@@ -9,6 +9,12 @@ use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Models\PublishTemplate;
 use hexa_app_publish\Services\PublishService;
+use hexa_package_wordpress\Services\WordPressService;
+use hexa_package_pexels\Services\PexelsService;
+use hexa_package_unsplash\Services\UnsplashService;
+use hexa_package_pixabay\Services\PixabayService;
+use hexa_package_gnews\Services\GNewsService;
+use hexa_package_newsdata\Services\NewsDataService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -17,15 +23,18 @@ class PublishArticleController extends Controller
 {
     protected GenericService $generic;
     protected PublishService $publishService;
+    protected WordPressService $wp;
 
     /**
      * @param GenericService $generic
      * @param PublishService $publishService
+     * @param WordPressService $wp
      */
-    public function __construct(GenericService $generic, PublishService $publishService)
+    public function __construct(GenericService $generic, PublishService $publishService, WordPressService $wp)
     {
         $this->generic = $generic;
         $this->publishService = $publishService;
+        $this->wp = $wp;
     }
 
     /**
@@ -215,21 +224,52 @@ class PublishArticleController extends Controller
     public function publish(int $id): JsonResponse
     {
         $article = PublishArticle::with('site')->findOrFail($id);
+        $site = $article->site;
 
-        // TODO: Use WordPress connector package to push content
-        // For now, mark as published with placeholder
+        if ($site->connection_type === 'wp_rest_api') {
+            if (!$site->wp_username || !$site->wp_application_password) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Site '{$site->name}' has no WordPress credentials configured.",
+                ]);
+            }
 
-        $article->update([
-            'status' => 'published',
-            'published_at' => now(),
-            'wp_status' => 'publish',
-        ]);
+            $wpStatus = ($article->delivery_mode === 'draft-wordpress') ? 'draft' : 'publish';
 
-        activity_log('publish', 'article_published', "Article published: {$article->title} ({$article->article_id}) → {$article->site->url}");
+            $result = $this->wp->createPost($site->url, $site->wp_username, $site->wp_application_password, [
+                'title' => $article->title,
+                'content' => $article->body,
+                'excerpt' => $article->excerpt ?? '',
+                'status' => $wpStatus,
+            ]);
 
+            if (!$result['success']) {
+                $article->update(['status' => 'failed']);
+                activity_log('publish', 'article_publish_failed', "Article publish failed: {$article->title} ({$article->article_id}) — {$result['message']}");
+
+                return response()->json($result);
+            }
+
+            $article->update([
+                'status' => 'completed',
+                'published_at' => now(),
+                'wp_post_id' => $result['data']['post_id'],
+                'wp_post_url' => $result['data']['post_url'],
+                'wp_status' => $result['data']['post_status'],
+            ]);
+
+            activity_log('publish', 'article_published', "Article published: {$article->title} ({$article->article_id}) → {$site->url} (WP ID: {$result['data']['post_id']})");
+
+            return response()->json([
+                'success' => true,
+                'message' => "Article published to {$site->name} as {$wpStatus}. WP Post ID: {$result['data']['post_id']}.",
+            ]);
+        }
+
+        // WP Toolkit publishing — TODO
         return response()->json([
-            'success' => true,
-            'message' => "Article published to {$article->site->name}.",
+            'success' => false,
+            'message' => 'WP Toolkit publishing not yet implemented.',
         ]);
     }
 
@@ -324,13 +364,45 @@ class PublishArticleController extends Controller
             'per_page' => 'nullable|integer|min:1|max:50',
         ]);
 
-        // TODO: Use Unsplash, Pexels, Pixabay packages to search
-        // Aggregate results from all enabled sources
+        $query = $validated['query'];
+        $perPage = $validated['per_page'] ?? 15;
+        $sources = $validated['sources'] ?? ['pexels', 'unsplash', 'pixabay'];
+        $allPhotos = [];
+        $errors = [];
+
+        if (in_array('pexels', $sources)) {
+            $result = app(PexelsService::class)->searchPhotos($query, $perPage);
+            if ($result['success']) {
+                $allPhotos = array_merge($allPhotos, $result['data']['photos'] ?? []);
+            } else {
+                $errors[] = 'Pexels: ' . $result['message'];
+            }
+        }
+
+        if (in_array('unsplash', $sources)) {
+            $result = app(UnsplashService::class)->searchPhotos($query, $perPage);
+            if ($result['success']) {
+                $allPhotos = array_merge($allPhotos, $result['data']['photos'] ?? []);
+            } else {
+                $errors[] = 'Unsplash: ' . $result['message'];
+            }
+        }
+
+        if (in_array('pixabay', $sources)) {
+            $result = app(PixabayService::class)->searchPhotos($query, $perPage);
+            if ($result['success']) {
+                $allPhotos = array_merge($allPhotos, $result['data']['photos'] ?? []);
+            } else {
+                $errors[] = 'Pixabay: ' . $result['message'];
+            }
+        }
 
         return response()->json([
             'success' => true,
-            'results' => [],
-            'message' => 'Photo search not yet implemented.',
+            'results' => $allPhotos,
+            'total' => count($allPhotos),
+            'errors' => $errors,
+            'message' => count($allPhotos) . ' photos found across ' . count($sources) . ' source(s).',
         ]);
     }
 
@@ -348,13 +420,64 @@ class PublishArticleController extends Controller
             'per_page' => 'nullable|integer|min:1|max:50',
         ]);
 
-        // TODO: Use GNews, NewsData, Google News RSS packages to search
-        // Aggregate results from all enabled sources
+        $query = $validated['query'];
+        $perPage = $validated['per_page'] ?? 10;
+        $sources = $validated['sources'] ?? ['google-news-rss', 'gnews', 'newsdata'];
+        $allArticles = [];
+        $errors = [];
+
+        // Google News RSS — free, no API key
+        if (in_array('google-news-rss', $sources)) {
+            try {
+                $rssUrl = 'https://news.google.com/rss/search?q=' . urlencode($query) . '&hl=en-US&gl=US&ceid=US:en';
+                $xml = @simplexml_load_string(file_get_contents($rssUrl));
+                if ($xml && isset($xml->channel->item)) {
+                    $count = 0;
+                    foreach ($xml->channel->item as $item) {
+                        if ($count >= $perPage) break;
+                        $allArticles[] = [
+                            'source_api' => 'google-news-rss',
+                            'title' => (string) $item->title,
+                            'description' => strip_tags((string) $item->description),
+                            'content' => '',
+                            'url' => (string) $item->link,
+                            'image' => null,
+                            'published_at' => (string) $item->pubDate,
+                            'source_name' => (string) ($item->source ?? 'Google News'),
+                            'source_url' => '',
+                        ];
+                        $count++;
+                    }
+                }
+            } catch (\Exception $e) {
+                $errors[] = 'Google News RSS: ' . $e->getMessage();
+            }
+        }
+
+        if (in_array('gnews', $sources)) {
+            $result = app(GNewsService::class)->searchArticles($query, $perPage);
+            if ($result['success']) {
+                $allArticles = array_merge($allArticles, $result['data']['articles'] ?? []);
+            } else {
+                $errors[] = 'GNews: ' . $result['message'];
+            }
+        }
+
+        if (in_array('newsdata', $sources)) {
+            $result = app(NewsDataService::class)->searchArticles($query, $perPage);
+            if ($result['success']) {
+                $allArticles = array_merge($allArticles, $result['data']['articles'] ?? []);
+            } else {
+                $errors[] = 'NewsData: ' . $result['message'];
+            }
+        }
 
         return response()->json([
             'success' => true,
-            'results' => [],
-            'message' => 'Article source search not yet implemented.',
+            'results' => $allArticles,
+            'total' => count($allArticles),
+            'errors' => $errors,
+            'message' => count($allArticles) . ' articles found across ' . count($sources) . ' source(s).',
         ]);
     }
 }

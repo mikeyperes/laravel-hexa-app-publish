@@ -7,6 +7,7 @@ use hexa_core\Services\GenericService;
 use hexa_app_publish\Models\PublishAccount;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Services\PublishService;
+use hexa_package_wordpress\Services\WordPressService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -15,15 +16,18 @@ class PublishSiteController extends Controller
 {
     protected GenericService $generic;
     protected PublishService $publishService;
+    protected WordPressService $wp;
 
     /**
      * @param GenericService $generic
      * @param PublishService $publishService
+     * @param WordPressService $wp
      */
-    public function __construct(GenericService $generic, PublishService $publishService)
+    public function __construct(GenericService $generic, PublishService $publishService, WordPressService $wp)
     {
         $this->generic = $generic;
         $this->publishService = $publishService;
+        $this->wp = $wp;
     }
 
     /**
@@ -189,21 +193,31 @@ class PublishSiteController extends Controller
     {
         $site = PublishSite::findOrFail($id);
 
-        // TODO: Implement actual WordPress REST API connection test
-        // For WP Toolkit sites, use WP Toolkit package
-        // For REST API sites, test /wp-json/wp/v2/posts endpoint
+        if ($site->connection_type === 'wp_rest_api') {
+            if (!$site->wp_username || !$site->wp_application_password) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'WordPress username and application password are required. Edit the site to add credentials.',
+                ]);
+            }
 
-        $site->update([
-            'status' => 'connected',
-            'last_connected_at' => now(),
-            'last_error' => null,
-        ]);
+            $result = $this->wp->testConnection($site->url, $site->wp_username, $site->wp_application_password);
 
-        activity_log('publish', 'site_test', "Site connection tested: {$site->name} ({$site->url}) — connected");
+            $site->update([
+                'status' => $result['success'] ? 'connected' : 'error',
+                'last_connected_at' => $result['success'] ? now() : $site->last_connected_at,
+                'last_error' => $result['success'] ? null : $result['message'],
+            ]);
 
+            activity_log('publish', 'site_test', "Site connection tested: {$site->name} ({$site->url}) — " . ($result['success'] ? 'connected' : 'failed: ' . $result['message']));
+
+            return response()->json($result);
+        }
+
+        // WP Toolkit connection — TODO: implement via wptoolkit package
         return response()->json([
-            'success' => true,
-            'message' => "Connection to '{$site->name}' successful.",
+            'success' => false,
+            'message' => 'WP Toolkit connection test not yet implemented.',
         ]);
     }
 }
