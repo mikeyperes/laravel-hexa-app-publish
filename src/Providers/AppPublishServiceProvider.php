@@ -50,6 +50,15 @@ class AppPublishServiceProvider extends ServiceProvider
             $factory->startPush('sidebar-settings',
                 view('app-publish::partials.sidebar-settings')->render());
         });
+
+        // Inject API key settings into the core integrations page
+        view()->composer('settings.integrations', function ($view) {
+            $factory = $view->getFactory();
+            $factory->startPush('integrations-modules',
+                view('app-publish::settings.integrations')->render());
+            $factory->startPush('scripts',
+                view('app-publish::settings.partials.integrations-scripts')->render());
+        });
     }
 
     /**

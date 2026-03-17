@@ -7,6 +7,7 @@ use hexa_app_publish\Http\Controllers\PublishCampaignController;
 use hexa_app_publish\Http\Controllers\PublishArticleController;
 use hexa_app_publish\Http\Controllers\PublishTemplateController;
 use hexa_app_publish\Http\Controllers\PublishDashboardController;
+use hexa_app_publish\Http\Controllers\PublishSettingsController;
 
 Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role'])->group(function () {
 
@@ -63,6 +64,9 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::post('/publish/articles/{id}/ai-check', [PublishArticleController::class, 'aiCheck'])->name('publish.articles.ai-check');
     Route::post('/publish/articles/{id}/seo-check', [PublishArticleController::class, 'seoCheck'])->name('publish.articles.seo-check');
     Route::post('/publish/articles/{id}/spin', [PublishArticleController::class, 'spin'])->name('publish.articles.spin');
+
+    // Settings — integration tests
+    Route::post('/settings/test-integration', [PublishSettingsController::class, 'testIntegration'])->name('settings.test-integration');
 
     // Photo search (unified)
     Route::get('/publish/photos/search', [PublishArticleController::class, 'searchPhotos'])->name('publish.photos.search');
