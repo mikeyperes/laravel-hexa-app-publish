@@ -73,4 +73,7 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
 
     // Article source search (unified)
     Route::get('/publish/sources/search', [PublishArticleController::class, 'searchSources'])->name('publish.sources.search');
+
+    // Web scraper
+    Route::post('/publish/sources/scrape', [PublishArticleController::class, 'scrapeUrl'])->name('publish.sources.scrape');
 });

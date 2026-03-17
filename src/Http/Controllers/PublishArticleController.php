@@ -18,6 +18,7 @@ use hexa_package_newsdata\Services\NewsDataService;
 use hexa_package_anthropic\Services\AnthropicService;
 use hexa_package_chatgpt\Services\ChatGptService;
 use hexa_package_sapling\Services\SaplingService;
+use hexa_app_publish\Services\WebScraperService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -656,5 +657,22 @@ class PublishArticleController extends Controller
             'errors' => $errors,
             'message' => count($allArticles) . ' articles found across ' . count($sources) . ' source(s).',
         ]);
+    }
+
+    /**
+     * Scrape a URL and extract article content.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function scrapeUrl(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'url' => 'required|url|max:2048',
+        ]);
+
+        $result = app(WebScraperService::class)->extractArticle($validated['url']);
+
+        return response()->json($result);
     }
 }
