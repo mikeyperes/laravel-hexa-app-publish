@@ -13,9 +13,22 @@ class PublishUsedSource extends Model
         'publish_account_id',
         'publish_article_id',
         'url',
+        'url_hash',
         'title',
         'source_api',
     ];
+
+    /**
+     * Auto-generate url_hash on save.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function ($model) {
+            if ($model->url) {
+                $model->url_hash = hash('sha256', $model->url);
+            }
+        });
+    }
 
     /**
      * @return BelongsTo
@@ -40,10 +53,17 @@ class PublishUsedSource extends Model
      * @param string $url
      * @return bool
      */
+    /**
+     * Check if a URL has already been used by an account.
+     *
+     * @param int $accountId
+     * @param string $url
+     * @return bool
+     */
     public static function isUsed(int $accountId, string $url): bool
     {
         return static::where('publish_account_id', $accountId)
-            ->where('url', $url)
+            ->where('url_hash', hash('sha256', $url))
             ->exists();
     }
 }
