@@ -1,6 +1,6 @@
 {
     "name": "hexawebsystems/laravel-hexa-app-publish",
-    "description": "HWS Publication System — fetch, spin, and push content to WordPress.",
+    "description": "HWS - News Publishing System — AI-powered content fetching, spinning, and publishing to WordPress.",
     "type": "library",
     "license": "MIT",
     "require": {
