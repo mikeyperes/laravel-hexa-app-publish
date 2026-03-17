@@ -15,6 +15,9 @@ use hexa_package_unsplash\Services\UnsplashService;
 use hexa_package_pixabay\Services\PixabayService;
 use hexa_package_gnews\Services\GNewsService;
 use hexa_package_newsdata\Services\NewsDataService;
+use hexa_package_anthropic\Services\AnthropicService;
+use hexa_package_chatgpt\Services\ChatGptService;
+use hexa_package_sapling\Services\SaplingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -283,15 +286,22 @@ class PublishArticleController extends Controller
     {
         $article = PublishArticle::findOrFail($id);
 
-        // TODO: Use Sapling package to run AI detection
-        // For now, placeholder
+        $text = strip_tags($article->body ?? '');
+        if (strlen($text) < 50) {
+            return response()->json(['success' => false, 'message' => 'Article content too short for AI detection.']);
+        }
 
-        activity_log('publish', 'article_ai_check', "AI check run on: {$article->title} ({$article->article_id})");
+        $result = app(SaplingService::class)->detect($text);
+
+        if ($result['success']) {
+            $article->update(['ai_detection_score' => $result['data']['score']]);
+            activity_log('publish', 'article_ai_check', "AI check: {$article->article_id} — score: {$result['data']['score']}%");
+        }
 
         return response()->json([
-            'success' => true,
-            'message' => "AI detection check completed.",
-            'score' => $article->ai_detection_score,
+            'success' => $result['success'],
+            'message' => $result['message'],
+            'score' => $result['data']['score'] ?? null,
         ]);
     }
 
@@ -305,17 +315,153 @@ class PublishArticleController extends Controller
     {
         $article = PublishArticle::findOrFail($id);
 
-        // TODO: Implement SEO scoring (keyword density, readability, heading structure)
-        // For now, placeholder
+        $html = $article->body ?? '';
+        $text = strip_tags($html);
 
-        activity_log('publish', 'article_seo_check', "SEO check run on: {$article->title} ({$article->article_id})");
+        if (strlen($text) < 50) {
+            return response()->json(['success' => false, 'message' => 'Article content too short for SEO analysis.']);
+        }
+
+        $seoData = $this->analyzeSeo($html, $text, $article->title ?? '');
+
+        $article->update([
+            'seo_score' => $seoData['score'],
+            'seo_data' => $seoData,
+        ]);
+
+        activity_log('publish', 'article_seo_check', "SEO check: {$article->article_id} — score: {$seoData['score']}");
 
         return response()->json([
             'success' => true,
-            'message' => "SEO analysis completed.",
-            'score' => $article->seo_score,
-            'data' => $article->seo_data,
+            'message' => "SEO analysis completed. Score: {$seoData['score']}/100.",
+            'score' => $seoData['score'],
+            'data' => $seoData,
         ]);
+    }
+
+    /**
+     * Analyze SEO metrics for article content.
+     *
+     * @param string $html Raw HTML content.
+     * @param string $text Plain text content.
+     * @param string $title Article title.
+     * @return array
+     */
+    private function analyzeSeo(string $html, string $text, string $title): array
+    {
+        $wordCount = str_word_count($text);
+        $sentenceCount = max(1, preg_match_all('/[.!?]+/', $text));
+        $avgWordsPerSentence = $wordCount / $sentenceCount;
+
+        // Flesch-Kincaid readability
+        $syllableCount = $this->countSyllables($text);
+        $fleschScore = 206.835 - (1.015 * $avgWordsPerSentence) - (84.6 * ($syllableCount / max(1, $wordCount)));
+        $fleschScore = max(0, min(100, $fleschScore));
+
+        // Heading structure
+        preg_match_all('/<h([1-6])[^>]*>/i', $html, $headingMatches);
+        $headingCount = count($headingMatches[0]);
+        $hasH1 = in_array('1', $headingMatches[1] ?? []);
+        $hasH2 = in_array('2', $headingMatches[1] ?? []);
+
+        // Links
+        preg_match_all('/<a\s/i', $html, $linkMatches);
+        $linkCount = count($linkMatches[0]);
+
+        // Images
+        preg_match_all('/<img\s/i', $html, $imgMatches);
+        $imageCount = count($imgMatches[0]);
+
+        // Images with alt text
+        preg_match_all('/<img[^>]+alt\s*=\s*"[^"]+"/i', $html, $imgAltMatches);
+        $imagesWithAlt = count($imgAltMatches[0]);
+
+        // Paragraph count
+        preg_match_all('/<p[\s>]/i', $html, $pMatches);
+        $paragraphCount = count($pMatches[0]);
+
+        // Title length
+        $titleLength = strlen($title);
+        $titleScore = ($titleLength >= 30 && $titleLength <= 70) ? 10 : ($titleLength > 0 ? 5 : 0);
+
+        // Scoring
+        $score = 0;
+
+        // Word count (0-15)
+        if ($wordCount >= 800) $score += 15;
+        elseif ($wordCount >= 500) $score += 10;
+        elseif ($wordCount >= 300) $score += 5;
+
+        // Readability (0-20)
+        if ($fleschScore >= 60) $score += 20;
+        elseif ($fleschScore >= 40) $score += 15;
+        elseif ($fleschScore >= 20) $score += 10;
+        else $score += 5;
+
+        // Headings (0-15)
+        if ($hasH2 && $headingCount >= 3) $score += 15;
+        elseif ($headingCount >= 2) $score += 10;
+        elseif ($headingCount >= 1) $score += 5;
+
+        // Links (0-10)
+        if ($linkCount >= 3) $score += 10;
+        elseif ($linkCount >= 1) $score += 5;
+
+        // Images (0-10)
+        if ($imageCount >= 2) $score += 10;
+        elseif ($imageCount >= 1) $score += 7;
+
+        // Images with alt (0-10)
+        if ($imageCount > 0 && $imagesWithAlt === $imageCount) $score += 10;
+        elseif ($imagesWithAlt > 0) $score += 5;
+
+        // Title (0-10)
+        $score += $titleScore;
+
+        // Paragraph structure (0-10)
+        if ($paragraphCount >= 5) $score += 10;
+        elseif ($paragraphCount >= 3) $score += 7;
+        elseif ($paragraphCount >= 1) $score += 3;
+
+        return [
+            'score' => min(100, $score),
+            'word_count' => $wordCount,
+            'sentence_count' => $sentenceCount,
+            'avg_words_per_sentence' => round($avgWordsPerSentence, 1),
+            'flesch_readability' => round($fleschScore, 1),
+            'heading_count' => $headingCount,
+            'has_h2' => $hasH2,
+            'link_count' => $linkCount,
+            'image_count' => $imageCount,
+            'images_with_alt' => $imagesWithAlt,
+            'paragraph_count' => $paragraphCount,
+            'title_length' => $titleLength,
+        ];
+    }
+
+    /**
+     * Estimate syllable count in text.
+     *
+     * @param string $text
+     * @return int
+     */
+    private function countSyllables(string $text): int
+    {
+        $words = preg_split('/\s+/', strtolower($text));
+        $total = 0;
+
+        foreach ($words as $word) {
+            $word = preg_replace('/[^a-z]/', '', $word);
+            if (strlen($word) <= 3) {
+                $total += 1;
+                continue;
+            }
+            $word = preg_replace('/(?:[^laeiouy]es|ed|[^laeiouy]e)$/', '', $word);
+            preg_match_all('/[aeiouy]{1,2}/', $word, $matches);
+            $total += max(1, count($matches[0]));
+        }
+
+        return $total;
     }
 
     /**
@@ -327,26 +473,57 @@ class PublishArticleController extends Controller
      */
     public function spin(Request $request, int $id): JsonResponse
     {
-        $article = PublishArticle::findOrFail($id);
+        $article = PublishArticle::with('template')->findOrFail($id);
 
         $validated = $request->validate([
             'ai_engine' => 'required|in:anthropic,chatgpt',
             'instruction' => 'nullable|string|max:2000',
         ]);
 
-        // TODO: Use Anthropic or ChatGPT package to spin content
-        // For now, placeholder
+        $body = $article->body;
+        if (!$body || strlen(strip_tags($body)) < 20) {
+            return response()->json(['success' => false, 'message' => 'Article has no content to spin.']);
+        }
+
+        $instruction = $validated['instruction'] ?? '';
+        $articleType = $article->article_type ?? ($article->template->article_type ?? null);
+        $tone = $article->template->tone ?? null;
+
+        // Prepend template AI prompt if available
+        if ($article->template && $article->template->ai_prompt) {
+            $instruction = $article->template->ai_prompt . "\n\n" . $instruction;
+        }
+
+        $article->update(['status' => 'spinning', 'ai_engine_used' => $validated['ai_engine']]);
+
+        if ($validated['ai_engine'] === 'anthropic') {
+            $result = app(AnthropicService::class)->spinArticle($body, $instruction, $articleType, $tone);
+        } else {
+            $result = app(ChatGptService::class)->spinArticle($body, $instruction, $articleType, $tone);
+        }
+
+        if (!$result['success']) {
+            $article->update(['status' => 'review']);
+            activity_log('publish', 'article_spin_failed', "Spin failed: {$article->article_id} — {$result['message']}");
+            return response()->json($result);
+        }
+
+        $newBody = $result['data']['content'] ?? '';
+        $wordCount = str_word_count(strip_tags($newBody));
 
         $article->update([
-            'ai_engine_used' => $validated['ai_engine'],
-            'status' => 'spinning',
+            'body' => $newBody,
+            'word_count' => $wordCount,
+            'status' => 'review',
         ]);
 
-        activity_log('publish', 'article_spin', "Article spin requested: {$article->title} ({$article->article_id}) via {$validated['ai_engine']}");
+        activity_log('publish', 'article_spun', "Article spun: {$article->article_id} via {$validated['ai_engine']} ({$wordCount} words)");
 
         return response()->json([
             'success' => true,
-            'message' => "Spin request sent to {$validated['ai_engine']}.",
+            'message' => "Article rewritten via {$validated['ai_engine']}. {$wordCount} words.",
+            'body' => $newBody,
+            'word_count' => $wordCount,
         ]);
     }
 

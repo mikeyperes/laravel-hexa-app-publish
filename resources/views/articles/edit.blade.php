@@ -249,6 +249,11 @@ function articleEditor() {
                 const data = await res.json();
                 this.resultSuccess = data.success;
                 this.resultMessage = data.message;
+                if (data.success && data.body && this.editor) {
+                    this.editor.setContent(data.body);
+                    this.form.body = data.body;
+                    this.form.word_count = data.word_count || 0;
+                }
             } catch (e) { this.resultSuccess = false; this.resultMessage = 'Error: ' + e.message; }
             this.spinning = false;
         },
