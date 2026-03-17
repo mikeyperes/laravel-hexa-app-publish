@@ -1,0 +1,35 @@
+{
+    "name": "hexawebsystems/laravel-hexa-app-publish",
+    "description": "HWS Publication System — fetch, spin, and push content to WordPress.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "hexawebsystems/laravel-hexa-package-whm": "*",
+        "hexawebsystems/laravel-hexa-package-wptoolkit": "*",
+        "hexawebsystems/laravel-hexa-package-wordpress": "*",
+        "hexawebsystems/laravel-hexa-package-anthropic": "*",
+        "hexawebsystems/laravel-hexa-package-chatgpt": "*",
+        "hexawebsystems/laravel-hexa-package-brevo": "*",
+        "hexawebsystems/laravel-hexa-package-stripe": "*",
+        "hexawebsystems/laravel-hexa-package-telegram": "*",
+        "hexawebsystems/laravel-hexa-package-unsplash": "*",
+        "hexawebsystems/laravel-hexa-package-pexels": "*",
+        "hexawebsystems/laravel-hexa-package-pixabay": "*",
+        "hexawebsystems/laravel-hexa-package-gnews": "*",
+        "hexawebsystems/laravel-hexa-package-newsdata": "*",
+        "hexawebsystems/laravel-hexa-package-sapling": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "hexa_app_publish\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "hexa_app_publish\\Providers\\AppPublishServiceProvider"
+            ]
+        }
+    }
+}
