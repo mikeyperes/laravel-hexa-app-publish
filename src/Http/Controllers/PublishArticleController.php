@@ -19,6 +19,7 @@ use hexa_package_anthropic\Services\AnthropicService;
 use hexa_package_chatgpt\Services\ChatGptService;
 use hexa_package_sapling\Services\SaplingService;
 use hexa_app_publish\Services\WebScraperService;
+use hexa_app_publish\Services\LinkInsertionService;
 use hexa_package_telegram\Services\TelegramService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -700,5 +701,62 @@ class PublishArticleController extends Controller
         $result = app(WebScraperService::class)->extractArticle($validated['url']);
 
         return response()->json($result);
+    }
+
+    /**
+     * Insert links into article content using AI.
+     *
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function insertLinks(Request $request, int $id): JsonResponse
+    {
+        $article = PublishArticle::with('site')->findOrFail($id);
+
+        if (!$article->body || strlen(strip_tags($article->body)) < 50) {
+            return response()->json(['success' => false, 'message' => 'Article has no content for link insertion.']);
+        }
+
+        $validated = $request->validate([
+            'max_links' => 'nullable|integer|min:1|max:20',
+            'link_ids' => 'nullable|array',
+        ]);
+
+        $maxLinks = $validated['max_links'] ?? 5;
+
+        // Get links — either specific IDs or auto-select from account
+        if (!empty($validated['link_ids'])) {
+            $links = \hexa_app_publish\Models\PublishLinkList::whereIn('id', $validated['link_ids'])
+                ->where('active', true)
+                ->get()
+                ->map(fn($l) => ['url' => $l->url, 'anchor_text' => $l->anchor_text, 'context' => $l->context])
+                ->toArray();
+        } else {
+            $links = app(LinkInsertionService::class)->getAvailableLinks($article->publish_account_id, $maxLinks);
+        }
+
+        if (empty($links)) {
+            return response()->json(['success' => false, 'message' => 'No active links available for this account.']);
+        }
+
+        $result = app(LinkInsertionService::class)->insertLinks($article->body, $links, $maxLinks);
+
+        if ($result['success']) {
+            $article->update([
+                'body' => $result['data']['html'],
+                'links_injected' => $result['data']['report'],
+                'word_count' => str_word_count(strip_tags($result['data']['html'])),
+            ]);
+
+            activity_log('publish', 'article_links_inserted', "Links inserted: {$article->article_id} — {$result['message']}");
+        }
+
+        return response()->json([
+            'success' => $result['success'],
+            'message' => $result['message'],
+            'report' => $result['data']['report'] ?? [],
+            'body' => $result['data']['html'] ?? null,
+        ]);
     }
 }

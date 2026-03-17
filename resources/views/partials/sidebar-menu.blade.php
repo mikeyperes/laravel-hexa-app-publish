@@ -46,3 +46,12 @@
     </svg>
     Articles
 </a>
+
+<a href="{{ route('publish.links.index') }}"
+   class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
+          {{ request()->routeIs('publish.links.*') || request()->routeIs('publish.sitemaps.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+    </svg>
+    Links & Sitemaps
+</a>
