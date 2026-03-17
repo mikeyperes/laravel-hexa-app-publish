@@ -19,6 +19,7 @@ use hexa_package_anthropic\Services\AnthropicService;
 use hexa_package_chatgpt\Services\ChatGptService;
 use hexa_package_sapling\Services\SaplingService;
 use hexa_app_publish\Services\WebScraperService;
+use hexa_package_telegram\Services\TelegramService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -263,6 +264,17 @@ class PublishArticleController extends Controller
             ]);
 
             activity_log('publish', 'article_published', "Article published: {$article->title} ({$article->article_id}) → {$site->url} (WP ID: {$result['data']['post_id']})");
+
+            // Telegram notification
+            try {
+                app(TelegramService::class)->notifyPublished(
+                    $article->title,
+                    $site->name,
+                    $result['data']['post_url'] ?? null
+                );
+            } catch (\Exception $e) {
+                // Don't fail the publish if Telegram fails
+            }
 
             return response()->json([
                 'success' => true,
@@ -519,6 +531,20 @@ class PublishArticleController extends Controller
         ]);
 
         activity_log('publish', 'article_spun', "Article spun: {$article->article_id} via {$validated['ai_engine']} ({$wordCount} words)");
+
+        // Send Telegram approval request if delivery mode is review or notify
+        if (in_array($article->delivery_mode, ['review', 'notify'])) {
+            try {
+                app(TelegramService::class)->sendArticleApproval(
+                    $article->id,
+                    $article->title ?? 'Untitled',
+                    $article->site->name ?? 'Unknown',
+                    $wordCount
+                );
+            } catch (\Exception $e) {
+                // Don't fail the spin if Telegram fails
+            }
+        }
 
         return response()->json([
             'success' => true,
