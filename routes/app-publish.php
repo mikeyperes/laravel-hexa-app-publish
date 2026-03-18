@@ -9,6 +9,7 @@ use hexa_app_publish\Http\Controllers\PublishTemplateController;
 use hexa_app_publish\Http\Controllers\PublishDashboardController;
 use hexa_app_publish\Http\Controllers\PublishSettingsController;
 use hexa_app_publish\Http\Controllers\PublishLinkController;
+use hexa_app_publish\Http\Controllers\PublishServerController;
 
 Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role'])->group(function () {
 
@@ -68,6 +69,12 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
 
     // Settings — integration tests
     Route::post('/settings/test-integration', [PublishSettingsController::class, 'testIntegration'])->name('settings.test-integration');
+
+    // Servers
+    Route::get('/publish/servers', [PublishServerController::class, 'index'])->name('publish.servers.index');
+    Route::post('/publish/servers/{server}/test', [PublishServerController::class, 'test'])->name('publish.servers.test');
+    Route::post('/publish/servers/{server}/refresh-stats', [PublishServerController::class, 'refreshStats'])->name('publish.servers.refresh-stats');
+    Route::get('/publish/servers/{server}/info', [PublishServerController::class, 'info'])->name('publish.servers.info');
 
     // Photo search (unified)
     Route::get('/publish/photos/search', [PublishArticleController::class, 'searchPhotos'])->name('publish.photos.search');
