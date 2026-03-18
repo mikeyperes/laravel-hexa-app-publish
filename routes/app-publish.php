@@ -75,6 +75,8 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::post('/publish/servers/{server}/test', [PublishServerController::class, 'test'])->name('publish.servers.test');
     Route::post('/publish/servers/{server}/refresh-stats', [PublishServerController::class, 'refreshStats'])->name('publish.servers.refresh-stats');
     Route::get('/publish/servers/{server}/info', [PublishServerController::class, 'info'])->name('publish.servers.info');
+    Route::get('/publish/servers/accounts', [PublishServerController::class, 'accounts'])->name('publish.servers.accounts');
+    Route::post('/publish/servers/{server}/sync-accounts', [PublishServerController::class, 'syncAccounts'])->name('publish.servers.sync-accounts');
 
     // Photo search (unified)
     Route::get('/publish/photos/search', [PublishArticleController::class, 'searchPhotos'])->name('publish.photos.search');
