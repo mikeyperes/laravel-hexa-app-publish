@@ -40,7 +40,7 @@ class PublishSettingsController extends Controller
             default => ['success' => false, 'message' => "Unknown service: {$service}"],
         };
 
-        activity_log('settings', 'test_integration', "Integration test: {$service} — " . ($result['success'] ? 'success' : 'failed: ' . $result['message']));
+        \hexa_core\Models\ActivityLog::log('settings', 'test_integration', "Integration test: {$service} — " . ($result['success'] ? 'success' : 'failed: ' . $result['message']));
 
         return response()->json($result);
     }
