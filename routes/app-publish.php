@@ -9,6 +9,7 @@ use hexa_app_publish\Http\Controllers\PublishTemplateController;
 use hexa_app_publish\Http\Controllers\PublishDashboardController;
 use hexa_app_publish\Http\Controllers\PublishSettingsController;
 use hexa_app_publish\Http\Controllers\PublishLinkController;
+use hexa_app_publish\Http\Controllers\PublishSearchController;
 
 
 Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role'])->group(function () {
@@ -90,4 +91,8 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
 
     // Article link insertion (AI-powered)
     Route::post('/publish/articles/{id}/insert-links', [PublishArticleController::class, 'insertLinks'])->name('publish.articles.insert-links');
+
+    // Search
+    Route::get('/search/images', [PublishSearchController::class, 'images'])->name('publish.search.images');
+    Route::post('/search/images', [PublishSearchController::class, 'searchImages'])->name('publish.search.images.post');
 });
