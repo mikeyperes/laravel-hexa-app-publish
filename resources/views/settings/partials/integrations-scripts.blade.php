@@ -21,7 +21,7 @@ function integrationField(serviceName, currentKey, saveUrl, testUrl) {
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ key: this.serviceName + '_api_key', value: this.newKey })
+                    body: JSON.stringify({ settings: { [this.serviceName + '_api_key']: this.newKey } })
                 });
                 const data = await res.json();
                 this.resultSuccess = data.success !== false;
