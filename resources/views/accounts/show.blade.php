@@ -46,7 +46,16 @@
 
     {{-- cPanel Accounts --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-4">cPanel Accounts</h3>
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-gray-800">cPanel Accounts</h3>
+            @if($attachedAccounts->isNotEmpty())
+                <div class="flex items-center gap-2">
+                    <button @click="document.querySelectorAll('.detach-checkbox').forEach(c => c.checked = true)" class="text-xs text-gray-500 hover:text-gray-700">Select All</button>
+                    <span class="text-gray-300">|</span>
+                    <button @click="document.querySelectorAll('.detach-checkbox').forEach(c => c.checked = false)" class="text-xs text-gray-500 hover:text-gray-700">None</button>
+                </div>
+            @endif
+        </div>
 
         {{-- Attached accounts --}}
         @if($attachedAccounts->isNotEmpty())
@@ -80,6 +89,11 @@
             <button @click="showAttach = !showAttach" class="text-sm text-blue-600 hover:text-blue-800 mb-3" x-text="showAttach ? 'Hide account list' : '+ Attach cPanel Accounts'"></button>
 
             <div x-show="showAttach" x-cloak>
+                <div class="flex items-center gap-2 mb-2">
+                    <button @click="document.querySelectorAll('.attach-checkbox').forEach(c => c.checked = true)" class="text-xs text-gray-500 hover:text-gray-700">Select All</button>
+                    <span class="text-gray-300">|</span>
+                    <button @click="document.querySelectorAll('.attach-checkbox').forEach(c => c.checked = false)" class="text-xs text-gray-500 hover:text-gray-700">None</button>
+                </div>
                 <div class="border border-gray-200 rounded-lg max-h-64 overflow-y-auto mb-3">
                     @foreach($availableAccounts as $acct)
                     <label class="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-b-0">
