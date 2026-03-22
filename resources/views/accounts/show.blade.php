@@ -331,7 +331,7 @@ function userProfile() {
             try {
                 const res = await fetch('/publish/users/{{ $user->id }}/add-site', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
                     body: JSON.stringify({
                         url: install.url,
                         name: install.name || install.url,
