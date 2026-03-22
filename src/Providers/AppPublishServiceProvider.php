@@ -316,5 +316,75 @@ class AppPublishServiceProvider extends ServiceProvider
             ],
             'app-publish'
         );
+
+        // Backfill description + ai_prompt on existing rows (core's seedDefaults doesn't handle these)
+        $this->backfillListDescriptions();
+    }
+
+    /**
+     * Update existing list items with description and ai_prompt values.
+     * Core's ListService only creates rows with list_value — this fills the extra columns.
+     */
+    private function backfillListDescriptions(): void
+    {
+        if (!\Illuminate\Support\Facades\Schema::hasColumn('lists', 'description')) {
+            return;
+        }
+
+        $categories = [
+            'article_formats' => [
+                'Editorial' => ['A balanced article presenting facts and analysis on a topic', 'Write a well-researched editorial that presents multiple viewpoints while maintaining a clear thesis. Include data points and expert perspectives.'],
+                'Expert Article' => ['An authoritative piece written from a specialist perspective', 'Write as a subject matter expert. Use technical terminology appropriately, cite relevant research, and provide actionable insights.'],
+                'Full Feature PR' => ['A comprehensive promotional piece disguised as editorial content', 'Write a full-length feature article that naturally incorporates the subject\'s achievements, products, or services within a compelling narrative.'],
+                'Press Release' => ['A formal announcement following AP style conventions', 'Write in standard press release format with dateline, strong lead paragraph, quotes from stakeholders, and boilerplate company description.'],
+                'Listicle' => ['A list-based article with numbered or bulleted key points', 'Structure the article as a numbered list with descriptive headers for each point. Include brief explanations under each item.'],
+            ],
+            'tones' => [
+                'Professional' => ['Formal, business-appropriate language', 'Use formal language, avoid colloquialisms, maintain objectivity, and write in third person where appropriate.'],
+                'Conversational' => ['Friendly, approachable writing style', 'Write as if speaking to a friend. Use contractions, rhetorical questions, and relatable examples.'],
+                'Authoritative' => ['Expert-level confidence and depth', 'Write with confidence and certainty. Use strong declarative statements, cite sources, and demonstrate deep subject knowledge.'],
+                'Casual' => ['Relaxed, informal tone', 'Use everyday language, humor where appropriate, and a laid-back style. First person is fine.'],
+                'Investigative' => ['Deep-dive analytical approach', 'Present findings methodically. Question assumptions, follow evidence trails, and present conclusions supported by data.'],
+                'Persuasive' => ['Compelling, action-oriented writing', 'Use emotional appeals alongside logic. Include calls to action, address objections, and build urgency.'],
+            ],
+            'image_preferences' => [
+                'Stock Photography' => ['Clean, professional stock-style images', 'Search for high-quality, well-lit professional photographs that match the article topic.'],
+                'Editorial Photography' => ['Photojournalistic, documentary-style images', 'Search for candid, real-world photographs that tell a story and add authenticity.'],
+                'Lifestyle' => ['People-centric, aspirational imagery', 'Search for lifestyle photographs showing people in real-world settings related to the article topic.'],
+                'Abstract/Conceptual' => ['Symbolic, metaphorical imagery', 'Search for abstract or conceptual images that represent the article\'s themes symbolically.'],
+                'Infographic-style' => ['Data visualization and informational graphics', 'Search for clean, data-driven visuals, charts, or infographic-style images.'],
+                'Minimalist' => ['Simple, clean imagery with negative space', 'Search for minimalist photographs with clean compositions and plenty of white space.'],
+            ],
+            'category_generation_rules' => [
+                'Broad Topic Match' => ['Match to the widest applicable topic', 'Assign 2-3 broad categories that represent the main topics. Prefer existing WordPress categories over creating new ones.'],
+                'Specific Niche' => ['Target narrow, specific categories', 'Create specific, niche categories that precisely describe the article content. Be granular.'],
+                'Industry Standard' => ['Use standard industry category names', 'Use standard industry terminology for categories. Follow common news/blog categorization patterns.'],
+                'SEO-Optimized' => ['Categories optimized for search engine visibility', 'Choose categories that contain high-value keywords. Consider search volume and competition.'],
+            ],
+            'tag_generation_rules' => [
+                'Keyword Focused' => ['Tags based on primary and secondary keywords', 'Extract the most important keywords and phrases from the article as tags.'],
+                'Entity Based' => ['Tags for people, places, organizations mentioned', 'Create tags for every named entity -- people, companies, locations, products, events mentioned in the article.'],
+                'Long-tail SEO' => ['Tags targeting long-tail search queries', 'Generate tags that match long-tail search queries. Use 2-4 word phrases that readers might search for.'],
+                'Topic Cluster' => ['Tags that connect related content', 'Create tags that help cluster related articles together. Think about content pillars and topic relationships.'],
+            ],
+            'image_layout_rules' => [
+                'After Introduction' => ['Single image after the opening paragraph', 'Place one hero image immediately after the introductory paragraph.'],
+                'Every Other Paragraph' => ['Images distributed between paragraphs', 'Insert an image between every second paragraph.'],
+                '3 Photos Evenly Spaced' => ['Three images distributed evenly throughout', 'Place the first image after the introduction, the second at the midpoint, and the third before the conclusion.'],
+                'Hero Image Only' => ['Single prominent image at the top', 'Place one large, high-quality image at the very top of the article. No additional images.'],
+                '5 Photos Randomly Placed' => ['Five images placed at natural break points', 'Insert 5 images at natural content transitions throughout the article.'],
+                'Between Sections' => ['Images as section dividers', 'Place an image between each major section or heading change.'],
+            ],
+        ];
+
+        foreach ($categories as $listKey => $items) {
+            foreach ($items as $value => [$desc, $prompt]) {
+                \Illuminate\Support\Facades\DB::table('lists')
+                    ->where('list_key', $listKey)
+                    ->where('list_value', $value)
+                    ->whereNull('description')
+                    ->update(['description' => $desc, 'ai_prompt' => $prompt]);
+            }
+        }
     }
 }
