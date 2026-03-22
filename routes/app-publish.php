@@ -10,6 +10,13 @@ use hexa_app_publish\Http\Controllers\PublishDashboardController;
 use hexa_app_publish\Http\Controllers\PublishSettingsController;
 use hexa_app_publish\Http\Controllers\PublishLinkController;
 use hexa_app_publish\Http\Controllers\PublishSearchController;
+use hexa_app_publish\Http\Controllers\PublishPipelineController;
+use hexa_app_publish\Http\Controllers\PublishDraftController;
+use hexa_app_publish\Http\Controllers\PublishBookmarkController;
+use hexa_app_publish\Http\Controllers\PublishPromptController;
+use hexa_app_publish\Http\Controllers\PublishPresetController;
+use hexa_app_publish\Http\Controllers\PublishMasterSettingController;
+use hexa_app_publish\Http\Controllers\PublishScheduleController;
 
 
 Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role'])->group(function () {
@@ -97,4 +104,47 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::post('/search/images', [PublishSearchController::class, 'searchImages'])->name('publish.search.images.post');
     Route::get('/search/articles', [PublishSearchController::class, 'articles'])->name('publish.search.articles');
     Route::post('/search/articles', [PublishSearchController::class, 'searchArticles'])->name('publish.search.articles.post');
+
+    // ═══ Article Pipeline ═══
+    Route::get('/article/publish', [PublishPipelineController::class, 'index'])->name('publish.pipeline');
+
+    // ═══ Drafted Articles ═══
+    Route::get('/article/drafts', [PublishDraftController::class, 'index'])->name('publish.drafts.index');
+    Route::post('/article/drafts', [PublishDraftController::class, 'store'])->name('publish.drafts.store');
+    Route::get('/article/drafts/{id}', [PublishDraftController::class, 'show'])->name('publish.drafts.show');
+    Route::put('/article/drafts/{id}', [PublishDraftController::class, 'update'])->name('publish.drafts.update');
+    Route::delete('/article/drafts/{id}', [PublishDraftController::class, 'destroy'])->name('publish.drafts.destroy');
+
+    // ═══ Bookmarked Articles ═══
+    Route::get('/article/bookmarks', [PublishBookmarkController::class, 'index'])->name('publish.bookmarks.index');
+    Route::post('/article/bookmarks', [PublishBookmarkController::class, 'store'])->name('publish.bookmarks.store');
+    Route::put('/article/bookmarks/{id}', [PublishBookmarkController::class, 'update'])->name('publish.bookmarks.update');
+    Route::delete('/article/bookmarks/{id}', [PublishBookmarkController::class, 'destroy'])->name('publish.bookmarks.destroy');
+
+    // ═══ Prompts ═══
+    Route::get('/publishing/prompts', [PublishPromptController::class, 'index'])->name('publish.prompts.index');
+    Route::post('/publishing/prompts', [PublishPromptController::class, 'store'])->name('publish.prompts.store');
+    Route::get('/publishing/prompts/{id}', [PublishPromptController::class, 'show'])->name('publish.prompts.show');
+    Route::put('/publishing/prompts/{id}', [PublishPromptController::class, 'update'])->name('publish.prompts.update');
+    Route::delete('/publishing/prompts/{id}', [PublishPromptController::class, 'destroy'])->name('publish.prompts.destroy');
+
+    // ═══ Article Presets ═══
+    Route::get('/publishing/presets', [PublishPresetController::class, 'index'])->name('publish.presets.index');
+    Route::post('/publishing/presets', [PublishPresetController::class, 'store'])->name('publish.presets.store');
+    Route::get('/publishing/presets/{id}', [PublishPresetController::class, 'show'])->name('publish.presets.show');
+    Route::put('/publishing/presets/{id}', [PublishPresetController::class, 'update'])->name('publish.presets.update');
+    Route::delete('/publishing/presets/{id}', [PublishPresetController::class, 'destroy'])->name('publish.presets.destroy');
+
+    // ═══ Master Settings ═══
+    Route::get('/publishing/settings', [PublishMasterSettingController::class, 'index'])->name('publish.settings.master');
+    Route::post('/publishing/settings', [PublishMasterSettingController::class, 'store'])->name('publish.settings.master.store');
+    Route::put('/publishing/settings/{id}', [PublishMasterSettingController::class, 'update'])->name('publish.settings.master.update');
+    Route::delete('/publishing/settings/{id}', [PublishMasterSettingController::class, 'destroy'])->name('publish.settings.master.destroy');
+
+    // ═══ Schedule ═══
+    Route::get('/schedule', [PublishScheduleController::class, 'index'])->name('publish.schedule.index');
+    Route::post('/schedule/fetch', [PublishScheduleController::class, 'fetchScheduled'])->name('publish.schedule.fetch');
+
+    // ═══ User search (shared AJAX endpoint for type-ahead) ═══
+    Route::get('/api/users/search', [PublishPipelineController::class, 'searchUsers'])->name('publish.users.search');
 });

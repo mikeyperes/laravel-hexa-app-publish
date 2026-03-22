@@ -44,7 +44,53 @@
     Articles
 </a>
 
-<p class="text-xs text-gray-600 uppercase tracking-wider pt-4 pb-1 px-3">Publishing</p>
+<p class="text-xs text-gray-600 uppercase tracking-wider pt-4 pb-1 px-3">Article</p>
+
+@if(Route::has('publish.pipeline'))
+<a href="{{ route('publish.pipeline') }}"
+   class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
+          {{ request()->routeIs('publish.pipeline') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
+    </svg>
+    Publish Article
+</a>
+@endif
+
+@if(Route::has('publish.drafts.index'))
+<a href="{{ route('publish.drafts.index') }}"
+   class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
+          {{ request()->routeIs('publish.drafts.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+    </svg>
+    Drafted Articles
+</a>
+@endif
+
+@if(Route::has('publish.bookmarks.index'))
+<a href="{{ route('publish.bookmarks.index') }}"
+   class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
+          {{ request()->routeIs('publish.bookmarks.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+    </svg>
+    Bookmarked Articles
+</a>
+@endif
+
+@if(Route::has('article-extractor.index'))
+<a href="{{ route('article-extractor.index') }}"
+   class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
+          {{ request()->routeIs('article-extractor.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+    </svg>
+    Linter
+</a>
+@endif
+
+<p class="text-xs text-gray-600 uppercase tracking-wider pt-4 pb-1 px-3">Content</p>
 
 <a href="{{ route('publish.accounts.index') }}"
    class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
@@ -99,3 +145,52 @@
     </svg>
     Links & Sitemaps
 </a>
+
+<p class="text-xs text-gray-600 uppercase tracking-wider pt-4 pb-1 px-3">Publishing</p>
+
+@if(Route::has('publish.prompts.index'))
+<a href="{{ route('publish.prompts.index') }}"
+   class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
+          {{ request()->routeIs('publish.prompts.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+    </svg>
+    Prompts
+</a>
+@endif
+
+@if(Route::has('publish.presets.index'))
+<a href="{{ route('publish.presets.index') }}"
+   class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
+          {{ request()->routeIs('publish.presets.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+    </svg>
+    Article Presets
+</a>
+@endif
+
+@if(Route::has('publish.settings.master'))
+<a href="{{ route('publish.settings.master') }}"
+   class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
+          {{ request()->routeIs('publish.settings.master*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+    </svg>
+    Settings
+</a>
+@endif
+
+<p class="text-xs text-gray-600 uppercase tracking-wider pt-4 pb-1 px-3">Schedule</p>
+
+@if(Route::has('publish.schedule.index'))
+<a href="{{ route('publish.schedule.index') }}"
+   class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
+          {{ request()->routeIs('publish.schedule.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+    </svg>
+    Calendar
+</a>
+@endif
