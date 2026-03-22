@@ -3,8 +3,8 @@
 namespace hexa_app_publish\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
+use hexa_core\Models\User;
 use hexa_core\Services\GenericService;
-use hexa_app_publish\Models\PublishAccount;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Services\PublishService;
 use hexa_package_wordpress\Services\WordPressService;
@@ -38,10 +38,10 @@ class PublishSiteController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = PublishSite::with(['account', 'campaigns', 'articles']);
+        $query = PublishSite::with(['user', 'campaigns', 'articles']);
 
-        if ($request->filled('account_id')) {
-            $query->where('publish_account_id', $request->input('account_id'));
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->input('user_id'));
         }
 
         if ($request->filled('status')) {
@@ -57,11 +57,11 @@ class PublishSiteController extends Controller
         }
 
         $sites = $query->orderByDesc('created_at')->get();
-        $accounts = PublishAccount::orderBy('name')->get();
+        $users = User::orderBy('name')->get();
 
         return view('app-publish::sites.index', [
             'sites' => $sites,
-            'accounts' => $accounts,
+            'users' => $users,
         ]);
     }
 
@@ -73,11 +73,11 @@ class PublishSiteController extends Controller
      */
     public function create(Request $request): View
     {
-        $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
+        $users = User::orderBy('name')->get();
 
         return view('app-publish::sites.create', [
-            'accounts' => $accounts,
-            'preselected_account_id' => $request->input('account_id'),
+            'users' => $users,
+            'preselected_user_id' => $request->input('user_id'),
         ]);
     }
 
@@ -90,7 +90,7 @@ class PublishSiteController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'publish_account_id' => 'required|exists:publish_accounts,id',
+            'user_id' => 'required|exists:users,id',
             'name' => 'required|string|max:255',
             'url' => 'required|url|max:2048',
             'connection_type' => 'required|in:wptoolkit,wp_rest_api',
@@ -123,7 +123,7 @@ class PublishSiteController extends Controller
      */
     public function show(int $id): View
     {
-        $site = PublishSite::with(['account', 'campaigns', 'articles'])->findOrFail($id);
+        $site = PublishSite::with(['user', 'campaigns', 'articles'])->findOrFail($id);
 
         return view('app-publish::sites.show', [
             'site' => $site,
@@ -138,12 +138,12 @@ class PublishSiteController extends Controller
      */
     public function edit(int $id): View
     {
-        $site = PublishSite::with('account')->findOrFail($id);
-        $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
+        $site = PublishSite::with('user')->findOrFail($id);
+        $users = User::orderBy('name')->get();
 
         return view('app-publish::sites.edit', [
             'site' => $site,
-            'accounts' => $accounts,
+            'users' => $users,
         ]);
     }
 
@@ -159,7 +159,7 @@ class PublishSiteController extends Controller
         $site = PublishSite::findOrFail($id);
 
         $validated = $request->validate([
-            'publish_account_id' => 'required|exists:publish_accounts,id',
+            'user_id' => 'required|exists:users,id',
             'name' => 'required|string|max:255',
             'url' => 'required|url|max:2048',
             'connection_type' => 'required|in:wptoolkit,wp_rest_api',

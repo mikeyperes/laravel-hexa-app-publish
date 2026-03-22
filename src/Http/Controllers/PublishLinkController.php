@@ -3,7 +3,7 @@
 namespace hexa_app_publish\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_app_publish\Models\PublishAccount;
+use hexa_core\Models\User;
 use hexa_app_publish\Models\PublishLinkList;
 use hexa_app_publish\Models\PublishSitemap;
 use hexa_app_publish\Services\LinkInsertionService;
@@ -31,15 +31,15 @@ class PublishLinkController extends Controller
      */
     public function index(Request $request): View
     {
-        $accounts = PublishAccount::orderBy('name')->get();
-        $accountId = $request->input('account_id');
+        $users = User::orderBy('name')->get();
+        $userId = $request->input('user_id');
 
-        $linksQuery = PublishLinkList::with('account');
-        $sitemapsQuery = PublishSitemap::with('account');
+        $linksQuery = PublishLinkList::with('user');
+        $sitemapsQuery = PublishSitemap::with('user');
 
-        if ($accountId) {
-            $linksQuery->where('publish_account_id', $accountId);
-            $sitemapsQuery->where('publish_account_id', $accountId);
+        if ($userId) {
+            $linksQuery->where('user_id', $userId);
+            $sitemapsQuery->where('user_id', $userId);
         }
 
         $links = $linksQuery->orderByDesc('priority')->orderBy('name')->get();
@@ -48,7 +48,7 @@ class PublishLinkController extends Controller
         return view('app-publish::links.index', [
             'links' => $links,
             'sitemaps' => $sitemaps,
-            'accounts' => $accounts,
+            'users' => $users,
         ]);
     }
 
@@ -61,7 +61,7 @@ class PublishLinkController extends Controller
     public function storeLink(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'publish_account_id' => 'required|exists:publish_accounts,id',
+            'user_id' => 'required|exists:users,id',
             'name' => 'required|string|max:255',
             'type' => 'required|in:backlink,internal,sitemap',
             'url' => 'required|url|max:2048',
@@ -117,7 +117,7 @@ class PublishLinkController extends Controller
     public function storeSitemap(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'publish_account_id' => 'required|exists:publish_accounts,id',
+            'user_id' => 'required|exists:users,id',
             'name' => 'required|string|max:255',
             'sitemap_url' => 'required|url|max:2048',
         ]);

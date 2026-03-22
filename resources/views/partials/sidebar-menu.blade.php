@@ -92,15 +92,6 @@
 
 <p class="text-xs text-gray-600 uppercase tracking-wider pt-4 pb-1 px-3">Content</p>
 
-<a href="{{ route('publish.accounts.index') }}"
-   class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
-          {{ request()->routeIs('publish.accounts.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
-    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-    </svg>
-    Accounts
-</a>
-
 <a href="{{ route('publish.sites.index') }}"
    class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
           {{ request()->routeIs('publish.sites.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">

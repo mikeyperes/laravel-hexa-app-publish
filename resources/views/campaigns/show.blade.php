@@ -12,7 +12,7 @@
             <div>
                 <p class="text-xs font-mono text-gray-400 mb-1">{{ $campaign->campaign_id }}</p>
                 <h2 class="text-xl font-semibold text-gray-800 break-words">{{ $campaign->name }}</h2>
-                <p class="text-sm text-gray-500 mt-1">Account: <a href="{{ route('publish.accounts.show', $campaign->account->id) }}" class="text-blue-600 hover:text-blue-800">{{ $campaign->account->name }}</a></p>
+                <p class="text-sm text-gray-500 mt-1">User: {{ $campaign->user->name ?? 'Unassigned' }}</p>
                 <p class="text-sm text-gray-500">Site: <a href="{{ route('publish.sites.show', $campaign->site->id) }}" class="text-blue-600 hover:text-blue-800">{{ $campaign->site->name }}</a></p>
                 @if($campaign->template)
                     <p class="text-sm text-gray-500">Template: <a href="{{ route('publish.templates.show', $campaign->template->id) }}" class="text-blue-600 hover:text-blue-800">{{ $campaign->template->name }}</a></p>

@@ -10,10 +10,10 @@
         <form method="GET" action="{{ route('publish.campaigns.index') }}" class="flex flex-wrap items-center gap-2 flex-1">
             <input type="text" name="search" value="{{ request('search') }}"
                 class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-48" placeholder="Search name/topic...">
-            <select name="account_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <option value="">All Accounts</option>
-                @foreach($accounts as $a)
-                    <option value="{{ $a->id }}" {{ request('account_id') == $a->id ? 'selected' : '' }}>{{ $a->name }}</option>
+            <select name="user_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">All Users</option>
+                @foreach($users as $u)
+                    <option value="{{ $u->id }}" {{ request('user_id') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
                 @endforeach
             </select>
             <select name="status" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -40,7 +40,7 @@
                 <thead class="bg-gray-50 border-b border-gray-200">
                     <tr>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Campaign</th>
-                        <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Account</th>
+                        <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase">User</th>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Site</th>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Schedule</th>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Mode</th>
@@ -56,7 +56,7 @@
                             <a href="{{ route('publish.campaigns.show', $c->id) }}" class="text-blue-600 hover:text-blue-800 font-medium break-words">{{ $c->name }}</a>
                             <p class="text-xs text-gray-400 font-mono">{{ $c->campaign_id }}</p>
                         </td>
-                        <td class="px-5 py-3 text-gray-600 break-words">{{ $c->account->name }}</td>
+                        <td class="px-5 py-3 text-gray-600 break-words">{{ $c->user->name ?? 'Unassigned' }}</td>
                         <td class="px-5 py-3 text-gray-600 break-words">{{ $c->site->name ?? '—' }}</td>
                         <td class="px-5 py-3 text-gray-500 text-xs">{{ $c->articles_per_interval }}/{{ $c->interval_unit }}</td>
                         <td class="px-5 py-3 text-gray-500 text-xs">{{ $c->delivery_mode }}</td>

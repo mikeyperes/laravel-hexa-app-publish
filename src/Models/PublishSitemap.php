@@ -4,6 +4,7 @@ namespace hexa_app_publish\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use hexa_core\Models\User;
 
 class PublishSitemap extends Model
 {
@@ -11,6 +12,7 @@ class PublishSitemap extends Model
 
     protected $fillable = [
         'publish_account_id',
+        'user_id',
         'name',
         'sitemap_url',
         'parsed_urls',
@@ -26,6 +28,15 @@ class PublishSitemap extends Model
     ];
 
     /**
+     * @return BelongsTo
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * @deprecated Use user() instead. Kept for backward compatibility.
      * @return BelongsTo
      */
     public function account(): BelongsTo

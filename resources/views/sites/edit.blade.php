@@ -9,10 +9,10 @@
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-5">
 
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Account <span class="text-red-500">*</span></label>
-            <select x-model="form.publish_account_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                @foreach($accounts as $a)
-                    <option value="{{ $a->id }}">{{ $a->name }}</option>
+            <label class="block text-sm font-medium text-gray-700 mb-1">User <span class="text-red-500">*</span></label>
+            <select x-model="form.user_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                @foreach($users as $u)
+                    <option value="{{ $u->id }}">{{ $u->name }}</option>
                 @endforeach
             </select>
         </div>
@@ -79,7 +79,7 @@
 function siteEditForm() {
     return {
         form: {
-            publish_account_id: @json($site->publish_account_id),
+            user_id: @json($site->user_id),
             name: @json($site->name),
             url: @json($site->url),
             connection_type: @json($site->connection_type),

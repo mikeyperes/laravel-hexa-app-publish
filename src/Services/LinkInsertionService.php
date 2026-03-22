@@ -11,15 +11,15 @@ use Illuminate\Support\Facades\Log;
 class LinkInsertionService
 {
     /**
-     * Get available links for an account (backlinks + sitemap URLs).
+     * Get available links for a user (backlinks + sitemap URLs).
      *
-     * @param int $accountId
+     * @param int $userId
      * @param int $maxLinks Max links to return.
      * @return array
      */
-    public function getAvailableLinks(int $accountId, int $maxLinks = 10): array
+    public function getAvailableLinks(int $userId, int $maxLinks = 10): array
     {
-        $links = PublishLinkList::where('publish_account_id', $accountId)
+        $links = PublishLinkList::where('user_id', $userId)
             ->where('active', true)
             ->orderByDesc('priority')
             ->orderBy('times_used')

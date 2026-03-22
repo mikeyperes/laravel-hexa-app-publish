@@ -10,7 +10,7 @@
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
-                <p class="text-sm text-gray-500 mb-1">Account: <a href="{{ route('publish.accounts.show', $site->account->id) }}" class="text-blue-600 hover:text-blue-800">{{ $site->account->name }}</a></p>
+                <p class="text-sm text-gray-500 mb-1">User: {{ $site->user->name ?? 'Unassigned' }}</p>
                 <h2 class="text-xl font-semibold text-gray-800 break-words">{{ $site->name }}</h2>
                 <p class="text-sm break-words mt-1"><a href="{{ $site->url }}" target="_blank" class="text-blue-600 hover:text-blue-800">{{ $site->url }} <svg class="inline w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></p>
                 <p class="text-xs text-gray-400 mt-2">Connection: {{ $site->connection_type === 'wptoolkit' ? 'WP Toolkit' : 'REST API' }}</p>
@@ -61,7 +61,7 @@
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
         <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
             <h3 class="font-semibold text-gray-800">Campaigns</h3>
-            <a href="{{ route('publish.campaigns.create', ['account_id' => $site->publish_account_id, 'site_id' => $site->id]) }}" class="text-sm text-blue-600 hover:text-blue-800">+ New Campaign</a>
+            <a href="{{ route('publish.campaigns.create', ['user_id' => $site->user_id, 'site_id' => $site->id]) }}" class="text-sm text-blue-600 hover:text-blue-800">+ New Campaign</a>
         </div>
         @if($site->campaigns->isEmpty())
             <div class="p-5 text-center text-gray-500 text-sm">No campaigns on this site yet.</div>

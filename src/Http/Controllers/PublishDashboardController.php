@@ -3,7 +3,7 @@
 namespace hexa_app_publish\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_app_publish\Models\PublishAccount;
+use hexa_core\Models\User;
 use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishCampaign;
 use hexa_app_publish\Models\PublishSite;
@@ -19,7 +19,7 @@ class PublishDashboardController extends Controller
     public function index(): View
     {
         $stats = [
-            'total_accounts' => PublishAccount::where('status', 'active')->count(),
+            'total_users' => User::count(),
             'total_sites' => PublishSite::where('status', 'connected')->count(),
             'active_campaigns' => PublishCampaign::where('status', 'active')->count(),
             'articles_today' => PublishArticle::whereDate('created_at', today())->count(),
@@ -33,7 +33,7 @@ class PublishDashboardController extends Controller
             ->limit(10)
             ->get();
 
-        $activeCampaigns = PublishCampaign::with(['site', 'account'])
+        $activeCampaigns = PublishCampaign::with(['site', 'user'])
             ->where('status', 'active')
             ->orderBy('next_run_at')
             ->limit(10)
