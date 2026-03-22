@@ -13,7 +13,6 @@ class PublishArticle extends Model
 
     protected $fillable = [
         'publish_account_id',
-        'user_id',
         'publish_site_id',
         'publish_campaign_id',
         'publish_template_id',
@@ -69,15 +68,6 @@ class PublishArticle extends Model
     }
 
     /**
-     * @return BelongsTo
-     */
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'user_id');
-    }
-
-    /**
-     * @deprecated Use user() instead. Kept for backward compatibility.
      * @return BelongsTo
      */
     public function account(): BelongsTo

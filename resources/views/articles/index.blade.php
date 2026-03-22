@@ -10,10 +10,10 @@
         <form method="GET" action="{{ route('publish.articles.index') }}" class="flex flex-wrap items-center gap-2 flex-1">
             <input type="text" name="search" value="{{ request('search') }}"
                 class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-48" placeholder="Search title/ID...">
-            <select name="user_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <option value="">All Users</option>
-                @foreach($users as $u)
-                    <option value="{{ $u->id }}" {{ request('user_id') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
+            <select name="account_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">All Accounts</option>
+                @foreach($accounts as $a)
+                    <option value="{{ $a->id }}" {{ request('account_id') == $a->id ? 'selected' : '' }}>{{ $a->name }}</option>
                 @endforeach
             </select>
             <select name="status" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">

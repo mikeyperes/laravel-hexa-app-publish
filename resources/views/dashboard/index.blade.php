@@ -9,8 +9,8 @@
     {{-- Stats cards --}}
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-            <p class="text-sm text-gray-500">Users</p>
-            <p class="text-3xl font-bold text-gray-800 mt-1">{{ $stats['total_users'] }}</p>
+            <p class="text-sm text-gray-500">Active Accounts</p>
+            <p class="text-3xl font-bold text-gray-800 mt-1">{{ $stats['total_accounts'] }}</p>
         </div>
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
             <p class="text-sm text-gray-500">Connected Sites</p>

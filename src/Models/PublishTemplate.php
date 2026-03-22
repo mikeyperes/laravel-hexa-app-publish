@@ -5,7 +5,6 @@ namespace hexa_app_publish\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use hexa_core\Models\User;
 
 class PublishTemplate extends Model
 {
@@ -13,7 +12,6 @@ class PublishTemplate extends Model
 
     protected $fillable = [
         'publish_account_id',
-        'user_id',
         'name',
         'article_type',
         'description',
@@ -36,15 +34,6 @@ class PublishTemplate extends Model
     ];
 
     /**
-     * @return BelongsTo
-     */
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'user_id');
-    }
-
-    /**
-     * @deprecated Use user() instead. Kept for backward compatibility.
      * @return BelongsTo
      */
     public function account(): BelongsTo

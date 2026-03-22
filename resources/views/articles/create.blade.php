@@ -10,11 +10,11 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">User <span class="text-red-500">*</span></label>
-                <select x-model="form.user_id" @change="filterSites()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select user...</option>
-                    @foreach($users as $u)
-                        <option value="{{ $u->id }}">{{ $u->name }}</option>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Account <span class="text-red-500">*</span></label>
+                <select x-model="form.publish_account_id" @change="filterSites()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Select account...</option>
+                    @foreach($accounts as $a)
+                        <option value="{{ $a->id }}">{{ $a->name }}</option>
                     @endforeach
                 </select>
             </div>
@@ -86,10 +86,10 @@
 @push('scripts')
 <script>
 function articleCreateForm() {
-    const allSites = @json($sites->map(fn($s) => ['id' => $s->id, 'name' => $s->name, 'user_id' => $s->user_id]));
+    const allSites = @json($sites->map(fn($s) => ['id' => $s->id, 'name' => $s->name, 'account_id' => $s->publish_account_id]));
     return {
         form: {
-            user_id: '{{ $preselected_user_id ?? '' }}',
+            publish_account_id: '{{ $preselected_account_id ?? '' }}',
             publish_site_id: '{{ $preselected_site_id ?? '' }}',
             publish_template_id: '', title: '', excerpt: '',
             article_type: '', delivery_mode: 'review',
@@ -98,8 +98,8 @@ function articleCreateForm() {
         saving: false, resultMessage: '', resultSuccess: false,
         init() { this.filterSites(); },
         filterSites() {
-            const uid = this.form.user_id;
-            this.filteredSites = uid ? this.allSites.filter(s => s.user_id == uid) : this.allSites;
+            const aid = this.form.publish_account_id;
+            this.filteredSites = aid ? this.allSites.filter(s => s.account_id == aid) : this.allSites;
         },
         async save() {
             this.saving = true; this.resultMessage = '';

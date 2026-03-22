@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use hexa_app_publish\Http\Controllers\PublishAccountController;
 use hexa_app_publish\Http\Controllers\PublishSiteController;
 use hexa_app_publish\Http\Controllers\PublishCampaignController;
 use hexa_app_publish\Http\Controllers\PublishArticleController;
@@ -22,6 +23,16 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
 
     // Dashboard widget data
     Route::get('/publish/dashboard', [PublishDashboardController::class, 'index'])->name('publish.dashboard');
+
+    // Accounts
+    Route::get('/publish/accounts', [PublishAccountController::class, 'index'])->name('publish.accounts.index');
+    Route::get('/publish/accounts/create', [PublishAccountController::class, 'create'])->name('publish.accounts.create');
+    Route::post('/publish/accounts', [PublishAccountController::class, 'store'])->name('publish.accounts.store');
+    Route::get('/publish/accounts/{id}', [PublishAccountController::class, 'show'])->name('publish.accounts.show');
+    Route::get('/publish/accounts/{id}/edit', [PublishAccountController::class, 'edit'])->name('publish.accounts.edit');
+    Route::put('/publish/accounts/{id}', [PublishAccountController::class, 'update'])->name('publish.accounts.update');
+    Route::post('/publish/accounts/{id}/add-user', [PublishAccountController::class, 'addUser'])->name('publish.accounts.add-user');
+    Route::delete('/publish/accounts/{id}/remove-user/{userId}', [PublishAccountController::class, 'removeUser'])->name('publish.accounts.remove-user');
 
     // Sites
     Route::get('/publish/sites', [PublishSiteController::class, 'index'])->name('publish.sites.index');

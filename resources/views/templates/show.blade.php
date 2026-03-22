@@ -9,7 +9,7 @@
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
-                <p class="text-sm text-gray-500 mb-1">User: {{ $template->user->name ?? 'Unassigned' }}</p>
+                <p class="text-sm text-gray-500 mb-1">Account: <a href="{{ route('publish.accounts.show', $template->account->id) }}" class="text-blue-600 hover:text-blue-800">{{ $template->account->name }}</a></p>
                 <h2 class="text-xl font-semibold text-gray-800 break-words">{{ $template->name }}</h2>
                 @if($template->description)
                     <p class="text-sm text-gray-500 mt-2 break-words">{{ $template->description }}</p>

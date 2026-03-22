@@ -11,11 +11,11 @@
         {{-- Identity --}}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">User <span class="text-red-500">*</span></label>
-                <select x-model="form.user_id" @change="filterSitesAndTemplates()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select user...</option>
-                    @foreach($users as $u)
-                        <option value="{{ $u->id }}">{{ $u->name }}</option>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Account <span class="text-red-500">*</span></label>
+                <select x-model="form.publish_account_id" @change="filterSitesAndTemplates()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Select account...</option>
+                    @foreach($accounts as $a)
+                        <option value="{{ $a->id }}">{{ $a->name }}</option>
                     @endforeach
                 </select>
             </div>
@@ -145,11 +145,11 @@
 @push('scripts')
 <script>
 function campaignForm() {
-    const allSites = @json($sites->map(fn($s) => ['id' => $s->id, 'name' => $s->name, 'user_id' => $s->user_id]));
-    const allTemplates = @json($templates->map(fn($t) => ['id' => $t->id, 'name' => $t->name, 'user_id' => $t->user_id]));
+    const allSites = @json($sites->map(fn($s) => ['id' => $s->id, 'name' => $s->name, 'account_id' => $s->publish_account_id]));
+    const allTemplates = @json($templates->map(fn($t) => ['id' => $t->id, 'name' => $t->name, 'account_id' => $t->publish_account_id]));
     return {
         form: {
-            user_id: '{{ $preselected_user_id ?? '' }}',
+            publish_account_id: '{{ $preselected_account_id ?? '' }}',
             publish_site_id: '{{ $preselected_site_id ?? '' }}',
             publish_template_id: '',
             name: '', description: '', topic: '',
@@ -163,9 +163,9 @@ function campaignForm() {
         saving: false, resultMessage: '', resultSuccess: false,
         init() { this.filterSitesAndTemplates(); },
         filterSitesAndTemplates() {
-            const uid = this.form.user_id;
-            this.filteredSites = uid ? this.allSites.filter(s => s.user_id == uid) : this.allSites;
-            this.filteredTemplates = uid ? this.allTemplates.filter(t => t.user_id == uid) : this.allTemplates;
+            const aid = this.form.publish_account_id;
+            this.filteredSites = aid ? this.allSites.filter(s => s.account_id == aid) : this.allSites;
+            this.filteredTemplates = aid ? this.allTemplates.filter(t => t.account_id == aid) : this.allTemplates;
         },
         toggleArray(arr, val) { const i = arr.indexOf(val); if (i === -1) arr.push(val); else arr.splice(i, 1); },
         async save() {

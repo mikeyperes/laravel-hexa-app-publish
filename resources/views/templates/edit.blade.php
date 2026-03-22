@@ -10,8 +10,8 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">User</label>
-                <input type="text" disabled value="{{ $template->user->name ?? 'Unassigned' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Account</label>
+                <input type="text" disabled value="{{ $template->account->name }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500">
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Template Name <span class="text-red-500">*</span></label>

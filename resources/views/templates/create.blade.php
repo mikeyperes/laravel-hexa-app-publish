@@ -10,11 +10,11 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">User <span class="text-red-500">*</span></label>
-                <select x-model="form.user_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select user...</option>
-                    @foreach($users as $u)
-                        <option value="{{ $u->id }}" {{ ($preselected_user_id ?? '') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Account <span class="text-red-500">*</span></label>
+                <select x-model="form.publish_account_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Select account...</option>
+                    @foreach($accounts as $a)
+                        <option value="{{ $a->id }}" {{ ($preselected_account_id ?? '') == $a->id ? 'selected' : '' }}>{{ $a->name }}</option>
                     @endforeach
                 </select>
             </div>
@@ -112,7 +112,7 @@
 function templateForm() {
     return {
         form: {
-            user_id: '{{ $preselected_user_id ?? '' }}',
+            publish_account_id: '{{ $preselected_account_id ?? '' }}',
             name: '', article_type: '', ai_engine: '', tone: '',
             word_count_min: '', word_count_max: '', photos_per_article: '',
             max_links: '', photo_sources: [], description: '', ai_prompt: '',

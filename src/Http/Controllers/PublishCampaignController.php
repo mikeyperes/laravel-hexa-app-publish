@@ -3,8 +3,8 @@
 namespace hexa_app_publish\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_core\Models\User;
 use hexa_core\Services\GenericService;
+use hexa_app_publish\Models\PublishAccount;
 use hexa_app_publish\Models\PublishCampaign;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Models\PublishTemplate;
@@ -36,10 +36,10 @@ class PublishCampaignController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = PublishCampaign::with(['user', 'site', 'template', 'articles']);
+        $query = PublishCampaign::with(['account', 'site', 'template', 'articles']);
 
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->input('user_id'));
+        if ($request->filled('account_id')) {
+            $query->where('publish_account_id', $request->input('account_id'));
         }
 
         if ($request->filled('site_id')) {
@@ -60,11 +60,11 @@ class PublishCampaignController extends Controller
         }
 
         $campaigns = $query->orderByDesc('created_at')->get();
-        $users = User::orderBy('name')->get();
+        $accounts = PublishAccount::orderBy('name')->get();
 
         return view('app-publish::campaigns.index', [
             'campaigns' => $campaigns,
-            'users' => $users,
+            'accounts' => $accounts,
         ]);
     }
 
@@ -76,12 +76,12 @@ class PublishCampaignController extends Controller
      */
     public function create(Request $request): View
     {
-        $users = User::orderBy('name')->get();
+        $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
         $templates = PublishTemplate::orderBy('name')->get();
 
         return view('app-publish::campaigns.create', [
-            'users' => $users,
+            'accounts' => $accounts,
             'sites' => $sites,
             'templates' => $templates,
             'deliveryModes' => config('hws-publish.campaign_modes', []),
@@ -90,7 +90,7 @@ class PublishCampaignController extends Controller
             'aiEngines' => config('hws-publish.ai_engines', []),
             'articleSources' => config('hws-publish.article_sources', []),
             'photoSources' => config('hws-publish.photo_sources', []),
-            'preselected_user_id' => $request->input('user_id'),
+            'preselected_account_id' => $request->input('account_id'),
             'preselected_site_id' => $request->input('site_id'),
         ]);
     }
@@ -104,7 +104,7 @@ class PublishCampaignController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'user_id' => 'required|exists:users,id',
+            'publish_account_id' => 'required|exists:publish_accounts,id',
             'publish_site_id' => 'required|exists:publish_sites,id',
             'publish_template_id' => 'nullable|exists:publish_templates,id',
             'name' => 'required|string|max:255',
@@ -149,7 +149,7 @@ class PublishCampaignController extends Controller
     public function show(int $id): View
     {
         $campaign = PublishCampaign::with([
-            'user', 'site', 'template', 'creator',
+            'account', 'site', 'template', 'creator',
             'articles' => function ($q) {
                 $q->orderByDesc('created_at');
             },
@@ -168,14 +168,14 @@ class PublishCampaignController extends Controller
      */
     public function edit(int $id): View
     {
-        $campaign = PublishCampaign::with(['user', 'site', 'template'])->findOrFail($id);
-        $users = User::orderBy('name')->get();
-        $sites = PublishSite::where('user_id', $campaign->user_id)->orderBy('name')->get();
-        $templates = PublishTemplate::where('user_id', $campaign->user_id)->orderBy('name')->get();
+        $campaign = PublishCampaign::with(['account', 'site', 'template'])->findOrFail($id);
+        $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
+        $sites = PublishSite::where('publish_account_id', $campaign->publish_account_id)->orderBy('name')->get();
+        $templates = PublishTemplate::where('publish_account_id', $campaign->publish_account_id)->orderBy('name')->get();
 
         return view('app-publish::campaigns.edit', [
             'campaign' => $campaign,
-            'users' => $users,
+            'accounts' => $accounts,
             'sites' => $sites,
             'templates' => $templates,
             'deliveryModes' => config('hws-publish.campaign_modes', []),

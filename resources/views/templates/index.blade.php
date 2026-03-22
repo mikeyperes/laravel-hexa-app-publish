@@ -8,10 +8,10 @@
 
     <div class="flex flex-wrap items-center gap-3">
         <form method="GET" action="{{ route('publish.templates.index') }}" class="flex flex-wrap items-center gap-2 flex-1">
-            <select name="user_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <option value="">All Users</option>
-                @foreach($users as $u)
-                    <option value="{{ $u->id }}" {{ request('user_id') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
+            <select name="account_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">All Accounts</option>
+                @foreach($accounts as $a)
+                    <option value="{{ $a->id }}" {{ request('account_id') == $a->id ? 'selected' : '' }}>{{ $a->name }}</option>
                 @endforeach
             </select>
             <select name="article_type" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -41,7 +41,7 @@
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     </a>
                 </div>
-                <p class="text-xs text-gray-400 mb-2">{{ $template->user->name ?? 'Unassigned' }}</p>
+                <p class="text-xs text-gray-400 mb-2">{{ $template->account->name }}</p>
                 @if($template->article_type)
                     <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">{{ ucwords(str_replace('-', ' ', $template->article_type)) }}</span>
                 @endif

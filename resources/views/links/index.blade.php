@@ -9,10 +9,10 @@
     {{-- Filter --}}
     <div class="flex flex-wrap items-center gap-3">
         <form method="GET" action="{{ route('publish.links.index') }}" class="flex items-center gap-2">
-            <select name="user_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <option value="">All Users</option>
-                @foreach($users as $u)
-                    <option value="{{ $u->id }}" {{ request('user_id') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
+            <select name="account_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">All Accounts</option>
+                @foreach($accounts as $a)
+                    <option value="{{ $a->id }}" {{ request('account_id') == $a->id ? 'selected' : '' }}>{{ $a->name }}</option>
                 @endforeach
             </select>
             <button type="submit" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Filter</button>
@@ -30,11 +30,11 @@
         <div x-show="showAddLink" x-cloak class="p-5 bg-gray-50 border-b border-gray-200">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">User</label>
-                    <select x-model="newLink.user_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <label class="block text-xs text-gray-500 mb-1">Account</label>
+                    <select x-model="newLink.publish_account_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="">Select...</option>
-                        @foreach($users as $u)
-                            <option value="{{ $u->id }}">{{ $u->name }}</option>
+                        @foreach($accounts as $a)
+                            <option value="{{ $a->id }}">{{ $a->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -89,7 +89,7 @@
                         <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Anchor</th>
                         <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Priority</th>
                         <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Used</th>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">User</th>
+                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Account</th>
                         <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                 </thead>
@@ -105,7 +105,7 @@
                         <td class="px-5 py-2 text-xs text-gray-500 break-words">{{ $link->anchor_text ?? '—' }}</td>
                         <td class="px-5 py-2 text-xs text-gray-500">{{ $link->priority }}</td>
                         <td class="px-5 py-2 text-xs text-gray-500">{{ $link->times_used }}x</td>
-                        <td class="px-5 py-2 text-xs text-gray-400">{{ $link->user->name ?? 'Unassigned' }}</td>
+                        <td class="px-5 py-2 text-xs text-gray-400">{{ $link->account->name }}</td>
                         <td class="px-5 py-2">
                             <div class="flex items-center gap-2">
                                 <button @click="toggleLink({{ $link->id }})" class="text-xs {{ $link->active ? 'text-yellow-600 hover:text-yellow-800' : 'text-green-600 hover:text-green-800' }}">
@@ -132,11 +132,11 @@
         <div x-show="showAddSitemap" x-cloak class="p-5 bg-gray-50 border-b border-gray-200">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">User</label>
-                    <select x-model="newSitemap.user_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <label class="block text-xs text-gray-500 mb-1">Account</label>
+                    <select x-model="newSitemap.publish_account_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="">Select...</option>
-                        @foreach($users as $u)
-                            <option value="{{ $u->id }}">{{ $u->name }}</option>
+                        @foreach($accounts as $a)
+                            <option value="{{ $a->id }}">{{ $a->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -169,7 +169,7 @@
                     <div>
                         <p class="font-medium text-sm break-words">{{ $sitemap->name }}</p>
                         <p class="text-xs text-gray-400 break-words"><a href="{{ $sitemap->sitemap_url }}" target="_blank" class="hover:text-blue-600">{{ $sitemap->sitemap_url }} <svg class="inline w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></p>
-                        <p class="text-xs text-gray-400">{{ $sitemap->url_count }} URLs &middot; {{ $sitemap->user->name ?? 'Unassigned' }} @if($sitemap->last_parsed_at) &middot; Parsed {{ $sitemap->last_parsed_at->diffForHumans() }}@endif</p>
+                        <p class="text-xs text-gray-400">{{ $sitemap->url_count }} URLs &middot; {{ $sitemap->account->name }} @if($sitemap->last_parsed_at) &middot; Parsed {{ $sitemap->last_parsed_at->diffForHumans() }}@endif</p>
                     </div>
                     <div class="flex items-center gap-2">
                         <button @click="refreshSitemap({{ $sitemap->id }})" class="text-xs text-blue-600 hover:text-blue-800">Refresh</button>
@@ -190,8 +190,8 @@ function linksManager() {
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
     return {
         showAddLink: false, showAddSitemap: false,
-        newLink: { user_id: '', name: '', type: 'backlink', url: '', anchor_text: '', context: '', priority: 0 },
-        newSitemap: { user_id: '', name: '', sitemap_url: '' },
+        newLink: { publish_account_id: '', name: '', type: 'backlink', url: '', anchor_text: '', context: '', priority: 0 },
+        newSitemap: { publish_account_id: '', name: '', sitemap_url: '' },
         savingLink: false, linkResult: '', linkSuccess: false,
         savingSitemap: false, sitemapResult: '', sitemapSuccess: false,
         async addLink() {

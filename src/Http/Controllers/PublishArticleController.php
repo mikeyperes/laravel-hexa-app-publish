@@ -3,8 +3,8 @@
 namespace hexa_app_publish\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_core\Models\User;
 use hexa_core\Services\GenericService;
+use hexa_app_publish\Models\PublishAccount;
 use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Models\PublishTemplate;
@@ -51,10 +51,10 @@ class PublishArticleController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = PublishArticle::with(['user', 'site', 'campaign', 'template', 'creator']);
+        $query = PublishArticle::with(['account', 'site', 'campaign', 'template', 'creator']);
 
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->input('user_id'));
+        if ($request->filled('account_id')) {
+            $query->where('publish_account_id', $request->input('account_id'));
         }
 
         if ($request->filled('site_id')) {
@@ -78,11 +78,11 @@ class PublishArticleController extends Controller
         }
 
         $articles = $query->orderByDesc('created_at')->paginate(25);
-        $users = User::orderBy('name')->get();
+        $accounts = PublishAccount::orderBy('name')->get();
 
         return view('app-publish::articles.index', [
             'articles' => $articles,
-            'users' => $users,
+            'accounts' => $accounts,
             'statuses' => config('hws-publish.article_statuses', []),
         ]);
     }
@@ -95,18 +95,18 @@ class PublishArticleController extends Controller
      */
     public function create(Request $request): View
     {
-        $users = User::orderBy('name')->get();
+        $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
         $templates = PublishTemplate::orderBy('name')->get();
 
         return view('app-publish::articles.create', [
-            'users' => $users,
+            'accounts' => $accounts,
             'sites' => $sites,
             'templates' => $templates,
             'articleTypes' => config('hws-publish.article_types', []),
             'aiEngines' => config('hws-publish.ai_engines', []),
             'deliveryModes' => config('hws-publish.campaign_modes', []),
-            'preselected_user_id' => $request->input('user_id'),
+            'preselected_account_id' => $request->input('account_id'),
             'preselected_site_id' => $request->input('site_id'),
         ]);
     }
@@ -120,7 +120,7 @@ class PublishArticleController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'user_id' => 'required|exists:users,id',
+            'publish_account_id' => 'required|exists:publish_accounts,id',
             'publish_site_id' => 'required|exists:publish_sites,id',
             'publish_template_id' => 'nullable|exists:publish_templates,id',
             'title' => 'required|string|max:500',
@@ -157,7 +157,7 @@ class PublishArticleController extends Controller
     public function show(int $id): View
     {
         $article = PublishArticle::with([
-            'user', 'site', 'campaign', 'template', 'creator', 'usedSources',
+            'account', 'site', 'campaign', 'template', 'creator', 'usedSources',
         ])->findOrFail($id);
 
         return view('app-publish::articles.show', [
@@ -174,7 +174,7 @@ class PublishArticleController extends Controller
     public function edit(int $id): View
     {
         $article = PublishArticle::with([
-            'user', 'site', 'campaign', 'template', 'usedSources',
+            'account', 'site', 'campaign', 'template', 'usedSources',
         ])->findOrFail($id);
 
         return view('app-publish::articles.edit', [
@@ -733,11 +733,11 @@ class PublishArticleController extends Controller
                 ->map(fn($l) => ['url' => $l->url, 'anchor_text' => $l->anchor_text, 'context' => $l->context])
                 ->toArray();
         } else {
-            $links = app(LinkInsertionService::class)->getAvailableLinks($article->user_id, $maxLinks);
+            $links = app(LinkInsertionService::class)->getAvailableLinks($article->publish_account_id, $maxLinks);
         }
 
         if (empty($links)) {
-            return response()->json(['success' => false, 'message' => 'No active links available for this user.']);
+            return response()->json(['success' => false, 'message' => 'No active links available for this account.']);
         }
 
         $result = app(LinkInsertionService::class)->insertLinks($article->body, $links, $maxLinks);
