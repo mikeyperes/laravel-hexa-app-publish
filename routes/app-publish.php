@@ -24,15 +24,9 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     // Dashboard widget data
     Route::get('/publish/dashboard', [PublishDashboardController::class, 'index'])->name('publish.dashboard');
 
-    // Accounts
-    Route::get('/publish/accounts', [PublishAccountController::class, 'index'])->name('publish.accounts.index');
-    Route::get('/publish/accounts/create', [PublishAccountController::class, 'create'])->name('publish.accounts.create');
-    Route::post('/publish/accounts', [PublishAccountController::class, 'store'])->name('publish.accounts.store');
-    Route::get('/publish/accounts/{id}', [PublishAccountController::class, 'show'])->name('publish.accounts.show');
-    Route::get('/publish/accounts/{id}/edit', [PublishAccountController::class, 'edit'])->name('publish.accounts.edit');
-    Route::put('/publish/accounts/{id}', [PublishAccountController::class, 'update'])->name('publish.accounts.update');
-    Route::post('/publish/accounts/{id}/add-user', [PublishAccountController::class, 'addUser'])->name('publish.accounts.add-user');
-    Route::delete('/publish/accounts/{id}/remove-user/{userId}', [PublishAccountController::class, 'removeUser'])->name('publish.accounts.remove-user');
+    // Users (publishing profiles)
+    Route::get('/publish/users', [PublishAccountController::class, 'index'])->name('publish.accounts.index');
+    Route::get('/publish/users/{id}', [PublishAccountController::class, 'show'])->name('publish.accounts.show');
 
     // Sites
     Route::get('/publish/sites', [PublishSiteController::class, 'index'])->name('publish.sites.index');

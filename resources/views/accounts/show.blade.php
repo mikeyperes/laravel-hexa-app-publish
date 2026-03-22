@@ -15,7 +15,9 @@
                 <p class="text-sm text-gray-500 mt-1">Role: <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">{{ $user->role ?? 'user' }}</span></p>
             </div>
             <div class="flex items-center gap-3">
-                <a href="{{ route('publish.accounts.edit', $user->id) }}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Edit</a>
+                @if(Route::has('settings.users.edit'))
+                    <a href="{{ route('settings.users.edit', $user->id) }}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Edit User</a>
+                @endif
             </div>
         </div>
     </div>
