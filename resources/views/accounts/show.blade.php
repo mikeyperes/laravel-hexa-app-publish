@@ -53,11 +53,13 @@
             <div class="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-4">
                 @foreach($attachedAccounts as $acct)
                 <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-                    <div>
+                    <div class="flex items-center gap-2">
                         <span class="text-sm font-medium text-gray-900">{{ $acct->domain }}</span>
-                        <span class="text-xs text-gray-400 ml-2">{{ $acct->username }}</span>
-                        <span class="text-xs text-gray-400 ml-2">{{ $acct->whmServer->hostname ?? '' }}</span>
-                        <span class="text-xs text-gray-400 ml-2">{{ $acct->ip_address }}</span>
+                        <span class="text-xs text-gray-400">{{ $acct->username }}</span>
+                        <span class="text-xs text-gray-400">{{ $acct->whmServer->hostname ?? '' }}</span>
+                        @if($acct->is_reseller)
+                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">Reseller ({{ $acct->child_count }} accounts)</span>
+                        @endif
                     </div>
                     <button @click="detachAccount({{ $acct->id }})" class="text-xs text-red-400 hover:text-red-600 px-2 py-1">Detach</button>
                 </div>
@@ -67,23 +69,42 @@
             <p class="text-sm text-gray-400 mb-4">No cPanel accounts attached.</p>
         @endif
 
-        {{-- Attach new account --}}
-        <div class="flex items-end gap-3">
-            <div class="flex-1">
-                <label class="block text-xs font-medium text-gray-500 mb-1">Attach cPanel Account</label>
-                <select x-model="selectedAccountId" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select account...</option>
+        {{-- Attach accounts (checkboxes) --}}
+        @if($availableAccounts->isNotEmpty())
+        <div x-data="{ showAttach: false }">
+            <button @click="showAttach = !showAttach" class="text-sm text-blue-600 hover:text-blue-800 mb-3" x-text="showAttach ? 'Hide account list' : '+ Attach cPanel Accounts'"></button>
+
+            <div x-show="showAttach" x-cloak>
+                <div class="border border-gray-200 rounded-lg max-h-64 overflow-y-auto mb-3">
                     @foreach($availableAccounts as $acct)
-                        <option value="{{ $acct->id }}">{{ $acct->domain }} ({{ $acct->username }}) — {{ $acct->whmServer->hostname ?? '?' }}</option>
+                    <label class="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-b-0">
+                        <input type="checkbox" value="{{ $acct->id }}" class="attach-checkbox rounded text-blue-600">
+                        <div class="flex items-center gap-2 flex-1 min-w-0">
+                            <span class="text-sm text-gray-800 break-words">{{ $acct->domain }}</span>
+                            <span class="text-xs text-gray-400">{{ $acct->username }}</span>
+                            <span class="text-xs text-gray-400">{{ $acct->whmServer->hostname ?? '' }}</span>
+                            @if($acct->is_reseller)
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">Reseller ({{ $acct->child_count }})</span>
+                            @endif
+                        </div>
+                    </label>
                     @endforeach
-                </select>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <button @click="attachSelected()" :disabled="attaching"
+                            class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+                        <svg x-show="attaching" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                        <span x-text="attaching ? 'Attaching...' : 'Attach Selected'"></span>
+                    </button>
+                    <label class="text-xs text-gray-500 flex items-center gap-1">
+                        <input type="checkbox" x-model="includeChildren" class="rounded text-blue-600">
+                        Auto-include reseller child accounts
+                    </label>
+                </div>
             </div>
-            <button @click="attachAccount()" :disabled="attaching || !selectedAccountId"
-                    class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
-                <svg x-show="attaching" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                <span x-text="attaching ? 'Attaching...' : 'Attach'"></span>
-            </button>
         </div>
+        @endif
 
         <div x-show="attachBanner" x-cloak class="mt-3 px-4 py-2 rounded-lg text-sm"
              :class="attachSuccess ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'"
@@ -214,10 +235,10 @@
 <script>
 function userProfile() {
     return {
-        selectedAccountId: '',
         attaching: false,
         attachBanner: '',
         attachSuccess: false,
+        includeChildren: true,
 
         scanning: false,
         scanBanner: '',
@@ -227,15 +248,21 @@ function userProfile() {
 
         csrfToken: document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
 
-        async attachAccount() {
-            if (!this.selectedAccountId) return;
+        async attachSelected() {
+            const checked = document.querySelectorAll('.attach-checkbox:checked');
+            if (checked.length === 0) {
+                this.attachSuccess = false;
+                this.attachBanner = 'Select at least one account.';
+                return;
+            }
+            const ids = Array.from(checked).map(cb => parseInt(cb.value));
             this.attaching = true;
             this.attachBanner = '';
             try {
                 const res = await fetch('{{ route("publish.accounts.attach", $user->id) }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ hosting_account_id: parseInt(this.selectedAccountId) }),
+                    body: JSON.stringify({ hosting_account_ids: ids, include_children: this.includeChildren }),
                 });
                 const data = await res.json();
                 this.attachSuccess = data.success;

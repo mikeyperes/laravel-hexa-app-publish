@@ -69,17 +69,27 @@ class PublishAccountController extends Controller
             ->pluck('hosting_account_id')
             ->toArray();
 
-        // Get attached cPanel accounts with server info
+        // Get attached cPanel accounts with server info + reseller detection
         $attachedAccounts = HostingAccount::with('whmServer')
             ->whereIn('id', $attachedIds)
-            ->get();
+            ->get()
+            ->map(function ($acct) {
+                $acct->is_reseller = $acct->isReseller();
+                $acct->child_count = $acct->is_reseller ? $acct->getChildAccountCount() : 0;
+                return $acct;
+            });
 
-        // Get all available cPanel accounts for the dropdown (not already attached)
+        // Get all available cPanel accounts (not already attached), with reseller info
         $availableAccounts = HostingAccount::with('whmServer')
             ->whereNotIn('id', $attachedIds)
             ->where('status', 'active')
             ->orderBy('domain')
-            ->get();
+            ->get()
+            ->map(function ($acct) {
+                $acct->is_reseller = $acct->isReseller();
+                $acct->child_count = $acct->is_reseller ? $acct->getChildAccountCount() : 0;
+                return $acct;
+            });
 
         $sites = PublishSite::where('user_id', $user->id)->get();
         $campaigns = PublishCampaign::where('user_id', $user->id)->with('site')->get();
@@ -114,34 +124,53 @@ class PublishAccountController extends Controller
     public function attachAccount(Request $request, int $id): JsonResponse
     {
         $request->validate([
-            'hosting_account_id' => 'required|integer',
+            'hosting_account_ids'   => 'required|array',
+            'hosting_account_ids.*' => 'integer',
+            'include_children'      => 'nullable|boolean',
         ]);
 
         $user = User::findOrFail($id);
-        $accountId = $request->input('hosting_account_id');
+        $requestedIds = $request->input('hosting_account_ids');
+        $includeChildren = $request->boolean('include_children', true);
 
-        // Check not already attached
-        $exists = DB::table('user_hosting_accounts')
+        // Expand reseller accounts to include child accounts
+        $allIds = collect($requestedIds);
+        if ($includeChildren) {
+            foreach ($requestedIds as $accountId) {
+                $account = HostingAccount::find($accountId);
+                if ($account && $account->isReseller()) {
+                    $childIds = $account->getChildAccounts()->pluck('id');
+                    $allIds = $allIds->merge($childIds);
+                }
+            }
+        }
+        $allIds = $allIds->unique()->values();
+
+        // Filter out already attached
+        $alreadyAttached = DB::table('user_hosting_accounts')
             ->where('user_id', $user->id)
-            ->where('hosting_account_id', $accountId)
-            ->exists();
+            ->whereIn('hosting_account_id', $allIds)
+            ->pluck('hosting_account_id');
 
-        if ($exists) {
-            return response()->json(['success' => false, 'message' => 'Account already attached.']);
+        $newIds = $allIds->diff($alreadyAttached);
+
+        if ($newIds->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'All selected accounts are already attached.']);
         }
 
-        DB::table('user_hosting_accounts')->insert([
+        // Insert all new ones
+        $inserts = $newIds->map(fn($aid) => [
             'user_id' => $user->id,
-            'hosting_account_id' => $accountId,
+            'hosting_account_id' => $aid,
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ])->toArray();
 
-        $account = HostingAccount::with('whmServer')->find($accountId);
+        DB::table('user_hosting_accounts')->insert($inserts);
 
         return response()->json([
             'success' => true,
-            'message' => 'cPanel account "' . ($account->domain ?? $account->username) . '" attached.',
+            'message' => count($inserts) . ' cPanel account(s) attached.',
         ]);
     }
 
