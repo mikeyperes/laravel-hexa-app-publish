@@ -50,10 +50,11 @@
 
         {{-- Attached accounts --}}
         @if($attachedAccounts->isNotEmpty())
-            <div class="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-4">
+            <div class="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-2">
                 @foreach($attachedAccounts as $acct)
-                <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-                    <div class="flex items-center gap-2">
+                <label class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" value="{{ $acct->id }}" class="detach-checkbox rounded text-red-600">
+                    <div class="flex items-center gap-2 flex-1 min-w-0">
                         <span class="text-sm font-medium text-gray-900">{{ $acct->domain }}</span>
                         <span class="text-xs text-gray-400">{{ $acct->username }}</span>
                         <span class="text-xs text-gray-400">{{ $acct->whmServer->hostname ?? '' }}</span>
@@ -61,10 +62,14 @@
                             <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">Reseller ({{ $acct->child_count }} accounts)</span>
                         @endif
                     </div>
-                    <button @click="detachAccount({{ $acct->id }})" class="text-xs text-red-400 hover:text-red-600 px-2 py-1">Detach</button>
-                </div>
+                </label>
                 @endforeach
             </div>
+            <button @click="detachSelected()" :disabled="detaching"
+                    class="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 border border-red-200 rounded-lg hover:bg-red-50 inline-flex items-center gap-1 mb-4">
+                <svg x-show="detaching" class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                <span x-text="detaching ? 'Detaching...' : 'Detach Selected'"></span>
+            </button>
         @else
             <p class="text-sm text-gray-400 mb-4">No cPanel accounts attached.</p>
         @endif
@@ -276,19 +281,34 @@ function userProfile() {
             }
         },
 
-        async detachAccount(accountId) {
-            if (!confirm('Detach this cPanel account?')) return;
+        detaching: false,
+
+        async detachSelected() {
+            const checked = document.querySelectorAll('.detach-checkbox:checked');
+            if (checked.length === 0) {
+                this.attachSuccess = false;
+                this.attachBanner = 'Select accounts to detach.';
+                return;
+            }
+            this.detaching = true;
+            this.attachBanner = '';
+            const ids = Array.from(checked).map(cb => parseInt(cb.value));
             try {
-                const res = await fetch('/publish/users/{{ $user->id }}/detach-account/' + accountId, {
-                    method: 'DELETE',
-                    headers: { 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
-                });
-                const data = await res.json();
-                if (data.success) location.reload();
-                else { this.attachSuccess = false; this.attachBanner = data.message; }
+                const results = await Promise.all(ids.map(id =>
+                    fetch('/publish/users/{{ $user->id }}/detach-account/' + id, {
+                        method: 'DELETE',
+                        headers: { 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                    }).then(r => r.json())
+                ));
+                const successCount = results.filter(r => r.success).length;
+                this.attachSuccess = true;
+                this.attachBanner = successCount + ' account(s) detached.';
+                setTimeout(() => location.reload(), 800);
             } catch (e) {
                 this.attachSuccess = false;
                 this.attachBanner = 'Error: ' + e.message;
+            } finally {
+                this.detaching = false;
             }
         },
 
