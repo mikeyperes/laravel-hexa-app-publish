@@ -166,6 +166,50 @@ class PublishAccountController extends Controller
     }
 
     /**
+     * AJAX: Add a WordPress install as a publish site for a user.
+     *
+     * @param Request $request
+     * @param int $id User ID
+     * @return JsonResponse
+     */
+    public function addSite(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'url'  => 'required|string|max:500',
+            'name' => 'required|string|max:255',
+            'hosting_account_id'    => 'nullable|integer',
+            'wordpress_install_id'  => 'nullable|integer',
+            'path' => 'nullable|string|max:500',
+        ]);
+
+        $user = User::findOrFail($id);
+
+        // Check not already added
+        $exists = PublishSite::where('user_id', $user->id)
+            ->where('url', $request->input('url'))
+            ->exists();
+
+        if ($exists) {
+            return response()->json(['success' => false, 'message' => 'This site is already added for this user.']);
+        }
+
+        $site = PublishSite::create([
+            'user_id'              => $user->id,
+            'name'                 => $request->input('name'),
+            'url'                  => $request->input('url'),
+            'connection_type'      => 'wptoolkit',
+            'hosting_account_id'   => $request->input('hosting_account_id'),
+            'wordpress_install_id' => $request->input('wordpress_install_id'),
+            'status'               => 'connected',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Site "' . $site->name . '" added.',
+        ]);
+    }
+
+    /**
      * AJAX: Scan WordPress installs for a user's attached cPanel accounts via WP Toolkit.
      *
      * @param int $id User ID

@@ -30,6 +30,7 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::post('/publish/users/{id}/attach-account', [PublishAccountController::class, 'attachAccount'])->name('publish.accounts.attach');
     Route::delete('/publish/users/{id}/detach-account/{accountId}', [PublishAccountController::class, 'detachAccount'])->name('publish.accounts.detach');
     Route::post('/publish/users/{id}/scan-wordpress', [PublishAccountController::class, 'scanWordPress'])->name('publish.accounts.scan-wp');
+    Route::post('/publish/users/{id}/add-site', [PublishAccountController::class, 'addSite'])->name('publish.accounts.add-site');
 
     // Sites
     Route::get('/publish/sites', [PublishSiteController::class, 'index'])->name('publish.sites.index');

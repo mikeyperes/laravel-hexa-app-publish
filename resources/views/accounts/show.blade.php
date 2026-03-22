@@ -117,21 +117,62 @@
             No WordPress installs found. Attach cPanel accounts and click "Scan WP Toolkit".
         </div>
 
-        <div x-show="wpInstalls.length > 0" class="border border-gray-200 rounded-lg divide-y divide-gray-100">
+        <div x-show="wpInstalls.length > 0" class="space-y-3">
             <template x-for="(install, idx) in wpInstalls" :key="idx">
-                <div class="px-4 py-3 hover:bg-gray-50">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <a :href="install.url" target="_blank" class="text-sm font-medium text-blue-600 hover:underline break-words" x-text="install.url + ' &#8599;'"></a>
-                            <div class="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
-                                <span x-text="'cPanel: ' + install.cpanel_user"></span>
-                                <span x-text="'Server: ' + install.server_name"></span>
-                                <span x-text="'WP ' + (install.version || '?')"></span>
-                                <span x-text="install.path"></span>
+                <div class="border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="flex-1 min-w-0">
+                            {{-- Site URL --}}
+                            <div class="flex items-center gap-2 mb-2">
+                                <a :href="install.url" target="_blank" class="text-base font-semibold text-blue-600 hover:underline break-words" x-text="install.url"></a>
+                                <svg class="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                <span class="text-xs px-2 py-0.5 rounded font-medium flex-shrink-0"
+                                      :class="install.status === 'active' || install.status === 'Working' ? 'bg-green-100 text-green-700' : install.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'"
+                                      x-text="install.status || 'unknown'"></span>
+                            </div>
+
+                            {{-- Details grid --}}
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 text-xs">
+                                <div>
+                                    <span class="text-gray-400">cPanel:</span>
+                                    <span class="text-gray-700 font-medium ml-1" x-text="install.cpanel_user"></span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">Domain:</span>
+                                    <span class="text-gray-700 ml-1" x-text="install.cpanel_domain"></span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">Server:</span>
+                                    <span class="text-gray-700 ml-1" x-text="install.server_name"></span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">WordPress:</span>
+                                    <span class="text-gray-700 font-medium ml-1" x-text="'v' + (install.version || '?')"></span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">Path:</span>
+                                    <span class="text-gray-600 font-mono ml-1" x-text="install.path"></span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">PHP:</span>
+                                    <span class="text-gray-700 ml-1" x-text="install.php_version || '—'"></span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">ID:</span>
+                                    <span class="text-gray-600 font-mono ml-1" x-text="install.id || '—'"></span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">Auto-update:</span>
+                                    <span class="text-gray-700 ml-1" x-text="install.auto_update || '—'"></span>
+                                </div>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs px-2 py-0.5 rounded" :class="install.status === 'active' || install.status === 'Working' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'" x-text="install.status || 'unknown'"></span>
+
+                        {{-- Action button --}}
+                        <div class="flex-shrink-0">
+                            <button @click="selectSite(install)" class="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-green-700 whitespace-nowrap">
+                                + Add as Site
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -221,6 +262,29 @@ function userProfile() {
             } catch (e) {
                 this.attachSuccess = false;
                 this.attachBanner = 'Error: ' + e.message;
+            }
+        },
+
+        async selectSite(install) {
+            try {
+                const res = await fetch('/publish/users/{{ $user->id }}/add-site', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({
+                        url: install.url,
+                        name: install.name || install.url,
+                        hosting_account_id: install.hosting_account_id,
+                        wordpress_install_id: install.id,
+                        path: install.path,
+                    }),
+                });
+                const data = await res.json();
+                this.scanSuccess = data.success;
+                this.scanBanner = data.message;
+                if (data.success) setTimeout(() => location.reload(), 800);
+            } catch (e) {
+                this.scanSuccess = false;
+                this.scanBanner = 'Error: ' + e.message;
             }
         },
 
