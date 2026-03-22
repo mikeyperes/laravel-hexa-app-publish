@@ -194,17 +194,31 @@
                         Search
                     </button>
                 </div>
-                <div x-show="newsResults.length > 0" x-cloak class="mt-3 space-y-2 max-h-64 overflow-y-auto">
-                    <template x-for="(article, idx) in newsResults" :key="idx">
-                        <div class="flex items-start gap-3 bg-gray-50 rounded-lg p-3">
-                            <div class="flex-1 min-w-0">
-                                <p class="text-sm font-medium text-gray-800 break-words" x-text="article.title"></p>
-                                <p class="text-xs text-gray-500 break-all" x-text="article.url"></p>
+                <div x-show="newsResults.length > 0" x-cloak class="mt-3">
+                    <p class="text-xs text-gray-500 mb-2" x-text="newsResults.length + ' article(s) found'"></p>
+                    <div class="space-y-2 max-h-80 overflow-y-auto">
+                        <template x-for="(article, idx) in newsResults" :key="idx">
+                            <div class="border border-gray-200 rounded-lg p-3 hover:bg-gray-50">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-medium text-gray-900 break-words" x-text="article.title"></p>
+                                        <p class="text-xs text-gray-500 mt-1 break-words line-clamp-2" x-text="article.description"></p>
+                                        <div class="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
+                                            <span x-text="article.source_name"></span>
+                                            <span x-text="article.published_at"></span>
+                                            <span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500" x-text="article.source_api"></span>
+                                        </div>
+                                        <a :href="article.url" target="_blank" class="text-xs text-blue-500 hover:underline break-all mt-1 block" x-text="article.url + ' &#8599;'"></a>
+                                    </div>
+                                    <div class="flex-shrink-0 flex flex-col gap-1">
+                                        <button @click="addSource(article.url, article.title)" class="text-blue-600 hover:text-blue-800 text-xs font-medium px-2.5 py-1.5 bg-blue-50 rounded hover:bg-blue-100">+ Add</button>
+                                    </div>
+                                </div>
                             </div>
-                            <button @click="addSource(article.url, article.title)" class="flex-shrink-0 text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 bg-blue-50 rounded">+ Add</button>
-                        </div>
-                    </template>
+                        </template>
+                    </div>
                 </div>
+                <div x-show="newsResults.length === 0 && !newsSearching && newsSearch" x-cloak class="mt-3 text-sm text-gray-400">No articles found.</div>
             </div>
 
             {{-- Bookmarks tab --}}
@@ -939,8 +953,11 @@ function publishPipeline() {
                     body: JSON.stringify({ query: this.newsSearch })
                 });
                 const data = await resp.json();
-                this.newsResults = data.results || [];
-            } catch (e) { this.newsResults = []; }
+                this.newsResults = (data.data && data.data.articles) ? data.data.articles : [];
+                if (this.newsResults.length === 0 && data.message) {
+                    this.notify(data.message, false);
+                }
+            } catch (e) { this.newsResults = []; this.notify('Search failed: ' + e.message, false); }
             this.newsSearching = false;
         },
 
