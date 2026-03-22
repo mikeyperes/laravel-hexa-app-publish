@@ -5,20 +5,17 @@ namespace hexa_app_publish\Http\Controllers;
 use hexa_core\Http\Controllers\Controller;
 use hexa_core\Models\User;
 use hexa_package_whm\Models\HostingAccount;
-use hexa_package_whm\Models\WhmServer;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Models\PublishCampaign;
 use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishTemplate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 /**
  * PublishAccountController — user publishing profiles.
- * Users are core entities. This controller manages their publishing data:
- * attached cPanel accounts, WordPress sites (via WP Toolkit), campaigns, articles.
+ * Uses WHM package's HostingAccount::users() relationship for cPanel account linking.
  */
 class PublishAccountController extends Controller
 {
@@ -44,7 +41,7 @@ class PublishAccountController extends Controller
             $user->sites_count = PublishSite::where('user_id', $user->id)->count();
             $user->campaigns_count = PublishCampaign::where('user_id', $user->id)->count();
             $user->articles_count = PublishArticle::where('user_id', $user->id)->count();
-            $user->cpanel_count = DB::table('user_hosting_accounts')->where('user_id', $user->id)->count();
+            $user->cpanel_count = HostingAccount::whereHas('users', fn($q) => $q->where('users.id', $user->id))->count();
             return $user;
         });
 
@@ -63,15 +60,9 @@ class PublishAccountController extends Controller
     {
         $user = User::findOrFail($id);
 
-        // Get attached cPanel account IDs
-        $attachedIds = DB::table('user_hosting_accounts')
-            ->where('user_id', $user->id)
-            ->pluck('hosting_account_id')
-            ->toArray();
-
-        // Get attached cPanel accounts with server info + reseller detection
+        // Get attached cPanel accounts via WHM package relationship
         $attachedAccounts = HostingAccount::with('whmServer')
-            ->whereIn('id', $attachedIds)
+            ->whereHas('users', fn($q) => $q->where('users.id', $user->id))
             ->get()
             ->map(function ($acct) {
                 $acct->is_reseller = $acct->isReseller();
@@ -79,7 +70,9 @@ class PublishAccountController extends Controller
                 return $acct;
             });
 
-        // Get all available cPanel accounts (not already attached), with reseller info
+        $attachedIds = $attachedAccounts->pluck('id')->toArray();
+
+        // Available accounts (not attached, active)
         $availableAccounts = HostingAccount::with('whmServer')
             ->whereNotIn('id', $attachedIds)
             ->where('status', 'active')
@@ -115,7 +108,7 @@ class PublishAccountController extends Controller
     }
 
     /**
-     * AJAX: Attach a cPanel account to a user.
+     * AJAX: Attach cPanel accounts to a user.
      *
      * @param Request $request
      * @param int $id User ID
@@ -130,47 +123,42 @@ class PublishAccountController extends Controller
         ]);
 
         $user = User::findOrFail($id);
-        $requestedIds = $request->input('hosting_account_ids');
+        $requestedIds = collect($request->input('hosting_account_ids'));
         $includeChildren = $request->boolean('include_children', true);
 
-        // Expand reseller accounts to include child accounts
-        $allIds = collect($requestedIds);
+        // Expand reseller accounts
+        $allIds = $requestedIds;
         if ($includeChildren) {
             foreach ($requestedIds as $accountId) {
                 $account = HostingAccount::find($accountId);
                 if ($account && $account->isReseller()) {
-                    $childIds = $account->getChildAccounts()->pluck('id');
-                    $allIds = $allIds->merge($childIds);
+                    $allIds = $allIds->merge($account->getChildAccounts()->pluck('id'));
                 }
             }
         }
         $allIds = $allIds->unique()->values();
 
-        // Filter out already attached
-        $alreadyAttached = DB::table('user_hosting_accounts')
-            ->where('user_id', $user->id)
-            ->whereIn('hosting_account_id', $allIds)
-            ->pluck('hosting_account_id');
+        // Get currently attached
+        $currentIds = HostingAccount::whereHas('users', fn($q) => $q->where('users.id', $user->id))
+            ->pluck('id');
 
-        $newIds = $allIds->diff($alreadyAttached);
+        $newIds = $allIds->diff($currentIds);
 
         if ($newIds->isEmpty()) {
             return response()->json(['success' => false, 'message' => 'All selected accounts are already attached.']);
         }
 
-        // Insert all new ones
-        $inserts = $newIds->map(fn($aid) => [
-            'user_id' => $user->id,
-            'hosting_account_id' => $aid,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ])->toArray();
-
-        DB::table('user_hosting_accounts')->insert($inserts);
+        // Attach using the relationship
+        foreach ($newIds as $aid) {
+            $acct = HostingAccount::find($aid);
+            if ($acct) {
+                $acct->users()->attach($user->id);
+            }
+        }
 
         return response()->json([
             'success' => true,
-            'message' => count($inserts) . ' cPanel account(s) attached.',
+            'message' => $newIds->count() . ' cPanel account(s) attached.',
         ]);
     }
 
@@ -183,10 +171,10 @@ class PublishAccountController extends Controller
      */
     public function detachAccount(int $id, int $accountId): JsonResponse
     {
-        DB::table('user_hosting_accounts')
-            ->where('user_id', $id)
-            ->where('hosting_account_id', $accountId)
-            ->delete();
+        $account = HostingAccount::find($accountId);
+        if ($account) {
+            $account->users()->detach($id);
+        }
 
         return response()->json([
             'success' => true,
@@ -213,7 +201,6 @@ class PublishAccountController extends Controller
 
         $user = User::findOrFail($id);
 
-        // Check not already added
         $exists = PublishSite::where('user_id', $user->id)
             ->where('url', $request->input('url'))
             ->exists();
@@ -248,16 +235,14 @@ class PublishAccountController extends Controller
     {
         $user = User::findOrFail($id);
 
-        $attachedIds = DB::table('user_hosting_accounts')
-            ->where('user_id', $user->id)
-            ->pluck('hosting_account_id')
-            ->toArray();
+        $accounts = HostingAccount::with('whmServer')
+            ->whereHas('users', fn($q) => $q->where('users.id', $user->id))
+            ->get();
 
-        if (empty($attachedIds)) {
+        if ($accounts->isEmpty()) {
             return response()->json(['success' => false, 'message' => 'No cPanel accounts attached.', 'installs' => []]);
         }
 
-        $accounts = HostingAccount::with('whmServer')->whereIn('id', $attachedIds)->get();
         $allInstalls = [];
         $errors = [];
 
