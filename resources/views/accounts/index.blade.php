@@ -1,7 +1,7 @@
-{{-- Publishing Accounts list --}}
+{{-- Publishing Users list --}}
 @extends('layouts.app')
-@section('title', 'Publishing Accounts')
-@section('header', 'Publishing Accounts')
+@section('title', 'Publishing Users')
+@section('header', 'Publishing Users')
 
 @section('content')
 <div class="space-y-4">
@@ -10,78 +10,58 @@
     <div class="flex flex-wrap items-center gap-3">
         <form method="GET" action="{{ route('publish.accounts.index') }}" class="flex flex-wrap items-center gap-2 flex-1">
             <input type="text" name="search" value="{{ request('search') }}"
-                class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-56" placeholder="Search name, email, ID...">
-            <select name="status" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <option value="">All Statuses</option>
-                <option value="active" {{ request('status') === 'active' ? 'selected' : '' }}>Active</option>
-                <option value="suspended" {{ request('status') === 'suspended' ? 'selected' : '' }}>Suspended</option>
-                <option value="canceled" {{ request('status') === 'canceled' ? 'selected' : '' }}>Canceled</option>
-            </select>
+                class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-56" placeholder="Search name, email...">
             <button type="submit" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Filter</button>
         </form>
-        <a href="{{ route('publish.accounts.create') }}" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">+ New Account</a>
     </div>
 
     {{-- Stats bar --}}
     <div class="flex flex-wrap gap-4 text-sm text-gray-500">
-        <span>{{ $accounts->count() }} account(s)</span>
-        <span>{{ $accounts->where('status', 'active')->count() }} active</span>
-        <span>{{ $accounts->sum(fn($a) => $a->sites->count()) }} total sites</span>
-        <span>{{ $accounts->sum(fn($a) => $a->campaigns->count()) }} total campaigns</span>
+        <span>{{ $users->count() }} user(s)</span>
+        <span>{{ $users->sum('sites_count') }} total sites</span>
+        <span>{{ $users->sum('campaigns_count') }} total campaigns</span>
+        <span>{{ $users->sum('articles_count') }} total articles</span>
     </div>
 
-    {{-- Accounts table --}}
-    @if($accounts->isEmpty())
+    {{-- Users table --}}
+    @if($users->isEmpty())
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-            <p class="text-gray-500">No publishing accounts yet.</p>
+            <p class="text-gray-500">No users found.</p>
         </div>
     @else
         <div class="bg-white rounded-xl shadow-sm border border-gray-200">
             <table class="w-full text-sm text-left">
                 <thead class="bg-gray-50 border-b border-gray-200">
                     <tr>
-                        <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Account</th>
-                        <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</th>
-                        <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                        <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Sites</th>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Campaigns</th>
-                        <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Plan</th>
+                        <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Articles</th>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                    @foreach($accounts as $account)
+                    @foreach($users as $user)
                     <tr class="hover:bg-gray-50">
                         <td class="px-5 py-3">
-                            <a href="{{ route('publish.accounts.show', $account->id) }}" class="text-blue-600 hover:text-blue-800 font-medium break-words">{{ $account->name }}</a>
-                            <p class="text-xs text-gray-400 font-mono">{{ $account->account_id }}</p>
-                            @if($account->email)
-                                <p class="text-xs text-gray-400 break-words">{{ $account->email }}</p>
-                            @endif
-                        </td>
-                        <td class="px-5 py-3 text-gray-600 break-words">
-                            {{ $account->owner->name ?? '—' }}
+                            <a href="{{ route('publish.accounts.show', $user->id) }}" class="text-blue-600 hover:text-blue-800 font-medium break-words">{{ $user->name }}</a>
+                            <p class="text-xs text-gray-400 break-words">{{ $user->email }}</p>
                         </td>
                         <td class="px-5 py-3">
-                            @if($account->status === 'active')
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Active</span>
-                            @elseif($account->status === 'suspended')
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">Suspended</span>
-                            @else
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Canceled</span>
-                            @endif
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">{{ $user->role ?? 'user' }}</span>
                         </td>
-                        <td class="px-5 py-3 text-gray-600">{{ $account->sites->count() }}</td>
-                        <td class="px-5 py-3 text-gray-600">{{ $account->campaigns->count() }}</td>
-                        <td class="px-5 py-3 text-gray-600 break-words">{{ $account->plan ?? '—' }}</td>
-                        <td class="px-5 py-3 text-gray-500 text-xs">{{ $account->created_at->format('M j, Y') }}</td>
+                        <td class="px-5 py-3 text-gray-600">{{ $user->sites_count }}</td>
+                        <td class="px-5 py-3 text-gray-600">{{ $user->campaigns_count }}</td>
+                        <td class="px-5 py-3 text-gray-600">{{ $user->articles_count }}</td>
+                        <td class="px-5 py-3 text-gray-500 text-xs">{{ $user->created_at->format('M j, Y') }}</td>
                         <td class="px-5 py-3">
                             <div class="flex items-center gap-2">
-                                <a href="{{ route('publish.accounts.show', $account->id) }}" class="text-gray-400 hover:text-blue-600" title="View">
+                                <a href="{{ route('publish.accounts.show', $user->id) }}" class="text-gray-400 hover:text-blue-600" title="View">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                 </a>
-                                <a href="{{ route('publish.accounts.edit', $account->id) }}" class="text-gray-400 hover:text-blue-600" title="Edit">
+                                <a href="{{ route('publish.accounts.edit', $user->id) }}" class="text-gray-400 hover:text-blue-600" title="Edit">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                                 </a>
                             </div>
