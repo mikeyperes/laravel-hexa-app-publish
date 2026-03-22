@@ -89,14 +89,15 @@
             <button @click="showAttach = !showAttach" class="text-sm text-blue-600 hover:text-blue-800 mb-3" x-text="showAttach ? 'Hide account list' : '+ Attach cPanel Accounts'"></button>
 
             <div x-show="showAttach" x-cloak>
-                <div class="flex items-center gap-2 mb-2">
+                <div class="flex items-center gap-3 mb-2">
+                    <input type="text" placeholder="Filter accounts..." class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1" oninput="document.querySelectorAll('.attach-row').forEach(r => r.style.display = r.textContent.toLowerCase().includes(this.value.toLowerCase()) ? '' : 'none')">
                     <button @click="document.querySelectorAll('.attach-checkbox').forEach(c => c.checked = true)" class="text-xs text-gray-500 hover:text-gray-700">Select All</button>
                     <span class="text-gray-300">|</span>
                     <button @click="document.querySelectorAll('.attach-checkbox').forEach(c => c.checked = false)" class="text-xs text-gray-500 hover:text-gray-700">None</button>
                 </div>
                 <div class="border border-gray-200 rounded-lg max-h-64 overflow-y-auto mb-3">
                     @foreach($availableAccounts as $acct)
-                    <label class="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-b-0">
+                    <label class="attach-row flex items-center gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-b-0">
                         <input type="checkbox" value="{{ $acct->id }}" class="attach-checkbox rounded text-blue-600">
                         <div class="flex items-center gap-2 flex-1 min-w-0">
                             <span class="text-sm text-gray-800 break-words">{{ $acct->domain }}</span>
