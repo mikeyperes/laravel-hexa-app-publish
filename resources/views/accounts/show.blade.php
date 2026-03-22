@@ -1,156 +1,253 @@
-{{-- Publishing User detail --}}
+{{-- User Publishing Profile --}}
 @extends('layouts.app')
-@section('title', $user->name . ' — Publishing')
-@section('header', $user->name)
+@section('title', $user->name . ' — Publishing Profile')
+@section('header', $user->name . ' — Publishing Profile')
 
 @section('content')
-<div class="space-y-6">
+<div class="space-y-6" x-data="userProfile()">
 
-    {{-- User header card --}}
+    {{-- User header --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
                 <h2 class="text-xl font-semibold text-gray-800 break-words">{{ $user->name }}</h2>
                 <p class="text-sm text-gray-500 break-words mt-1">{{ $user->email }}</p>
-                <p class="text-sm text-gray-500 mt-1">Role: <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">{{ $user->role ?? 'user' }}</span></p>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 mt-1">{{ $user->role ?? 'user' }}</span>
             </div>
-            <div class="flex items-center gap-3">
-                @if(Route::has('settings.users.edit'))
-                    <a href="{{ route('settings.users.edit', $user->id) }}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Edit User</a>
-                @endif
-            </div>
+            @if(Route::has('settings.users.edit'))
+                <a href="{{ route('settings.users.edit', $user->id) }}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Edit User</a>
+            @endif
         </div>
     </div>
 
-    {{-- Stats cards --}}
+    {{-- Stats --}}
     <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
+            <p class="text-2xl font-bold text-gray-800">{{ $attachedAccounts->count() }}</p>
+            <p class="text-xs text-gray-500 mt-1">cPanel Accounts</p>
+        </div>
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
             <p class="text-2xl font-bold text-gray-800">{{ $sites->count() }}</p>
             <p class="text-xs text-gray-500 mt-1">Sites</p>
         </div>
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-            <p class="text-2xl font-bold text-gray-800">{{ $campaigns->count() }}</p>
-            <p class="text-xs text-gray-500 mt-1">Campaigns</p>
-        </div>
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
             <p class="text-2xl font-bold text-blue-600">{{ $articleStats['total'] }}</p>
-            <p class="text-xs text-gray-500 mt-1">Total Articles</p>
+            <p class="text-xs text-gray-500 mt-1">Articles</p>
         </div>
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
             <p class="text-2xl font-bold text-green-600">{{ $articleStats['published'] }}</p>
             <p class="text-xs text-gray-500 mt-1">Published</p>
         </div>
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-            <p class="text-2xl font-bold text-yellow-600">{{ $articleStats['review'] }}</p>
-            <p class="text-xs text-gray-500 mt-1">In Review</p>
+            <p class="text-2xl font-bold text-gray-800">{{ $campaigns->count() }}</p>
+            <p class="text-xs text-gray-500 mt-1">Campaigns</p>
         </div>
     </div>
 
-    {{-- Sites --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 class="font-semibold text-gray-800">Sites ({{ $sites->count() }})</h3>
-            <a href="{{ route('publish.sites.create') }}" class="text-sm text-blue-600 hover:text-blue-800">+ Add Site</a>
-        </div>
-        @if($sites->isEmpty())
-            <div class="p-5 text-center text-gray-500 text-sm">No sites added yet.</div>
-        @else
-            <table class="w-full text-sm text-left">
-                <thead class="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Name</th>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">URL</th>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Connection</th>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Status</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                    @foreach($sites as $site)
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-5 py-2"><a href="{{ route('publish.sites.show', $site->id) }}" class="text-blue-600 hover:text-blue-800 break-words">{{ $site->name }}</a></td>
-                        <td class="px-5 py-2 text-gray-500 break-words"><a href="{{ $site->url }}" target="_blank" class="hover:text-blue-600">{{ $site->url }} &#8599;</a></td>
-                        <td class="px-5 py-2 text-xs text-gray-500">{{ $site->connection_type === 'wptoolkit' ? 'WP Toolkit' : 'REST API' }}</td>
-                        <td class="px-5 py-2">
-                            @if($site->status === 'connected')
-                                <span class="text-xs text-green-600 font-medium">Connected</span>
-                            @elseif($site->status === 'error')
-                                <span class="text-xs text-red-600 font-medium">Error</span>
-                            @else
-                                <span class="text-xs text-gray-400">Disconnected</span>
-                            @endif
-                        </td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        @endif
-    </div>
+    {{-- cPanel Accounts --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 class="font-semibold text-gray-800 mb-4">cPanel Accounts</h3>
 
-    {{-- Templates --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 class="font-semibold text-gray-800">Templates ({{ $templates->count() }})</h3>
-            <a href="{{ route('publish.templates.create') }}" class="text-sm text-blue-600 hover:text-blue-800">+ New Template</a>
-        </div>
-        @if($templates->isEmpty())
-            <div class="p-5 text-center text-gray-500 text-sm">No templates created yet.</div>
-        @else
-            <div class="divide-y divide-gray-100">
-                @foreach($templates as $template)
-                <div class="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
+        {{-- Attached accounts --}}
+        @if($attachedAccounts->isNotEmpty())
+            <div class="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-4">
+                @foreach($attachedAccounts as $acct)
+                <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
                     <div>
-                        <a href="{{ route('publish.templates.show', $template->id) }}" class="text-blue-600 hover:text-blue-800 font-medium text-sm break-words">{{ $template->name }}</a>
-                        @if($template->article_type)
-                            <span class="ml-2 text-xs text-gray-400">{{ $template->article_type }}</span>
-                        @endif
+                        <span class="text-sm font-medium text-gray-900">{{ $acct->domain }}</span>
+                        <span class="text-xs text-gray-400 ml-2">{{ $acct->username }}</span>
+                        <span class="text-xs text-gray-400 ml-2">{{ $acct->whmServer->hostname ?? '' }}</span>
+                        <span class="text-xs text-gray-400 ml-2">{{ $acct->ip_address }}</span>
                     </div>
-                    <a href="{{ route('publish.templates.edit', $template->id) }}" class="text-gray-400 hover:text-blue-600 text-xs">Edit</a>
+                    <button @click="detachAccount({{ $acct->id }})" class="text-xs text-red-400 hover:text-red-600 px-2 py-1">Detach</button>
                 </div>
                 @endforeach
             </div>
+        @else
+            <p class="text-sm text-gray-400 mb-4">No cPanel accounts attached.</p>
         @endif
+
+        {{-- Attach new account --}}
+        <div class="flex items-end gap-3">
+            <div class="flex-1">
+                <label class="block text-xs font-medium text-gray-500 mb-1">Attach cPanel Account</label>
+                <select x-model="selectedAccountId" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Select account...</option>
+                    @foreach($availableAccounts as $acct)
+                        <option value="{{ $acct->id }}">{{ $acct->domain }} ({{ $acct->username }}) — {{ $acct->whmServer->hostname ?? '?' }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <button @click="attachAccount()" :disabled="attaching || !selectedAccountId"
+                    class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+                <svg x-show="attaching" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                <span x-text="attaching ? 'Attaching...' : 'Attach'"></span>
+            </button>
+        </div>
+
+        <div x-show="attachBanner" x-cloak class="mt-3 px-4 py-2 rounded-lg text-sm"
+             :class="attachSuccess ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'"
+             x-text="attachBanner"></div>
+    </div>
+
+    {{-- WordPress Sites (from WP Toolkit) --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-gray-800">WordPress Sites</h3>
+            <button @click="scanWordPress()" :disabled="scanning"
+                    class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-2">
+                <svg x-show="scanning" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                <span x-text="scanning ? 'Scanning...' : 'Scan WP Toolkit'"></span>
+            </button>
+        </div>
+
+        <div x-show="scanBanner" x-cloak class="mb-4 px-4 py-2 rounded-lg text-sm"
+             :class="scanSuccess ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'"
+             x-text="scanBanner"></div>
+
+        {{-- Scan errors --}}
+        <template x-if="scanErrors.length > 0">
+            <div class="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-600">
+                <template x-for="err in scanErrors"><div x-text="err"></div></template>
+            </div>
+        </template>
+
+        {{-- WordPress installs list --}}
+        <div x-show="wpInstalls.length === 0 && !scanning" class="text-sm text-gray-400">
+            No WordPress installs found. Attach cPanel accounts and click "Scan WP Toolkit".
+        </div>
+
+        <div x-show="wpInstalls.length > 0" class="border border-gray-200 rounded-lg divide-y divide-gray-100">
+            <template x-for="(install, idx) in wpInstalls" :key="idx">
+                <div class="px-4 py-3 hover:bg-gray-50">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <a :href="install.url" target="_blank" class="text-sm font-medium text-blue-600 hover:underline break-words" x-text="install.url + ' &#8599;'"></a>
+                            <div class="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
+                                <span x-text="'cPanel: ' + install.cpanel_user"></span>
+                                <span x-text="'Server: ' + install.server_name"></span>
+                                <span x-text="'WP ' + (install.version || '?')"></span>
+                                <span x-text="install.path"></span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs px-2 py-0.5 rounded" :class="install.status === 'active' || install.status === 'Working' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'" x-text="install.status || 'unknown'"></span>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
     </div>
 
     {{-- Campaigns --}}
+    @if($campaigns->isNotEmpty())
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+        <div class="px-5 py-4 border-b border-gray-200">
             <h3 class="font-semibold text-gray-800">Campaigns ({{ $campaigns->count() }})</h3>
-            <a href="{{ route('publish.campaigns.create') }}" class="text-sm text-blue-600 hover:text-blue-800">+ New Campaign</a>
         </div>
-        @if($campaigns->isEmpty())
-            <div class="p-5 text-center text-gray-500 text-sm">No campaigns created yet.</div>
-        @else
-            <table class="w-full text-sm text-left">
-                <thead class="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Campaign</th>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Site</th>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Schedule</th>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Mode</th>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Status</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                    @foreach($campaigns as $campaign)
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-5 py-2"><a href="{{ route('publish.campaigns.show', $campaign->id) }}" class="text-blue-600 hover:text-blue-800 break-words">{{ $campaign->name }}</a></td>
-                        <td class="px-5 py-2 text-gray-500 break-words">{{ $campaign->site->name ?? '—' }}</td>
-                        <td class="px-5 py-2 text-gray-500 text-xs">{{ $campaign->articles_per_interval ?? '—' }}/{{ $campaign->interval_unit ?? '—' }}</td>
-                        <td class="px-5 py-2 text-gray-500 text-xs">{{ $campaign->delivery_mode ?? '—' }}</td>
-                        <td class="px-5 py-2">
-                            @if($campaign->status === 'active')
-                                <span class="text-xs text-green-600 font-medium">Active</span>
-                            @elseif($campaign->status === 'paused')
-                                <span class="text-xs text-yellow-600 font-medium">Paused</span>
-                            @else
-                                <span class="text-xs text-gray-400">{{ ucfirst($campaign->status ?? 'draft') }}</span>
-                            @endif
-                        </td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        @endif
+        <table class="w-full text-sm text-left">
+            <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                    <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Campaign</th>
+                    <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Site</th>
+                    <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                @foreach($campaigns as $campaign)
+                <tr class="hover:bg-gray-50">
+                    <td class="px-5 py-2"><a href="{{ route('publish.campaigns.show', $campaign->id) }}" class="text-blue-600 hover:text-blue-800 break-words">{{ $campaign->name }}</a></td>
+                    <td class="px-5 py-2 text-gray-500 break-words">{{ $campaign->site->name ?? '—' }}</td>
+                    <td class="px-5 py-2">
+                        <span class="text-xs {{ $campaign->status === 'active' ? 'text-green-600' : 'text-gray-400' }}">{{ ucfirst($campaign->status ?? 'draft') }}</span>
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
     </div>
+    @endif
 </div>
+
+@push('scripts')
+<script>
+function userProfile() {
+    return {
+        selectedAccountId: '',
+        attaching: false,
+        attachBanner: '',
+        attachSuccess: false,
+
+        scanning: false,
+        scanBanner: '',
+        scanSuccess: false,
+        scanErrors: [],
+        wpInstalls: [],
+
+        csrfToken: document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+
+        async attachAccount() {
+            if (!this.selectedAccountId) return;
+            this.attaching = true;
+            this.attachBanner = '';
+            try {
+                const res = await fetch('{{ route("publish.accounts.attach", $user->id) }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({ hosting_account_id: parseInt(this.selectedAccountId) }),
+                });
+                const data = await res.json();
+                this.attachSuccess = data.success;
+                this.attachBanner = data.message;
+                if (data.success) setTimeout(() => location.reload(), 800);
+            } catch (e) {
+                this.attachSuccess = false;
+                this.attachBanner = 'Error: ' + e.message;
+            } finally {
+                this.attaching = false;
+            }
+        },
+
+        async detachAccount(accountId) {
+            if (!confirm('Detach this cPanel account?')) return;
+            try {
+                const res = await fetch('/publish/users/{{ $user->id }}/detach-account/' + accountId, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                });
+                const data = await res.json();
+                if (data.success) location.reload();
+                else { this.attachSuccess = false; this.attachBanner = data.message; }
+            } catch (e) {
+                this.attachSuccess = false;
+                this.attachBanner = 'Error: ' + e.message;
+            }
+        },
+
+        async scanWordPress() {
+            this.scanning = true;
+            this.scanBanner = '';
+            this.scanErrors = [];
+            this.wpInstalls = [];
+            try {
+                const res = await fetch('{{ route("publish.accounts.scan-wp", $user->id) }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                });
+                const data = await res.json();
+                this.scanSuccess = data.success;
+                this.scanBanner = data.message;
+                this.wpInstalls = data.installs || [];
+                this.scanErrors = data.errors || [];
+            } catch (e) {
+                this.scanSuccess = false;
+                this.scanBanner = 'Error: ' + e.message;
+            } finally {
+                this.scanning = false;
+            }
+        },
+    };
+}
+</script>
+@endpush
 @endsection

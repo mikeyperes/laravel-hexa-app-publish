@@ -27,6 +27,9 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     // Users (publishing profiles)
     Route::get('/publish/users', [PublishAccountController::class, 'index'])->name('publish.accounts.index');
     Route::get('/publish/users/{id}', [PublishAccountController::class, 'show'])->name('publish.accounts.show');
+    Route::post('/publish/users/{id}/attach-account', [PublishAccountController::class, 'attachAccount'])->name('publish.accounts.attach');
+    Route::delete('/publish/users/{id}/detach-account/{accountId}', [PublishAccountController::class, 'detachAccount'])->name('publish.accounts.detach');
+    Route::post('/publish/users/{id}/scan-wordpress', [PublishAccountController::class, 'scanWordPress'])->name('publish.accounts.scan-wp');
 
     // Sites
     Route::get('/publish/sites', [PublishSiteController::class, 'index'])->name('publish.sites.index');
