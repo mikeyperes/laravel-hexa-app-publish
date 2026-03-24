@@ -30,8 +30,14 @@ class PublishPresetController extends Controller
 
         $presets = $query->orderByDesc('updated_at')->get();
 
+        $editingPreset = null;
+        if ($request->filled('edit')) {
+            $editingPreset = PublishPreset::with('user')->find($request->input('edit'));
+        }
+
         return view('app-publish::publishing.presets.index', [
             'presets'          => $presets,
+            'editingPreset'    => $editingPreset,
             'articleFormats'   => ListItem::getValues('article_formats'),
             'tones'            => ListItem::getValues('tones'),
             'imagePreferences' => ListItem::getValues('image_preferences'),

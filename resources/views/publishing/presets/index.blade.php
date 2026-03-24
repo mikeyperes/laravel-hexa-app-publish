@@ -1,11 +1,97 @@
 {{-- Article Presets --}}
 @extends('layouts.app')
-@section('title', 'Article Presets')
-@section('header', 'Article Presets')
+@section('title', $editingPreset ? 'Edit Preset: ' . $editingPreset->name : 'Article Presets')
+@section('header', $editingPreset ? 'Edit Preset: ' . $editingPreset->name : 'Article Presets')
 
 @section('content')
 <div class="space-y-4" x-data="presetsManager()">
 
+    @if($editingPreset)
+    {{-- Edit preset form (full page, not modal) --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-gray-800">Edit Preset</h3>
+            <a href="{{ route('publish.presets.index', request()->only('user_id')) }}" class="text-sm text-gray-500 hover:text-gray-700">Back to list</a>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Preset Name</label>
+                <input type="text" x-model="editData.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Follow / Nofollow</label>
+                <div class="flex items-center gap-4 mt-1">
+                    <label class="flex items-center gap-1 text-sm"><input type="radio" x-model="editData.follow_links" value="follow"> Follow</label>
+                    <label class="flex items-center gap-1 text-sm"><input type="radio" x-model="editData.follow_links" value="nofollow"> Nofollow</label>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Article Format</label>
+                <select x-model="editData.article_format" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Select format...</option>
+                    @foreach($articleFormats as $format)
+                        <option value="{{ $format }}">{{ $format }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Tone</label>
+                <select x-model="editData.tone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Select tone...</option>
+                    @foreach($tones as $tone)
+                        <option value="{{ $tone }}">{{ $tone }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Image Preference</label>
+                <select x-model="editData.image_preference" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Select preference...</option>
+                    @foreach($imagePreferences as $pref)
+                        <option value="{{ $pref }}">{{ $pref }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Default Publish Action</label>
+                <select x-model="editData.default_publish_action" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Select action...</option>
+                    @foreach($publishActions as $key => $label)
+                        <option value="{{ $key }}">{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Category Count</label>
+                <input type="number" x-model="editData.default_category_count" min="0" max="20" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Tag Count</label>
+                <input type="number" x-model="editData.default_tag_count" min="0" max="50" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Image Layout</label>
+                <select x-model="editData.image_layout" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Select layout...</option>
+                    @foreach($imageLayouts as $layout)
+                        <option value="{{ $layout }}">{{ $layout }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+        <div class="mt-4 flex items-center gap-2">
+            <button @click="updatePreset()" :disabled="updating" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
+                <svg x-show="updating" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                <span x-text="updating ? 'Saving...' : 'Save Changes'"></span>
+            </button>
+            <a href="{{ route('publish.presets.index', request()->only('user_id')) }}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Cancel</a>
+        </div>
+        <div x-show="editResult" x-cloak class="mt-2 rounded-lg px-3 py-2 text-sm" :class="editSuccess ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'">
+            <span x-text="editResult"></span>
+        </div>
+    </div>
+
+    @else
     {{-- Header row --}}
     <div class="flex flex-wrap items-center gap-3">
         <div class="flex items-center gap-2 flex-1">
@@ -146,9 +232,9 @@
                 <div class="flex items-start justify-between mb-2">
                     <h4 class="font-medium text-gray-800 break-words">{{ $preset->name }}</h4>
                     <div class="flex items-center gap-2 flex-shrink-0 ml-2">
-                        <button @click="editPreset({{ $preset->id }})" class="text-gray-400 hover:text-blue-600">
+                        <a href="{{ route('publish.presets.index', array_merge(request()->only('user_id'), ['edit' => $preset->id])) }}" class="text-gray-400 hover:text-blue-600">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                        </button>
+                        </a>
                         <button @click="deletePreset({{ $preset->id }}, '{{ addslashes($preset->name) }}')" class="text-gray-400 hover:text-red-600">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                         </button>
@@ -180,89 +266,7 @@
             @endforeach
         </div>
     @endif
-
-    {{-- Edit modal --}}
-    <div x-show="editingId" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div class="bg-white rounded-xl shadow-xl border border-gray-200 p-6 w-full max-w-2xl mx-4 max-h-screen overflow-y-auto">
-            <h3 class="font-semibold text-gray-800 mb-3">Edit Preset</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Preset Name</label>
-                    <input type="text" x-model="editData.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Follow / Nofollow</label>
-                    <div class="flex items-center gap-4 mt-1">
-                        <label class="flex items-center gap-1 text-sm"><input type="radio" x-model="editData.follow_links" value="follow"> Follow</label>
-                        <label class="flex items-center gap-1 text-sm"><input type="radio" x-model="editData.follow_links" value="nofollow"> Nofollow</label>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Article Format</label>
-                    <select x-model="editData.article_format" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">Select format...</option>
-                        @foreach($articleFormats as $format)
-                            <option value="{{ $format }}">{{ $format }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Tone</label>
-                    <select x-model="editData.tone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">Select tone...</option>
-                        @foreach($tones as $tone)
-                            <option value="{{ $tone }}">{{ $tone }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Image Preference</label>
-                    <select x-model="editData.image_preference" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">Select preference...</option>
-                        @foreach($imagePreferences as $pref)
-                            <option value="{{ $pref }}">{{ $pref }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Default Publish Action</label>
-                    <select x-model="editData.default_publish_action" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">Select action...</option>
-                        @foreach($publishActions as $key => $label)
-                            <option value="{{ $key }}">{{ $label }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Category Count</label>
-                    <input type="number" x-model="editData.default_category_count" min="0" max="20" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Tag Count</label>
-                    <input type="number" x-model="editData.default_tag_count" min="0" max="50" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Image Layout</label>
-                    <select x-model="editData.image_layout" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">Select layout...</option>
-                        @foreach($imageLayouts as $layout)
-                            <option value="{{ $layout }}">{{ $layout }}</option>
-                        @endforeach
-                    </select>
-                </div>
-            </div>
-            <div class="mt-4 flex items-center gap-2">
-                <button @click="updatePreset()" :disabled="updating" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
-                    <svg x-show="updating" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                    <span x-text="updating ? 'Saving...' : 'Save Changes'"></span>
-                </button>
-                <button @click="editingId = null" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Cancel</button>
-            </div>
-            <div x-show="editResult" x-cloak class="mt-2 rounded-lg px-3 py-2 text-sm" :class="editSuccess ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'">
-                <span x-text="editResult"></span>
-            </div>
-        </div>
-    </div>
+    @endif
 </div>
 @endsection
 
@@ -276,7 +280,8 @@ function presetsManager() {
         newPreset: { name: '', user_id: '', default_site_id: '', follow_links: 'follow', article_format: '', tone: '', image_preference: '', default_publish_action: '', default_category_count: 3, default_tag_count: 5, image_layout: '' },
         newUserQuery: '', newUserResults: [],
         saving: false, result: '', success: false,
-        editingId: null, editData: {}, updating: false, editResult: '', editSuccess: false,
+        editData: @json($editingPreset ?? (object)[]),
+        updating: false, editResult: '', editSuccess: false,
         async searchNewUsers() {
             if (this.newUserQuery.length < 2) { this.newUserResults = []; return; }
             try {
@@ -293,20 +298,12 @@ function presetsManager() {
             } catch(e) { this.success = false; this.result = 'Error: ' + e.message; }
             this.saving = false;
         },
-        async editPreset(id) {
-            this.editingId = id; this.editResult = '';
-            try {
-                const r = await fetch('/publishing/presets/' + id, { headers: { 'Accept': 'application/json' } });
-                const d = await r.json();
-                if (d.success) this.editData = d.preset;
-            } catch(e) { alert('Error loading preset: ' + e.message); this.editingId = null; }
-        },
         async updatePreset() {
             this.updating = true; this.editResult = '';
             try {
-                const r = await fetch('/publishing/presets/' + this.editingId, { method: 'PUT', headers, body: JSON.stringify(this.editData) });
+                const r = await fetch('/publishing/presets/' + this.editData.id, { method: 'PUT', headers, body: JSON.stringify(this.editData) });
                 const d = await r.json(); this.editSuccess = d.success; this.editResult = d.message;
-                if (d.success) setTimeout(() => location.reload(), 600);
+                if (d.success) setTimeout(() => { window.location.href = '{{ route("publish.presets.index") }}'; }, 600);
             } catch(e) { this.editSuccess = false; this.editResult = 'Error: ' + e.message; }
             this.updating = false;
         },
