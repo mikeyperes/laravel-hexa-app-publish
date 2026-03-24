@@ -62,8 +62,6 @@ class AppPublishServiceProvider extends ServiceProvider
             $registry->registerSidebarLink('publish.pipeline', 'Publish Article', 'M13 5l7 7-7 7M5 5l7 7-7 7', 'Article', 'app-publish', 30);
             $registry->registerSidebarLink('publish.drafts.index', 'Drafted Articles', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', 'Article', 'app-publish', 31);
             $registry->registerSidebarLink('publish.bookmarks.index', 'Bookmarked Articles', 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z', 'Article', 'app-publish', 32);
-            $registry->registerSidebarLink('article-extractor.index', 'Linter', 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', 'Article', 'app-publish', 33);
-
             // Content
             $registry->registerSidebarLink('publish.accounts.index', 'Users', 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4', 'Content', 'app-publish', 40);
             $registry->registerSidebarLink('publish.sites.index', 'Sites', 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9', 'Content', 'app-publish', 41);
