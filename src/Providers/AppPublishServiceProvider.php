@@ -50,10 +50,6 @@ class AppPublishServiceProvider extends ServiceProvider
         if (!config('hexa.app_controls_sidebar', false)) {
             $registry = app(PackageRegistryService::class);
 
-            // Web Servers
-            $registry->registerSidebarLink('hosting.servers', 'Servers', 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01', 'Web Servers', 'app-publish', 10);
-            $registry->registerSidebarLink('hosting.accounts', 'Accounts', 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', 'Web Servers', 'app-publish', 11);
-
             // Search
             $registry->registerSidebarLink('publish.search.images', 'Images', 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z', 'Search', 'app-publish', 20);
             $registry->registerSidebarLink('publish.search.articles', 'Articles', 'M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z', 'Search', 'app-publish', 21);
