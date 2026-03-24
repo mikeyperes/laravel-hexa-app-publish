@@ -9,6 +9,8 @@ use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Models\PublishCampaign;
 use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishTemplate;
+use hexa_app_publish\Models\PublishPreset;
+use hexa_app_publish\Models\PublishBookmark;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -87,6 +89,9 @@ class PublishAccountController extends Controller
         $sites = PublishSite::where('user_id', $user->id)->get();
         $campaigns = PublishCampaign::where('user_id', $user->id)->with('site')->get();
         $templates = PublishTemplate::where('user_id', $user->id)->get();
+        $presets = PublishPreset::where('user_id', $user->id)->get();
+        $drafts = PublishArticle::where('user_id', $user->id)->where('status', 'draft')->orderByDesc('updated_at')->limit(20)->get();
+        $bookmarks = PublishBookmark::where('user_id', $user->id)->orderByDesc('created_at')->limit(20)->get();
 
         $articleStats = [
             'total' => PublishArticle::where('user_id', $user->id)->count(),
@@ -103,6 +108,9 @@ class PublishAccountController extends Controller
             'sites' => $sites,
             'campaigns' => $campaigns,
             'templates' => $templates,
+            'presets' => $presets,
+            'drafts' => $drafts,
+            'bookmarks' => $bookmarks,
             'articleStats' => $articleStats,
         ]);
     }
@@ -223,6 +231,63 @@ class PublishAccountController extends Controller
             'success' => true,
             'message' => 'Site "' . $site->name . '" added.',
         ]);
+    }
+
+    /**
+     * AJAX: Scan a single cPanel account for WordPress installs via WP Toolkit.
+     * Used by the activity log to scan accounts one-by-one with live feedback.
+     *
+     * @param Request $request
+     * @param int $id User ID
+     * @return JsonResponse
+     */
+    public function scanWordPressSingle(Request $request, int $id): JsonResponse
+    {
+        $request->validate(['hosting_account_id' => 'required|integer']);
+
+        $account = HostingAccount::with('whmServer')->findOrFail($request->input('hosting_account_id'));
+        $wpToolkit = app(\hexa_package_wptoolkit\Services\WpToolkitService::class);
+
+        if (!$account->whmServer) {
+            return response()->json([
+                'success' => false,
+                'message' => $account->username . ': No WHM server linked.',
+                'installs' => [],
+            ]);
+        }
+
+        try {
+            $result = $wpToolkit->getInstallsForAccount($account->whmServer, $account->username);
+
+            if ($result['success'] && !empty($result['installs'])) {
+                $installs = [];
+                foreach ($result['installs'] as $install) {
+                    $install['cpanel_user'] = $account->username;
+                    $install['cpanel_domain'] = $account->domain;
+                    $install['server_name'] = $account->whmServer->name ?? $account->whmServer->hostname;
+                    $install['hosting_account_id'] = $account->id;
+                    $installs[] = $install;
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => $account->username . ': ' . count($installs) . ' install(s) found.',
+                    'installs' => $installs,
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $account->username . ': No installs found.',
+                'installs' => [],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $account->username . ': ' . $e->getMessage(),
+                'installs' => [],
+            ]);
+        }
     }
 
     /**
