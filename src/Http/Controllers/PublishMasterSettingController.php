@@ -55,7 +55,7 @@ class PublishMasterSettingController extends Controller
 
         $setting = PublishMasterSetting::create($validated);
 
-        activity_log('publish', 'master_setting_created', "Master setting created: {$setting->name} ({$setting->type})");
+        hexaLog('publish', 'master_setting_created', "Master setting created: {$setting->name} ({$setting->type})");
 
         return response()->json([
             'success' => true,
@@ -84,7 +84,7 @@ class PublishMasterSettingController extends Controller
 
         $setting->update($validated);
 
-        activity_log('publish', 'master_setting_updated', "Master setting updated: {$setting->name}");
+        hexaLog('publish', 'master_setting_updated', "Master setting updated: {$setting->name}");
 
         return response()->json([
             'success' => true,
@@ -105,7 +105,7 @@ class PublishMasterSettingController extends Controller
 
         $setting->delete();
 
-        activity_log('publish', 'master_setting_deleted', "Master setting deleted: {$name}");
+        hexaLog('publish', 'master_setting_deleted', "Master setting deleted: {$name}");
 
         return response()->json([
             'success' => true,

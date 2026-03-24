@@ -130,7 +130,7 @@ class PublishCampaignController extends Controller
 
         $campaign = PublishCampaign::create($validated);
 
-        activity_log('publish', 'campaign_created', "Campaign created: {$campaign->name} ({$campaign->campaign_id})");
+        hexaLog('publish', 'campaign_created', "Campaign created: {$campaign->name} ({$campaign->campaign_id})");
 
         return response()->json([
             'success' => true,
@@ -218,7 +218,7 @@ class PublishCampaignController extends Controller
 
         $campaign->update($validated);
 
-        activity_log('publish', 'campaign_updated', "Campaign updated: {$campaign->name} ({$campaign->campaign_id})");
+        hexaLog('publish', 'campaign_updated', "Campaign updated: {$campaign->name} ({$campaign->campaign_id})");
 
         return response()->json([
             'success' => true,
@@ -241,7 +241,7 @@ class PublishCampaignController extends Controller
             'next_run_at' => now(),
         ]);
 
-        activity_log('publish', 'campaign_activated', "Campaign activated: {$campaign->name} ({$campaign->campaign_id})");
+        hexaLog('publish', 'campaign_activated', "Campaign activated: {$campaign->name} ({$campaign->campaign_id})");
 
         return response()->json([
             'success' => true,
@@ -264,7 +264,7 @@ class PublishCampaignController extends Controller
             'next_run_at' => null,
         ]);
 
-        activity_log('publish', 'campaign_paused', "Campaign paused: {$campaign->name} ({$campaign->campaign_id})");
+        hexaLog('publish', 'campaign_paused', "Campaign paused: {$campaign->name} ({$campaign->campaign_id})");
 
         return response()->json([
             'success' => true,
@@ -300,7 +300,7 @@ class PublishCampaignController extends Controller
         $duplicate->created_by = auth()->id();
         $duplicate->save();
 
-        activity_log('publish', 'campaign_duplicated', "Campaign duplicated: {$source->name} → {$duplicate->name}");
+        hexaLog('publish', 'campaign_duplicated', "Campaign duplicated: {$source->name} → {$duplicate->name}");
 
         return response()->json([
             'success' => true,

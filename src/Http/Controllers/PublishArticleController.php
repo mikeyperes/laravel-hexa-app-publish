@@ -138,7 +138,7 @@ class PublishArticleController extends Controller
 
         $article = PublishArticle::create($validated);
 
-        activity_log('publish', 'article_created', "Article created: {$article->title} ({$article->article_id})");
+        hexaLog('publish', 'article_created', "Article created: {$article->title} ({$article->article_id})");
 
         return response()->json([
             'success' => true,
@@ -213,7 +213,7 @@ class PublishArticleController extends Controller
 
         $article->update($validated);
 
-        activity_log('publish', 'article_updated', "Article updated: {$article->title} ({$article->article_id})");
+        hexaLog('publish', 'article_updated', "Article updated: {$article->title} ({$article->article_id})");
 
         return response()->json([
             'success' => true,
@@ -251,7 +251,7 @@ class PublishArticleController extends Controller
 
             if (!$result['success']) {
                 $article->update(['status' => 'failed']);
-                activity_log('publish', 'article_publish_failed', "Article publish failed: {$article->title} ({$article->article_id}) — {$result['message']}");
+                hexaLog('publish', 'article_publish_failed', "Article publish failed: {$article->title} ({$article->article_id}) — {$result['message']}");
 
                 return response()->json($result);
             }
@@ -264,7 +264,7 @@ class PublishArticleController extends Controller
                 'wp_status' => $result['data']['post_status'],
             ]);
 
-            activity_log('publish', 'article_published', "Article published: {$article->title} ({$article->article_id}) → {$site->url} (WP ID: {$result['data']['post_id']})");
+            hexaLog('publish', 'article_published', "Article published: {$article->title} ({$article->article_id}) → {$site->url} (WP ID: {$result['data']['post_id']})");
 
             // Telegram notification
             try {
@@ -309,7 +309,7 @@ class PublishArticleController extends Controller
 
         if ($result['success']) {
             $article->update(['ai_detection_score' => $result['data']['score']]);
-            activity_log('publish', 'article_ai_check', "AI check: {$article->article_id} — score: {$result['data']['score']}%");
+            hexaLog('publish', 'article_ai_check', "AI check: {$article->article_id} — score: {$result['data']['score']}%");
         }
 
         return response()->json([
@@ -343,7 +343,7 @@ class PublishArticleController extends Controller
             'seo_data' => $seoData,
         ]);
 
-        activity_log('publish', 'article_seo_check', "SEO check: {$article->article_id} — score: {$seoData['score']}");
+        hexaLog('publish', 'article_seo_check', "SEO check: {$article->article_id} — score: {$seoData['score']}");
 
         return response()->json([
             'success' => true,
@@ -518,7 +518,7 @@ class PublishArticleController extends Controller
 
         if (!$result['success']) {
             $article->update(['status' => 'review']);
-            activity_log('publish', 'article_spin_failed', "Spin failed: {$article->article_id} — {$result['message']}");
+            hexaLog('publish', 'article_spin_failed', "Spin failed: {$article->article_id} — {$result['message']}");
             return response()->json($result);
         }
 
@@ -531,7 +531,7 @@ class PublishArticleController extends Controller
             'status' => 'review',
         ]);
 
-        activity_log('publish', 'article_spun', "Article spun: {$article->article_id} via {$validated['ai_engine']} ({$wordCount} words)");
+        hexaLog('publish', 'article_spun', "Article spun: {$article->article_id} via {$validated['ai_engine']} ({$wordCount} words)");
 
         // Send Telegram approval request if delivery mode is review or notify
         if (in_array($article->delivery_mode, ['review', 'notify'])) {
@@ -749,7 +749,7 @@ class PublishArticleController extends Controller
                 'word_count' => str_word_count(strip_tags($result['data']['html'])),
             ]);
 
-            activity_log('publish', 'article_links_inserted', "Links inserted: {$article->article_id} — {$result['message']}");
+            hexaLog('publish', 'article_links_inserted', "Links inserted: {$article->article_id} — {$result['message']}");
         }
 
         return response()->json([

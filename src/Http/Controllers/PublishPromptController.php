@@ -52,7 +52,7 @@ class PublishPromptController extends Controller
 
         $prompt = PublishPrompt::create($validated);
 
-        activity_log('publish', 'prompt_created', "Prompt created: {$prompt->name}");
+        hexaLog('publish', 'prompt_created', "Prompt created: {$prompt->name}");
 
         return response()->json([
             'success' => true,
@@ -96,7 +96,7 @@ class PublishPromptController extends Controller
 
         $prompt->update($validated);
 
-        activity_log('publish', 'prompt_updated', "Prompt updated: {$prompt->name}");
+        hexaLog('publish', 'prompt_updated', "Prompt updated: {$prompt->name}");
 
         return response()->json([
             'success' => true,
@@ -117,7 +117,7 @@ class PublishPromptController extends Controller
 
         $prompt->delete();
 
-        activity_log('publish', 'prompt_deleted', "Prompt deleted: {$name}");
+        hexaLog('publish', 'prompt_deleted', "Prompt deleted: {$name}");
 
         return response()->json([
             'success' => true,

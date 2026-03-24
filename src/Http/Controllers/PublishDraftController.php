@@ -57,7 +57,7 @@ class PublishDraftController extends Controller
 
         $draft = PublishArticle::create($validated);
 
-        activity_log('publish', 'draft_created', "Draft created: {$draft->title}");
+        hexaLog('publish', 'draft_created', "Draft created: {$draft->title}");
 
         return response()->json([
             'success'  => true,
@@ -104,7 +104,7 @@ class PublishDraftController extends Controller
 
         $draft->update($validated);
 
-        activity_log('publish', 'draft_updated', "Draft updated: {$draft->title}");
+        hexaLog('publish', 'draft_updated', "Draft updated: {$draft->title}");
 
         return response()->json([
             'success' => true,
@@ -125,7 +125,7 @@ class PublishDraftController extends Controller
 
         $draft->delete();
 
-        activity_log('publish', 'draft_deleted', "Draft deleted: {$title}");
+        hexaLog('publish', 'draft_deleted', "Draft deleted: {$title}");
 
         return response()->json([
             'success' => true,

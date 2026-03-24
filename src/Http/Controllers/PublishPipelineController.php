@@ -462,7 +462,7 @@ class PublishPipelineController extends Controller
         );
 
         if (!$result['success']) {
-            activity_log('publish', 'pipeline_publish_failed', "Pipeline publish failed to {$site->name}: {$result['message']}");
+            hexaLog('publish', 'pipeline_publish_failed', "Pipeline publish failed to {$site->name}: {$result['message']}");
             return response()->json($result);
         }
 
@@ -481,7 +481,7 @@ class PublishPipelineController extends Controller
             }
         }
 
-        activity_log('publish', 'pipeline_published', "Pipeline published to {$site->name}: {$validated['title']} (WP ID: {$result['data']['post_id']})");
+        hexaLog('publish', 'pipeline_published', "Pipeline published to {$site->name}: {$validated['title']} (WP ID: {$result['data']['post_id']})");
 
         return response()->json([
             'success'  => true,
@@ -538,7 +538,7 @@ class PublishPipelineController extends Controller
             $message = "Draft created: {$draft->title}";
         }
 
-        activity_log('publish', 'pipeline_draft_saved', $message);
+        hexaLog('publish', 'pipeline_draft_saved', $message);
 
         return response()->json([
             'success'  => true,

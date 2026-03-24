@@ -72,7 +72,7 @@ class PublishLinkController extends Controller
 
         $link = PublishLinkList::create($validated);
 
-        activity_log('publish', 'link_created', "Link added: {$link->name} ({$link->url})");
+        hexaLog('publish', 'link_created', "Link added: {$link->name} ({$link->url})");
 
         return response()->json(['success' => true, 'message' => "Link '{$link->name}' added.", 'link' => $link]);
     }
@@ -89,7 +89,7 @@ class PublishLinkController extends Controller
         $name = $link->name;
         $link->delete();
 
-        activity_log('publish', 'link_deleted', "Link removed: {$name}");
+        hexaLog('publish', 'link_deleted', "Link removed: {$name}");
 
         return response()->json(['success' => true, 'message' => "Link '{$name}' removed."]);
     }
@@ -127,7 +127,7 @@ class PublishLinkController extends Controller
         // Parse immediately
         $parseResult = $this->linkService->parseSitemap($sitemap);
 
-        activity_log('publish', 'sitemap_added', "Sitemap added: {$sitemap->name} ({$sitemap->sitemap_url}) — {$parseResult['url_count']} URLs");
+        hexaLog('publish', 'sitemap_added', "Sitemap added: {$sitemap->name} ({$sitemap->sitemap_url}) — {$parseResult['url_count']} URLs");
 
         return response()->json([
             'success' => true,
@@ -162,7 +162,7 @@ class PublishLinkController extends Controller
         $name = $sitemap->name;
         $sitemap->delete();
 
-        activity_log('publish', 'sitemap_deleted', "Sitemap removed: {$name}");
+        hexaLog('publish', 'sitemap_deleted', "Sitemap removed: {$name}");
 
         return response()->json(['success' => true, 'message' => "Sitemap '{$name}' removed."]);
     }

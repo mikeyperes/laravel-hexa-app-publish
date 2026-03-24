@@ -72,7 +72,7 @@ class RunCampaignsCommand extends Command
 
         $this->line("    Next run: {$nextRun->format('Y-m-d H:i')}");
 
-        activity_log('publish', 'campaign_run', "Campaign run: {$campaign->name} ({$campaign->campaign_id}) — spawned {$count} article(s)");
+        hexaLog('publish', 'campaign_run', "Campaign run: {$campaign->name} ({$campaign->campaign_id}) — spawned {$count} article(s)");
     }
 
     /**

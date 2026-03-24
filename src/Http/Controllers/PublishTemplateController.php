@@ -100,7 +100,7 @@ class PublishTemplateController extends Controller
 
         $template = PublishTemplate::create($validated);
 
-        activity_log('publish', 'template_created', "Template created: {$template->name}");
+        hexaLog('publish', 'template_created', "Template created: {$template->name}");
 
         return response()->json([
             'success' => true,
@@ -174,7 +174,7 @@ class PublishTemplateController extends Controller
 
         $template->update($validated);
 
-        activity_log('publish', 'template_updated', "Template updated: {$template->name}");
+        hexaLog('publish', 'template_updated', "Template updated: {$template->name}");
 
         return response()->json([
             'success' => true,
@@ -195,7 +195,7 @@ class PublishTemplateController extends Controller
 
         $template->delete();
 
-        activity_log('publish', 'template_deleted', "Template deleted: {$name}");
+        hexaLog('publish', 'template_deleted', "Template deleted: {$name}");
 
         return response()->json([
             'success' => true,

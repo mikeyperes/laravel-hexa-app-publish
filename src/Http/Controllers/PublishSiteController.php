@@ -105,7 +105,7 @@ class PublishSiteController extends Controller
 
         $site = PublishSite::create($validated);
 
-        activity_log('publish', 'site_created', "Site created: {$site->name} ({$site->url})");
+        hexaLog('publish', 'site_created', "Site created: {$site->name} ({$site->url})");
 
         return response()->json([
             'success' => true,
@@ -175,7 +175,7 @@ class PublishSiteController extends Controller
 
         $site->update($validated);
 
-        activity_log('publish', 'site_updated', "Site updated: {$site->name} ({$site->url})");
+        hexaLog('publish', 'site_updated', "Site updated: {$site->name} ({$site->url})");
 
         return response()->json([
             'success' => true,
@@ -209,7 +209,7 @@ class PublishSiteController extends Controller
                 'last_error' => $result['success'] ? null : $result['message'],
             ]);
 
-            activity_log('publish', 'site_test', "Site connection tested: {$site->name} ({$site->url}) — " . ($result['success'] ? 'connected' : 'failed: ' . $result['message']));
+            hexaLog('publish', 'site_test', "Site connection tested: {$site->name} ({$site->url}) — " . ($result['success'] ? 'connected' : 'failed: ' . $result['message']));
 
             return response()->json($result);
         }

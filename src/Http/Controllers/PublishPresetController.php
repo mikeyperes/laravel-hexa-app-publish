@@ -71,7 +71,7 @@ class PublishPresetController extends Controller
 
         $preset = PublishPreset::create($validated);
 
-        activity_log('publish', 'preset_created', "Preset created: {$preset->name}");
+        hexaLog('publish', 'preset_created', "Preset created: {$preset->name}");
 
         return response()->json([
             'success' => true,
@@ -123,7 +123,7 @@ class PublishPresetController extends Controller
 
         $preset->update($validated);
 
-        activity_log('publish', 'preset_updated', "Preset updated: {$preset->name}");
+        hexaLog('publish', 'preset_updated', "Preset updated: {$preset->name}");
 
         return response()->json([
             'success' => true,
@@ -144,7 +144,7 @@ class PublishPresetController extends Controller
 
         $preset->delete();
 
-        activity_log('publish', 'preset_deleted', "Preset deleted: {$name}");
+        hexaLog('publish', 'preset_deleted', "Preset deleted: {$name}");
 
         return response()->json([
             'success' => true,

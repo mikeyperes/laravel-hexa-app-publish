@@ -55,7 +55,7 @@ class PublishBookmarkController extends Controller
 
         $bookmark = PublishBookmark::create($validated);
 
-        activity_log('publish', 'bookmark_created', "Bookmark saved: {$bookmark->url}");
+        hexaLog('publish', 'bookmark_created', "Bookmark saved: {$bookmark->url}");
 
         return response()->json([
             'success'  => true,
@@ -86,7 +86,7 @@ class PublishBookmarkController extends Controller
 
         $bookmark->update($validated);
 
-        activity_log('publish', 'bookmark_updated', "Bookmark updated: {$bookmark->url}");
+        hexaLog('publish', 'bookmark_updated', "Bookmark updated: {$bookmark->url}");
 
         return response()->json([
             'success' => true,
@@ -107,7 +107,7 @@ class PublishBookmarkController extends Controller
 
         $bookmark->delete();
 
-        activity_log('publish', 'bookmark_deleted', "Bookmark deleted: {$url}");
+        hexaLog('publish', 'bookmark_deleted', "Bookmark deleted: {$url}");
 
         return response()->json([
             'success' => true,
