@@ -13,6 +13,18 @@
             <h3 class="font-semibold text-gray-800">Edit Preset</h3>
             <a href="{{ route('publish.presets.index', request()->only('user_id')) }}" class="text-sm text-gray-500 hover:text-gray-700">Back to list</a>
         </div>
+
+        {{-- Account section --}}
+        <div class="mb-4 pb-4 border-b border-gray-200">
+            <label class="block text-xs text-gray-500 mb-1">Account <span class="text-red-500">*</span></label>
+            <select x-model="editData.user_id" class="w-full md:w-1/3 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">Select user...</option>
+                @foreach(\hexa_core\Models\User::orderBy('name')->get() as $u)
+                    <option value="{{ $u->id }}">{{ $u->name }}</option>
+                @endforeach
+            </select>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <div>
                 <label class="block text-xs text-gray-500 mb-1">Preset Name</label>
@@ -110,23 +122,22 @@
     {{-- New preset form --}}
     <div x-show="showNew" x-cloak class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
         <h3 class="font-semibold text-gray-800 mb-3">Create New Preset</h3>
+
+        {{-- Account section --}}
+        <div class="mb-4 pb-4 border-b border-gray-200">
+            <label class="block text-xs text-gray-500 mb-1">Account <span class="text-red-500">*</span></label>
+            <select x-model="newPreset.user_id" class="w-full md:w-1/3 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">Select user...</option>
+                @foreach(\hexa_core\Models\User::orderBy('name')->get() as $u)
+                    <option value="{{ $u->id }}">{{ $u->name }}</option>
+                @endforeach
+            </select>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <div>
                 <label class="block text-xs text-gray-500 mb-1">Preset Name</label>
                 <input type="text" x-model="newPreset.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Standard Editorial">
-            </div>
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Assign to User</label>
-                <div class="relative">
-                    <input type="text" x-model="newUserQuery" @input.debounce.300ms="searchNewUsers()" placeholder="Type to search..."
-                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <div x-show="newUserResults.length > 0" x-cloak class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                        <template x-for="user in newUserResults" :key="user.id">
-                            <button type="button" @click="newPreset.user_id = user.id; newUserQuery = user.name; newUserResults = []"
-                                    class="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50" x-text="user.name + ' (' + user.email + ')'"></button>
-                        </template>
-                    </div>
-                </div>
             </div>
             <div>
                 <label class="block text-xs text-gray-500 mb-1">Default WordPress Site</label>
@@ -222,7 +233,13 @@
                         </button>
                     </div>
                 </div>
-                <p class="text-xs text-gray-400 mb-2">{{ $preset->user->name ?? 'Unassigned' }}</p>
+                <p class="text-xs text-gray-400 mb-1">{{ $preset->user->name ?? 'Unassigned' }}</p>
+                <label class="flex items-center gap-2 mb-2 cursor-pointer">
+                    <input type="checkbox" {{ $preset->is_default ? 'checked' : '' }}
+                           @click.prevent="toggleDefault({{ $preset->id }}, $event)"
+                           class="rounded text-green-600">
+                    <span class="text-xs {{ $preset->is_default ? 'text-green-600 font-medium' : 'text-gray-400' }}">Default</span>
+                </label>
                 <div class="space-y-1 text-xs text-gray-500">
                     @if($preset->article_format)
                         <p><span class="text-gray-400">Format:</span> {{ $preset->article_format }}</p>
@@ -285,6 +302,13 @@ function presetsManager() {
                 if (d.success) setTimeout(() => { window.location.href = '{{ route("publish.presets.index") }}'; }, 600);
             } catch(e) { this.editSuccess = false; this.editResult = 'Error: ' + e.message; }
             this.updating = false;
+        },
+        async toggleDefault(id, event) {
+            try {
+                const r = await fetch('/publishing/presets/' + id + '/toggle-default', { method: 'POST', headers });
+                const d = await r.json();
+                if (d.success) setTimeout(() => location.reload(), 400);
+            } catch(e) { alert('Error: ' + e.message); }
         },
         async deletePreset(id, name) {
             if (!confirm('Delete preset "' + name + '"?')) return;

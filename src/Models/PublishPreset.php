@@ -14,6 +14,7 @@ use hexa_core\Models\User;
  * @property int $id
  * @property int|null $user_id
  * @property string $name
+ * @property bool $is_default
  * @property int|null $default_site_id
  * @property string $follow_links
  * @property string|null $article_format
@@ -33,6 +34,7 @@ class PublishPreset extends Model
     protected $fillable = [
         'user_id',
         'name',
+        'is_default',
         'default_site_id',
         'follow_links',
         'article_format',
@@ -45,6 +47,7 @@ class PublishPreset extends Model
     ];
 
     protected $casts = [
+        'is_default'             => 'boolean',
         'default_site_id'        => 'integer',
         'default_category_count' => 'integer',
         'default_tag_count'      => 'integer',

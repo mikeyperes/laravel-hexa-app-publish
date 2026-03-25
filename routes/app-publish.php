@@ -138,6 +138,7 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::get('/publishing/presets/{id}', [PublishPresetController::class, 'show'])->name('publish.presets.show');
     Route::put('/publishing/presets/{id}', [PublishPresetController::class, 'update'])->name('publish.presets.update');
     Route::delete('/publishing/presets/{id}', [PublishPresetController::class, 'destroy'])->name('publish.presets.destroy');
+    Route::post('/publishing/presets/{id}/toggle-default', [PublishPresetController::class, 'toggleDefault'])->name('publish.presets.toggle-default');
 
     // ═══ Master Settings ═══
     Route::get('/publishing/settings', [PublishMasterSettingController::class, 'index'])->name('publish.settings.master');

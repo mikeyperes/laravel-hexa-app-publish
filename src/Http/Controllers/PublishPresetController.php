@@ -138,6 +138,30 @@ class PublishPresetController extends Controller
     }
 
     /**
+     * Toggle a preset as default for its user. Unsets all other defaults for that user.
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function toggleDefault(int $id): JsonResponse
+    {
+        $preset = PublishPreset::findOrFail($id);
+
+        if ($preset->is_default) {
+            $preset->update(['is_default' => false]);
+            hexaLog('publish', 'preset_default_removed', "Default removed: {$preset->name}");
+            return response()->json(['success' => true, 'message' => "'{$preset->name}' is no longer the default.", 'is_default' => false]);
+        }
+
+        // Unset all other defaults for this user
+        PublishPreset::where('user_id', $preset->user_id)->where('id', '!=', $preset->id)->update(['is_default' => false]);
+        $preset->update(['is_default' => true]);
+
+        hexaLog('publish', 'preset_default_set', "Default preset set: {$preset->name}");
+        return response()->json(['success' => true, 'message' => "'{$preset->name}' is now the default.", 'is_default' => true]);
+    }
+
+    /**
      * Delete a preset.
      *
      * @param int $id
