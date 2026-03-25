@@ -24,7 +24,7 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Article Type</label>
                 <select x-model="form.article_type" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -35,12 +35,23 @@
                 </select>
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">AI Engine</label>
-                <select x-model="form.ai_engine" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">— Default —</option>
-                    @foreach($aiEngines as $engine)
-                        <option value="{{ $engine }}">{{ ucfirst($engine) }}</option>
-                    @endforeach
+                <label class="block text-sm font-medium text-gray-700 mb-1">AI Company</label>
+                <select x-model="selectedCompany" @change="form.ai_engine = ''" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Select company...</option>
+                    <template x-for="(models, company) in companies" :key="company">
+                        <option :value="company" x-text="company"></option>
+                    </template>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">AI Model</label>
+                <select x-model="form.ai_engine" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" :disabled="!selectedCompany">
+                    <option value="">Select model...</option>
+                    <template x-if="selectedCompany && companies[selectedCompany]">
+                        <template x-for="model in companies[selectedCompany]" :key="model">
+                            <option :value="model" x-text="model"></option>
+                        </template>
+                    </template>
                 </select>
             </div>
         </div>
@@ -50,7 +61,7 @@
             <input type="text" x-model="form.tone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. formal, casual, authoritative, conversational">
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Min Words</label>
                 <input type="number" x-model="form.word_count_min" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="800">
@@ -58,10 +69,6 @@
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Max Words</label>
                 <input type="number" x-model="form.word_count_max" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="1500">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Photos Per Article</label>
-                <input type="number" x-model="form.photos_per_article" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="2" min="0" max="20">
             </div>
         </div>
 
@@ -111,10 +118,15 @@
 <script>
 function templateForm() {
     return {
+        companies: {
+            'Anthropic': @json(config('anthropic.available_models', [])),
+            'OpenAI': @json(config('chatgpt.available_models', [])),
+        },
+        selectedCompany: '',
         form: {
             publish_account_id: '{{ $preselected_account_id ?? '' }}',
             name: '', article_type: '', ai_engine: '', tone: '',
-            word_count_min: '', word_count_max: '', photos_per_article: '',
+            word_count_min: '', word_count_max: '',
             max_links: '', photo_sources: [], description: '', ai_prompt: '',
         },
         saving: false, resultMessage: '', resultSuccess: false,

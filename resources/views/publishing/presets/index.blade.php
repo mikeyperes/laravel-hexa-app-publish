@@ -35,15 +35,6 @@
                 </select>
             </div>
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Tone</label>
-                <select x-model="editData.tone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select tone...</option>
-                    @foreach($tones as $tone)
-                        <option value="{{ $tone }}">{{ $tone }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
                 <label class="block text-xs text-gray-500 mb-1">Image Preference</label>
                 <select x-model="editData.image_preference" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">Select preference...</option>
@@ -162,15 +153,6 @@
                 </select>
             </div>
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Tone</label>
-                <select x-model="newPreset.tone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select tone...</option>
-                    @foreach($tones as $tone)
-                        <option value="{{ $tone }}">{{ $tone }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
                 <label class="block text-xs text-gray-500 mb-1">Image Preference</label>
                 <select x-model="newPreset.image_preference" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">Select preference...</option>
@@ -245,9 +227,6 @@
                     @if($preset->article_format)
                         <p><span class="text-gray-400">Format:</span> {{ $preset->article_format }}</p>
                     @endif
-                    @if($preset->tone)
-                        <p><span class="text-gray-400">Tone:</span> {{ $preset->tone }}</p>
-                    @endif
                     @if($preset->image_preference)
                         <p><span class="text-gray-400">Images:</span> {{ $preset->image_preference }}</p>
                     @endif
@@ -277,7 +256,7 @@ function presetsManager() {
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
     return {
         showNew: false,
-        newPreset: { name: '', user_id: '', default_site_id: '', follow_links: 'follow', article_format: '', tone: '', image_preference: '', default_publish_action: '', default_category_count: 3, default_tag_count: 5, image_layout: '' },
+        newPreset: { name: '', user_id: '', default_site_id: '', follow_links: 'follow', article_format: '', image_preference: '', default_publish_action: '', default_category_count: 3, default_tag_count: 5, image_layout: '' },
         newUserQuery: '', newUserResults: [],
         saving: false, result: '', success: false,
         editData: @json($editingPreset ?? (object)[]),

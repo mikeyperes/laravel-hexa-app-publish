@@ -19,7 +19,7 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Article Type</label>
                 <select x-model="form.article_type" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -30,12 +30,23 @@
                 </select>
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">AI Engine</label>
-                <select x-model="form.ai_engine" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">— Default —</option>
-                    @foreach($aiEngines as $engine)
-                        <option value="{{ $engine }}">{{ ucfirst($engine) }}</option>
-                    @endforeach
+                <label class="block text-sm font-medium text-gray-700 mb-1">AI Company</label>
+                <select x-model="selectedCompany" @change="form.ai_engine = ''" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Select company...</option>
+                    <template x-for="(models, company) in companies" :key="company">
+                        <option :value="company" x-text="company"></option>
+                    </template>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">AI Model</label>
+                <select x-model="form.ai_engine" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" :disabled="!selectedCompany">
+                    <option value="">Select model...</option>
+                    <template x-if="selectedCompany && companies[selectedCompany]">
+                        <template x-for="model in companies[selectedCompany]" :key="model">
+                            <option :value="model" x-text="model"></option>
+                        </template>
+                    </template>
                 </select>
             </div>
         </div>
@@ -45,7 +56,7 @@
             <input type="text" x-model="form.tone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Min Words</label>
                 <input type="number" x-model="form.word_count_min" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -53,10 +64,6 @@
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Max Words</label>
                 <input type="number" x-model="form.word_count_max" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Photos Per Article</label>
-                <input type="number" x-model="form.photos_per_article" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" min="0" max="20">
             </div>
         </div>
 
@@ -105,7 +112,18 @@
 @push('scripts')
 <script>
 function templateEditForm() {
+    const allCompanies = {
+        'Anthropic': @json(config('anthropic.available_models', [])),
+        'OpenAI': @json(config('chatgpt.available_models', [])),
+    };
+    const currentEngine = @json($template->ai_engine ?? '');
+    let detectedCompany = '';
+    for (const [company, models] of Object.entries(allCompanies)) {
+        if (models.includes(currentEngine)) { detectedCompany = company; break; }
+    }
     return {
+        companies: allCompanies,
+        selectedCompany: detectedCompany,
         form: {
             name: @json($template->name),
             article_type: @json($template->article_type ?? ''),
@@ -113,7 +131,6 @@ function templateEditForm() {
             tone: @json($template->tone ?? ''),
             word_count_min: @json($template->word_count_min ?? ''),
             word_count_max: @json($template->word_count_max ?? ''),
-            photos_per_article: @json($template->photos_per_article ?? ''),
             max_links: @json($template->max_links ?? ''),
             photo_sources: @json($template->photo_sources ?? []),
             description: @json($template->description ?? ''),
