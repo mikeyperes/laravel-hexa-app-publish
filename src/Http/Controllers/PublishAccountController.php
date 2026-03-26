@@ -268,6 +268,27 @@ class PublishAccountController extends Controller
     }
 
     /**
+     * AJAX: Remove a WordPress site from a user.
+     *
+     * @param int $id User ID
+     * @param int $siteId Site ID
+     * @return JsonResponse
+     */
+    public function removeSite(int $id, int $siteId): JsonResponse
+    {
+        $site = PublishSite::where('id', $siteId)->where('user_id', $id)->first();
+
+        if (!$site) {
+            return response()->json(['success' => false, 'message' => 'Site not found.']);
+        }
+
+        $name = $site->name;
+        $site->delete();
+
+        return response()->json(['success' => true, 'message' => "Site \"{$name}\" removed."]);
+    }
+
+    /**
      * AJAX: Scan a single cPanel account for WordPress installs via WP Toolkit.
      * Used by the activity log to scan accounts one-by-one with live feedback.
      *
