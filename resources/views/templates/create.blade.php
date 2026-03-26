@@ -129,12 +129,12 @@ function templateForm() {
             'Anthropic': @json(config('anthropic.available_models', [])),
             'OpenAI': @json(config('chatgpt.available_models', [])),
         },
-        selectedCompany: '',
+        selectedCompany: 'Anthropic',
         form: {
             publish_account_id: '{{ $preselected_account_id ?? '' }}',
-            name: '', article_type: '', ai_engine: '', tone: [],
-            word_count_min: '', word_count_max: '',
-            max_links: '', photo_sources: [], description: '', ai_prompt: '',
+            name: '', article_type: '', ai_engine: 'claude-opus-4-6-20250610', tone: [],
+            word_count_min: 300, word_count_max: 800,
+            max_links: '', photo_sources: @json(config('hws-publish.photo_sources', [])), description: '', ai_prompt: '',
         },
         saving: false, resultMessage: '', resultSuccess: false,
         toggleArray(arr, val) {
