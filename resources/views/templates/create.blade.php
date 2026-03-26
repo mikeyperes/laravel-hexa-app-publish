@@ -38,20 +38,21 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">AI Company</label>
                 <select x-model="selectedCompany" @change="form.ai_engine = ''" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">Select company...</option>
-                    <template x-for="(models, company) in companies" :key="company">
-                        <option :value="company" x-text="company"></option>
-                    </template>
+                    @foreach(['Anthropic', 'OpenAI'] as $company)
+                        <option value="{{ $company }}">{{ $company }}</option>
+                    @endforeach
                 </select>
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">AI Model</label>
                 <select x-model="form.ai_engine" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" :disabled="!selectedCompany">
                     <option value="">Select model...</option>
-                    <template x-if="selectedCompany && companies[selectedCompany]">
-                        <template x-for="model in companies[selectedCompany]" :key="model">
-                            <option :value="model" x-text="model"></option>
-                        </template>
-                    </template>
+                    @foreach(config('anthropic.available_models', []) as $model)
+                        <option value="{{ $model }}" x-show="selectedCompany === 'Anthropic'">{{ $model }}</option>
+                    @endforeach
+                    @foreach(config('chatgpt.available_models', []) as $model)
+                        <option value="{{ $model }}" x-show="selectedCompany === 'OpenAI'">{{ $model }}</option>
+                    @endforeach
                 </select>
             </div>
         </div>
