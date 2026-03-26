@@ -53,79 +53,71 @@
         {{-- Sub-section 1: Currently Attached --}}
         <div class="mb-6">
             <div class="flex items-center justify-between mb-3">
-                <h4 class="text-sm font-semibold text-gray-700">Currently Attached ({{ $attachedAccounts->count() }})</h4>
-                @if($attachedAccounts->isNotEmpty())
-                    <div class="flex items-center gap-2">
-                        <button @click="document.querySelectorAll('.detach-checkbox').forEach(c => c.checked = true)" class="text-xs text-gray-500 hover:text-gray-700">Select All</button>
-                        <span class="text-gray-300">|</span>
-                        <button @click="document.querySelectorAll('.detach-checkbox').forEach(c => c.checked = false)" class="text-xs text-gray-500 hover:text-gray-700">None</button>
-                    </div>
-                @endif
+                <h4 class="text-sm font-semibold text-gray-700">Currently Attached (<span x-text="attachedAccounts.length"></span>)</h4>
+                <div x-show="attachedAccounts.length > 0" class="flex items-center gap-2">
+                    <button @click="detachChecked = attachedAccounts.map(a => a.id)" class="text-xs text-gray-500 hover:text-gray-700">Select All</button>
+                    <span class="text-gray-300">|</span>
+                    <button @click="detachChecked = []" class="text-xs text-gray-500 hover:text-gray-700">None</button>
+                </div>
             </div>
 
-            @if($attachedAccounts->isNotEmpty())
-                <div class="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-3">
-                    @foreach($attachedAccounts as $acct)
-                    <label class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer border-l-4 border-green-500">
-                        <input type="checkbox" value="{{ $acct->id }}" class="detach-checkbox rounded text-red-600">
-                        <div class="flex items-center gap-2 flex-1 min-w-0">
-                            <span class="text-sm font-medium text-gray-900 break-words">{{ $acct->domain }}</span>
-                            <span class="text-xs text-gray-400">{{ $acct->username }}</span>
-                            <span class="text-xs text-gray-400">{{ $acct->whmServer->hostname ?? '' }}</span>
-                            @if($acct->is_reseller)
-                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">Reseller ({{ $acct->child_count }} accounts)</span>
-                            @endif
-                        </div>
-                    </label>
-                    @endforeach
+            <template x-if="attachedAccounts.length > 0">
+                <div>
+                    <div class="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-3">
+                        <template x-for="acct in attachedAccounts" :key="acct.id">
+                            <label class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer border-l-4 border-green-500">
+                                <input type="checkbox" :value="acct.id" x-model.number="detachChecked" class="rounded text-red-600">
+                                <div class="flex items-center gap-2 flex-1 min-w-0">
+                                    <span class="text-sm font-medium text-gray-900 break-words" x-text="acct.domain"></span>
+                                    <span class="text-xs text-gray-400" x-text="acct.username"></span>
+                                    <span class="text-xs text-gray-400" x-text="acct.hostname"></span>
+                                </div>
+                            </label>
+                        </template>
+                    </div>
+                    <button @click="detachSelected()" :disabled="detaching || detachChecked.length === 0"
+                            class="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 border border-red-200 rounded-lg hover:bg-red-50 inline-flex items-center gap-1 disabled:opacity-50">
+                        <svg x-show="detaching" class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                        <span x-text="detaching ? 'Detaching...' : 'Detach Selected (' + detachChecked.length + ')'"></span>
+                    </button>
                 </div>
-                <button @click="detachSelected()" :disabled="detaching"
-                        class="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 border border-red-200 rounded-lg hover:bg-red-50 inline-flex items-center gap-1">
-                    <svg x-show="detaching" class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                    <span x-text="detaching ? 'Detaching...' : 'Detach Selected'"></span>
-                </button>
-            @else
-                <p class="text-sm text-gray-400">No cPanel accounts attached.</p>
-            @endif
+            </template>
+            <p x-show="attachedAccounts.length === 0" class="text-sm text-gray-400">No cPanel accounts attached.</p>
         </div>
 
         {{-- Sub-section 2: + Add More Accounts (collapsible) --}}
-        @if($availableAccounts->isNotEmpty())
-        <div x-data="{ showAttach: false }">
+        <div x-show="availableAccounts.length > 0">
             <button @click="showAttach = !showAttach" class="flex items-center gap-2 w-full text-left py-3 px-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
                 <svg class="w-4 h-4 text-gray-500 transition-transform" :class="showAttach ? 'rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 <span class="text-sm font-semibold text-gray-700">+ Add More Accounts</span>
-                <span class="text-xs text-gray-400">({{ $availableAccounts->count() }} available)</span>
+                <span class="text-xs text-gray-400">(<span x-text="availableAccounts.length"></span> available)</span>
             </button>
 
             <div x-show="showAttach" x-cloak class="mt-3">
                 <div class="flex items-center gap-3 mb-2">
-                    <input type="text" placeholder="Filter accounts..." class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1" oninput="document.querySelectorAll('.attach-row').forEach(r => r.style.display = r.textContent.toLowerCase().includes(this.value.toLowerCase()) ? '' : 'none')">
-                    <button @click="document.querySelectorAll('.attach-checkbox').forEach(c => c.checked = true)" class="text-xs text-gray-500 hover:text-gray-700">Select All</button>
+                    <input type="text" x-model="attachFilter" placeholder="Filter accounts..." class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1">
+                    <button @click="attachChecked = filteredAvailable.map(a => a.id)" class="text-xs text-gray-500 hover:text-gray-700">Select All</button>
                     <span class="text-gray-300">|</span>
-                    <button @click="document.querySelectorAll('.attach-checkbox').forEach(c => c.checked = false)" class="text-xs text-gray-500 hover:text-gray-700">None</button>
+                    <button @click="attachChecked = []" class="text-xs text-gray-500 hover:text-gray-700">None</button>
                 </div>
                 <div class="border border-gray-200 rounded-lg max-h-64 overflow-y-auto mb-3">
-                    @foreach($availableAccounts as $acct)
-                    <label class="attach-row flex items-center gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-b-0">
-                        <input type="checkbox" value="{{ $acct->id }}" class="attach-checkbox rounded text-blue-600">
-                        <div class="flex items-center gap-2 flex-1 min-w-0">
-                            <span class="text-sm text-gray-800 break-words">{{ $acct->domain }}</span>
-                            <span class="text-xs text-gray-400">{{ $acct->username }}</span>
-                            <span class="text-xs text-gray-400">{{ $acct->whmServer->hostname ?? '' }}</span>
-                            @if($acct->is_reseller)
-                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">Reseller ({{ $acct->child_count }})</span>
-                            @endif
-                        </div>
-                    </label>
-                    @endforeach
+                    <template x-for="acct in filteredAvailable" :key="acct.id">
+                        <label class="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-b-0">
+                            <input type="checkbox" :value="acct.id" x-model.number="attachChecked" class="rounded text-blue-600">
+                            <div class="flex items-center gap-2 flex-1 min-w-0">
+                                <span class="text-sm text-gray-800 break-words" x-text="acct.domain"></span>
+                                <span class="text-xs text-gray-400" x-text="acct.username"></span>
+                                <span class="text-xs text-gray-400" x-text="acct.hostname"></span>
+                            </div>
+                        </label>
+                    </template>
                 </div>
 
                 <div class="flex items-center gap-3">
-                    <button @click="attachSelected()" :disabled="attaching"
+                    <button @click="attachSelected()" :disabled="attaching || attachChecked.length === 0"
                             class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
                         <svg x-show="attaching" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                        <span x-text="attaching ? 'Attaching...' : 'Attach Selected'"></span>
+                        <span x-text="attaching ? 'Attaching...' : 'Attach Selected (' + attachChecked.length + ')'"></span>
                     </button>
                     <label class="text-xs text-gray-500 flex items-center gap-1">
                         <input type="checkbox" x-model="includeChildren" class="rounded text-blue-600">
@@ -134,7 +126,6 @@
                 </div>
             </div>
         </div>
-        @endif
 
         {{-- Attach/Detach result banner --}}
         <div x-show="attachBanner" x-cloak class="mt-3 px-4 py-2 rounded-lg text-sm inline-flex items-center gap-2"
@@ -489,9 +480,23 @@ function userProfile() {
         attachBanner: '',
         attachSuccess: false,
         includeChildren: true,
+        showAttach: false,
+        attachFilter: '',
+        attachChecked: [],
+        detachChecked: [],
 
-        // Enabled sites (Alpine-driven, no reload needed)
-        enabledSites: @json($sites->map(fn($s) => ['id' => $s->id, 'name' => $s->name, 'url' => $s->url])),
+        // cPanel accounts (Alpine-driven)
+        attachedAccounts: @json($attachedAccountsJson),
+        availableAccounts: @json($availableAccountsJson),
+
+        get filteredAvailable() {
+            if (!this.attachFilter) return this.availableAccounts;
+            const q = this.attachFilter.toLowerCase();
+            return this.availableAccounts.filter(a => (a.domain + ' ' + a.username + ' ' + a.hostname).toLowerCase().includes(q));
+        },
+
+        // Enabled sites (Alpine-driven)
+        enabledSites: @json($sitesJson),
         defaultSiteId: '{{ $defaultSiteId ?? '' }}',
         defaultSiteSaved: false,
 
@@ -503,9 +508,6 @@ function userProfile() {
         wpInstalls: [],
         addingIdx: -1,
 
-        // Attached accounts data for per-account scanning
-        attachedAccountsData: @json($attachedAccounts->map(fn($a) => ['id' => $a->id, 'username' => $a->username, 'domain' => $a->domain])),
-
         csrfToken: document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
 
         isSiteAdded(url) {
@@ -513,29 +515,28 @@ function userProfile() {
         },
 
         async attachSelected() {
-            const checked = document.querySelectorAll('.attach-checkbox:checked');
-            if (checked.length === 0) {
+            if (this.attachChecked.length === 0) {
                 this.attachSuccess = false;
                 this.attachBanner = 'Select at least one account.';
                 return;
             }
-            const ids = Array.from(checked).map(cb => parseInt(cb.value));
             this.attaching = true;
             this.attachBanner = '';
             try {
                 const res = await fetch('{{ route("publish.accounts.attach", $user->id) }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ hosting_account_ids: ids, include_children: this.includeChildren }),
+                    body: JSON.stringify({ hosting_account_ids: this.attachChecked, include_children: this.includeChildren }),
                 });
                 const data = await res.json();
                 this.attachSuccess = data.success;
                 this.attachBanner = data.message;
                 if (data.success && data.attached) {
                     data.attached.forEach(a => {
-                        this.attachedAccountsData.push({ id: a.id, username: a.username, domain: a.domain });
+                        this.attachedAccounts.push(a);
+                        this.availableAccounts = this.availableAccounts.filter(av => av.id !== a.id);
                     });
-                    this.attachBanner += ' Reload to see updated account list.';
+                    this.attachChecked = [];
                 }
             } catch (e) {
                 this.attachSuccess = false;
@@ -548,15 +549,14 @@ function userProfile() {
         detaching: false,
 
         async detachSelected() {
-            const checked = document.querySelectorAll('.detach-checkbox:checked');
-            if (checked.length === 0) {
+            if (this.detachChecked.length === 0) {
                 this.attachSuccess = false;
                 this.attachBanner = 'Select accounts to detach.';
                 return;
             }
             this.detaching = true;
             this.attachBanner = '';
-            const ids = Array.from(checked).map(cb => parseInt(cb.value));
+            const ids = [...this.detachChecked];
             try {
                 const results = await Promise.all(ids.map(id =>
                     fetch('/publish/users/{{ $user->id }}/detach-account/' + id, {
@@ -566,10 +566,14 @@ function userProfile() {
                 ));
                 const successCount = results.filter(r => r.success).length;
                 this.attachSuccess = true;
-                this.attachBanner = successCount + ' account(s) detached. Reload to see updated account list.';
-                // Remove from scan data so future scans don't include them
-                const detachedIds = ids;
-                this.attachedAccountsData = this.attachedAccountsData.filter(a => !detachedIds.includes(a.id));
+                this.attachBanner = successCount + ' account(s) detached.';
+                // Move detached accounts from attached → available
+                ids.forEach(id => {
+                    const acct = this.attachedAccounts.find(a => a.id === id);
+                    if (acct) this.availableAccounts.push(acct);
+                });
+                this.attachedAccounts = this.attachedAccounts.filter(a => !ids.includes(a.id));
+                this.detachChecked = [];
             } catch (e) {
                 this.attachSuccess = false;
                 this.attachBanner = 'Error: ' + e.message;
@@ -645,7 +649,7 @@ function userProfile() {
         },
 
         async scanWordPress() {
-            const accounts = this.attachedAccountsData;
+            const accounts = this.attachedAccounts;
             if (accounts.length === 0) {
                 this.scanSuccess = false;
                 this.scanBanner = 'No cPanel accounts attached. Attach accounts first.';

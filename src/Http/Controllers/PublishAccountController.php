@@ -104,6 +104,19 @@ class PublishAccountController extends Controller
         $defaultPreset = $presets->where('is_default', true)->first();
         $defaultSiteId = $defaultPreset ? $defaultPreset->default_site_id : null;
 
+        // Pre-map for Alpine JS arrays (arrow functions in @json break Blade)
+        $attachedAccountsJson = $attachedAccounts->map(function ($a) {
+            return ['id' => $a->id, 'domain' => $a->domain, 'username' => $a->username, 'hostname' => $a->whmServer->hostname ?? ''];
+        })->values();
+
+        $availableAccountsJson = $availableAccounts->map(function ($a) {
+            return ['id' => $a->id, 'domain' => $a->domain, 'username' => $a->username, 'hostname' => $a->whmServer->hostname ?? ''];
+        })->values();
+
+        $sitesJson = $sites->map(function ($s) {
+            return ['id' => $s->id, 'name' => $s->name, 'url' => $s->url];
+        })->values();
+
         return view('app-publish::accounts.show', [
             'user' => $user,
             'attachedAccounts' => $attachedAccounts,
@@ -116,6 +129,9 @@ class PublishAccountController extends Controller
             'bookmarks' => $bookmarks,
             'articleStats' => $articleStats,
             'defaultSiteId' => $defaultSiteId,
+            'attachedAccountsJson' => $attachedAccountsJson,
+            'availableAccountsJson' => $availableAccountsJson,
+            'sitesJson' => $sitesJson,
         ]);
     }
 
@@ -197,9 +213,17 @@ class PublishAccountController extends Controller
             }
         }
 
+        $attached = HostingAccount::with('whmServer')->whereIn('id', $newIds)->get()->map(fn($a) => [
+            'id' => $a->id,
+            'domain' => $a->domain,
+            'username' => $a->username,
+            'hostname' => $a->whmServer->hostname ?? '',
+        ]);
+
         return response()->json([
             'success' => true,
             'message' => $newIds->count() . ' cPanel account(s) attached.',
+            'attached' => $attached,
         ]);
     }
 
