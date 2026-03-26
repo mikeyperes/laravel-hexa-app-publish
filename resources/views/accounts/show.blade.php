@@ -157,9 +157,9 @@
             <div class="flex items-center gap-3 max-w-md">
                 <select x-model="defaultSiteId" @change="saveDefaultSite()" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">-- No default --</option>
-                    @foreach($sites as $site)
-                        <option value="{{ $site->id }}">{{ $site->name }} ({{ $site->url }})</option>
-                    @endforeach
+                    <template x-for="s in enabledSites" :key="s.id">
+                        <option :value="s.id" x-text="s.name + ' (' + s.url + ')'"></option>
+                    </template>
                 </select>
                 <span x-show="defaultSiteSaved" x-cloak x-transition class="text-xs text-green-600 font-medium">Saved</span>
             </div>
@@ -167,26 +167,25 @@
 
         {{-- Sub-section 1: Enabled Sites --}}
         <div class="mb-6">
-            <h4 class="text-sm font-semibold text-gray-700 mb-3">Enabled Sites ({{ $sites->count() }})</h4>
+            <h4 class="text-sm font-semibold text-gray-700 mb-3">Enabled Sites (<span x-text="enabledSites.length"></span>)</h4>
 
-            @if($sites->isNotEmpty())
+            <template x-if="enabledSites.length > 0">
                 <div class="border border-gray-200 rounded-lg divide-y divide-gray-100">
-                    @foreach($sites as $site)
-                    <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-                        <div class="flex-1 min-w-0">
-                            <p class="text-sm font-medium text-gray-900 break-words">{{ $site->name }}</p>
-                            <a href="{{ $site->url }}" target="_blank" class="text-xs text-blue-600 hover:underline break-words inline-flex items-center gap-1">
-                                {{ $site->url }}
-                                <svg class="w-3 h-3 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                            </a>
+                    <template x-for="site in enabledSites" :key="site.id">
+                        <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 break-words" x-text="site.name"></p>
+                                <a :href="site.url" target="_blank" class="text-xs text-blue-600 hover:underline break-words inline-flex items-center gap-1">
+                                    <span x-text="site.url"></span>
+                                    <svg class="w-3 h-3 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                </a>
+                            </div>
+                            <button @click="removeSite(site.id)" class="text-xs text-red-500 hover:text-red-700 px-2 py-1 border border-red-200 rounded hover:bg-red-50 flex-shrink-0 ml-3">Remove</button>
                         </div>
-                        <button @click="removeSite({{ $site->id }})" class="text-xs text-red-500 hover:text-red-700 px-2 py-1 border border-red-200 rounded hover:bg-red-50 flex-shrink-0 ml-3">Remove</button>
-                    </div>
-                    @endforeach
+                    </template>
                 </div>
-            @else
-                <p class="text-sm text-gray-400">No WordPress sites enabled yet. Scan for sites below.</p>
-            @endif
+            </template>
+            <p x-show="enabledSites.length === 0" class="text-sm text-gray-400">No WordPress sites enabled yet. Scan for sites below.</p>
         </div>
 
         {{-- Sub-section 2: Scan for WordPress Sites --}}
@@ -282,9 +281,18 @@
 
                             {{-- Action button --}}
                             <div class="flex-shrink-0">
-                                <button @click="selectSite(install)" class="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-green-700 whitespace-nowrap">
-                                    + Add as Site
-                                </button>
+                                <template x-if="isSiteAdded(install.url)">
+                                    <span class="text-xs text-green-600 font-medium px-3 py-1.5 inline-flex items-center gap-1">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                        Added
+                                    </span>
+                                </template>
+                                <template x-if="!isSiteAdded(install.url)">
+                                    <button @click="selectSite(install)" :disabled="install.adding" class="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-green-700 whitespace-nowrap disabled:opacity-50 inline-flex items-center gap-1">
+                                        <svg x-show="install.adding" class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                                        <span x-text="install.adding ? 'Adding...' : '+ Add as Site'"></span>
+                                    </button>
+                                </template>
                             </div>
                         </div>
                     </div>
@@ -486,6 +494,8 @@ function userProfile() {
         attachSuccess: false,
         includeChildren: true,
 
+        // Enabled sites (Alpine-driven, no reload needed)
+        enabledSites: @json($sites->map(fn($s) => ['id' => $s->id, 'name' => $s->name, 'url' => $s->url])),
         defaultSiteId: '{{ $defaultSiteId ?? '' }}',
         defaultSiteSaved: false,
 
@@ -500,6 +510,10 @@ function userProfile() {
         attachedAccountsData: @json($attachedAccounts->map(fn($a) => ['id' => $a->id, 'username' => $a->username, 'domain' => $a->domain])),
 
         csrfToken: document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+
+        isSiteAdded(url) {
+            return this.enabledSites.some(s => s.url === url);
+        },
 
         async attachSelected() {
             const checked = document.querySelectorAll('.attach-checkbox:checked');
@@ -520,7 +534,12 @@ function userProfile() {
                 const data = await res.json();
                 this.attachSuccess = data.success;
                 this.attachBanner = data.message;
-                if (data.success) setTimeout(() => location.reload(), 800);
+                if (data.success && data.attached) {
+                    data.attached.forEach(a => {
+                        this.attachedAccountsData.push({ id: a.id, username: a.username, domain: a.domain });
+                    });
+                    this.attachBanner += ' Reload to see updated account list.';
+                }
             } catch (e) {
                 this.attachSuccess = false;
                 this.attachBanner = 'Error: ' + e.message;
@@ -550,8 +569,10 @@ function userProfile() {
                 ));
                 const successCount = results.filter(r => r.success).length;
                 this.attachSuccess = true;
-                this.attachBanner = successCount + ' account(s) detached.';
-                setTimeout(() => location.reload(), 800);
+                this.attachBanner = successCount + ' account(s) detached. Reload to see updated account list.';
+                // Remove from scan data so future scans don't include them
+                const detachedIds = ids;
+                this.attachedAccountsData = this.attachedAccountsData.filter(a => !detachedIds.includes(a.id));
             } catch (e) {
                 this.attachSuccess = false;
                 this.attachBanner = 'Error: ' + e.message;
@@ -561,6 +582,7 @@ function userProfile() {
         },
 
         async selectSite(install) {
+            install.adding = true;
             try {
                 const res = await fetch('/publish/users/{{ $user->id }}/add-site', {
                     method: 'POST',
@@ -576,11 +598,14 @@ function userProfile() {
                 const data = await res.json();
                 this.scanSuccess = data.success;
                 this.scanBanner = data.message;
-                if (data.success) setTimeout(() => location.reload(), 800);
+                if (data.success && data.site) {
+                    this.enabledSites.push({ id: data.site.id, name: data.site.name, url: data.site.url });
+                }
             } catch (e) {
                 this.scanSuccess = false;
                 this.scanBanner = 'Error: ' + e.message;
             }
+            install.adding = false;
         },
 
         async removeSite(siteId) {
@@ -592,7 +617,12 @@ function userProfile() {
                 const data = await res.json();
                 this.scanSuccess = data.success;
                 this.scanBanner = data.message;
-                if (data.success) setTimeout(() => location.reload(), 800);
+                if (data.success) {
+                    this.enabledSites = this.enabledSites.filter(s => s.id !== siteId);
+                    if (String(this.defaultSiteId) === String(siteId)) {
+                        this.defaultSiteId = '';
+                    }
+                }
             } catch (e) {
                 this.scanSuccess = false;
                 this.scanBanner = 'Error: ' + e.message;

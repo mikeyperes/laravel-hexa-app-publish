@@ -263,6 +263,7 @@ class PublishAccountController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Site "' . $site->name . '" added.',
+            'site' => ['id' => $site->id, 'name' => $site->name, 'url' => $site->url],
         ]);
     }
 
