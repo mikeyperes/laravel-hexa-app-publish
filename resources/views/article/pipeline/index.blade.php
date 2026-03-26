@@ -790,9 +790,13 @@ function publishPipeline() {
                     if (state.selectedSiteId) this.selectedSiteId = state.selectedSiteId;
                     if (state.selectedSite) this.selectedSite = state.selectedSite;
                     if (state.sources) this.sources = state.sources;
+                    if (state.checkResults) { this.checkResults = state.checkResults; this.checkPassCount = state.checkResults.filter(r => r.success).length; }
                     if (state.aiModel) this.aiModel = state.aiModel;
                     if (state.articleTitle) this.articleTitle = state.articleTitle;
                     if (state.publishAction) this.publishAction = state.publishAction;
+                    if (state.spunContent) { this.spunContent = state.spunContent; this.spunWordCount = state.spunWordCount || 0; }
+                    if (state.editorContent) this.editorContent = state.editorContent;
+                    if (state.tokenUsage) this.tokenUsage = state.tokenUsage;
                     // Reload presets/templates if user was selected
                     if (this.selectedUser) {
                         this.loadUserPresets();
@@ -808,8 +812,11 @@ function publishPipeline() {
             this.$watch('selectedTemplateId', () => this.savePipelineState());
             this.$watch('selectedSiteId', () => this.savePipelineState());
             this.$watch('sources', () => this.savePipelineState());
+            this.$watch('checkResults', () => this.savePipelineState());
             this.$watch('aiModel', () => this.savePipelineState());
             this.$watch('articleTitle', () => this.savePipelineState());
+            this.$watch('spunContent', () => this.savePipelineState());
+            this.$watch('editorContent', () => this.savePipelineState());
         },
 
         savePipelineState() {
@@ -825,9 +832,14 @@ function publishPipeline() {
                 selectedSiteId: this.selectedSiteId,
                 selectedSite: this.selectedSite,
                 sources: this.sources,
+                checkResults: this.checkResults,
                 aiModel: this.aiModel,
                 articleTitle: this.articleTitle,
                 publishAction: this.publishAction,
+                spunContent: this.spunContent,
+                spunWordCount: this.spunWordCount,
+                editorContent: this.editorContent,
+                tokenUsage: this.tokenUsage,
             };
             localStorage.setItem('publishPipelineState', JSON.stringify(state));
         },
