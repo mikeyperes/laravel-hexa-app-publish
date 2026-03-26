@@ -20,7 +20,7 @@ class PublishPresetController extends Controller
      * @param Request $request
      * @return View
      */
-    public function index(Request $request): View
+    public function index(Request $request): View|JsonResponse
     {
         $query = PublishPreset::with('user');
 
@@ -29,6 +29,10 @@ class PublishPresetController extends Controller
         }
 
         $presets = $query->orderByDesc('updated_at')->get();
+
+        if ($request->wantsJson() || $request->filled('format')) {
+            return response()->json($presets);
+        }
 
         $editingPreset = null;
         if ($request->filled('edit')) {
