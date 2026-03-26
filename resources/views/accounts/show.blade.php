@@ -151,6 +151,20 @@
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 class="font-semibold text-gray-800 text-lg mb-4">WordPress Sites</h3>
 
+        {{-- Default Website --}}
+        <div class="mb-6 pb-4 border-b border-gray-200">
+            <h4 class="text-sm font-semibold text-gray-700 mb-2">Default Website</h4>
+            <div class="flex items-center gap-3 max-w-md">
+                <select x-model="defaultSiteId" @change="saveDefaultSite()" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">-- No default --</option>
+                    @foreach($sites as $site)
+                        <option value="{{ $site->id }}">{{ $site->name }} ({{ $site->url }})</option>
+                    @endforeach
+                </select>
+                <span x-show="defaultSiteSaved" x-cloak x-transition class="text-xs text-green-600 font-medium">Saved</span>
+            </div>
+        </div>
+
         {{-- Sub-section 1: Enabled Sites --}}
         <div class="mb-6">
             <h4 class="text-sm font-semibold text-gray-700 mb-3">Enabled Sites ({{ $sites->count() }})</h4>
@@ -472,6 +486,9 @@ function userProfile() {
         attachSuccess: false,
         includeChildren: true,
 
+        defaultSiteId: '{{ $defaultSiteId ?? '' }}',
+        defaultSiteSaved: false,
+
         scanning: false,
         scanBanner: '',
         scanSuccess: false,
@@ -580,6 +597,22 @@ function userProfile() {
                 this.scanSuccess = false;
                 this.scanBanner = 'Error: ' + e.message;
             }
+        },
+
+        async saveDefaultSite() {
+            this.defaultSiteSaved = false;
+            try {
+                const resp = await fetch('{{ route("publish.accounts.update-default-site", $user->id) }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' },
+                    body: JSON.stringify({ default_site_id: this.defaultSiteId || null })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    this.defaultSiteSaved = true;
+                    setTimeout(() => this.defaultSiteSaved = false, 2000);
+                }
+            } catch (e) {}
         },
 
         async scanWordPress() {

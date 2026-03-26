@@ -9,6 +9,7 @@ use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishMasterSetting;
 use hexa_app_publish\Models\PublishPreset;
 use hexa_app_publish\Models\PublishPrompt;
+use hexa_app_publish\Models\PublishTemplate;
 use hexa_app_publish\Models\PublishSite;
 use hexa_package_anthropic\Services\AnthropicService;
 use hexa_package_article_extractor\Services\ArticleExtractorService;
@@ -146,7 +147,7 @@ class PublishPipelineController extends Controller
         $validated = $request->validate([
             'source_texts'       => 'required|array|min:1',
             'source_texts.*'     => 'required|string',
-            'prompt_id'          => 'nullable|integer|exists:publish_prompts,id',
+            'template_id'        => 'nullable|integer|exists:publish_templates,id',
             'preset_id'          => 'nullable|integer|exists:publish_presets,id',
             'model'              => 'required|string|max:100',
             'master_setting_ids' => 'nullable|array',
@@ -208,10 +209,26 @@ class PublishPipelineController extends Controller
         // Build user message from prompt template + sources
         $userParts = [];
 
-        if (!empty($validated['prompt_id'])) {
-            $prompt = PublishPrompt::find($validated['prompt_id']);
-            if ($prompt) {
-                $userParts[] = $prompt->content;
+        if (!empty($validated['template_id'])) {
+            $template = PublishTemplate::find($validated['template_id']);
+            if ($template) {
+                $templateParts = [];
+                if ($template->ai_prompt) {
+                    $templateParts[] = $template->ai_prompt;
+                }
+                if ($template->tone) {
+                    $tones = is_array($template->tone) ? implode(', ', $template->tone) : $template->tone;
+                    $templateParts[] = "Tone: {$tones}";
+                }
+                if ($template->word_count_min || $template->word_count_max) {
+                    $templateParts[] = "Target word count: {$template->word_count_min} - {$template->word_count_max} words";
+                }
+                if ($template->article_type) {
+                    $templateParts[] = "Article type: {$template->article_type}";
+                }
+                if (!empty($templateParts)) {
+                    $userParts[] = implode("\n", $templateParts);
+                }
             }
         }
 

@@ -32,7 +32,7 @@ class PublishTemplateController extends Controller
      * @param Request $request
      * @return View
      */
-    public function index(Request $request): View
+    public function index(Request $request): View|JsonResponse
     {
         $query = PublishTemplate::with(['account', 'campaigns']);
 
@@ -45,6 +45,11 @@ class PublishTemplateController extends Controller
         }
 
         $templates = $query->orderByDesc('created_at')->get();
+
+        if ($request->wantsJson() || $request->filled('format')) {
+            return response()->json($templates);
+        }
+
         $accounts = PublishAccount::orderBy('name')->get();
 
         return view('app-publish::templates.index', [

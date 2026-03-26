@@ -80,7 +80,7 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 2: Select Article Preset
+         Step 2: Select WordPress Template
          ══════════════════════════════════════════════════════════════ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 2, 'opacity-50': !isStepAccessible(2) }">
         <button @click="toggleStep(2)" :disabled="!isStepAccessible(2)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
@@ -90,7 +90,7 @@
                     <template x-if="completedSteps.includes(2)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(2)"><span>2</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Select Article Preset</span>
+                <span class="font-semibold text-gray-800">Select WordPress Template</span>
                 <span x-show="selectedPreset" x-cloak class="text-sm text-green-600" x-text="selectedPreset ? selectedPreset.name : ''"></span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(2) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -321,7 +321,7 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 6: Select Prompt Template
+         Step 6: Select AI Template
          ══════════════════════════════════════════════════════════════ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 6, 'opacity-50': !isStepAccessible(6) }">
         <button @click="toggleStep(6)" :disabled="!isStepAccessible(6)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
@@ -331,25 +331,30 @@
                     <template x-if="completedSteps.includes(6)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(6)"><span>6</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Select Prompt Template</span>
-                <span x-show="selectedPrompt" x-cloak class="text-sm text-green-600" x-text="selectedPrompt ? selectedPrompt.name : ''"></span>
+                <span class="font-semibold text-gray-800">Select AI Template</span>
+                <span x-show="selectedTemplate" x-cloak class="text-sm text-green-600" x-text="selectedTemplate ? selectedTemplate.name : ''"></span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(6) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <div x-show="openSteps.includes(6)" x-cloak x-collapse class="px-4 pb-4">
             <div class="max-w-md">
-                <label class="block text-xs text-gray-500 mb-1">Prompt Template</label>
-                <select x-model="selectedPromptId" @change="selectPrompt()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">-- No template --</option>
-                    <template x-for="p in prompts" :key="p.id">
-                        <option :value="p.id" x-text="p.name"></option>
+                <label class="block text-xs text-gray-500 mb-1">User's AI Templates</label>
+                <select x-model="selectedTemplateId" @change="selectTemplate()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">-- No template (configure manually) --</option>
+                    <template x-for="t in templates" :key="t.id">
+                        <option :value="t.id" x-text="t.name"></option>
                     </template>
                 </select>
             </div>
-            <div x-show="selectedPrompt" x-cloak class="mt-3 bg-gray-50 rounded-lg p-3 text-sm text-gray-700 break-words whitespace-pre-wrap" x-text="selectedPrompt ? selectedPrompt.content : ''"></div>
+            <div x-show="selectedTemplate" x-cloak class="mt-3 bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+                <p><span class="text-gray-500">AI Engine:</span> <span class="font-medium" x-text="selectedTemplate?.ai_engine || 'Not set'"></span></p>
+                <p><span class="text-gray-500">Tone:</span> <span class="font-medium" x-text="Array.isArray(selectedTemplate?.tone) ? selectedTemplate.tone.join(', ') : (selectedTemplate?.tone || 'Not set')"></span></p>
+                <p><span class="text-gray-500">Word Count:</span> <span class="font-medium" x-text="(selectedTemplate?.word_count_min || '—') + ' - ' + (selectedTemplate?.word_count_max || '—')"></span></p>
+                <p x-show="selectedTemplate?.description"><span class="text-gray-500">Description:</span> <span class="font-medium" x-text="selectedTemplate?.description"></span></p>
+            </div>
             <div class="mt-3">
                 <button @click="completeStep(6); openStep(7)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
-                    <span x-text="selectedPrompt ? 'Continue with Prompt' : 'Skip Prompt'"></span> &rarr;
+                    <span x-text="selectedTemplate ? 'Continue with Template' : 'Skip Template'"></span> &rarr;
                 </button>
             </div>
         </div>
@@ -698,7 +703,7 @@ function publishPipeline() {
         currentStep: 1,
         openSteps: [1],
         completedSteps: [],
-        stepLabels: ['User', 'Preset', 'Website', 'Sources', 'Check', 'Prompt', 'Model', 'Spin', 'Editor', 'Prepare', 'Publish'],
+        stepLabels: ['User', 'WP Template', 'Website', 'Sources', 'Check', 'AI Template', 'Model', 'Spin', 'Editor', 'Prepare', 'Publish'],
 
         // Step 1 — User
         userSearch: '',
@@ -731,10 +736,10 @@ function publishPipeline() {
         checkPassCount: 0,
         checkUserAgent: 'chrome',
 
-        // Step 6 — Prompt
-        prompts: [],
-        selectedPromptId: '',
-        selectedPrompt: null,
+        // Step 6 — AI Template
+        templates: [],
+        selectedTemplateId: '',
+        selectedTemplate: null,
 
         // Step 7 — Model
         aiModel: 'claude-sonnet-4-6-20250610',
@@ -839,8 +844,21 @@ function publishPipeline() {
             this.userResults = [];
             this.completeStep(1);
             this.openStep(2);
-            await this.loadUserPresets();
-            await this.loadUserPrompts();
+            await Promise.all([this.loadUserPresets(), this.loadUserTemplates()]);
+
+            // Auto-select default preset
+            const defaultPreset = this.presets.find(p => p.is_default);
+            if (defaultPreset) {
+                this.selectedPresetId = String(defaultPreset.id);
+                this.selectPreset();
+            }
+
+            // Auto-select default AI template
+            const defaultTemplate = this.templates.find(t => t.is_default);
+            if (defaultTemplate) {
+                this.selectedTemplateId = String(defaultTemplate.id);
+                this.selectTemplate();
+            }
         },
 
         clearUser() {
@@ -848,9 +866,9 @@ function publishPipeline() {
             this.presets = [];
             this.selectedPreset = null;
             this.selectedPresetId = '';
-            this.prompts = [];
-            this.selectedPrompt = null;
-            this.selectedPromptId = '';
+            this.templates = [];
+            this.selectedTemplate = null;
+            this.selectedTemplateId = '';
             this.completedSteps = [];
             this.openSteps = [1];
             this.currentStep = 1;
@@ -867,15 +885,15 @@ function publishPipeline() {
             } catch (e) { this.presets = []; }
         },
 
-        async loadUserPrompts() {
+        async loadUserTemplates() {
             if (!this.selectedUser) return;
             try {
-                const resp = await fetch(`{{ route('publish.prompts.index') }}?user_id=${this.selectedUser.id}&format=json`, {
+                const resp = await fetch(`{{ route('publish.templates.index') }}?account_id=${this.selectedUser.id}&format=json`, {
                     headers: { 'Accept': 'application/json' }
                 });
                 const data = await resp.json();
-                this.prompts = data.data || data || [];
-            } catch (e) { this.prompts = []; }
+                this.templates = data.data || data || [];
+            } catch (e) { this.templates = []; }
         },
 
         // ── Step 2: Preset ────────────────────────────────
@@ -1035,12 +1053,16 @@ function publishPipeline() {
             }
         },
 
-        // ── Step 6: Prompt ────────────────────────────────
-        selectPrompt() {
-            if (this.selectedPromptId) {
-                this.selectedPrompt = this.prompts.find(p => p.id == this.selectedPromptId) || null;
+        // ── Step 6: AI Template ─────────────────────────────
+        selectTemplate() {
+            if (this.selectedTemplateId) {
+                this.selectedTemplate = this.templates.find(t => t.id == this.selectedTemplateId) || null;
+                // Auto-fill AI model from template
+                if (this.selectedTemplate && this.selectedTemplate.ai_engine) {
+                    this.aiModel = this.selectedTemplate.ai_engine;
+                }
             } else {
-                this.selectedPrompt = null;
+                this.selectedTemplate = null;
             }
         },
 
@@ -1066,7 +1088,7 @@ function publishPipeline() {
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
                     body: JSON.stringify({
                         source_texts: sourceTexts,
-                        prompt_id: this.selectedPromptId || null,
+                        template_id: this.selectedTemplateId || null,
                         preset_id: this.selectedPresetId || null,
                         model: this.aiModel,
                     })
@@ -1337,7 +1359,7 @@ function publishPipeline() {
                         user_id: this.selectedUser?.id || null,
                         site_id: this.selectedSite?.id || null,
                         preset_id: this.selectedPresetId || null,
-                        prompt_id: this.selectedPromptId || null,
+                        template_id: this.selectedTemplateId || null,
                         ai_model: this.aiModel,
                         sources: this.sources.map(s => ({ url: s.url, title: s.title })),
                         tags: this.suggestedTags,

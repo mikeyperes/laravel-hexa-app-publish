@@ -101,6 +101,9 @@ class PublishAccountController extends Controller
             'drafting' => PublishArticle::where('user_id', $user->id)->whereIn('status', ['sourcing', 'drafting', 'spinning'])->count(),
         ];
 
+        $defaultPreset = $presets->where('is_default', true)->first();
+        $defaultSiteId = $defaultPreset ? $defaultPreset->default_site_id : null;
+
         return view('app-publish::accounts.show', [
             'user' => $user,
             'attachedAccounts' => $attachedAccounts,
@@ -112,7 +115,37 @@ class PublishAccountController extends Controller
             'drafts' => $drafts,
             'bookmarks' => $bookmarks,
             'articleStats' => $articleStats,
+            'defaultSiteId' => $defaultSiteId,
         ]);
+    }
+
+    /**
+     * AJAX: Update the user's default website by setting it on their default preset.
+     *
+     * @param Request $request
+     * @param int $id User ID
+     * @return JsonResponse
+     */
+    public function updateDefaultSite(Request $request, int $id): JsonResponse
+    {
+        $user = User::findOrFail($id);
+        $siteId = $request->input('default_site_id') ?: null;
+
+        $preset = PublishPreset::where('user_id', $user->id)->where('is_default', true)->first();
+
+        if (!$preset) {
+            $preset = PublishPreset::create([
+                'user_id' => $user->id,
+                'name' => $user->name . ' — Default',
+                'status' => 'active',
+                'is_default' => true,
+                'default_site_id' => $siteId,
+            ]);
+        } else {
+            $preset->update(['default_site_id' => $siteId]);
+        }
+
+        return response()->json(['success' => true, 'message' => 'Default website updated.']);
     }
 
     /**
