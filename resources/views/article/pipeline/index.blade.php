@@ -267,13 +267,13 @@
             </div>
 
             <div class="mt-3" x-show="sources.length > 0" x-cloak>
-                <button @click="completeStep(4); openStep(5)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to Check Sources &rarr;</button>
+                <button @click="completeStep(4); openStep(5)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to Get Articles &rarr;</button>
             </div>
         </div>
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 5: Check Sources
+         Step 5: Get Articles
          ══════════════════════════════════════════════════════════════ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 5, 'opacity-50': !isStepAccessible(5) }">
         <button @click="toggleStep(5)" :disabled="!isStepAccessible(5)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
@@ -283,9 +283,9 @@
                     <template x-if="completedSteps.includes(5)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(5)"><span>5</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Check Sources</span>
+                <span class="font-semibold text-gray-800">Get Articles</span>
                 <span x-show="checkResults.length > 0" x-cloak class="text-sm" :class="checkPassCount === sources.length ? 'text-green-600' : 'text-yellow-600'"
-                      x-text="checkPassCount + '/' + sources.length + ' verified'"></span>
+                      x-text="checkPassCount + '/' + sources.length + ' extracted'"></span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(5) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
@@ -293,7 +293,7 @@
             <div class="flex items-center gap-3 mb-4">
                 <button @click="checkAllSources()" :disabled="checking" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
                     <svg x-show="checking" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="checking ? 'Checking...' : 'Check All Sources'"></span>
+                    <span x-text="checking ? 'Extracting...' : 'Get Articles'"></span>
                 </button>
                 <select x-model="checkUserAgent" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="chrome">Chrome UA</option>
@@ -304,24 +304,33 @@
                 </select>
             </div>
 
-            <div x-show="checkResults.length > 0" x-cloak class="space-y-2">
+            <div x-show="checkResults.length > 0" x-cloak class="space-y-3">
                 <template x-for="(result, idx) in checkResults" :key="idx">
-                    <div class="flex items-start gap-3 rounded-lg px-3 py-2"
-                         :class="result.success ? 'bg-green-50' : 'bg-red-50'">
-                        <span :class="result.success ? 'text-green-500' : 'text-red-500'" class="mt-0.5">
-                            <template x-if="result.success"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></template>
-                            <template x-if="!result.success"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></template>
-                        </span>
-                        <div class="flex-1 min-w-0">
-                            <a :href="result.url" target="_blank" class="text-sm font-medium break-all inline-flex items-center gap-1 hover:underline" :class="result.success ? 'text-green-800' : 'text-red-800'">
-                                <span x-text="result.url"></span>
-                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                            </a>
-                            <p x-show="result.title" class="text-xs text-gray-600 font-medium mt-0.5" x-text="result.title"></p>
-                            <p class="text-xs" :class="result.success ? 'text-green-600' : 'text-red-600'" x-text="result.message"></p>
-                            <p x-show="result.success" class="text-xs text-green-600" x-text="result.word_count + ' words'"></p>
+                    <div class="rounded-lg border" :class="result.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'">
+                        {{-- Header row — click to expand --}}
+                        <div @click="result._expanded = !result._expanded" class="flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-opacity-80">
+                            <span :class="result.success ? 'text-green-500' : 'text-red-500'" class="mt-0.5 flex-shrink-0">
+                                <svg x-show="result.success" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                <svg x-show="!result.success" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </span>
+                            <div class="flex-1 min-w-0">
+                                <a :href="result.url" target="_blank" @click.stop class="text-sm font-medium break-all inline-flex items-center gap-1 hover:underline" :class="result.success ? 'text-green-800' : 'text-red-800'">
+                                    <span x-text="result.url"></span>
+                                    <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                </a>
+                                <p x-show="result.title" class="text-xs text-gray-600 font-medium mt-0.5" x-text="result.title"></p>
+                                <p class="text-xs" :class="result.success ? 'text-green-600' : 'text-red-600'" x-text="result.message"></p>
+                                <p x-show="result.success" class="text-xs text-green-600" x-text="result.word_count + ' words — click to expand'"></p>
+                            </div>
+                            <div class="flex items-center gap-2 flex-shrink-0">
+                                <button x-show="!result.success" @click.stop="retrySingleSource(idx)" class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-blue-50 rounded">Retry</button>
+                                <svg x-show="result.success" class="w-4 h-4 text-gray-400 transition-transform" :class="result._expanded ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                            </div>
                         </div>
-                        <button x-show="!result.success" @click="retrySingleSource(idx)" class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-blue-50 rounded flex-shrink-0">Retry</button>
+                        {{-- Expanded article text --}}
+                        <div x-show="result._expanded && result.text" x-cloak class="px-3 pb-3 border-t" :class="result.success ? 'border-green-200' : 'border-red-200'">
+                            <div class="mt-2 bg-white rounded-lg border border-gray-200 p-3 text-sm text-gray-700 break-words whitespace-pre-wrap max-h-96 overflow-y-auto" x-text="result.text"></div>
+                        </div>
                     </div>
                 </template>
             </div>
@@ -685,7 +694,7 @@ function publishPipeline() {
         currentStep: 1,
         openSteps: [1],
         completedSteps: [],
-        stepLabels: ['User', 'WP Template', 'Website', 'Sources', 'Check', 'AI Template', 'Spin', 'Editor', 'Prepare', 'Publish'],
+        stepLabels: ['User', 'WP Template', 'Website', 'Sources', 'Get Articles', 'AI Template', 'Spin', 'Editor', 'Prepare', 'Publish'],
 
         // Step 1 — User
         userSearch: '',
@@ -1070,7 +1079,7 @@ function publishPipeline() {
             this.bookmarksLoading = false;
         },
 
-        // ── Step 5: Check Sources ─────────────────────────
+        // ── Step 5: Get Articles ──────────────────────────
         async checkAllSources() {
             if (this.sources.length === 0) return;
             this.checking = true;

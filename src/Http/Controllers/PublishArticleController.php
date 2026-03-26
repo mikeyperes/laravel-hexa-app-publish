@@ -18,7 +18,7 @@ use hexa_package_newsdata\Services\NewsDataService;
 use hexa_package_anthropic\Services\AnthropicService;
 use hexa_package_chatgpt\Services\ChatGptService;
 use hexa_package_sapling\Services\SaplingService;
-use hexa_app_publish\Services\WebScraperService;
+use hexa_package_article_extractor\Services\ArticleExtractorService;
 use hexa_app_publish\Services\LinkInsertionService;
 use hexa_package_telegram\Services\TelegramService;
 use Illuminate\Http\JsonResponse;
@@ -716,7 +716,7 @@ class PublishArticleController extends Controller
             'url' => 'required|url|max:2048',
         ]);
 
-        $result = app(WebScraperService::class)->extractArticle($validated['url']);
+        $result = app(ArticleExtractorService::class)->extract($validated['url']);
 
         return response()->json($result);
     }
