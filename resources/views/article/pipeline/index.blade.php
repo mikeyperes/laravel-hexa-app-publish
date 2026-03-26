@@ -449,9 +449,9 @@
                 <input type="text" x-model="articleTitle" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-semibold" placeholder="Enter article title...">
             </div>
 
-            {{-- TinyMCE editor --}}
+            {{-- TinyMCE editor via core component --}}
             <div class="mb-4">
-                <textarea id="pipeline-editor" x-ref="editorTextarea"></textarea>
+                <x-hexa-tinymce name="pipeline-body" value="" preset="wordpress" :height="500" id="pipeline-editor" />
             </div>
 
             {{-- Photos panel --}}
@@ -677,14 +677,6 @@
         <span class="text-sm break-words" :class="notification.type === 'success' ? 'text-green-800' : 'text-red-800'" x-text="notification.message"></span>
     </div>
 </div>
-
-{{-- TinyMCE CDN --}}
-@php $tinymceKey = $tinymceKey ?? ''; @endphp
-@if($tinymceKey)
-<script src="https://cdn.tiny.cloud/1/{{ $tinymceKey }}/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
-@else
-<script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js"></script>
-@endif
 
 <script>
 function publishPipeline() {
@@ -1195,30 +1187,20 @@ function publishPipeline() {
 
         // ── Step 8: Editor ────────────────────────────────
         initEditor() {
-            if (this.editorInstance) {
-                this.editorInstance.destroy();
-                this.editorInstance = null;
-            }
-
             const self = this;
-            tinymce.init({
-                target: this.$refs.editorTextarea,
-                height: 500,
-                menubar: false,
-                plugins: 'link image lists code fullscreen',
-                toolbar: 'bold italic underline | link unlink image | bullist numlist | h2 h3 blockquote | removeformat code fullscreen',
-                content_style: 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 14px; line-height: 1.6; }',
-                setup(editor) {
+            // Core component auto-inits. Set content and attach change listener.
+            const waitForEditor = setInterval(() => {
+                const editor = tinymce.get('pipeline-editor');
+                if (editor) {
+                    clearInterval(waitForEditor);
                     self.editorInstance = editor;
-                    editor.on('init', () => {
-                        editor.setContent(self.editorContent);
-                    });
+                    editor.setContent(self.editorContent);
                     editor.on('change keyup', () => {
                         self.editorContent = editor.getContent();
                         self.extractLinks();
                     });
                 }
-            });
+            }, 200);
         },
 
         extractLinks() {

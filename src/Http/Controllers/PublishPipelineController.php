@@ -53,12 +53,10 @@ class PublishPipelineController extends Controller
      */
     public function index(): View
     {
-        $tinymceKey = Setting::getValue('tinymce_api_key', '');
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
 
         return view('app-publish::article.pipeline.index', [
-            'tinymceKey' => $tinymceKey,
-            'sites'      => $sites,
+            'sites' => $sites,
         ]);
     }
 
