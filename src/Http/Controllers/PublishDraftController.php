@@ -62,6 +62,7 @@ class PublishDraftController extends Controller
         return response()->json([
             'success'  => true,
             'message'  => 'Draft created successfully.',
+            'article'  => $draft,
             'draft'    => $draft,
             'redirect' => route('publish.drafts.show', $draft->id),
         ]);
@@ -96,7 +97,7 @@ class PublishDraftController extends Controller
      */
     public function update(Request $request, int $id): JsonResponse
     {
-        $draft = PublishArticle::where('status', 'drafting')->findOrFail($id);
+        $draft = PublishArticle::whereIn('status', ['drafting', 'draft'])->findOrFail($id);
 
         $validated = $request->validate([
             'title'      => 'required|string|max:500',
@@ -104,6 +105,7 @@ class PublishDraftController extends Controller
             'excerpt'    => 'nullable|string|max:1000',
             'created_by' => 'nullable|integer|exists:users,id',
             'notes'      => 'nullable|string',
+            'status'     => 'nullable|in:draft,drafting',
         ]);
 
         $draft->update($validated);
@@ -113,6 +115,7 @@ class PublishDraftController extends Controller
         return response()->json([
             'success' => true,
             'message' => "Draft '{$draft->title}' updated successfully.",
+            'article' => $draft,
         ]);
     }
 

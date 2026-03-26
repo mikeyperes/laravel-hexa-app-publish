@@ -96,17 +96,14 @@ class PublishArticleController extends Controller
     public function editor(Request $request, ?int $id = null): View
     {
         $article = $id ? PublishArticle::find($id) : null;
-        $drafts = PublishArticle::where('status', 'draft')
+        $drafts = PublishArticle::whereIn('status', ['draft', 'drafting'])
             ->orderByDesc('updated_at')
             ->limit(100)
             ->get(['id', 'title', 'status', 'updated_at']);
 
-        $tinymceKey = \hexa_core\Models\Setting::getValue('tinymce_api_key', '');
-
         return view('app-publish::articles.editor', [
             'article' => $article,
             'drafts' => $drafts,
-            'tinymceKey' => $tinymceKey,
         ]);
     }
 
