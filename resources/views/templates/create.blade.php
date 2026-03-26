@@ -58,7 +58,14 @@
 
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Tone</label>
-            <input type="text" x-model="form.tone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. formal, casual, authoritative, conversational">
+            <div class="flex flex-wrap gap-3 mt-1">
+                @foreach(['Professional', 'Conversational', 'Authoritative', 'Casual', 'Investigative', 'Persuasive'] as $tone)
+                <label class="inline-flex items-center gap-2 text-sm text-gray-600">
+                    <input type="checkbox" :checked="form.tone.includes('{{ $tone }}')" @change="toggleArray(form.tone, '{{ $tone }}')" class="rounded border-gray-300 text-blue-600">
+                    {{ $tone }}
+                </label>
+                @endforeach
+            </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -125,7 +132,7 @@ function templateForm() {
         selectedCompany: '',
         form: {
             publish_account_id: '{{ $preselected_account_id ?? '' }}',
-            name: '', article_type: '', ai_engine: '', tone: '',
+            name: '', article_type: '', ai_engine: '', tone: [],
             word_count_min: '', word_count_max: '',
             max_links: '', photo_sources: [], description: '', ai_prompt: '',
         },

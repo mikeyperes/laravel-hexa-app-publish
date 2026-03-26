@@ -58,7 +58,14 @@
 
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Tone</label>
-            <input type="text" x-model="form.tone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <div class="flex flex-wrap gap-3 mt-1">
+                @foreach(['Professional', 'Conversational', 'Authoritative', 'Casual', 'Investigative', 'Persuasive'] as $tone)
+                <label class="inline-flex items-center gap-2 text-sm text-gray-600">
+                    <input type="checkbox" :checked="form.tone.includes('{{ $tone }}')" @change="toggleArray(form.tone, '{{ $tone }}')" class="rounded border-gray-300 text-blue-600">
+                    {{ $tone }}
+                </label>
+                @endforeach
+            </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -133,7 +140,7 @@ function templateEditForm() {
             name: @json($template->name),
             article_type: @json($template->article_type ?? ''),
             ai_engine: @json($template->ai_engine ?? ''),
-            tone: @json($template->tone ?? ''),
+            tone: @json(is_array($template->tone) ? $template->tone : ($template->tone ? [$template->tone] : [])),
             word_count_min: @json($template->word_count_min ?? ''),
             word_count_max: @json($template->word_count_max ?? ''),
             max_links: @json($template->max_links ?? ''),

@@ -28,6 +28,7 @@ class PublishTemplate extends Model
     ];
 
     protected $casts = [
+        'tone' => 'array',
         'photo_sources' => 'array',
         'structure' => 'array',
         'rules' => 'array',
