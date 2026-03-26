@@ -142,7 +142,7 @@ function templateForm() {
         selectedCompany: 'Anthropic',
         form: {
             publish_account_id: '{{ $preselected_account_id ?? '' }}',
-            name: '', is_default: false, article_type: '', ai_engine: 'claude-opus-4-6-20250610', tone: [],
+            name: '', is_default: false, article_type: '', ai_engine: 'claude-opus-4-20250514', tone: [],
             word_count_min: 300, word_count_max: 800,
             max_links: '', photo_sources: @json(config('hws-publish.photo_sources', [])), description: '', ai_prompt: '',
         },

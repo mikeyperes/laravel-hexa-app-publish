@@ -6,6 +6,14 @@
 @section('content')
 <div class="max-w-5xl mx-auto space-y-4" x-data="publishPipeline()">
 
+    {{-- Clear button --}}
+    <div x-show="completedSteps.length > 0" x-cloak class="flex justify-end">
+        <button @click="clearPipeline()" class="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 border border-red-200 rounded-lg hover:bg-red-50 inline-flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            Clear &amp; Start Over
+        </button>
+    </div>
+
     {{-- ══════════════════════════════════════════════════════════════
          Progress bar
          ══════════════════════════════════════════════════════════════ --}}
@@ -380,10 +388,11 @@
             <div class="max-w-md">
                 <label class="block text-xs text-gray-500 mb-1">AI Model</label>
                 <select x-model="aiModel" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="claude-opus-4-6-20250610">Claude Opus 4.6</option>
-                    <option value="claude-sonnet-4-6-20250610">Claude Sonnet 4.6</option>
-                    <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
-                    <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                    @foreach(config('anthropic.models', []) as $model)
+                        @if($model['type'] === 'api' || $model['type'] === 'both')
+                            <option value="{{ $model['id'] }}">{{ $model['name'] }}</option>
+                        @endif
+                    @endforeach
                 </select>
             </div>
             <div class="mt-3">
@@ -742,7 +751,7 @@ function publishPipeline() {
         selectedTemplate: null,
 
         // Step 7 — Model
-        aiModel: 'claude-sonnet-4-6-20250610',
+        aiModel: 'claude-sonnet-4-20250514',
 
         // Step 8 — Spin
         spinning: false,
@@ -789,6 +798,90 @@ function publishPipeline() {
         // CSRF token
         get csrfToken() {
             return document.querySelector('meta[name="csrf-token"]')?.content || '';
+        },
+
+        // ── State Persistence ────────────────────────────
+        init() {
+            const saved = localStorage.getItem('publishPipelineState');
+            if (saved) {
+                try {
+                    const state = JSON.parse(saved);
+                    if (state.selectedUser) this.selectedUser = state.selectedUser;
+                    if (state.currentStep) this.currentStep = state.currentStep;
+                    if (state.openSteps) this.openSteps = state.openSteps;
+                    if (state.completedSteps) this.completedSteps = state.completedSteps;
+                    if (state.selectedPresetId) this.selectedPresetId = state.selectedPresetId;
+                    if (state.selectedPreset) this.selectedPreset = state.selectedPreset;
+                    if (state.selectedTemplateId) this.selectedTemplateId = state.selectedTemplateId;
+                    if (state.selectedTemplate) this.selectedTemplate = state.selectedTemplate;
+                    if (state.selectedSiteId) this.selectedSiteId = state.selectedSiteId;
+                    if (state.selectedSite) this.selectedSite = state.selectedSite;
+                    if (state.sources) this.sources = state.sources;
+                    if (state.aiModel) this.aiModel = state.aiModel;
+                    if (state.articleTitle) this.articleTitle = state.articleTitle;
+                    if (state.publishAction) this.publishAction = state.publishAction;
+                    // Reload presets/templates if user was selected
+                    if (this.selectedUser) {
+                        this.loadUserPresets();
+                        this.loadUserTemplates();
+                    }
+                } catch (e) { /* ignore corrupt state */ }
+            }
+
+            this.$watch('currentStep', () => this.savePipelineState());
+            this.$watch('completedSteps', () => this.savePipelineState());
+            this.$watch('selectedUser', () => this.savePipelineState());
+            this.$watch('selectedPresetId', () => this.savePipelineState());
+            this.$watch('selectedTemplateId', () => this.savePipelineState());
+            this.$watch('selectedSiteId', () => this.savePipelineState());
+            this.$watch('sources', () => this.savePipelineState());
+            this.$watch('aiModel', () => this.savePipelineState());
+            this.$watch('articleTitle', () => this.savePipelineState());
+        },
+
+        savePipelineState() {
+            const state = {
+                selectedUser: this.selectedUser,
+                currentStep: this.currentStep,
+                openSteps: this.openSteps,
+                completedSteps: this.completedSteps,
+                selectedPresetId: this.selectedPresetId,
+                selectedPreset: this.selectedPreset,
+                selectedTemplateId: this.selectedTemplateId,
+                selectedTemplate: this.selectedTemplate,
+                selectedSiteId: this.selectedSiteId,
+                selectedSite: this.selectedSite,
+                sources: this.sources,
+                aiModel: this.aiModel,
+                articleTitle: this.articleTitle,
+                publishAction: this.publishAction,
+            };
+            localStorage.setItem('publishPipelineState', JSON.stringify(state));
+        },
+
+        clearPipeline() {
+            localStorage.removeItem('publishPipelineState');
+            this.currentStep = 1;
+            this.openSteps = [1];
+            this.completedSteps = [];
+            this.selectedUser = null;
+            this.userSearch = '';
+            this.presets = [];
+            this.selectedPreset = null;
+            this.selectedPresetId = '';
+            this.templates = [];
+            this.selectedTemplate = null;
+            this.selectedTemplateId = '';
+            this.selectedSiteId = '';
+            this.selectedSite = null;
+            this.sources = [];
+            this.checkResults = [];
+            this.aiModel = 'claude-sonnet-4-20250514';
+            this.spunContent = '';
+            this.articleTitle = '';
+            this.editorContent = '';
+            this.publishAction = 'draft_local';
+            this.publishResult = null;
         },
 
         // ── Navigation ────────────────────────────────────
