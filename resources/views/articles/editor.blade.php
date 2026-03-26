@@ -93,14 +93,13 @@
 </div>
 @endsection
 
+@push('scripts')
 @php $tinymceKey = $tinymceKey ?? ''; @endphp
 @if($tinymceKey)
 <script src="https://cdn.tiny.cloud/1/{{ $tinymceKey }}/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
 @else
 <script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js"></script>
 @endif
-
-@push('scripts')
 <script>
 function articleEditor() {
     return {
