@@ -285,9 +285,9 @@
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                     Added
                                 </span>
-                                <button x-show="!isSiteAdded(install.url)" @click="selectSite(install)" :disabled="install.adding" class="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-green-700 whitespace-nowrap disabled:opacity-50 inline-flex items-center gap-1">
-                                    <svg x-show="install.adding" x-cloak class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                                    <span x-text="install.adding ? 'Adding...' : '+ Add as Site'"></span>
+                                <button x-show="!isSiteAdded(install.url)" @click="addSiteFromScan(idx)" :disabled="addingIdx === idx" class="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-green-700 whitespace-nowrap disabled:opacity-50 inline-flex items-center gap-1">
+                                    <svg x-show="addingIdx === idx" x-cloak class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                                    <span x-text="addingIdx === idx ? 'Adding...' : '+ Add as Site'"></span>
                                 </button>
                             </div>
                         </div>
@@ -501,6 +501,7 @@ function userProfile() {
         scanLog: [],
         scanStatusText: 'Scanning...',
         wpInstalls: [],
+        addingIdx: -1,
 
         // Attached accounts data for per-account scanning
         attachedAccountsData: @json($attachedAccounts->map(fn($a) => ['id' => $a->id, 'username' => $a->username, 'domain' => $a->domain])),
@@ -577,8 +578,10 @@ function userProfile() {
             }
         },
 
-        async selectSite(install) {
-            install.adding = true;
+        async addSiteFromScan(idx) {
+            const install = this.wpInstalls[idx];
+            if (!install) return;
+            this.addingIdx = idx;
             try {
                 const res = await fetch('/publish/users/{{ $user->id }}/add-site', {
                     method: 'POST',
@@ -601,7 +604,7 @@ function userProfile() {
                 this.scanSuccess = false;
                 this.scanBanner = 'Error: ' + e.message;
             }
-            install.adding = false;
+            this.addingIdx = -1;
         },
 
         async removeSite(siteId) {
