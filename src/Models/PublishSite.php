@@ -11,6 +11,7 @@ class PublishSite extends Model
     protected $table = 'publish_sites';
 
     protected $fillable = [
+        'user_id',
         'publish_account_id',
         'name',
         'url',
