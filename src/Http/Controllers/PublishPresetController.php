@@ -38,7 +38,6 @@ class PublishPresetController extends Controller
         return view('app-publish::publishing.presets.index', [
             'presets'          => $presets,
             'editingPreset'    => $editingPreset,
-            'articleFormats'   => ListItem::getValues('article_formats'),
             'tones'            => ListItem::getValues('tones'),
             'imagePreferences' => ListItem::getValues('image_preferences'),
             'imageLayouts'     => ListItem::getValues('image_layout_rules'),
@@ -66,7 +65,6 @@ class PublishPresetController extends Controller
             'user_id'                => 'nullable|integer|exists:users,id',
             'default_site_id'        => 'nullable|integer',
             'follow_links'           => 'nullable|in:follow,nofollow',
-            'article_format'         => 'nullable|string|max:100',
             'tone'                   => 'nullable|string|max:100',
             'image_preference'       => 'nullable|string|max:100',
             'default_publish_action' => 'nullable|in:publish_immediate,draft_local,draft_wordpress,schedule',
@@ -127,7 +125,6 @@ class PublishPresetController extends Controller
             'user_id'                => 'nullable|integer|exists:users,id',
             'default_site_id'        => 'nullable|integer',
             'follow_links'           => 'nullable|in:follow,nofollow',
-            'article_format'         => 'nullable|string|max:100',
             'tone'                   => 'nullable|string|max:100',
             'image_preference'       => 'nullable|string|max:100',
             'default_publish_action' => 'nullable|in:publish_immediate,draft_local,draft_wordpress,schedule',

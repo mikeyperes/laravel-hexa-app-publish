@@ -147,6 +147,7 @@ function templateEditForm() {
         companies: allCompanies,
         selectedCompany: detectedCompany,
         form: {
+            publish_account_id: @json($template->publish_account_id),
             name: @json($template->name),
             is_default: @json((bool) $template->is_default),
             article_type: @json($template->article_type ?? ''),

@@ -38,15 +38,6 @@
                 </div>
             </div>
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Article Format</label>
-                <select x-model="editData.article_format" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select format...</option>
-                    @foreach($articleFormats as $format)
-                        <option value="{{ $format }}">{{ $format }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
                 <label class="block text-xs text-gray-500 mb-1">Image Preference</label>
                 <select x-model="editData.image_preference" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">Select preference...</option>
@@ -163,15 +154,6 @@
                 </div>
             </div>
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Article Format</label>
-                <select x-model="newPreset.article_format" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select format...</option>
-                    @foreach($articleFormats as $format)
-                        <option value="{{ $format }}">{{ $format }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
                 <label class="block text-xs text-gray-500 mb-1">Image Preference</label>
                 <select x-model="newPreset.image_preference" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">Select preference...</option>
@@ -258,9 +240,6 @@
                     <span class="text-xs {{ $preset->is_default ? 'text-green-600 font-medium' : 'text-gray-400' }}">Default</span>
                 </label>
                 <div class="space-y-1 text-xs text-gray-500">
-                    @if($preset->article_format)
-                        <p><span class="text-gray-400">Format:</span> {{ $preset->article_format }}</p>
-                    @endif
                     @if($preset->image_preference)
                         <p><span class="text-gray-400">Images:</span> {{ $preset->image_preference }}</p>
                     @endif
@@ -290,7 +269,7 @@ function presetsManager() {
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
     return {
         showNew: false,
-        newPreset: { name: '', is_default: false, user_id: '', default_site_id: '', follow_links: 'follow', article_format: '', image_preference: '', default_publish_action: '', default_category_count: 3, default_tag_count: 5, image_layout: '' },
+        newPreset: { name: '', is_default: false, user_id: '', default_site_id: '', follow_links: 'follow', image_preference: '', default_publish_action: '', default_category_count: 3, default_tag_count: 5, image_layout: '' },
         newUserQuery: '', newUserResults: [],
         saving: false, saveType: '', result: '', success: false,
         editData: @json($editingPreset ?? (object)[]),
