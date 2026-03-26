@@ -114,6 +114,10 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::post('/article/publish/publish', [PublishPipelineController::class, 'publishToWordpress'])->name('publish.pipeline.publish');
     Route::post('/article/publish/save-draft', [PublishPipelineController::class, 'saveDraft'])->name('publish.pipeline.save-draft');
 
+    // ═══ Article Editor ═══
+    Route::get('/article/editor', [PublishArticleController::class, 'editor'])->name('publish.editor');
+    Route::get('/article/editor/{id}', [PublishArticleController::class, 'editor'])->name('publish.editor.load');
+
     // ═══ Drafted Articles ═══
     Route::get('/article/drafts', [PublishDraftController::class, 'index'])->name('publish.drafts.index');
     Route::post('/article/drafts', [PublishDraftController::class, 'store'])->name('publish.drafts.store');

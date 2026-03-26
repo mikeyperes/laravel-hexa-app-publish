@@ -73,9 +73,13 @@ class PublishDraftController extends Controller
      * @param int $id
      * @return View
      */
-    public function show(int $id): View
+    public function show(Request $request, int $id): View|JsonResponse
     {
-        $draft = PublishArticle::where('status', 'drafting')->findOrFail($id);
+        $draft = PublishArticle::findOrFail($id);
+
+        if ($request->wantsJson()) {
+            return response()->json(['success' => true, 'article' => $draft]);
+        }
 
         return view('app-publish::article.drafts.index', [
             'drafts'      => PublishArticle::where('status', 'drafting')->orderByDesc('updated_at')->paginate(25),

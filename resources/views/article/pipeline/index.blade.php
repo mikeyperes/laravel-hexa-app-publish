@@ -313,7 +313,11 @@
                             <template x-if="!result.success"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></template>
                         </span>
                         <div class="flex-1 min-w-0">
-                            <p class="text-sm font-medium break-all" :class="result.success ? 'text-green-800' : 'text-red-800'" x-text="result.url"></p>
+                            <a :href="result.url" target="_blank" class="text-sm font-medium break-all inline-flex items-center gap-1 hover:underline" :class="result.success ? 'text-green-800' : 'text-red-800'">
+                                <span x-text="result.url"></span>
+                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                            </a>
+                            <p x-show="result.title" class="text-xs text-gray-600 font-medium mt-0.5" x-text="result.title"></p>
                             <p class="text-xs" :class="result.success ? 'text-green-600' : 'text-red-600'" x-text="result.message"></p>
                             <p x-show="result.success" class="text-xs text-green-600" x-text="result.word_count + ' words'"></p>
                         </div>
@@ -369,7 +373,7 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 7: Select AI Model
+         Step 7: Spin Article (model selector + spin combined)
          ══════════════════════════════════════════════════════════════ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 7, 'opacity-50': !isStepAccessible(7) }">
         <button @click="toggleStep(7)" :disabled="!isStepAccessible(7)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
@@ -379,46 +383,23 @@
                     <template x-if="completedSteps.includes(7)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(7)"><span>7</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Select AI Model</span>
-                <span x-show="completedSteps.includes(7)" x-cloak class="text-sm text-green-600" x-text="aiModel"></span>
+                <span class="font-semibold text-gray-800">Spin Article</span>
+                <span x-show="spunContent" x-cloak class="text-sm text-green-600" x-text="spunWordCount + ' words'"></span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(7) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <div x-show="openSteps.includes(7)" x-cloak x-collapse class="px-4 pb-4">
-            <div class="max-w-md">
-                <label class="block text-xs text-gray-500 mb-1">AI Model</label>
-                <select x-model="aiModel" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    @foreach(config('anthropic.models', []) as $model)
-                        @if($model['type'] === 'api' || $model['type'] === 'both')
-                            <option value="{{ $model['id'] }}">{{ $model['name'] }}</option>
-                        @endif
-                    @endforeach
-                </select>
-            </div>
-            <div class="mt-3">
-                <button @click="completeStep(7); openStep(8)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue &rarr;</button>
-            </div>
-        </div>
-    </div>
-
-    {{-- ══════════════════════════════════════════════════════════════
-         Step 8: Spin Article
-         ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 8, 'opacity-50': !isStepAccessible(8) }">
-        <button @click="toggleStep(8)" :disabled="!isStepAccessible(8)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
-            <div class="flex items-center gap-3">
-                <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                      :class="completedSteps.includes(8) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
-                    <template x-if="completedSteps.includes(8)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(8)"><span>8</span></template>
-                </span>
-                <span class="font-semibold text-gray-800">Spin Article</span>
-                <span x-show="spunContent" x-cloak class="text-sm text-green-600" x-text="spunWordCount + ' words'"></span>
-            </div>
-            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(8) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div x-show="openSteps.includes(8)" x-cloak x-collapse class="px-4 pb-4">
-            <div class="flex items-center gap-3 mb-4">
+            <div class="flex flex-wrap items-end gap-3 mb-4">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">AI Model</label>
+                    <select x-model="aiModel" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        @foreach(config('anthropic.models', []) as $model)
+                            @if($model['type'] === 'api' || $model['type'] === 'both')
+                                <option value="{{ $model['id'] }}">{{ $model['name'] }}</option>
+                            @endif
+                        @endforeach
+                    </select>
+                </div>
                 <button @click="spinArticle()" :disabled="spinning" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2">
                     <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     <span x-text="spinning ? 'Spinning...' : (spunContent ? 'Re-spin' : 'Spin Article')"></span>
@@ -447,21 +428,21 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 9: Editor
+         Step 8: Editor
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 9, 'opacity-50': !isStepAccessible(9) }">
-        <button @click="toggleStep(9)" :disabled="!isStepAccessible(9)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 8, 'opacity-50': !isStepAccessible(9) }">
+        <button @click="toggleStep(8)" :disabled="!isStepAccessible(9)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                      :class="completedSteps.includes(9) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
-                    <template x-if="completedSteps.includes(9)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(9)"><span>9</span></template>
+                      :class="completedSteps.includes(8) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
+                    <template x-if="completedSteps.includes(8)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
+                    <template x-if="!completedSteps.includes(8)"><span>9</span></template>
                 </span>
                 <span class="font-semibold text-gray-800">Editor</span>
             </div>
-            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(9) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(8) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(9)" x-cloak x-collapse class="px-4 pb-4">
+        <div x-show="openSteps.includes(8)" x-cloak x-collapse class="px-4 pb-4">
             {{-- Title --}}
             <div class="mb-3">
                 <label class="block text-xs text-gray-500 mb-1">Article Title</label>
@@ -555,21 +536,21 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 10: Prepare for WordPress
+         Step 9: Prepare for WordPress
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 10, 'opacity-50': !isStepAccessible(10) }">
-        <button @click="toggleStep(10)" :disabled="!isStepAccessible(10)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 9, 'opacity-50': !isStepAccessible(10) }">
+        <button @click="toggleStep(9)" :disabled="!isStepAccessible(10)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                      :class="completedSteps.includes(10) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
-                    <template x-if="completedSteps.includes(10)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(10)"><span>10</span></template>
+                      :class="completedSteps.includes(9) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
+                    <template x-if="completedSteps.includes(9)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
+                    <template x-if="!completedSteps.includes(9)"><span>10</span></template>
                 </span>
                 <span class="font-semibold text-gray-800">Prepare for WordPress</span>
             </div>
-            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(10) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(9) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(10)" x-cloak x-collapse class="px-4 pb-4">
+        <div x-show="openSteps.includes(9)" x-cloak x-collapse class="px-4 pb-4">
             <button @click="prepareForWp()" :disabled="preparing" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 mb-4">
                 <svg x-show="preparing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 <span x-text="preparing ? 'Preparing...' : 'Prepare for WordPress'"></span>
@@ -603,27 +584,27 @@
             </div>
 
             <div class="mt-3" x-show="prepareComplete" x-cloak>
-                <button @click="completeStep(10); openStep(11)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to Publish &rarr;</button>
+                <button @click="completeStep(9); openStep(10)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to Publish &rarr;</button>
             </div>
         </div>
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 11: Publish
+         Step 10: Publish
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 11, 'opacity-50': !isStepAccessible(11) }">
-        <button @click="toggleStep(11)" :disabled="!isStepAccessible(11)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 10, 'opacity-50': !isStepAccessible(11) }">
+        <button @click="toggleStep(10)" :disabled="!isStepAccessible(11)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                      :class="completedSteps.includes(11) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
-                    <template x-if="completedSteps.includes(11)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(11)"><span>11</span></template>
+                      :class="completedSteps.includes(10) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
+                    <template x-if="completedSteps.includes(10)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
+                    <template x-if="!completedSteps.includes(10)"><span>11</span></template>
                 </span>
                 <span class="font-semibold text-gray-800">Publish</span>
             </div>
-            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(11) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(10) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(11)" x-cloak x-collapse class="px-4 pb-4">
+        <div x-show="openSteps.includes(10)" x-cloak x-collapse class="px-4 pb-4">
             <div class="max-w-md space-y-3 mb-4">
                 <label class="block text-xs text-gray-500 mb-1">Publish Action</label>
                 <div class="space-y-2">
@@ -712,7 +693,7 @@ function publishPipeline() {
         currentStep: 1,
         openSteps: [1],
         completedSteps: [],
-        stepLabels: ['User', 'WP Template', 'Website', 'Sources', 'Check', 'AI Template', 'Model', 'Spin', 'Editor', 'Prepare', 'Publish'],
+        stepLabels: ['User', 'WP Template', 'Website', 'Sources', 'Check', 'AI Template', 'Spin', 'Editor', 'Prepare', 'Publish'],
 
         // Step 1 — User
         userSearch: '',
@@ -751,16 +732,16 @@ function publishPipeline() {
         selectedTemplate: null,
 
         // Step 7 — Model
-        aiModel: 'claude-sonnet-4-20250514',
+        aiModel: 'claude-opus-4-6',
 
-        // Step 8 — Spin
+        // Step 7 — Spin
         spinning: false,
         spunContent: '',
         spunWordCount: 0,
         tokenUsage: null,
         spinError: '',
 
-        // Step 9 — Editor
+        // Step 8 — Editor
         articleTitle: '',
         editorContent: '',
         editorInstance: null,
@@ -773,7 +754,7 @@ function publishPipeline() {
         newCategory: '',
         articleLinks: [],
 
-        // Step 10 — Prepare
+        // Step 9 — Prepare
         preparing: false,
         prepareChecklist: [],
         prepareComplete: false,
@@ -781,7 +762,7 @@ function publishPipeline() {
         preparedCategoryIds: [],
         preparedTagIds: [],
 
-        // Step 11 — Publish
+        // Step 10 — Publish
         publishAction: 'draft_local',
         scheduleDate: '',
         publishing: false,
@@ -876,7 +857,7 @@ function publishPipeline() {
             this.selectedSite = null;
             this.sources = [];
             this.checkResults = [];
-            this.aiModel = 'claude-sonnet-4-20250514';
+            this.aiModel = 'claude-opus-4-6';
             this.spunContent = '';
             this.articleTitle = '';
             this.editorContent = '';
@@ -1159,7 +1140,7 @@ function publishPipeline() {
             }
         },
 
-        // ── Step 8: Spin ──────────────────────────────────
+        // ── Step 7: Spin ──────────────────────────────────
         async spinArticle() {
             this.spinning = true;
             this.spinError = '';
@@ -1204,15 +1185,15 @@ function publishPipeline() {
 
         acceptSpin() {
             this.editorContent = this.spunContent;
-            this.completeStep(8);
-            this.openStep(9);
+            this.completeStep(7);
+            this.openStep(8);
             // Init TinyMCE after a tick so the DOM is visible
             this.$nextTick(() => this.initEditor());
             // Auto-save draft
             this.autoSaveDraft();
         },
 
-        // ── Step 9: Editor ────────────────────────────────
+        // ── Step 8: Editor ────────────────────────────────
         initEditor() {
             if (this.editorInstance) {
                 this.editorInstance.destroy();
@@ -1324,12 +1305,12 @@ function publishPipeline() {
             if (this.editorInstance) {
                 this.editorContent = this.editorInstance.getContent();
             }
-            this.completeStep(9);
-            this.openStep(10);
+            this.completeStep(8);
+            this.openStep(9);
             this.autoSaveDraft();
         },
 
-        // ── Step 10: Prepare ──────────────────────────────
+        // ── Step 9: Prepare ──────────────────────────────
         async prepareForWp() {
             if (!this.selectedSite) {
                 this.showNotification('error', 'No WordPress site selected');
@@ -1379,7 +1360,7 @@ function publishPipeline() {
             this.preparing = false;
         },
 
-        // ── Step 11: Publish ──────────────────────────────
+        // ── Step 10: Publish ──────────────────────────────
         async publishArticle() {
             this.publishing = true;
             this.publishResult = null;
@@ -1389,7 +1370,7 @@ function publishPipeline() {
             if (this.publishAction === 'draft_local') {
                 await this.saveDraftNow();
                 this.publishResult = { message: 'Saved as local draft.', post_url: null };
-                this.completeStep(11);
+                this.completeStep(10);
                 this.publishing = false;
                 this.autoSaveDraft();
                 return;
@@ -1423,7 +1404,7 @@ function publishPipeline() {
 
                 if (data.success) {
                     this.publishResult = data;
-                    this.completeStep(11);
+                    this.completeStep(10);
                     this.showNotification('success', data.message);
                 } else {
                     this.publishError = data.message;
