@@ -12,9 +12,9 @@
         <div class="pb-4 border-b border-gray-200">
             <label class="block text-sm font-medium text-gray-700 mb-1">Account <span class="text-red-500">*</span></label>
             <select x-model="form.publish_account_id" class="w-full md:w-1/3 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <option value="">Select account...</option>
-                @foreach($accounts as $a)
-                    <option value="{{ $a->id }}" {{ ($preselected_account_id ?? '') == $a->id ? 'selected' : '' }}>{{ $a->name }}</option>
+                <option value="">Select user...</option>
+                @foreach(\hexa_core\Models\User::orderBy('name')->get() as $u)
+                    <option value="{{ $u->id }}" {{ ($preselected_account_id ?? '') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
                 @endforeach
             </select>
         </div>
