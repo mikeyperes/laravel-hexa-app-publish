@@ -23,10 +23,6 @@
                     <option value="{{ $u->id }}">{{ $u->name }}</option>
                 @endforeach
             </select>
-            <label class="inline-flex items-center gap-2 mt-2 cursor-pointer">
-                <input type="checkbox" x-model="editData.is_default" class="rounded border-gray-300 text-green-600">
-                <span class="text-sm text-gray-600">Set as default preset</span>
-            </label>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -86,7 +82,11 @@
                 </select>
             </div>
         </div>
-        <div class="mt-4 flex items-center gap-2">
+        <label class="inline-flex items-center gap-2 mt-4 cursor-pointer">
+            <input type="checkbox" x-model="editData.is_default" class="rounded border-gray-300 text-green-600">
+            <span class="text-sm text-gray-600">Set as default preset</span>
+        </label>
+        <div class="mt-3 flex items-center gap-2">
             <button @click="updatePreset('active')" :disabled="updating" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
                 <svg x-show="updating && saveType === 'active'" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
                 <span x-text="updating && saveType === 'active' ? 'Saving...' : 'Save Changes'"></span>
@@ -140,10 +140,6 @@
                     <option value="{{ $u->id }}">{{ $u->name }}</option>
                 @endforeach
             </select>
-            <label class="inline-flex items-center gap-2 mt-2 cursor-pointer">
-                <input type="checkbox" x-model="newPreset.is_default" class="rounded border-gray-300 text-green-600">
-                <span class="text-sm text-gray-600">Set as default preset</span>
-            </label>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -211,6 +207,10 @@
                 </select>
             </div>
         </div>
+        <label class="inline-flex items-center gap-2 mt-3 cursor-pointer">
+            <input type="checkbox" x-model="newPreset.is_default" class="rounded border-gray-300 text-green-600">
+            <span class="text-sm text-gray-600">Set as default preset</span>
+        </label>
         <div class="mt-3 flex items-center gap-2">
             <button @click="savePreset('active')" :disabled="saving" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
                 <svg x-show="saving && saveType === 'active'" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>

@@ -17,10 +17,6 @@
                     <option value="{{ $u->id }}" {{ $template->publish_account_id == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
                 @endforeach
             </select>
-            <label class="inline-flex items-center gap-2 mt-2 cursor-pointer">
-                <input type="checkbox" x-model="form.is_default" class="rounded border-gray-300 text-green-600">
-                <span class="text-sm text-gray-600">Set as default template</span>
-            </label>
         </div>
 
         <div>
@@ -110,6 +106,11 @@
             <label class="block text-sm font-medium text-gray-700 mb-1">AI Prompt / Instructions</label>
             <textarea x-model="form.ai_prompt" rows="5" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"></textarea>
         </div>
+
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" x-model="form.is_default" class="rounded border-gray-300 text-green-600">
+            <span class="text-sm text-gray-600">Set as default template</span>
+        </label>
 
         <div class="flex items-center gap-3">
             <button @click="save('active')" :disabled="saving" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">

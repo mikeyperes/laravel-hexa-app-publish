@@ -11,6 +11,12 @@
             <div>
                 <p class="text-sm text-gray-500 mb-1">Account: <a href="{{ route('publish.accounts.show', $template->account->id) }}" class="text-blue-600 hover:text-blue-800">{{ $template->account->name }}</a></p>
                 <h2 class="text-xl font-semibold text-gray-800 break-words">{{ $template->name }}</h2>
+                <div class="flex items-center gap-2 mt-1">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ ($template->status ?? 'draft') === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800' }}">{{ ucfirst($template->status ?? 'draft') }}</span>
+                    @if($template->is_default)
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Default</span>
+                    @endif
+                </div>
                 @if($template->description)
                     <p class="text-sm text-gray-500 mt-2 break-words">{{ $template->description }}</p>
                 @endif
@@ -29,7 +35,7 @@
             </div>
             <div>
                 <p class="text-xs text-gray-400 uppercase">Tone</p>
-                <p class="text-sm text-gray-700 mt-1">{{ $template->tone ?? '—' }}</p>
+                <p class="text-sm text-gray-700 mt-1">{{ is_array($template->tone) ? implode(', ', $template->tone) : ($template->tone ?? '—') }}</p>
             </div>
             <div>
                 <p class="text-xs text-gray-400 uppercase">Word Count</p>
