@@ -17,6 +17,10 @@
                     <option value="{{ $u->id }}" {{ ($preselected_account_id ?? '') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
                 @endforeach
             </select>
+            <label class="inline-flex items-center gap-2 mt-2 cursor-pointer">
+                <input type="checkbox" x-model="form.is_default" class="rounded border-gray-300 text-green-600">
+                <span class="text-sm text-gray-600">Set as default template</span>
+            </label>
         </div>
 
         <div>
@@ -137,7 +141,7 @@ function templateForm() {
         selectedCompany: 'Anthropic',
         form: {
             publish_account_id: '{{ $preselected_account_id ?? '' }}',
-            name: '', article_type: '', ai_engine: 'claude-opus-4-6-20250610', tone: [],
+            name: '', is_default: false, article_type: '', ai_engine: 'claude-opus-4-6-20250610', tone: [],
             word_count_min: 300, word_count_max: 800,
             max_links: '', photo_sources: @json(config('hws-publish.photo_sources', [])), description: '', ai_prompt: '',
         },

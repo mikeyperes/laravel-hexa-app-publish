@@ -14,6 +14,7 @@ class PublishTemplate extends Model
         'publish_account_id',
         'name',
         'status',
+        'is_default',
         'article_type',
         'description',
         'ai_prompt',
@@ -29,6 +30,7 @@ class PublishTemplate extends Model
     ];
 
     protected $casts = [
+        'is_default' => 'boolean',
         'tone' => 'array',
         'photo_sources' => 'array',
         'structure' => 'array',

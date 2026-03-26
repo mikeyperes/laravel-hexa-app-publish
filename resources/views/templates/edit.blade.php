@@ -17,6 +17,10 @@
                     <option value="{{ $u->id }}" {{ $template->publish_account_id == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
                 @endforeach
             </select>
+            <label class="inline-flex items-center gap-2 mt-2 cursor-pointer">
+                <input type="checkbox" x-model="form.is_default" class="rounded border-gray-300 text-green-600">
+                <span class="text-sm text-gray-600">Set as default template</span>
+            </label>
         </div>
 
         <div>
@@ -143,6 +147,7 @@ function templateEditForm() {
         selectedCompany: detectedCompany,
         form: {
             name: @json($template->name),
+            is_default: @json((bool) $template->is_default),
             article_type: @json($template->article_type ?? ''),
             ai_engine: @json($template->ai_engine ?? ''),
             tone: @json(is_array($template->tone) ? $template->tone : ($template->tone ? [$template->tone] : [])),

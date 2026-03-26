@@ -85,6 +85,7 @@ class PublishTemplateController extends Controller
             'publish_account_id' => 'required|exists:publish_accounts,id',
             'name' => 'required|string|max:255',
             'status' => 'nullable|in:draft,active',
+            'is_default' => 'nullable|boolean',
             'article_type' => 'nullable|string|max:50',
             'description' => 'nullable|string',
             'ai_prompt' => 'nullable|string',
@@ -100,6 +101,10 @@ class PublishTemplateController extends Controller
         ]);
 
         $validated['status'] = $validated['status'] ?? 'draft';
+
+        if (!empty($validated['is_default'])) {
+            PublishTemplate::where('publish_account_id', $validated['publish_account_id'])->update(['is_default' => false]);
+        }
 
         $template = PublishTemplate::create($validated);
 
@@ -162,6 +167,7 @@ class PublishTemplateController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'status' => 'nullable|in:draft,active',
+            'is_default' => 'nullable|boolean',
             'article_type' => 'nullable|string|max:50',
             'description' => 'nullable|string',
             'ai_prompt' => 'nullable|string',
@@ -175,6 +181,10 @@ class PublishTemplateController extends Controller
             'structure' => 'nullable|array',
             'rules' => 'nullable|array',
         ]);
+
+        if (!empty($validated['is_default'])) {
+            PublishTemplate::where('publish_account_id', $template->publish_account_id)->where('id', '!=', $template->id)->update(['is_default' => false]);
+        }
 
         $template->update($validated);
 

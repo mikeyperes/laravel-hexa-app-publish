@@ -62,6 +62,7 @@ class PublishPresetController extends Controller
         $validated = $request->validate([
             'name'                   => 'required|string|max:255',
             'status'                 => 'nullable|in:draft,active',
+            'is_default'             => 'nullable|boolean',
             'user_id'                => 'nullable|integer|exists:users,id',
             'default_site_id'        => 'nullable|integer',
             'follow_links'           => 'nullable|in:follow,nofollow',
@@ -76,6 +77,10 @@ class PublishPresetController extends Controller
 
         $validated['user_id'] = $validated['user_id'] ?? auth()->id();
         $validated['status'] = $validated['status'] ?? 'draft';
+
+        if (!empty($validated['is_default'])) {
+            PublishPreset::where('user_id', $validated['user_id'])->update(['is_default' => false]);
+        }
 
         $preset = PublishPreset::create($validated);
 
@@ -118,6 +123,7 @@ class PublishPresetController extends Controller
         $validated = $request->validate([
             'name'                   => 'required|string|max:255',
             'status'                 => 'nullable|in:draft,active',
+            'is_default'             => 'nullable|boolean',
             'user_id'                => 'nullable|integer|exists:users,id',
             'default_site_id'        => 'nullable|integer',
             'follow_links'           => 'nullable|in:follow,nofollow',
@@ -129,6 +135,10 @@ class PublishPresetController extends Controller
             'default_tag_count'      => 'nullable|integer|min:0|max:50',
             'image_layout'           => 'nullable|string|max:100',
         ]);
+
+        if (!empty($validated['is_default'])) {
+            PublishPreset::where('user_id', $preset->user_id)->where('id', '!=', $preset->id)->update(['is_default' => false]);
+        }
 
         $preset->update($validated);
 

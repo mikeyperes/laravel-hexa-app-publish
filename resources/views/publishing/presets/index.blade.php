@@ -23,6 +23,10 @@
                     <option value="{{ $u->id }}">{{ $u->name }}</option>
                 @endforeach
             </select>
+            <label class="inline-flex items-center gap-2 mt-2 cursor-pointer">
+                <input type="checkbox" x-model="editData.is_default" class="rounded border-gray-300 text-green-600">
+                <span class="text-sm text-gray-600">Set as default preset</span>
+            </label>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -136,6 +140,10 @@
                     <option value="{{ $u->id }}">{{ $u->name }}</option>
                 @endforeach
             </select>
+            <label class="inline-flex items-center gap-2 mt-2 cursor-pointer">
+                <input type="checkbox" x-model="newPreset.is_default" class="rounded border-gray-300 text-green-600">
+                <span class="text-sm text-gray-600">Set as default preset</span>
+            </label>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -282,7 +290,7 @@ function presetsManager() {
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
     return {
         showNew: false,
-        newPreset: { name: '', user_id: '', default_site_id: '', follow_links: 'follow', article_format: '', image_preference: '', default_publish_action: '', default_category_count: 3, default_tag_count: 5, image_layout: '' },
+        newPreset: { name: '', is_default: false, user_id: '', default_site_id: '', follow_links: 'follow', article_format: '', image_preference: '', default_publish_action: '', default_category_count: 3, default_tag_count: 5, image_layout: '' },
         newUserQuery: '', newUserResults: [],
         saving: false, saveType: '', result: '', success: false,
         editData: @json($editingPreset ?? (object)[]),
