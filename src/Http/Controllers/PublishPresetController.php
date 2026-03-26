@@ -61,6 +61,7 @@ class PublishPresetController extends Controller
     {
         $validated = $request->validate([
             'name'                   => 'required|string|max:255',
+            'status'                 => 'nullable|in:draft,active',
             'user_id'                => 'nullable|integer|exists:users,id',
             'default_site_id'        => 'nullable|integer',
             'follow_links'           => 'nullable|in:follow,nofollow',
@@ -74,6 +75,7 @@ class PublishPresetController extends Controller
         ]);
 
         $validated['user_id'] = $validated['user_id'] ?? auth()->id();
+        $validated['status'] = $validated['status'] ?? 'draft';
 
         $preset = PublishPreset::create($validated);
 
@@ -115,6 +117,7 @@ class PublishPresetController extends Controller
 
         $validated = $request->validate([
             'name'                   => 'required|string|max:255',
+            'status'                 => 'nullable|in:draft,active',
             'user_id'                => 'nullable|integer|exists:users,id',
             'default_site_id'        => 'nullable|integer',
             'follow_links'           => 'nullable|in:follow,nofollow',

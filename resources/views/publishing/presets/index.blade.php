@@ -83,9 +83,13 @@
             </div>
         </div>
         <div class="mt-4 flex items-center gap-2">
-            <button @click="updatePreset()" :disabled="updating" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
-                <svg x-show="updating" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                <span x-text="updating ? 'Saving...' : 'Save Changes'"></span>
+            <button @click="updatePreset('active')" :disabled="updating" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
+                <svg x-show="updating && saveType === 'active'" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                <span x-text="updating && saveType === 'active' ? 'Saving...' : 'Save Changes'"></span>
+            </button>
+            <button @click="updatePreset('draft')" :disabled="updating" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-60 inline-flex items-center gap-2">
+                <svg x-show="updating && saveType === 'draft'" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                <span x-text="updating && saveType === 'draft' ? 'Saving Draft...' : 'Save as Draft'"></span>
             </button>
             <a href="{{ route('publish.presets.index', request()->only('user_id')) }}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Cancel</a>
         </div>
@@ -200,9 +204,13 @@
             </div>
         </div>
         <div class="mt-3 flex items-center gap-2">
-            <button @click="savePreset()" :disabled="saving" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
-                <svg x-show="saving" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                <span x-text="saving ? 'Creating...' : 'Create Preset'"></span>
+            <button @click="savePreset('active')" :disabled="saving" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
+                <svg x-show="saving && saveType === 'active'" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                <span x-text="saving && saveType === 'active' ? 'Creating...' : 'Create Preset'"></span>
+            </button>
+            <button @click="savePreset('draft')" :disabled="saving" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-60 inline-flex items-center gap-2">
+                <svg x-show="saving && saveType === 'draft'" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                <span x-text="saving && saveType === 'draft' ? 'Saving Draft...' : 'Save as Draft'"></span>
             </button>
         </div>
         <div x-show="result" x-cloak class="mt-2 rounded-lg px-3 py-2 text-sm" :class="success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'">
@@ -234,6 +242,7 @@
                     </div>
                 </div>
                 <p class="text-xs text-gray-400 mb-1">{{ $preset->user->name ?? 'Unassigned' }}</p>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mb-1 {{ ($preset->status ?? 'draft') === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800' }}">{{ ucfirst($preset->status ?? 'draft') }}</span>
                 <label class="flex items-center gap-2 mb-2 cursor-pointer">
                     <input type="checkbox" {{ $preset->is_default ? 'checked' : '' }}
                            @click.prevent="toggleDefault({{ $preset->id }}, $event)"
@@ -275,7 +284,7 @@ function presetsManager() {
         showNew: false,
         newPreset: { name: '', user_id: '', default_site_id: '', follow_links: 'follow', article_format: '', image_preference: '', default_publish_action: '', default_category_count: 3, default_tag_count: 5, image_layout: '' },
         newUserQuery: '', newUserResults: [],
-        saving: false, result: '', success: false,
+        saving: false, saveType: '', result: '', success: false,
         editData: @json($editingPreset ?? (object)[]),
         updating: false, editResult: '', editSuccess: false,
         async searchNewUsers() {
@@ -285,19 +294,19 @@ function presetsManager() {
                 this.newUserResults = await r.json();
             } catch(e) { this.newUserResults = []; }
         },
-        async savePreset() {
-            this.saving = true; this.result = '';
+        async savePreset(status) {
+            this.saving = true; this.saveType = status; this.result = '';
             try {
-                const r = await fetch('{{ route("publish.presets.store") }}', { method: 'POST', headers, body: JSON.stringify(this.newPreset) });
+                const r = await fetch('{{ route("publish.presets.store") }}', { method: 'POST', headers, body: JSON.stringify({ ...this.newPreset, status }) });
                 const d = await r.json(); this.success = d.success; this.result = d.message;
                 if (d.success) setTimeout(() => location.reload(), 600);
             } catch(e) { this.success = false; this.result = 'Error: ' + e.message; }
             this.saving = false;
         },
-        async updatePreset() {
-            this.updating = true; this.editResult = '';
+        async updatePreset(status) {
+            this.updating = true; this.saveType = status; this.editResult = '';
             try {
-                const r = await fetch('/publishing/presets/' + this.editData.id, { method: 'PUT', headers, body: JSON.stringify(this.editData) });
+                const r = await fetch('/publishing/presets/' + this.editData.id, { method: 'PUT', headers, body: JSON.stringify({ ...this.editData, status }) });
                 const d = await r.json(); this.editSuccess = d.success; this.editResult = d.message;
                 if (d.success) setTimeout(() => { window.location.href = '{{ route("publish.presets.index") }}'; }, 600);
             } catch(e) { this.editSuccess = false; this.editResult = 'Error: ' + e.message; }

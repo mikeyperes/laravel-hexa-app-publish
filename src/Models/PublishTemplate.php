@@ -13,6 +13,7 @@ class PublishTemplate extends Model
     protected $fillable = [
         'publish_account_id',
         'name',
+        'status',
         'article_type',
         'description',
         'ai_prompt',

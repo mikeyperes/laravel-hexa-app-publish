@@ -34,6 +34,7 @@ class PublishPreset extends Model
     protected $fillable = [
         'user_id',
         'name',
+        'status',
         'is_default',
         'default_site_id',
         'follow_links',

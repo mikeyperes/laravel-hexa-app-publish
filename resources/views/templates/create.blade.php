@@ -107,9 +107,13 @@
         </div>
 
         <div class="flex items-center gap-3">
-            <button @click="save()" :disabled="saving" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
-                <svg x-show="saving" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                <span x-text="saving ? 'Creating...' : 'Create Template'"></span>
+            <button @click="save('active')" :disabled="saving" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
+                <svg x-show="saving && saveType === 'active'" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                <span x-text="saving && saveType === 'active' ? 'Creating...' : 'Create Template'"></span>
+            </button>
+            <button @click="save('draft')" :disabled="saving" class="bg-gray-200 text-gray-700 px-5 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-60 inline-flex items-center gap-2">
+                <svg x-show="saving && saveType === 'draft'" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                <span x-text="saving && saveType === 'draft' ? 'Saving Draft...' : 'Save as Draft'"></span>
             </button>
             <a href="{{ route('publish.templates.index') }}" class="text-sm text-gray-500 hover:text-gray-700">Cancel</a>
         </div>
@@ -136,18 +140,18 @@ function templateForm() {
             word_count_min: 300, word_count_max: 800,
             max_links: '', photo_sources: @json(config('hws-publish.photo_sources', [])), description: '', ai_prompt: '',
         },
-        saving: false, resultMessage: '', resultSuccess: false,
+        saving: false, saveType: '', resultMessage: '', resultSuccess: false,
         toggleArray(arr, val) {
             const i = arr.indexOf(val);
             if (i === -1) arr.push(val); else arr.splice(i, 1);
         },
-        async save() {
-            this.saving = true; this.resultMessage = '';
+        async save(status) {
+            this.saving = true; this.saveType = status; this.resultMessage = '';
             try {
                 const res = await fetch('{{ route("publish.templates.store") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' },
-                    body: JSON.stringify(this.form)
+                    body: JSON.stringify({ ...this.form, status })
                 });
                 const data = await res.json();
                 this.resultSuccess = data.success;

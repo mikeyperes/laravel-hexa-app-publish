@@ -84,11 +84,12 @@ class PublishTemplateController extends Controller
         $validated = $request->validate([
             'publish_account_id' => 'required|exists:publish_accounts,id',
             'name' => 'required|string|max:255',
+            'status' => 'nullable|in:draft,active',
             'article_type' => 'nullable|string|max:50',
             'description' => 'nullable|string',
             'ai_prompt' => 'nullable|string',
-            'ai_engine' => 'nullable|in:anthropic,chatgpt',
-            'tone' => 'nullable|string|max:100',
+            'ai_engine' => 'nullable|string|max:100',
+            'tone' => 'nullable|array',
             'word_count_min' => 'nullable|integer|min:100',
             'word_count_max' => 'nullable|integer|min:100',
             'photos_per_article' => 'nullable|integer|min:0|max:20',
@@ -97,6 +98,8 @@ class PublishTemplateController extends Controller
             'structure' => 'nullable|array',
             'rules' => 'nullable|array',
         ]);
+
+        $validated['status'] = $validated['status'] ?? 'draft';
 
         $template = PublishTemplate::create($validated);
 
@@ -158,11 +161,12 @@ class PublishTemplateController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'status' => 'nullable|in:draft,active',
             'article_type' => 'nullable|string|max:50',
             'description' => 'nullable|string',
             'ai_prompt' => 'nullable|string',
-            'ai_engine' => 'nullable|in:anthropic,chatgpt',
-            'tone' => 'nullable|string|max:100',
+            'ai_engine' => 'nullable|string|max:100',
+            'tone' => 'nullable|array',
             'word_count_min' => 'nullable|integer|min:100',
             'word_count_max' => 'nullable|integer|min:100',
             'photos_per_article' => 'nullable|integer|min:0|max:20',
