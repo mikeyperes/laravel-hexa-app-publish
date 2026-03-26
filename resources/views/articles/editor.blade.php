@@ -142,7 +142,7 @@ function articleEditor() {
                 + (this.config.tables ? ' | table' : '');
 
             const wpCss = this.config.wpStyles ? `
-                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif; font-size: 16px; line-height: 1.75; color: #1a1a1a; max-width: 720px; margin: 0 auto; padding: 16px; }
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif; font-size: 16px; line-height: 1.75; color: #1a1a1a; padding: 16px; }
                 h1 { font-size: 2em; margin: 0.67em 0; } h2 { font-size: 1.5em; margin: 0.75em 0; } h3 { font-size: 1.25em; margin: 0.83em 0; }
                 p { margin: 0 0 1.5em; } blockquote { border-left: 4px solid #ccc; margin: 1.5em 0; padding: 0.5em 1em; color: #555; }
                 img { max-width: 100%; height: auto; } a { color: #0073aa; } table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #ddd; padding: 8px; }
