@@ -233,12 +233,9 @@
                 </div>
                 <p class="text-xs text-gray-400 mb-1">{{ $preset->user->name ?? 'Unassigned' }}</p>
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mb-1 {{ ($preset->status ?? 'draft') === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800' }}">{{ ucfirst($preset->status ?? 'draft') }}</span>
-                <label class="flex items-center gap-2 mb-2 cursor-pointer">
-                    <input type="checkbox" {{ $preset->is_default ? 'checked' : '' }}
-                           @click.prevent="toggleDefault({{ $preset->id }}, $event)"
-                           class="rounded text-green-600">
-                    <span class="text-xs {{ $preset->is_default ? 'text-green-600 font-medium' : 'text-gray-400' }}">Default</span>
-                </label>
+                @if($preset->is_default)
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 mb-1">Default</span>
+                @endif
                 <div class="space-y-1 text-xs text-gray-500">
                     @if($preset->image_preference)
                         <p><span class="text-gray-400">Images:</span> {{ $preset->image_preference }}</p>
