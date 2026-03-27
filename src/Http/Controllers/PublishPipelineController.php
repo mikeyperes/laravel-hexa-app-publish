@@ -201,9 +201,11 @@ class PublishPipelineController extends Controller
             }
         }
 
+        $htmlInstruction = "\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Use <h1>, <h2>, <h3> for headings — NEVER use markdown ## syntax. Use <p> for paragraphs. Use <strong> and <em> for emphasis — NEVER use ** or * markdown. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links. Do NOT output markdown. Do NOT wrap in ```html code blocks. Output raw HTML tags directly.";
+
         $systemPrompt = !empty($systemParts)
-            ? implode("\n\n", $systemParts)
-            : "You are a professional content writer. Rewrite the provided source articles into a new unique article in HTML format. Output ONLY the article HTML.";
+            ? implode("\n\n", $systemParts) . $htmlInstruction
+            : "You are a professional content writer. Rewrite the provided source articles into a new unique article." . $htmlInstruction;
 
         // Build user message from prompt template + sources
         $userParts = [];
@@ -256,6 +258,49 @@ class PublishPipelineController extends Controller
         }
 
         $content = $result['data']['content'] ?? '';
+
+        // Strip ```html code blocks if AI wrapped output
+        $content = preg_replace('/^```html\s*/i', '', $content);
+        $content = preg_replace('/\s*```$/', '', $content);
+
+        // Strip full HTML document wrapper — extract body content only
+        if (preg_match('/<body[^>]*>(.*)<\/body>/is', $content, $bodyMatch)) {
+            $content = trim($bodyMatch[1]);
+        }
+        // Also strip <html>, <head>, <title>, <!DOCTYPE> if no <body> tag
+        $content = preg_replace('/<!DOCTYPE[^>]*>/i', '', $content);
+        $content = preg_replace('/<\/?html[^>]*>/i', '', $content);
+        $content = preg_replace('/<head>.*?<\/head>/is', '', $content);
+        $content = trim($content);
+
+        // Markdown → HTML fallback: detect and convert if AI returned markdown
+        if (preg_match('/^#{1,6}\s|^\*\*|^\- |\n#{1,6}\s/m', $content)) {
+            // Headings: ## Title → <h2>Title</h2>
+            $content = preg_replace('/^######\s+(.+)$/m', '<h6>$1</h6>', $content);
+            $content = preg_replace('/^#####\s+(.+)$/m', '<h5>$1</h5>', $content);
+            $content = preg_replace('/^####\s+(.+)$/m', '<h4>$1</h4>', $content);
+            $content = preg_replace('/^###\s+(.+)$/m', '<h3>$1</h3>', $content);
+            $content = preg_replace('/^##\s+(.+)$/m', '<h2>$1</h2>', $content);
+            $content = preg_replace('/^#\s+(.+)$/m', '<h1>$1</h1>', $content);
+            // Bold: **text** → <strong>text</strong>
+            $content = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $content);
+            // Italic: *text* → <em>text</em>
+            $content = preg_replace('/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/', '<em>$1</em>', $content);
+            // Unordered lists: - item → <li>item</li>
+            $content = preg_replace('/^[\-\*]\s+(.+)$/m', '<li>$1</li>', $content);
+            $content = preg_replace('/(<li>.*<\/li>\n?)+/', '<ul>$0</ul>', $content);
+            // Links: [text](url) → <a href="url">text</a>
+            $content = preg_replace('/\[([^\]]+)\]\(([^\)]+)\)/', '<a href="$2">$1</a>', $content);
+            // Paragraphs: wrap remaining plain text blocks in <p> tags
+            $lines = explode("\n\n", $content);
+            $content = implode("\n", array_map(function ($block) {
+                $block = trim($block);
+                if (empty($block)) return '';
+                if (preg_match('/^<(h[1-6]|ul|ol|li|blockquote|div|p|table)/', $block)) return $block;
+                return '<p>' . str_replace("\n", '<br>', $block) . '</p>';
+            }, $lines));
+        }
+
         $plainText = strip_tags($content);
         $wordCount = str_word_count($plainText);
 
