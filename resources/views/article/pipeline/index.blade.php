@@ -481,7 +481,6 @@
                     <span x-text="selectedTemplate ? 'Continue with Template' : 'Skip Template'"></span> &rarr;
                 </button>
             </div>
-            </div>{{-- close !templatesLoading --}}
         </div>
     </div>
 
