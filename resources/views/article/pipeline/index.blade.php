@@ -308,7 +308,7 @@
 
             <div x-show="checkResults.length > 0" x-cloak class="space-y-3">
                 <template x-for="(result, idx) in checkResults" :key="idx">
-                    <div class="rounded-lg border" :class="result.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'">
+                    <div class="rounded-lg border" :class="result._approved ? 'border-green-400 bg-green-50 ring-1 ring-green-300' : (result._discarded ? 'border-gray-200 bg-gray-50 opacity-40' : (result.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'))"
                         {{-- Header row — click to expand --}}
                         <div @click="result._expanded = !result._expanded" class="flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-opacity-80">
                             <span :class="result.success ? 'text-green-500' : 'text-red-500'" class="mt-0.5 flex-shrink-0">
@@ -322,16 +322,31 @@
                                 </a>
                                 <p x-show="result.title" class="text-xs text-gray-600 font-medium mt-0.5" x-text="result.title"></p>
                                 <p class="text-xs" :class="result.success ? 'text-green-600' : 'text-red-600'" x-text="result.message"></p>
-                                <p x-show="result.success" class="text-xs text-green-600" x-text="result.word_count + ' words — click to expand'"></p>
+                                <p x-show="result.success" class="text-xs" :class="result._approved ? 'text-green-700 font-medium' : (result._discarded ? 'text-gray-400' : 'text-green-600')" x-text="result.word_count + ' words' + (result._approved ? ' — Approved' : (result._discarded ? ' — Discarded' : ' — click to expand'))"></p>
                             </div>
                             <div class="flex items-center gap-2 flex-shrink-0">
                                 <button x-show="!result.success" @click.stop="retrySingleSource(idx)" class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-blue-50 rounded">Retry</button>
                                 <svg x-show="result.success" class="w-4 h-4 text-gray-400 transition-transform" :class="result._expanded ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                             </div>
                         </div>
-                        {{-- Expanded article text --}}
+                        {{-- Expanded article content --}}
                         <div x-show="result._expanded && result.text" x-cloak class="px-3 pb-3 border-t" :class="result.success ? 'border-green-200' : 'border-red-200'">
-                            <div class="mt-2 bg-white rounded-lg border border-gray-200 p-3 text-sm text-gray-700 break-words whitespace-pre-wrap max-h-96 overflow-y-auto" x-text="result.text"></div>
+                            <div class="mt-2 bg-white rounded-lg border border-gray-200 p-4 prose prose-sm max-w-none max-h-96 overflow-y-auto break-words" x-html="result.text.replace(/\n/g, '<br>')"></div>
+                            {{-- Action buttons --}}
+                            <div x-show="result.success" class="mt-3 flex items-center gap-2">
+                                <button @click.stop="result._approved = true; result._discarded = false" :disabled="result._approved" class="text-xs font-medium px-3 py-1.5 rounded-lg inline-flex items-center gap-1 disabled:opacity-50" :class="result._approved ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                    <span x-text="result._approved ? 'Approved' : 'Approve'"></span>
+                                </button>
+                                <button @click.stop="result._discarded = true; result._approved = false" :disabled="result._discarded" class="text-xs font-medium px-3 py-1.5 rounded-lg inline-flex items-center gap-1 disabled:opacity-50" :class="result._discarded ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    <span x-text="result._discarded ? 'Discarded' : 'Discard'"></span>
+                                </button>
+                                <button @click.stop class="text-xs font-medium px-3 py-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 inline-flex items-center gap-1">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                    Retry
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </template>
