@@ -330,22 +330,36 @@
                             </div>
                         </div>
                         {{-- Expanded article content --}}
-                        <div x-show="expandedSources.includes(idx) && result.text" x-cloak class="px-4 pb-4 border-t border-green-200">
-                            <div class="mt-3 bg-white rounded-lg border border-gray-200 p-5 max-h-[500px] overflow-y-auto text-sm text-gray-800 leading-relaxed break-words" x-html="result.text.replace(/\n\n/g, '</p><p class=\'mb-3\'>').replace(/\n/g, '<br>').replace(/^/, '<p class=\'mb-3\'>').replace(/$/, '</p>')"></div>
-                            {{-- Action buttons --}}
-                            <div x-show="result.success" class="mt-3 flex items-center gap-3">
-                                <button @click.stop="approveSource(idx)" class="text-sm font-medium px-4 py-2 rounded-lg inline-flex items-center gap-1.5 transition-colors" :class="approvedSources.includes(idx) ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                    <span x-text="approvedSources.includes(idx) ? 'Approved' : 'Approve'"></span>
-                                </button>
-                                <button @click.stop="discardSource(idx)" class="text-sm font-medium px-4 py-2 rounded-lg inline-flex items-center gap-1.5 transition-colors" :class="discardedSources.includes(idx) ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                    <span x-text="discardedSources.includes(idx) ? 'Discarded' : 'Discard'"></span>
-                                </button>
-                                <button @click.stop class="text-sm font-medium px-4 py-2 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 inline-flex items-center gap-1.5 transition-colors">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                    Retry
-                                </button>
+                        <div x-show="expandedSources.includes(idx) && result.text" x-cloak x-data="{ showRaw: false }" class="border-t border-green-200">
+                            <div class="bg-white rounded-b-lg shadow-sm">
+                                {{-- Content header with raw toggle --}}
+                                <div class="flex items-center justify-between px-6 pt-4 pb-2">
+                                    <span class="text-xs text-gray-400">Extracted content</span>
+                                    <button @click.stop="showRaw = !showRaw" class="text-xs px-2 py-0.5 rounded border transition-colors" :class="showRaw ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400'" title="Toggle formatted/raw view">
+                                        &lt;/&gt;
+                                    </button>
+                                </div>
+                                {{-- Formatted view --}}
+                                <div x-show="!showRaw" class="px-6 pb-4 max-h-[400px] overflow-y-auto" style="font-size: 15px; line-height: 1.8; color: #374151;" x-html="result.formatted_html || result.text"></div>
+                                {{-- Raw text view --}}
+                                <div x-show="showRaw" x-cloak class="px-6 pb-4 max-h-[400px] overflow-y-auto">
+                                    <pre class="text-xs text-gray-500 bg-gray-50 rounded-lg p-4 whitespace-pre-wrap break-words font-mono" x-text="result.text"></pre>
+                                </div>
+                                {{-- Action buttons with separator --}}
+                                <div x-show="result.success" class="px-6 py-3 border-t border-gray-100 flex items-center gap-3">
+                                    <button @click.stop="approveSource(idx)" class="text-sm font-medium px-4 py-2 rounded-lg inline-flex items-center gap-1.5 transition-colors" :class="approvedSources.includes(idx) ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                        <span x-text="approvedSources.includes(idx) ? 'Approved' : 'Approve'"></span>
+                                    </button>
+                                    <button @click.stop="discardSource(idx)" class="text-sm font-medium px-4 py-2 rounded-lg inline-flex items-center gap-1.5 transition-colors" :class="discardedSources.includes(idx) ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                        <span x-text="discardedSources.includes(idx) ? 'Discarded' : 'Discard'"></span>
+                                    </button>
+                                    <button @click.stop class="text-sm font-medium px-4 py-2 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 inline-flex items-center gap-1.5 transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                        Retry
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

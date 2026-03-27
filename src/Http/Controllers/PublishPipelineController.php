@@ -110,13 +110,14 @@ class PublishPipelineController extends Controller
             ]);
 
             $results[] = [
-                'url'        => $url,
-                'success'    => $extraction['success'],
-                'message'    => $extraction['message'],
-                'title'      => $extraction['data']['title'] ?? '',
-                'word_count' => $extraction['data']['word_count'] ?? 0,
-                'text'       => $extraction['data']['content_text'] ?? '',
-                'fetch_info' => $extraction['fetch_info'] ?? null,
+                'url'            => $url,
+                'success'        => $extraction['success'],
+                'message'        => $extraction['message'],
+                'title'          => $extraction['data']['title'] ?? '',
+                'word_count'     => $extraction['data']['word_count'] ?? 0,
+                'text'           => $extraction['data']['content_text'] ?? '',
+                'formatted_html' => $extraction['data']['content_formatted'] ?? '',
+                'fetch_info'     => $extraction['fetch_info'] ?? null,
             ];
 
             if ($extraction['success']) {
