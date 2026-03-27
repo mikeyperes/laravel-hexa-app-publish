@@ -148,6 +148,7 @@ class PublishPipelineController extends Controller
             'template_id'        => 'nullable|integer|exists:publish_templates,id',
             'preset_id'          => 'nullable|integer|exists:publish_presets,id',
             'model'              => 'required|string|max:100',
+            'change_request'     => 'nullable|string|max:2000',
             'master_setting_ids' => 'nullable|array',
             'master_setting_ids.*' => 'integer|exists:publish_master_settings,id',
         ]);
@@ -230,11 +231,16 @@ class PublishPipelineController extends Controller
             }
         }
 
-        $userParts[] = "Below are the source articles to spin into a new unique article:\n";
+        // If this is a change request, treat source_texts as the existing article
+        if (!empty($validated['change_request'])) {
+            $userParts[] = "Below is an existing article. Apply the following changes:\n\nChanges requested: {$validated['change_request']}\n\n=== Current Article ===\n{$validated['source_texts'][0]}";
+        } else {
+            $userParts[] = "Below are the source articles to spin into a new unique article:\n";
 
-        foreach ($validated['source_texts'] as $i => $text) {
-            $num = $i + 1;
-            $userParts[] = "=== Source {$num} ===\n{$text}";
+            foreach ($validated['source_texts'] as $i => $text) {
+                $num = $i + 1;
+                $userParts[] = "=== Source {$num} ===\n{$text}";
+            }
         }
 
         $userMessage = implode("\n\n", $userParts);

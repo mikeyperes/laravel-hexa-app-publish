@@ -444,11 +444,50 @@
                 <span>Total: <span class="font-medium text-gray-700" x-text="(tokenUsage?.input_tokens || 0) + (tokenUsage?.output_tokens || 0)"></span></span>
             </div>
 
-            {{-- Preview --}}
-            <div x-show="spunContent" x-cloak class="border border-gray-200 rounded-lg p-4 bg-gray-50 prose prose-sm max-w-none break-words" x-html="spunContent"></div>
+            {{-- Preview with visual/source toggle --}}
+            <div x-show="spunContent" x-cloak>
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-xs text-gray-500">Generated article preview</p>
+                    <button @click="spinSourceView = !spinSourceView" class="text-xs px-2 py-1 rounded border" :class="spinSourceView ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'">
+                        <span x-text="spinSourceView ? 'Visual' : 'HTML Source'"></span>
+                    </button>
+                </div>
 
-            <div class="mt-3" x-show="spunContent" x-cloak>
-                <button @click="acceptSpin()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Accept & Edit &rarr;</button>
+                {{-- Visual view --}}
+                <div x-show="!spinSourceView" class="border border-gray-200 rounded-lg bg-white max-h-[600px] overflow-y-auto">
+                    <div class="p-6 prose prose-lg max-w-none break-words" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.8;" x-html="spunContent"></div>
+                </div>
+
+                {{-- Source view --}}
+                <div x-show="spinSourceView" x-cloak>
+                    <textarea x-model="spunContent" rows="20" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono bg-gray-900 text-green-400"></textarea>
+                </div>
+
+                {{-- Action buttons --}}
+                <div class="mt-4 flex flex-wrap items-center gap-3">
+                    <button @click="acceptSpin()" class="bg-green-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-green-700 inline-flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                        Accept & Edit
+                    </button>
+                    <button @click="spinArticle()" :disabled="spinning" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-2">
+                        <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Re-spin
+                    </button>
+                    <button @click="showChangeInput = !showChangeInput" class="bg-blue-100 text-blue-700 px-5 py-2 rounded-lg text-sm hover:bg-blue-200 inline-flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                        Request Changes
+                    </button>
+                </div>
+
+                {{-- Change request input --}}
+                <div x-show="showChangeInput" x-cloak class="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <label class="block text-sm font-medium text-blue-800 mb-2">What changes do you want?</label>
+                    <textarea x-model="spinChangeRequest" rows="3" class="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Make it more formal, add a conclusion paragraph, rewrite the intro..."></textarea>
+                    <button @click="requestSpinChanges()" :disabled="spinning || !spinChangeRequest.trim()" class="mt-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+                        <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        <span x-text="spinning ? 'Processing...' : 'Send to AI'"></span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -759,6 +798,9 @@ function publishPipeline() {
         spinning: false,
         spunContent: '',
         spunWordCount: 0,
+        spinSourceView: false,
+        spinChangeRequest: '',
+        showChangeInput: false,
         tokenUsage: null,
         spinError: '',
 
@@ -1243,10 +1285,41 @@ function publishPipeline() {
             this.editorContent = this.spunContent;
             this.completeStep(7);
             this.openStep(8);
-            // Init TinyMCE after a tick so the DOM is visible
             this.$nextTick(() => this.initEditor());
-            // Auto-save draft
             this.autoSaveDraft();
+        },
+
+        async requestSpinChanges() {
+            if (!this.spinChangeRequest.trim() || !this.spunContent) return;
+            this.spinning = true;
+            this.spinError = '';
+            try {
+                const resp = await fetch('{{ route('publish.pipeline.spin') }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({
+                        source_texts: [this.spunContent],
+                        template_id: this.selectedTemplateId || null,
+                        preset_id: this.selectedPresetId || null,
+                        model: this.aiModel,
+                        change_request: this.spinChangeRequest,
+                    })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    this.spunContent = data.html;
+                    this.spunWordCount = data.word_count;
+                    this.tokenUsage = data.usage;
+                    this.spinChangeRequest = '';
+                    this.showChangeInput = false;
+                    this.showNotification('success', 'Changes applied.');
+                } else {
+                    this.spinError = data.message;
+                }
+            } catch (e) {
+                this.spinError = 'Network error.';
+            }
+            this.spinning = false;
         },
 
         // ── Step 8: Editor ────────────────────────────────
