@@ -104,7 +104,12 @@
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(2) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <div x-show="openSteps.includes(2)" x-cloak x-collapse class="px-4 pb-4">
-            <div class="max-w-md">
+            {{-- Loading indicator --}}
+            <div x-show="presetsLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
+                <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                Loading presets...
+            </div>
+            <div x-show="!presetsLoading" class="max-w-md">
                 <label class="block text-xs text-gray-500 mb-1">User's Presets</label>
                 <select x-model="selectedPresetId" @change="selectPreset()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">-- No preset (configure manually) --</option>
@@ -266,7 +271,7 @@
                 </div>
                 <div x-show="newsResults.length > 0" x-cloak class="mt-3">
                     <p class="text-xs text-gray-500 mb-2" x-text="newsResults.length + ' article(s) found'"></p>
-                    <div class="space-y-2 max-h-80 overflow-y-auto">
+                    <div class="space-y-2 max-h-[600px] overflow-y-auto">
                         <template x-for="(article, idx) in newsResults" :key="idx">
                             <div class="border rounded-lg p-3" :class="sources.some(s => s.url === article.url) ? 'border-gray-100 bg-gray-50 opacity-60' : 'border-gray-200 hover:bg-gray-50'">
                                 <div class="flex items-start justify-between gap-3">
@@ -451,7 +456,12 @@
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(6) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <div x-show="openSteps.includes(6)" x-cloak x-collapse class="px-4 pb-4">
-            <div class="max-w-md">
+            {{-- Loading indicator --}}
+            <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
+                <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                Loading templates...
+            </div>
+            <div x-show="!templatesLoading" class="max-w-md">
                 <label class="block text-xs text-gray-500 mb-1">User's AI Templates</label>
                 <select x-model="selectedTemplateId" @change="selectTemplate()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">-- No template (configure manually) --</option>
@@ -471,6 +481,7 @@
                     <span x-text="selectedTemplate ? 'Continue with Template' : 'Skip Template'"></span> &rarr;
                 </button>
             </div>
+            </div>{{-- close !templatesLoading --}}
         </div>
     </div>
 
@@ -571,8 +582,8 @@
     {{-- ══════════════════════════════════════════════════════════════
          Step 8: Editor
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 8, 'opacity-50': !isStepAccessible(9) }">
-        <button @click="toggleStep(8)" :disabled="!isStepAccessible(9)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 8, 'opacity-50': !isStepAccessible(8) }">
+        <button @click="toggleStep(8)" :disabled="!isStepAccessible(8)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                       :class="completedSteps.includes(8) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
@@ -867,6 +878,7 @@ function publishPipeline() {
 
         // Step 2 — Preset
         presets: [],
+        presetsLoading: false,
         selectedPresetId: '',
         selectedPreset: null,
 
@@ -899,6 +911,7 @@ function publishPipeline() {
 
         // Step 6 — AI Template
         templates: [],
+        templatesLoading: false,
         selectedTemplateId: '',
         selectedTemplate: null,
 
@@ -1158,6 +1171,7 @@ function publishPipeline() {
 
         async loadUserPresets() {
             if (!this.selectedUser) return;
+            this.presetsLoading = true;
             try {
                 const resp = await fetch(`{{ route('publish.presets.index') }}?user_id=${this.selectedUser.id}&format=json`, {
                     headers: { 'Accept': 'application/json' }
@@ -1165,10 +1179,12 @@ function publishPipeline() {
                 const data = await resp.json();
                 this.presets = data.data || data || [];
             } catch (e) { this.presets = []; }
+            this.presetsLoading = false;
         },
 
         async loadUserTemplates() {
             if (!this.selectedUser) return;
+            this.templatesLoading = true;
             try {
                 const resp = await fetch(`{{ route('publish.templates.index') }}?account_id=${this.selectedUser.id}&format=json`, {
                     headers: { 'Accept': 'application/json' }
@@ -1176,6 +1192,7 @@ function publishPipeline() {
                 const data = await resp.json();
                 this.templates = data.data || data || [];
             } catch (e) { this.templates = []; }
+            this.templatesLoading = false;
         },
 
         // ── Step 2: Preset ────────────────────────────────
@@ -1417,6 +1434,13 @@ function publishPipeline() {
 
         acceptSpin() {
             this.editorContent = this.spunContent;
+            // Auto-extract title from first H1 tag
+            if (!this.articleTitle) {
+                const tmp = document.createElement('div');
+                tmp.innerHTML = this.spunContent;
+                const h1 = tmp.querySelector('h1');
+                if (h1) this.articleTitle = h1.textContent.trim();
+            }
             this.completeStep(7);
             this.openStep(8);
             this.$nextTick(() => this.initEditor());

@@ -9,6 +9,7 @@ use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishMasterSetting;
 use hexa_app_publish\Models\PublishPreset;
 use hexa_app_publish\Models\PublishPrompt;
+use hexa_app_publish\Models\AiActivityLog;
 use hexa_app_publish\Models\PublishTemplate;
 use hexa_app_publish\Models\PublishSite;
 use hexa_package_anthropic\Services\AnthropicService;
@@ -305,13 +306,29 @@ class PublishPipelineController extends Controller
         $plainText = strip_tags($content);
         $wordCount = str_word_count($plainText);
 
+        // Log AI activity
+        $usage = $result['data']['usage'] ?? [];
+        $apiKey = \hexa_core\Models\Setting::getValue('anthropic_api_key', '');
+        AiActivityLog::logCall([
+            'provider'         => 'anthropic',
+            'model'            => $validated['model'],
+            'agent'            => !empty($validated['change_request']) ? 'pipeline-revise' : 'pipeline-spin',
+            'prompt_tokens'    => $usage['input_tokens'] ?? 0,
+            'completion_tokens' => $usage['output_tokens'] ?? 0,
+            'system_prompt'    => mb_substr($systemPrompt, 0, 5000),
+            'user_message'     => mb_substr($userPrompt, 0, 5000),
+            'response_content' => mb_substr($content, 0, 10000),
+            'success'          => true,
+            'api_key_masked'   => $apiKey ? '...' . substr($apiKey, -4) : null,
+        ]);
+
         return response()->json([
             'success'    => true,
             'message'    => "Article generated: {$wordCount} words.",
             'html'       => $content,
             'text'       => $plainText,
             'word_count' => $wordCount,
-            'usage'      => $result['data']['usage'] ?? [],
+            'usage'      => $usage,
             'model'      => $result['data']['model'] ?? $model,
         ]);
     }

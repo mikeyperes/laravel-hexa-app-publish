@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use hexa_app_publish\Http\Controllers\PublishAccountController;
 use hexa_app_publish\Http\Controllers\PublishSiteController;
 use hexa_app_publish\Http\Controllers\PublishCampaignController;
+use hexa_app_publish\Http\Controllers\AiActivityController;
 use hexa_app_publish\Http\Controllers\PublishArticleController;
 use hexa_app_publish\Http\Controllers\PublishTemplateController;
 use hexa_app_publish\Http\Controllers\PublishDashboardController;
@@ -63,6 +64,9 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::post('/publish/campaigns/{id}/activate', [PublishCampaignController::class, 'activate'])->name('publish.campaigns.activate');
     Route::post('/publish/campaigns/{id}/pause', [PublishCampaignController::class, 'pause'])->name('publish.campaigns.pause');
     Route::post('/publish/campaigns/{id}/duplicate', [PublishCampaignController::class, 'duplicate'])->name('publish.campaigns.duplicate');
+
+    // AI Activity
+    Route::get('/publish/ai-activity', [AiActivityController::class, 'index'])->name('publish.ai-activity.index');
 
     // Articles
     Route::get('/publish/articles', [PublishArticleController::class, 'index'])->name('publish.articles.index');
