@@ -603,19 +603,51 @@
     {{-- ══════════════════════════════════════════════════════════════
          Step 9: Prepare for WordPress
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 9, 'opacity-50': !isStepAccessible(10) }">
-        <button @click="toggleStep(9)" :disabled="!isStepAccessible(10)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 9, 'opacity-50': !isStepAccessible(9) }">
+        <button @click="toggleStep(9)" :disabled="!isStepAccessible(9)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                       :class="completedSteps.includes(9) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
                     <template x-if="completedSteps.includes(9)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(9)"><span>10</span></template>
+                    <template x-if="!completedSteps.includes(9)"><span>9</span></template>
                 </span>
                 <span class="font-semibold text-gray-800">Prepare for WordPress</span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(9) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <div x-show="openSteps.includes(9)" x-cloak x-collapse class="px-4 pb-4">
+            {{-- WordPress Publishing Summary --}}
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                <h5 class="text-sm font-semibold text-gray-700 mb-3">Publishing Settings</h5>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                    <div>
+                        <span class="text-gray-400 text-xs">Website</span>
+                        <p class="font-medium text-gray-800" x-text="selectedSite ? selectedSite.name : 'Not selected'"></p>
+                        <p x-show="selectedSite" class="text-xs text-gray-500 break-all" x-text="selectedSite?.url"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">WP Template</span>
+                        <p class="font-medium text-gray-800" x-text="selectedPreset ? selectedPreset.name : 'None'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Follow Links</span>
+                        <p class="font-medium text-gray-800" x-text="selectedPreset?.follow_links || 'Default'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Publish Action</span>
+                        <p class="font-medium text-gray-800" x-text="publishAction === 'publish' ? 'Publish Immediately' : (publishAction === 'draft_wp' ? 'WordPress Draft' : (publishAction === 'draft_local' ? 'Local Draft' : publishAction))"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Categories</span>
+                        <p class="font-medium text-gray-800" x-text="suggestedCategories.length ? suggestedCategories.join(', ') : 'None'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Tags</span>
+                        <p class="font-medium text-gray-800" x-text="suggestedTags.length ? suggestedTags.join(', ') : 'None'"></p>
+                    </div>
+                </div>
+            </div>
+
             <button @click="prepareForWp()" :disabled="preparing" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 mb-4">
                 <svg x-show="preparing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 <span x-text="preparing ? 'Preparing...' : 'Prepare for WordPress'"></span>
@@ -657,13 +689,13 @@
     {{-- ══════════════════════════════════════════════════════════════
          Step 10: Publish
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 10, 'opacity-50': !isStepAccessible(11) }">
-        <button @click="toggleStep(10)" :disabled="!isStepAccessible(11)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 10, 'opacity-50': !isStepAccessible(10) }">
+        <button @click="toggleStep(10)" :disabled="!isStepAccessible(10)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                       :class="completedSteps.includes(10) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
                     <template x-if="completedSteps.includes(10)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(10)"><span>11</span></template>
+                    <template x-if="!completedSteps.includes(10)"><span>10</span></template>
                 </span>
                 <span class="font-semibold text-gray-800">Publish</span>
             </div>
@@ -845,11 +877,18 @@ function publishPipeline() {
         },
 
         // ── State Persistence ────────────────────────────
+        _stateVersion: 2,
+
         init() {
             const saved = localStorage.getItem('publishPipelineState');
             if (saved) {
                 try {
                     const state = JSON.parse(saved);
+                    // Clear stale state from older versions
+                    if (!state._v || state._v < this._stateVersion) {
+                        localStorage.removeItem('publishPipelineState');
+                        return;
+                    }
                     if (state.selectedUser) this.selectedUser = state.selectedUser;
                     if (state.currentStep) this.currentStep = state.currentStep;
                     if (state.openSteps) this.openSteps = state.openSteps;
@@ -895,6 +934,7 @@ function publishPipeline() {
 
         savePipelineState() {
             const state = {
+                _v: this._stateVersion,
                 selectedUser: this.selectedUser,
                 currentStep: this.currentStep,
                 openSteps: this.openSteps,
