@@ -308,7 +308,7 @@
 
             <div x-show="checkResults.length > 0" x-cloak class="space-y-3">
                 <template x-for="(result, idx) in checkResults" :key="idx">
-                    <div class="rounded-lg border" :class="result._approved ? 'border-green-400 bg-green-50 ring-1 ring-green-300' : (result._discarded ? 'border-gray-200 bg-gray-50 opacity-40' : (result.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'))"
+                    <div class="rounded-lg border" :class="result._approved ? 'border-green-400 bg-green-50 ring-1 ring-green-300' : (result._discarded ? 'border-gray-200 bg-gray-50 opacity-40' : (result.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'))">
                         {{-- Header row — click to expand --}}
                         <div @click="result._expanded = !result._expanded" class="flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-opacity-80">
                             <span :class="result.success ? 'text-green-500' : 'text-red-500'" class="mt-0.5 flex-shrink-0">
