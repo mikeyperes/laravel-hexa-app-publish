@@ -206,7 +206,7 @@
                     <p class="text-xs text-gray-500 mb-2" x-text="newsResults.length + ' article(s) found'"></p>
                     <div class="space-y-2 max-h-80 overflow-y-auto">
                         <template x-for="(article, idx) in newsResults" :key="idx">
-                            <div class="border border-gray-200 rounded-lg p-3 hover:bg-gray-50">
+                            <div class="border rounded-lg p-3" :class="sources.some(s => s.url === article.url) ? 'border-gray-100 bg-gray-50 opacity-60' : 'border-gray-200 hover:bg-gray-50'">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="flex-1 min-w-0">
                                         <p class="text-sm font-medium text-gray-900 break-words" x-text="article.title"></p>
@@ -219,7 +219,8 @@
                                         <a :href="article.url" target="_blank" class="text-xs text-blue-500 hover:underline break-all mt-1 block" x-text="article.url + ' &#8599;'"></a>
                                     </div>
                                     <div class="flex-shrink-0 flex flex-col gap-1">
-                                        <button @click="addSource(article.url, article.title)" class="text-blue-600 hover:text-blue-800 text-xs font-medium px-2.5 py-1.5 bg-blue-50 rounded hover:bg-blue-100">+ Add</button>
+                                        <span x-show="sources.some(s => s.url === article.url)" class="text-xs text-gray-400 font-medium px-2.5 py-1.5">Added</span>
+                                        <button x-show="!sources.some(s => s.url === article.url)" @click="addSource(article.url, article.title)" class="text-blue-600 hover:text-blue-800 text-xs font-medium px-2.5 py-1.5 bg-blue-50 rounded hover:bg-blue-100">+ Add</button>
                                     </div>
                                 </div>
                             </div>
@@ -238,12 +239,13 @@
                 <div x-show="!bookmarksLoading && bookmarks.length === 0" x-cloak class="text-sm text-gray-400 py-4">No bookmarks found for this user.</div>
                 <div x-show="bookmarks.length > 0" x-cloak class="space-y-2 max-h-64 overflow-y-auto">
                     <template x-for="bm in bookmarks" :key="bm.id">
-                        <div class="flex items-start gap-3 bg-gray-50 rounded-lg p-3">
+                        <div class="flex items-start gap-3 rounded-lg p-3" :class="sources.some(s => s.url === bm.url) ? 'bg-gray-100 opacity-60' : 'bg-gray-50'">
                             <div class="flex-1 min-w-0">
                                 <p class="text-sm font-medium text-gray-800 break-words" x-text="bm.title || bm.url"></p>
                                 <p class="text-xs text-gray-500 break-all" x-text="bm.url"></p>
                             </div>
-                            <button @click="addSource(bm.url, bm.title)" class="flex-shrink-0 text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 bg-blue-50 rounded">+ Add</button>
+                            <span x-show="sources.some(s => s.url === bm.url)" class="flex-shrink-0 text-xs text-gray-400 font-medium px-2 py-1">Added</span>
+                            <button x-show="!sources.some(s => s.url === bm.url)" @click="addSource(bm.url, bm.title)" class="flex-shrink-0 text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 bg-blue-50 rounded">+ Add</button>
                         </div>
                     </template>
                 </div>
