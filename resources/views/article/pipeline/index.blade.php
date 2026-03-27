@@ -195,8 +195,70 @@
 
             {{-- Search News tab --}}
             <div x-show="sourceTab === 'search'">
-                <div class="flex gap-2">
+                {{-- Search mode pills --}}
+                <div class="flex flex-wrap gap-2 mb-3">
+                    <button @click="newsMode = 'keyword'" class="px-3 py-1 rounded-full text-xs font-medium transition-colors" :class="newsMode === 'keyword' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Keyword</button>
+                    <button @click="newsMode = 'local'" class="px-3 py-1 rounded-full text-xs font-medium transition-colors" :class="newsMode === 'local' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Local News</button>
+                    <button @click="newsMode = 'trending'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium transition-colors" :class="newsMode === 'trending' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Trending</button>
+                    <button @click="newsMode = 'genre'" class="px-3 py-1 rounded-full text-xs font-medium transition-colors" :class="newsMode === 'genre' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Genre</button>
+                </div>
+
+                {{-- Keyword search --}}
+                <div x-show="newsMode === 'keyword'" class="flex gap-2">
                     <input type="text" x-model="newsSearch" @keydown.enter="searchNews()" placeholder="Search for articles..." class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <button @click="searchNews()" :disabled="newsSearching" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+                        <svg x-show="newsSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Search
+                    </button>
+                </div>
+
+                {{-- Local news --}}
+                <div x-show="newsMode === 'local'" class="flex flex-wrap gap-2">
+                    <input type="text" x-model="newsSearch" @keydown.enter="searchNews()" placeholder="City or state name..." class="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <select x-model="newsCountry" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="us">United States</option>
+                        <option value="gb">United Kingdom</option>
+                        <option value="ca">Canada</option>
+                        <option value="au">Australia</option>
+                        <option value="il">Israel</option>
+                        <option value="in">India</option>
+                        <option value="de">Germany</option>
+                        <option value="fr">France</option>
+                    </select>
+                    <button @click="searchNews()" :disabled="newsSearching" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+                        <svg x-show="newsSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Search Local
+                    </button>
+                </div>
+
+                {{-- Trending --}}
+                <div x-show="newsMode === 'trending'" class="space-y-2">
+                    <div class="flex flex-wrap gap-2">
+                        <button @click="newsCategory = ''; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="!newsCategory ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">All</button>
+                        <button @click="newsCategory = 'technology'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'technology' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Technology</button>
+                        <button @click="newsCategory = 'business'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'business' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Business</button>
+                        <button @click="newsCategory = 'politics'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'politics' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Politics</button>
+                        <button @click="newsCategory = 'sports'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'sports' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Sports</button>
+                        <button @click="newsCategory = 'health'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'health' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Health</button>
+                        <button @click="newsCategory = 'entertainment'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'entertainment' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Entertainment</button>
+                        <button @click="newsCategory = 'science'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'science' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Science</button>
+                    </div>
+                </div>
+
+                {{-- Genre --}}
+                <div x-show="newsMode === 'genre'" class="flex gap-2">
+                    <select x-model="newsCategory" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">Select genre...</option>
+                        <option value="technology">Technology</option>
+                        <option value="business">Business</option>
+                        <option value="health">Health</option>
+                        <option value="sports">Sports</option>
+                        <option value="science">Science</option>
+                        <option value="entertainment">Entertainment</option>
+                        <option value="politics">Politics</option>
+                        <option value="world">World</option>
+                    </select>
+                    <input type="text" x-model="newsSearch" @keydown.enter="searchNews()" placeholder="Optional keyword..." class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <button @click="searchNews()" :disabled="newsSearching" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
                         <svg x-show="newsSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         Search
@@ -820,6 +882,9 @@ function publishPipeline() {
         newsSearch: '',
         newsSearching: false,
         newsResults: [],
+        newsMode: 'keyword',
+        newsCategory: '',
+        newsCountry: 'us',
         bookmarks: [],
         bookmarksLoading: false,
 
@@ -891,7 +956,7 @@ function publishPipeline() {
         },
 
         // ── State Persistence ────────────────────────────
-        _stateVersion: 2,
+        _stateVersion: 3,
 
         init() {
             const saved = localStorage.getItem('publishPipelineState');
@@ -907,11 +972,7 @@ function publishPipeline() {
                     if (state.currentStep) this.currentStep = state.currentStep;
                     if (state.openSteps) this.openSteps = state.openSteps;
                     if (state.completedSteps) this.completedSteps = state.completedSteps;
-                    if (state.selectedPresetId) this.selectedPresetId = state.selectedPresetId;
-                    if (state.selectedPreset) this.selectedPreset = state.selectedPreset;
-                    if (state.selectedTemplateId) this.selectedTemplateId = state.selectedTemplateId;
-                    if (state.selectedTemplate) this.selectedTemplate = state.selectedTemplate;
-                    if (state.selectedSiteId) this.selectedSiteId = state.selectedSiteId;
+                    if (state.selectedSiteId) this.selectedSiteId = String(state.selectedSiteId);
                     if (state.selectedSite) this.selectedSite = state.selectedSite;
                     if (state.sources) this.sources = state.sources;
                     if (state.checkResults) { this.checkResults = state.checkResults; this.checkPassCount = state.checkResults.filter(r => r.success).length; }
@@ -924,10 +985,22 @@ function publishPipeline() {
                     if (state.spunContent) { this.spunContent = state.spunContent; this.spunWordCount = state.spunWordCount || 0; }
                     if (state.editorContent) this.editorContent = state.editorContent;
                     if (state.tokenUsage) this.tokenUsage = state.tokenUsage;
-                    // Reload presets/templates if user was selected
+                    // Reload presets/templates THEN re-select saved values
                     if (this.selectedUser) {
-                        this.loadUserPresets();
-                        this.loadUserTemplates();
+                        const savedPresetId = state.selectedPresetId;
+                        const savedPreset = state.selectedPreset;
+                        const savedTemplateId = state.selectedTemplateId;
+                        const savedTemplate = state.selectedTemplate;
+                        Promise.all([this.loadUserPresets(), this.loadUserTemplates()]).then(() => {
+                            if (savedPresetId) {
+                                this.selectedPresetId = String(savedPresetId);
+                                this.selectedPreset = this.presets.find(p => p.id == savedPresetId) || savedPreset;
+                            }
+                            if (savedTemplateId) {
+                                this.selectedTemplateId = String(savedTemplateId);
+                                this.selectedTemplate = this.templates.find(t => t.id == savedTemplateId) || savedTemplate;
+                            }
+                        });
                     }
                 } catch (e) { /* ignore corrupt state */ }
             }
@@ -1170,14 +1243,21 @@ function publishPipeline() {
         },
 
         async searchNews() {
-            if (!this.newsSearch.trim()) return;
+            if (this.newsMode === 'keyword' && !this.newsSearch.trim()) return;
+            if (this.newsMode === 'local' && !this.newsSearch.trim()) return;
+            if (this.newsMode === 'genre' && !this.newsCategory && !this.newsSearch.trim()) return;
             this.newsSearching = true;
             this.newsResults = [];
             try {
                 const resp = await fetch('{{ route('publish.search.articles.post') }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ query: this.newsSearch })
+                    body: JSON.stringify({
+                        query: this.newsSearch,
+                        mode: this.newsMode,
+                        category: this.newsCategory,
+                        country: this.newsCountry,
+                    })
                 });
                 const data = await resp.json();
                 this.newsResults = (data.data && data.data.articles) ? data.data.articles : [];

@@ -140,14 +140,33 @@ class PublishSearchController extends Controller
     public function searchArticles(Request $request): JsonResponse
     {
         $request->validate([
-            'query'    => 'required|string|max:255',
+            'query'    => 'nullable|string|max:255',
+            'category' => 'nullable|string|max:50',
+            'country'  => 'nullable|string|max:5',
+            'mode'     => 'nullable|in:keyword,local,trending,genre',
             'per_page' => 'integer|min:1|max:50',
             'sources'  => 'array',
         ]);
 
-        $query   = $request->input('query');
+        $query   = $request->input('query', '');
+        $category = $request->input('category');
+        $country = $request->input('country', 'us');
+        $mode    = $request->input('mode', 'keyword');
         $perPage = (int) $request->input('per_page', 10);
         $selectedSources = $request->input('sources', ['gnews', 'newsdata', 'currents_news']);
+
+        // For trending mode, use top-headlines style query
+        if ($mode === 'trending' && empty($query)) {
+            $query = $category ?: 'breaking news';
+        }
+        // For local mode, prepend location to query
+        if ($mode === 'local' && $query) {
+            // query already contains the city/state name
+        }
+        // For genre mode, append category to query
+        if ($mode === 'genre' && $category) {
+            $query = $query ? "{$query} {$category}" : $category;
+        }
 
         $allArticles = [];
         $errors = [];
