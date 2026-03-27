@@ -5,6 +5,7 @@ use hexa_app_publish\Http\Controllers\PublishAccountController;
 use hexa_app_publish\Http\Controllers\PublishSiteController;
 use hexa_app_publish\Http\Controllers\PublishCampaignController;
 use hexa_app_publish\Http\Controllers\AiActivityController;
+use hexa_app_publish\Http\Controllers\AiSmartEditController;
 use hexa_app_publish\Http\Controllers\PublishArticleController;
 use hexa_app_publish\Http\Controllers\PublishTemplateController;
 use hexa_app_publish\Http\Controllers\PublishDashboardController;
@@ -67,6 +68,12 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
 
     // AI Activity
     Route::get('/publish/ai-activity', [AiActivityController::class, 'index'])->name('publish.ai-activity.index');
+
+    // AI Smart Edit Templates
+    Route::get('/article/smart-edits', [AiSmartEditController::class, 'index'])->name('publish.smart-edits.index');
+    Route::post('/article/smart-edits', [AiSmartEditController::class, 'store'])->name('publish.smart-edits.store');
+    Route::put('/article/smart-edits/{id}', [AiSmartEditController::class, 'update'])->name('publish.smart-edits.update');
+    Route::delete('/article/smart-edits/{id}', [AiSmartEditController::class, 'destroy'])->name('publish.smart-edits.destroy');
 
     // Articles
     Route::get('/publish/articles', [PublishArticleController::class, 'index'])->name('publish.articles.index');
