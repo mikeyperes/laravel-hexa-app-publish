@@ -43,8 +43,9 @@
 
     {{-- Template cards --}}
     @foreach($templates as $t)
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5" x-data="{ editing: false, editData: @json($t) }">
-        <div x-show="!editing">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        {{-- View mode --}}
+        <div x-show="editingId !== {{ $t->id }}">
             <div class="flex items-start justify-between gap-3">
                 <div>
                     <h4 class="font-medium text-gray-800 break-words">{{ $t->name }}</h4>
@@ -54,7 +55,7 @@
                     @endif
                 </div>
                 <div class="flex items-center gap-2">
-                    <button @click="editing = true" class="text-gray-400 hover:text-blue-600">
+                    <button @click="startEdit({{ $t->id }}, @json($t))" class="text-gray-400 hover:text-blue-600">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     </button>
                     <button @click="deleteTemplate({{ $t->id }}, '{{ addslashes($t->name) }}')" class="text-gray-400 hover:text-red-600">
@@ -64,7 +65,8 @@
             </div>
             <p class="text-sm text-gray-600 mt-2 break-words">{{ $t->prompt }}</p>
         </div>
-        <div x-show="editing" x-cloak class="space-y-3">
+        {{-- Edit mode --}}
+        <div x-show="editingId === {{ $t->id }}" x-cloak class="space-y-3">
             <div>
                 <label class="block text-xs text-gray-500 mb-1">Name</label>
                 <input type="text" x-model="editData.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -85,8 +87,8 @@
                 <textarea x-model="editData.prompt" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
             </div>
             <div class="flex items-center gap-3">
-                <button @click="updateTemplate({{ $t->id }}, editData)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Save</button>
-                <button @click="editing = false" class="text-sm text-gray-500 hover:text-gray-700">Cancel</button>
+                <button @click="updateTemplate()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Save</button>
+                <button @click="editingId = null" class="text-sm text-gray-500 hover:text-gray-700">Cancel</button>
                 <label class="flex items-center gap-2 text-sm text-gray-600 ml-auto">
                     <input type="checkbox" x-model="editData.is_active" class="rounded border-gray-300 text-green-600">
                     Active
@@ -108,7 +110,15 @@ function smartEdits() {
         saving: false,
         result: '',
         success: false,
+        editingId: null,
+        editData: {},
         newTemplate: { name: '', prompt: '', category: 'general' },
+
+        startEdit(id, data) {
+            this.editingId = id;
+            this.editData = JSON.parse(JSON.stringify(data));
+        },
+
         async createTemplate() {
             this.saving = true; this.result = '';
             try {
@@ -119,13 +129,15 @@ function smartEdits() {
             } catch (e) { this.success = false; this.result = 'Error: ' + e.message; }
             this.saving = false;
         },
-        async updateTemplate(id, data) {
+
+        async updateTemplate() {
             try {
-                const r = await fetch('/article/smart-edits/' + id, { method: 'PUT', headers, body: JSON.stringify(data) });
+                const r = await fetch('/article/smart-edits/' + this.editingId, { method: 'PUT', headers, body: JSON.stringify(this.editData) });
                 const d = await r.json();
                 if (d.success) location.reload();
             } catch (e) { alert('Error: ' + e.message); }
         },
+
         async deleteTemplate(id, name) {
             if (!confirm('Delete "' + name + '"?')) return;
             try {
