@@ -295,7 +295,12 @@ function masterSettingsManager() {
 </script>
 
 {{-- TinyMCE CDN for WYSIWYG editing --}}
-<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+@php $tinymceKey = \hexa_core\Models\Setting::getValue('tinymce_api_key', ''); @endphp
+@if($tinymceKey)
+<script src="https://cdn.tiny.cloud/1/{{ $tinymceKey }}/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
+@else
+<script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js"></script>
+@endif
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     if (typeof tinymce !== 'undefined') {
