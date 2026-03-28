@@ -359,18 +359,58 @@
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(5) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <div x-show="openSteps.includes(5)" x-cloak x-collapse class="px-4 pb-4">
-            <div class="flex items-center gap-3 mb-4">
-                <button @click="checkAllSources()" :disabled="checking" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
-                    <svg x-show="checking" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="checking ? 'Extracting...' : 'Get Articles'"></span>
-                </button>
-                <select x-model="checkUserAgent" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="chrome">Chrome UA</option>
-                    <option value="firefox">Firefox UA</option>
-                    <option value="safari">Safari UA</option>
-                    <option value="googlebot">Googlebot UA</option>
-                    <option value="bot">HWS Bot UA</option>
-                </select>
+            {{-- Extraction Options --}}
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                <div class="flex flex-wrap items-end gap-3">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Method</label>
+                        <select x-model="extractMethod" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="auto">Auto (Recommended)</option>
+                            <option value="readability">Readability</option>
+                            <option value="css">CSS Selector</option>
+                            <option value="regex">Regex</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">User Agent</label>
+                        <select x-model="checkUserAgent" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="chrome">Chrome Desktop</option>
+                            <option value="firefox">Firefox Desktop</option>
+                            <option value="safari">Safari macOS</option>
+                            <option value="googlebot">Googlebot</option>
+                            <option value="bot">HWS Bot</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Retries</label>
+                        <select x-model="extractRetries" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="0">0</option>
+                            <option value="1" selected>1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Timeout</label>
+                        <select x-model="extractTimeout" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="10">10s</option>
+                            <option value="20" selected>20s</option>
+                            <option value="30">30s</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Min Words</label>
+                        <input type="number" x-model="extractMinWords" class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-20" min="10" max="1000">
+                    </div>
+                    <label class="flex items-center gap-2 text-xs text-gray-600 pb-2">
+                        <input type="checkbox" x-model="extractAutoFallback" class="rounded border-gray-300 text-blue-600">
+                        Auto-fallback (Googlebot)
+                    </label>
+                    <button @click="checkAllSources()" :disabled="checking" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+                        <svg x-show="checking" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        <span x-text="checking ? 'Extracting...' : 'Get Articles'"></span>
+                    </button>
+                </div>
             </div>
 
             <div x-show="checkResults.length > 0" x-cloak class="space-y-3">
@@ -378,9 +418,9 @@
                     <div class="rounded-lg border" :class="approvedSources.includes(idx) ? 'border-green-400 bg-green-50 ring-1 ring-green-300' : (discardedSources.includes(idx) ? 'border-gray-200 bg-gray-100 opacity-40' : (result.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'))">
                         {{-- Header row — click to expand --}}
                         <div @click="toggleSourceExpand(idx)" class="flex items-start gap-3 px-4 py-3 cursor-pointer">
-                            <span :class="result.success ? 'text-green-500' : 'text-red-500'" class="mt-0.5 flex-shrink-0">
-                                <svg x-show="result.success" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                <svg x-show="!result.success" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            <span class="mt-0.5 flex-shrink-0">
+                                <svg x-show="result.success" class="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                <svg x-show="!result.success" class="w-7 h-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             </span>
                             <div class="flex-1 min-w-0">
                                 <a :href="result.url" target="_blank" @click.stop class="text-sm font-medium break-all inline-flex items-center gap-1 hover:underline" :class="result.success ? 'text-green-800' : 'text-red-800'">
@@ -389,7 +429,8 @@
                                 </a>
                                 <p x-show="result.title" class="text-xs text-gray-600 font-medium mt-0.5" x-text="result.title"></p>
                                 <p class="text-xs" :class="result.success ? 'text-green-600' : 'text-red-600'" x-text="result.message"></p>
-                                <p x-show="result.success" class="text-xs" :class="approvedSources.includes(idx) ? 'text-green-700 font-medium' : (discardedSources.includes(idx) ? 'text-gray-400' : 'text-green-600')" x-text="result.word_count + ' words' + (approvedSources.includes(idx) ? ' — Approved' : (discardedSources.includes(idx) ? ' — Discarded' : ' — click to expand'))"></p>
+                                <p x-show="result.success" class="text-xs font-medium" :class="approvedSources.includes(idx) ? 'text-green-700' : (discardedSources.includes(idx) ? 'text-gray-400' : 'text-green-600')" x-text="'Successfully extracted ' + result.word_count + ' words' + (approvedSources.includes(idx) ? ' — Approved' : (discardedSources.includes(idx) ? ' — Discarded' : ' — click to expand'))"></p>
+                                <p x-show="!result.success" class="text-xs text-red-600 font-medium">Extraction failed — <button @click.stop="retrySingleSource(idx)" class="underline hover:text-red-800">retry with fallback settings</button></p>
                             </div>
                             <div class="flex items-center gap-2 flex-shrink-0">
                                 <button x-show="!result.success" @click.stop="retrySingleSource(idx)" class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-blue-50 rounded">Retry</button>
@@ -983,6 +1024,11 @@ function publishPipeline() {
         checkResults: [],
         checkPassCount: 0,
         checkUserAgent: 'chrome',
+        extractMethod: 'auto',
+        extractRetries: 1,
+        extractTimeout: 20,
+        extractMinWords: 50,
+        extractAutoFallback: true,
         expandedSources: [],
         approvedSources: [],
         discardedSources: [],
@@ -1428,6 +1474,11 @@ function publishPipeline() {
                     body: JSON.stringify({
                         urls: this.sources.map(s => s.url),
                         user_agent: this.checkUserAgent,
+                        method: this.extractMethod,
+                        retries: parseInt(this.extractRetries),
+                        timeout: parseInt(this.extractTimeout),
+                        min_words: parseInt(this.extractMinWords),
+                        auto_fallback: this.extractAutoFallback,
                     })
                 });
                 const data = await resp.json();
@@ -1603,10 +1654,19 @@ function publishPipeline() {
         },
 
         setSpinEditor(html) {
+            const self = this;
             this.$nextTick(() => {
                 const wait = setInterval(() => {
                     const editor = tinymce.get('spin-preview-editor');
-                    if (editor) { clearInterval(wait); editor.setContent(html || ''); }
+                    if (editor) {
+                        clearInterval(wait);
+                        editor.setContent(html || '');
+                        // Listen for changes to re-extract links
+                        editor.off('change keyup');
+                        editor.on('change keyup', () => {
+                            self.extractArticleLinks(editor.getContent());
+                        });
+                    }
                 }, 200);
             });
         },

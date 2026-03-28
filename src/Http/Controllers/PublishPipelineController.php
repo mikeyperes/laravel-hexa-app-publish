@@ -95,20 +95,46 @@ class PublishPipelineController extends Controller
     public function checkSources(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'urls'       => 'required|array|min:1',
-            'urls.*'     => 'required|url|max:2048',
-            'user_agent' => 'nullable|string|max:100',
+            'urls'        => 'required|array|min:1',
+            'urls.*'      => 'required|url|max:2048',
+            'user_agent'  => 'nullable|string|max:100',
+            'method'      => 'nullable|in:auto,readability,css,regex',
+            'retries'     => 'nullable|integer|min:0|max:5',
+            'timeout'     => 'nullable|integer|min:5|max:60',
+            'min_words'   => 'nullable|integer|min:10|max:1000',
+            'auto_fallback' => 'nullable|boolean',
         ]);
 
         $urls = $validated['urls'];
         $userAgent = $validated['user_agent'] ?? 'chrome';
+        $method = $validated['method'] ?? 'auto';
+        $retries = $validated['retries'] ?? 1;
+        $timeout = $validated['timeout'] ?? 20;
+        $minWords = $validated['min_words'] ?? 50;
+        $autoFallback = $validated['auto_fallback'] ?? true;
         $results = [];
         $passCount = 0;
 
         foreach ($urls as $url) {
-            $extraction = $this->extractor->extract($url, 'auto', null, [
+            $extraction = $this->extractor->extract($url, $method, null, [
                 'user_agent' => $userAgent,
+                'retries'    => $retries,
+                'timeout'    => $timeout,
+                'min_words'  => $minWords,
             ]);
+
+            // Auto-fallback: if failed and enabled, retry with googlebot UA
+            if (!$extraction['success'] && $autoFallback && $userAgent !== 'googlebot') {
+                $extraction = $this->extractor->extract($url, $method, null, [
+                    'user_agent' => 'googlebot',
+                    'retries'    => $retries,
+                    'timeout'    => $timeout,
+                    'min_words'  => $minWords,
+                ]);
+                if ($extraction['success']) {
+                    $extraction['message'] = 'Extracted via fallback (Googlebot). ' . $extraction['message'];
+                }
+            }
 
             $results[] = [
                 'url'            => $url,
