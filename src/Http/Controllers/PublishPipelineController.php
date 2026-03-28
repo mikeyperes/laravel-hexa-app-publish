@@ -203,7 +203,7 @@ class PublishPipelineController extends Controller
             }
         }
 
-        $htmlInstruction = "\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Use <h1>, <h2>, <h3> for headings — NEVER use markdown ## syntax. Use <p> for paragraphs. Use <strong> and <em> for emphasis — NEVER use ** or * markdown. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links. Do NOT output markdown. Do NOT wrap in ```html code blocks. Output raw HTML tags directly.";
+        $htmlInstruction = "\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title — the title is handled separately. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis — NEVER use ** or * markdown. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links with relevant supporting URLs where appropriate. Do NOT output markdown. Do NOT wrap in ```html code blocks. Output raw HTML tags directly.";
 
         $systemPrompt = !empty($systemParts)
             ? implode("\n\n", $systemParts) . $htmlInstruction
@@ -275,6 +275,10 @@ class PublishPipelineController extends Controller
         $content = preg_replace('/<head>.*?<\/head>/is', '', $content);
         $content = trim($content);
 
+        // Strip H1 from body — title is handled separately
+        $content = preg_replace('/<h1[^>]*>.*?<\/h1>/is', '', $content, 1);
+        $content = trim($content);
+
         // Markdown → HTML fallback: detect and convert if AI returned markdown
         if (preg_match('/^#{1,6}\s|^\*\*|^\- |\n#{1,6}\s/m', $content)) {
             // Headings: ## Title → <h2>Title</h2>
@@ -322,6 +326,19 @@ class PublishPipelineController extends Controller
             'api_key_masked'   => $apiKey ? '...' . substr($apiKey, -4) : null,
         ]);
 
+        // Calculate cost for response
+        $pricing = [
+            'claude-opus-4-6' => ['input' => 15.0, 'output' => 75.0],
+            'claude-opus-4-20250514' => ['input' => 15.0, 'output' => 75.0],
+            'claude-sonnet-4-6' => ['input' => 3.0, 'output' => 15.0],
+            'claude-sonnet-4-20250514' => ['input' => 3.0, 'output' => 15.0],
+            'claude-haiku-4-5-20251001' => ['input' => 0.80, 'output' => 4.0],
+        ];
+        $rates = $pricing[$model] ?? ['input' => 0, 'output' => 0];
+        $inputTokens = $usage['input_tokens'] ?? 0;
+        $outputTokens = $usage['output_tokens'] ?? 0;
+        $cost = ($inputTokens * $rates['input'] / 1_000_000) + ($outputTokens * $rates['output'] / 1_000_000);
+
         return response()->json([
             'success'    => true,
             'message'    => "Article generated: {$wordCount} words.",
@@ -330,6 +347,11 @@ class PublishPipelineController extends Controller
             'word_count' => $wordCount,
             'usage'      => $usage,
             'model'      => $result['data']['model'] ?? $model,
+            'cost'       => round($cost, 6),
+            'provider'   => 'anthropic',
+            'user_name'  => auth()->user()?->name ?? 'System',
+            'ip'         => request()->ip(),
+            'timestamp_utc' => now()->utc()->format('Y-m-d H:i:s'),
         ]);
     }
 
@@ -347,7 +369,7 @@ class PublishPipelineController extends Controller
         ]);
 
         $articleText = strip_tags($validated['article_html']);
-        $prompt = "Based on this article, generate exactly:\n\n1. 10 unique title options (compelling, SEO-friendly)\n2. 15 category suggestions (broad topics)\n3. 15 tag suggestions (specific keywords)\n\nArticle:\n" . mb_substr($articleText, 0, 3000) . "\n\nRespond ONLY in this exact JSON format, no other text:\n{\"titles\":[\"title1\",\"title2\",...],\"categories\":[\"cat1\",\"cat2\",...],\"tags\":[\"tag1\",\"tag2\",...]}";
+        $prompt = "Based on this article, generate exactly:\n\n1. 10 unique title options (compelling, SEO-friendly)\n2. 15 category suggestions (broad topics)\n3. 15 tag suggestions (specific keywords)\n4. 5-10 supporting URLs (real, relevant reference links that could support claims in the article — news sites, Wikipedia, official sources)\n\nArticle:\n" . mb_substr($articleText, 0, 3000) . "\n\nRespond ONLY in this exact JSON format, no other text:\n{\"titles\":[\"title1\",...],\"categories\":[\"cat1\",...],\"tags\":[\"tag1\",...],\"urls\":[{\"url\":\"https://...\",\"title\":\"description\"},...]}";
 
         $result = $this->anthropic->chat(
             'You are a content metadata expert. Output ONLY valid JSON. No markdown, no explanation.',
@@ -391,6 +413,7 @@ class PublishPipelineController extends Controller
             'titles' => array_slice($parsed['titles'] ?? [], 0, 10),
             'categories' => array_slice($parsed['categories'] ?? [], 0, 15),
             'tags' => array_slice($parsed['tags'] ?? [], 0, 15),
+            'urls' => array_slice($parsed['urls'] ?? [], 0, 10),
         ]);
     }
 

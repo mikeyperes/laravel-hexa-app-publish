@@ -533,16 +533,22 @@
             {{-- Spun content in TinyMCE editor --}}
             <div x-show="spunContent" x-cloak>
                 <p class="text-xs text-gray-500 mb-2">Generated article — edit directly below</p>
+                {{-- Title textbox --}}
+                <div class="mb-3">
+                    <label class="block text-xs text-gray-500 mb-1">Article Title</label>
+                    <input type="text" x-model="articleTitle" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-semibold" placeholder="Enter article title...">
+                </div>
+
                 <x-hexa-tinymce name="spin-preview" value="" preset="wordpress" :height="700" id="spin-preview-editor" />
 
                 {{-- Title Options --}}
                 <div x-show="suggestedTitles.length > 0" x-cloak class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h5 class="text-sm font-semibold text-gray-700 mb-2">Select Title</h5>
-                    <div class="space-y-2">
+                    <h5 class="text-sm font-semibold text-gray-700 mb-3">Title Options</h5>
+                    <div class="space-y-2.5">
                         <template x-for="(title, idx) in suggestedTitles" :key="idx">
-                            <label class="flex items-center gap-2 cursor-pointer text-sm" :class="selectedTitleIdx === idx ? 'text-blue-800 font-medium' : 'text-gray-700'">
+                            <label class="flex items-center gap-2.5 cursor-pointer" :class="selectedTitleIdx === idx ? 'text-blue-800 font-semibold' : 'text-gray-700'">
                                 <input type="radio" name="spin-title" :checked="selectedTitleIdx === idx" @click="selectedTitleIdx = idx; articleTitle = title" class="text-blue-600">
-                                <span x-text="title" class="break-words"></span>
+                                <span x-text="title" class="break-words text-base"></span>
                             </label>
                         </template>
                     </div>
@@ -552,7 +558,7 @@
                 <div x-show="suggestedCategories.length > 0 || suggestedTags.length > 0" x-cloak class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div x-show="suggestedCategories.length > 0" class="bg-gray-50 border border-gray-200 rounded-lg p-4">
                         <h5 class="text-sm font-semibold text-gray-700 mb-2">Categories <span class="font-normal text-gray-400" x-text="'(' + selectedCategories.length + ' selected)'"></span></h5>
-                        <div class="space-y-1 max-h-48 overflow-y-auto">
+                        <div class="space-y-1">
                             <template x-for="(cat, idx) in suggestedCategories" :key="idx">
                                 <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
                                     <input type="checkbox" :checked="selectedCategories.includes(idx)" @click="toggleSelection(selectedCategories, idx)" class="rounded border-gray-300 text-green-600">
@@ -563,7 +569,7 @@
                     </div>
                     <div x-show="suggestedTags.length > 0" class="bg-gray-50 border border-gray-200 rounded-lg p-4">
                         <h5 class="text-sm font-semibold text-gray-700 mb-2">Tags <span class="font-normal text-gray-400" x-text="'(' + selectedTags.length + ' selected)'"></span></h5>
-                        <div class="space-y-1 max-h-48 overflow-y-auto">
+                        <div class="space-y-1">
                             <template x-for="(tag, idx) in suggestedTags" :key="idx">
                                 <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
                                     <input type="checkbox" :checked="selectedTags.includes(idx)" @click="toggleSelection(selectedTags, idx)" class="rounded border-gray-300 text-blue-600">
@@ -574,10 +580,36 @@
                     </div>
                 </div>
 
+                {{-- Supporting URLs --}}
+                <div x-show="suggestedUrls.length > 0" x-cloak class="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h5 class="text-sm font-semibold text-gray-700 mb-2">Supporting URLs</h5>
+                    <div class="space-y-2">
+                        <template x-for="(link, idx) in suggestedUrls" :key="idx">
+                            <div class="flex items-center gap-2 text-sm">
+                                <a :href="link.url" target="_blank" class="text-blue-600 hover:underline break-all flex-1" x-text="link.title || link.url"></a>
+                                <button @click="suggestedUrls.splice(idx, 1)" class="text-red-400 hover:text-red-600 flex-shrink-0">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
                 {{-- Loading metadata --}}
                 <div x-show="metadataLoading" x-cloak class="mt-3 flex items-center gap-2 text-sm text-gray-500">
                     <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     Generating titles, categories & tags...
+                </div>
+
+                {{-- AI call cost notification --}}
+                <div x-show="lastAiCall" x-cloak class="mt-3 bg-gray-900 text-gray-300 rounded-lg px-4 py-2 text-xs font-mono flex flex-wrap gap-x-4 gap-y-1">
+                    <span><span class="text-gray-500">User:</span> <span class="text-white" x-text="lastAiCall?.user_name"></span></span>
+                    <span><span class="text-gray-500">Model:</span> <span class="text-purple-400" x-text="lastAiCall?.model"></span></span>
+                    <span><span class="text-gray-500">Provider:</span> <span class="text-blue-400" x-text="lastAiCall?.provider"></span></span>
+                    <span><span class="text-gray-500">Tokens:</span> <span class="text-green-400" x-text="(lastAiCall?.usage?.input_tokens || 0) + '+' + (lastAiCall?.usage?.output_tokens || 0)"></span></span>
+                    <span><span class="text-gray-500">Cost:</span> <span class="text-yellow-400" x-text="'$' + (lastAiCall?.cost || 0).toFixed(4)"></span></span>
+                    <span><span class="text-gray-500">IP:</span> <span x-text="lastAiCall?.ip"></span></span>
+                    <span><span class="text-gray-500">UTC:</span> <span x-text="lastAiCall?.timestamp_utc"></span></span>
                 </div>
 
                 {{-- Action buttons --}}
@@ -611,6 +643,13 @@
                         <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         <span x-text="spinning ? 'Processing...' : 'Send to AI'"></span>
                     </button>
+                </div>
+
+                {{-- Quick links --}}
+                <div class="mt-4 flex justify-end gap-4 text-xs text-gray-400">
+                    <a href="{{ route('publish.templates.index') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">AI Templates <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                    <a href="{{ route('publish.smart-edits.index') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">Smart Edit Templates <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                    <a href="{{ route('publish.settings.master') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">Publishing Settings <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
                 </div>
             </div>
         </div>
@@ -968,6 +1007,8 @@ function publishPipeline() {
         selectedCategories: [],
         selectedTags: [],
         metadataLoading: false,
+        suggestedUrls: [],
+        lastAiCall: null,
         appliedSmartEdits: [],
         tokenUsage: null,
         spinError: '',
@@ -1040,6 +1081,12 @@ function publishPipeline() {
                     if (state.articleTitle) this.articleTitle = state.articleTitle;
                     if (state.publishAction) this.publishAction = state.publishAction;
                     if (state.spunContent) { this.spunContent = state.spunContent; this.spunWordCount = state.spunWordCount || 0; this.setSpinEditor(state.spunContent); }
+                    if (state.suggestedTitles) this.suggestedTitles = state.suggestedTitles;
+                    if (state.suggestedCategories) this.suggestedCategories = state.suggestedCategories;
+                    if (state.suggestedTags) this.suggestedTags = state.suggestedTags;
+                    if (state.selectedCategories) this.selectedCategories = state.selectedCategories;
+                    if (state.selectedTags) this.selectedTags = state.selectedTags;
+                    if (state.selectedTitleIdx !== undefined) { this.selectedTitleIdx = state.selectedTitleIdx; if (this.suggestedTitles[this.selectedTitleIdx]) this.articleTitle = this.suggestedTitles[this.selectedTitleIdx]; }
                     if (state.editorContent) this.editorContent = state.editorContent;
                     if (state.tokenUsage) this.tokenUsage = state.tokenUsage;
                     // Reload presets/templates THEN re-select saved values
@@ -1099,6 +1146,12 @@ function publishPipeline() {
                 publishAction: this.publishAction,
                 spunContent: this.spunContent,
                 spunWordCount: this.spunWordCount,
+                suggestedTitles: this.suggestedTitles,
+                suggestedCategories: this.suggestedCategories,
+                suggestedTags: this.suggestedTags,
+                selectedCategories: this.selectedCategories,
+                selectedTags: this.selectedTags,
+                selectedTitleIdx: this.selectedTitleIdx,
                 editorContent: this.editorContent,
                 tokenUsage: this.tokenUsage,
             };
@@ -1467,6 +1520,7 @@ function publishPipeline() {
                     this.spunWordCount = data.word_count;
                     this.tokenUsage = data.usage;
                     this.setSpinEditor(data.html);
+                    this.lastAiCall = { user_name: data.user_name, model: data.model, provider: data.provider, usage: data.usage, cost: data.cost, ip: data.ip, timestamp_utc: data.timestamp_utc };
                     this.showNotification('success', data.message);
                     this.generateMetadata(data.html);
                 } else {
@@ -1531,6 +1585,7 @@ function publishPipeline() {
                     this.spunWordCount = data.word_count;
                     this.tokenUsage = data.usage;
                     this.setSpinEditor(data.html);
+                    this.lastAiCall = { user_name: data.user_name, model: data.model, provider: data.provider, usage: data.usage, cost: data.cost, ip: data.ip, timestamp_utc: data.timestamp_utc };
                     this.spinChangeRequest = '';
                     this.showChangeInput = false;
                     this.appliedSmartEdits = [];
@@ -1566,6 +1621,7 @@ function publishPipeline() {
                     this.suggestedTitles = data.titles || [];
                     this.suggestedCategories = data.categories || [];
                     this.suggestedTags = data.tags || [];
+                    this.suggestedUrls = data.urls || [];
                     this.selectedTitleIdx = 0;
                     if (this.suggestedTitles.length > 0) this.articleTitle = this.suggestedTitles[0];
                     this.selectedCategories = Array.from({length: Math.min(10, this.suggestedCategories.length)}, (_, i) => i);
