@@ -316,7 +316,7 @@ class PublishPipelineController extends Controller
             'prompt_tokens'    => $usage['input_tokens'] ?? 0,
             'completion_tokens' => $usage['output_tokens'] ?? 0,
             'system_prompt'    => mb_substr($systemPrompt, 0, 5000),
-            'user_message'     => mb_substr($userPrompt, 0, 5000),
+            'user_message'     => mb_substr($userMessage, 0, 5000),
             'response_content' => mb_substr($content, 0, 10000),
             'success'          => true,
             'api_key_masked'   => $apiKey ? '...' . substr($apiKey, -4) : null,
