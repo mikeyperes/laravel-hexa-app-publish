@@ -536,7 +536,8 @@
                 {{-- Title textbox --}}
                 <div class="mb-3">
                     <label class="block text-xs text-gray-500 mb-1">Article Title</label>
-                    <input type="text" x-model="articleTitle" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-semibold" placeholder="Enter article title...">
+                    <div x-show="metadataLoading && !articleTitle" class="w-full border border-gray-200 rounded-lg px-4 py-3 bg-gray-50 animate-pulse h-[52px]"></div>
+                    <input x-show="!metadataLoading || articleTitle" type="text" x-model="articleTitle" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-lg font-bold" placeholder="Enter article title...">
                 </div>
 
                 <x-hexa-tinymce name="spin-preview" value="" preset="wordpress" :height="700" id="spin-preview-editor" />
@@ -602,30 +603,27 @@
                 </div>
 
                 {{-- AI call cost notification --}}
-                <div x-show="lastAiCall" x-cloak class="mt-3 bg-gray-900 text-gray-300 rounded-lg px-4 py-2 text-xs font-mono flex flex-wrap gap-x-4 gap-y-1">
-                    <span><span class="text-gray-500">User:</span> <span class="text-white" x-text="lastAiCall?.user_name"></span></span>
-                    <span><span class="text-gray-500">Model:</span> <span class="text-purple-400" x-text="lastAiCall?.model"></span></span>
-                    <span><span class="text-gray-500">Provider:</span> <span class="text-blue-400" x-text="lastAiCall?.provider"></span></span>
-                    <span><span class="text-gray-500">Tokens:</span> <span class="text-green-400" x-text="(lastAiCall?.usage?.input_tokens || 0) + '+' + (lastAiCall?.usage?.output_tokens || 0)"></span></span>
-                    <span><span class="text-gray-500">Cost:</span> <span class="text-yellow-400" x-text="'$' + (lastAiCall?.cost || 0).toFixed(4)"></span></span>
-                    <span><span class="text-gray-500">IP:</span> <span x-text="lastAiCall?.ip"></span></span>
-                    <span><span class="text-gray-500">UTC:</span> <span x-text="lastAiCall?.timestamp_utc"></span></span>
-                </div>
-
-                {{-- Action buttons --}}
-                <div class="mt-4 flex flex-wrap items-center gap-3">
-                    <button @click="acceptSpin()" class="bg-green-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-green-700 inline-flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        Accept & Edit
-                    </button>
-                    <button @click="spinArticle()" :disabled="spinning" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-2">
-                        <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        Re-spin
-                    </button>
-                    <button @click="showChangeInput = !showChangeInput; loadSmartEdits()" class="bg-blue-100 text-blue-700 px-5 py-2 rounded-lg text-sm hover:bg-blue-200 inline-flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
-                        Request Changes
-                    </button>
+                {{-- Action buttons + Quick links — same row --}}
+                <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <button @click="acceptSpin()" class="bg-green-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-green-700 inline-flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            Accept & Edit
+                        </button>
+                        <button @click="spinArticle()" :disabled="spinning" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-2">
+                            <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            Re-spin
+                        </button>
+                        <button @click="showChangeInput = !showChangeInput; loadSmartEdits()" class="bg-blue-100 text-blue-700 px-5 py-2 rounded-lg text-sm hover:bg-blue-200 inline-flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                            Request Changes
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-4 text-xs text-gray-400">
+                        <a href="{{ route('publish.templates.index') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">AI Templates <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                        <a href="{{ route('publish.smart-edits.index') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">Smart Edits <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                        <a href="{{ route('publish.settings.master') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">Settings <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                    </div>
                 </div>
 
                 {{-- Change request input with Smart Edit Templates --}}
@@ -645,11 +643,15 @@
                     </button>
                 </div>
 
-                {{-- Quick links --}}
-                <div class="mt-4 flex justify-end gap-4 text-xs text-gray-400">
-                    <a href="{{ route('publish.templates.index') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">AI Templates <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
-                    <a href="{{ route('publish.smart-edits.index') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">Smart Edit Templates <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
-                    <a href="{{ route('publish.settings.master') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">Publishing Settings <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                {{-- AI call cost report — very bottom --}}
+                <div x-show="lastAiCall" x-cloak class="mt-4 bg-gray-900 text-gray-300 rounded-lg px-4 py-2 text-xs font-mono flex flex-wrap gap-x-4 gap-y-1">
+                    <span><span class="text-gray-500">User:</span> <span class="text-white" x-text="lastAiCall?.user_name"></span></span>
+                    <span><span class="text-gray-500">Model:</span> <span class="text-purple-400" x-text="lastAiCall?.model"></span></span>
+                    <span><span class="text-gray-500">Provider:</span> <span class="text-blue-400" x-text="lastAiCall?.provider"></span></span>
+                    <span><span class="text-gray-500">Tokens:</span> <span class="text-green-400" x-text="(lastAiCall?.usage?.input_tokens || 0) + '+' + (lastAiCall?.usage?.output_tokens || 0)"></span></span>
+                    <span><span class="text-gray-500">Cost:</span> <span class="text-yellow-400" x-text="'$' + (lastAiCall?.cost || 0).toFixed(4)"></span></span>
+                    <span><span class="text-gray-500">IP:</span> <span x-text="lastAiCall?.ip"></span></span>
+                    <span><span class="text-gray-500">UTC:</span> <span x-text="lastAiCall?.timestamp_utc"></span></span>
                 </div>
             </div>
         </div>
@@ -674,7 +676,7 @@
             {{-- Title --}}
             <div class="mb-3">
                 <label class="block text-xs text-gray-500 mb-1">Article Title</label>
-                <input type="text" x-model="articleTitle" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-semibold" placeholder="Enter article title...">
+                <input type="text" x-model="articleTitle" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-lg font-bold" placeholder="Enter article title...">
             </div>
 
             {{-- TinyMCE editor via core component --}}
@@ -1523,6 +1525,7 @@ function publishPipeline() {
                     this.lastAiCall = { user_name: data.user_name, model: data.model, provider: data.provider, usage: data.usage, cost: data.cost, ip: data.ip, timestamp_utc: data.timestamp_utc };
                     this.showNotification('success', data.message);
                     this.generateMetadata(data.html);
+                    this.extractArticleLinks(data.html);
                 } else {
                     this.spinError = data.message;
                 }
@@ -1635,6 +1638,16 @@ function publishPipeline() {
             const pos = arr.indexOf(idx);
             if (pos === -1) arr.push(idx);
             else arr.splice(pos, 1);
+        },
+
+        extractArticleLinks(html) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            const anchors = tmp.querySelectorAll('a[href]');
+            this.suggestedUrls = Array.from(anchors).map(a => ({
+                url: a.getAttribute('href'),
+                title: a.textContent.trim() || a.getAttribute('href'),
+            })).filter(l => l.url && l.url.startsWith('http'));
         },
 
         async loadSmartEdits() {
