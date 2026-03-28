@@ -28,9 +28,15 @@ class PublishMasterSettingController extends Controller
             ->orderBy('sort_order')
             ->get();
 
+        $aiPrompts = PublishMasterSetting::whereIn('type', [
+            'ai_system_prompt', 'ai_html_format', 'ai_spin_instruction',
+            'ai_change_instruction', 'ai_metadata_prompt',
+        ])->orderBy('sort_order')->get();
+
         return view('app-publish::publishing.settings.index', [
             'wordpressGuidelines' => $wordpressGuidelines,
             'spinningGuidelines'  => $spinningGuidelines,
+            'aiPrompts'           => $aiPrompts,
         ]);
     }
 
@@ -44,7 +50,7 @@ class PublishMasterSettingController extends Controller
     {
         $validated = $request->validate([
             'name'       => 'required|string|max:255',
-            'type'       => 'required|in:wordpress_guidelines,spinning_guidelines',
+            'type'       => 'required|in:wordpress_guidelines,spinning_guidelines,ai_system_prompt,ai_html_format,ai_spin_instruction,ai_change_instruction,ai_metadata_prompt',
             'content'    => 'nullable|string',
             'is_active'  => 'nullable|boolean',
             'sort_order' => 'nullable|integer|min:0',

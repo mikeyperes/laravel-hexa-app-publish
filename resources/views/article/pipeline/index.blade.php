@@ -535,6 +535,51 @@
                 <p class="text-xs text-gray-500 mb-2">Generated article — edit directly below</p>
                 <x-hexa-tinymce name="spin-preview" value="" preset="wordpress" :height="700" id="spin-preview-editor" />
 
+                {{-- Title Options --}}
+                <div x-show="suggestedTitles.length > 0" x-cloak class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h5 class="text-sm font-semibold text-gray-700 mb-2">Select Title</h5>
+                    <div class="space-y-2">
+                        <template x-for="(title, idx) in suggestedTitles" :key="idx">
+                            <label class="flex items-center gap-2 cursor-pointer text-sm" :class="selectedTitleIdx === idx ? 'text-blue-800 font-medium' : 'text-gray-700'">
+                                <input type="radio" name="spin-title" :checked="selectedTitleIdx === idx" @click="selectedTitleIdx = idx; articleTitle = title" class="text-blue-600">
+                                <span x-text="title" class="break-words"></span>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+
+                {{-- Categories & Tags --}}
+                <div x-show="suggestedCategories.length > 0 || suggestedTags.length > 0" x-cloak class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div x-show="suggestedCategories.length > 0" class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <h5 class="text-sm font-semibold text-gray-700 mb-2">Categories <span class="font-normal text-gray-400" x-text="'(' + selectedCategories.length + ' selected)'"></span></h5>
+                        <div class="space-y-1 max-h-48 overflow-y-auto">
+                            <template x-for="(cat, idx) in suggestedCategories" :key="idx">
+                                <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+                                    <input type="checkbox" :checked="selectedCategories.includes(idx)" @click="toggleSelection(selectedCategories, idx)" class="rounded border-gray-300 text-green-600">
+                                    <span x-text="cat"></span>
+                                </label>
+                            </template>
+                        </div>
+                    </div>
+                    <div x-show="suggestedTags.length > 0" class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <h5 class="text-sm font-semibold text-gray-700 mb-2">Tags <span class="font-normal text-gray-400" x-text="'(' + selectedTags.length + ' selected)'"></span></h5>
+                        <div class="space-y-1 max-h-48 overflow-y-auto">
+                            <template x-for="(tag, idx) in suggestedTags" :key="idx">
+                                <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+                                    <input type="checkbox" :checked="selectedTags.includes(idx)" @click="toggleSelection(selectedTags, idx)" class="rounded border-gray-300 text-blue-600">
+                                    <span x-text="tag"></span>
+                                </label>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Loading metadata --}}
+                <div x-show="metadataLoading" x-cloak class="mt-3 flex items-center gap-2 text-sm text-gray-500">
+                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Generating titles, categories & tags...
+                </div>
+
                 {{-- Action buttons --}}
                 <div class="mt-4 flex flex-wrap items-center gap-3">
                     <button @click="acceptSpin()" class="bg-green-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-green-700 inline-flex items-center gap-2">
@@ -917,6 +962,12 @@ function publishPipeline() {
         spinChangeRequest: '',
         showChangeInput: false,
         smartEditTemplates: [],
+        appliedSmartEdits: [],
+        suggestedTitles: [],
+        selectedTitleIdx: 0,
+        selectedCategories: [],
+        selectedTags: [],
+        metadataLoading: false,
         appliedSmartEdits: [],
         tokenUsage: null,
         spinError: '',
@@ -1417,6 +1468,7 @@ function publishPipeline() {
                     this.tokenUsage = data.usage;
                     this.setSpinEditor(data.html);
                     this.showNotification('success', data.message);
+                    this.generateMetadata(data.html);
                 } else {
                     this.spinError = data.message;
                 }
@@ -1430,13 +1482,22 @@ function publishPipeline() {
             // Read latest content from spin TinyMCE editor
             const spinEditor = tinymce.get('spin-preview-editor');
             this.spunContent = spinEditor ? spinEditor.getContent() : this.spunContent;
+            // Extract title from H1 and REMOVE from body
+            const tmp = document.createElement('div');
+            tmp.innerHTML = this.spunContent;
+            const h1 = tmp.querySelector('h1');
+            if (h1) {
+                if (!this.articleTitle) this.articleTitle = h1.textContent.trim();
+                h1.remove();
+                this.spunContent = tmp.innerHTML;
+            }
             this.editorContent = this.spunContent;
-            // Auto-extract title from first H1 tag
-            if (!this.articleTitle) {
-                const tmp = document.createElement('div');
-                tmp.innerHTML = this.spunContent;
-                const h1 = tmp.querySelector('h1');
-                if (h1) this.articleTitle = h1.textContent.trim();
+            // Populate categories/tags from selections
+            if (this.selectedCategories.length > 0 && this.suggestedCategories.length > 0) {
+                this.suggestedCategories = this.suggestedCategories.filter((c, i) => this.selectedCategories.includes(i));
+            }
+            if (this.selectedTags.length > 0 && this.suggestedTags.length > 0) {
+                this.suggestedTags = this.suggestedTags.filter((t, i) => this.selectedTags.includes(i));
             }
             this.completeStep(7);
             this.openStep(8);
@@ -1490,6 +1551,34 @@ function publishPipeline() {
                     if (editor) { clearInterval(wait); editor.setContent(html || ''); }
                 }, 200);
             });
+        },
+
+        async generateMetadata(html) {
+            this.metadataLoading = true;
+            try {
+                const resp = await fetch('{{ route("publish.pipeline.metadata") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({ article_html: html })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    this.suggestedTitles = data.titles || [];
+                    this.suggestedCategories = data.categories || [];
+                    this.suggestedTags = data.tags || [];
+                    this.selectedTitleIdx = 0;
+                    if (this.suggestedTitles.length > 0) this.articleTitle = this.suggestedTitles[0];
+                    this.selectedCategories = Array.from({length: Math.min(10, this.suggestedCategories.length)}, (_, i) => i);
+                    this.selectedTags = Array.from({length: Math.min(10, this.suggestedTags.length)}, (_, i) => i);
+                }
+            } catch (e) { /* silently fail */ }
+            this.metadataLoading = false;
+        },
+
+        toggleSelection(arr, idx) {
+            const pos = arr.indexOf(idx);
+            if (pos === -1) arr.push(idx);
+            else arr.splice(pos, 1);
         },
 
         async loadSmartEdits() {

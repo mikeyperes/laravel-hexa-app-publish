@@ -171,6 +171,71 @@
             </div>
         @endif
     </div>
+
+    {{-- ═══ AI Prompts & Instructions ═══ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div>
+                <h3 class="font-semibold text-gray-800">AI Prompts & Instructions</h3>
+                <p class="text-xs text-gray-500 mt-1">These prompts control how the AI generates, formats, and edits content. Each section is documented below.</p>
+            </div>
+            <button @click="addSetting('ai_system_prompt')" class="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">+ Add Prompt</button>
+        </div>
+
+        <div class="p-5 space-y-4">
+            {{-- Documentation --}}
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900">
+                <h4 class="font-semibold mb-2">Prompt Types Reference</h4>
+                <dl class="space-y-2">
+                    <div><dt class="font-medium">ai_system_prompt</dt><dd class="text-blue-700">The main system instruction sent to the AI before any article task. Controls tone, behavior, and output format.</dd></div>
+                    <div><dt class="font-medium">ai_html_format</dt><dd class="text-blue-700">Instructions for HTML output formatting. Tells the AI to use proper HTML tags instead of markdown.</dd></div>
+                    <div><dt class="font-medium">ai_spin_instruction</dt><dd class="text-blue-700">Instructions for the spin/rewrite task. Tells the AI what to do with source articles.</dd></div>
+                    <div><dt class="font-medium">ai_change_instruction</dt><dd class="text-blue-700">Instructions for "Request Changes" edits. Controls how the AI applies user-requested modifications.</dd></div>
+                    <div><dt class="font-medium">ai_metadata_prompt</dt><dd class="text-blue-700">Instructions for generating titles, categories, and tags from article content.</dd></div>
+                </dl>
+            </div>
+
+            @if($aiPrompts->isEmpty())
+                <p class="text-sm text-gray-400 py-4">No AI prompts configured. Using built-in defaults. Add prompts above to customize AI behavior.</p>
+            @else
+                @foreach($aiPrompts as $setting)
+                <div class="border border-gray-200 rounded-lg p-4" x-data="{ editingAi: false }">
+                    <div x-show="!editingAi" class="flex items-start justify-between gap-3">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <h4 class="font-medium text-gray-800">{{ $setting->name }}</h4>
+                                <span class="text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-mono">{{ $setting->type }}</span>
+                                @if(!$setting->is_active)
+                                    <span class="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-800">Inactive</span>
+                                @endif
+                            </div>
+                            <div class="text-sm text-gray-600 mt-1 break-words whitespace-pre-wrap bg-gray-50 rounded p-3 max-h-48 overflow-y-auto">{{ $setting->content }}</div>
+                        </div>
+                        <div class="flex gap-2 flex-shrink-0">
+                            <button @click="editingAi = true" class="text-gray-400 hover:text-blue-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+                            <button @click="deleteSetting({{ $setting->id }})" class="text-gray-400 hover:text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+                        </div>
+                    </div>
+                    <div x-show="editingAi" x-cloak class="space-y-3">
+                        <input type="text" value="{{ $setting->name }}" id="ai-name-{{ $setting->id }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <select id="ai-type-{{ $setting->id }}" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="ai_system_prompt" {{ $setting->type === 'ai_system_prompt' ? 'selected' : '' }}>System Prompt</option>
+                            <option value="ai_html_format" {{ $setting->type === 'ai_html_format' ? 'selected' : '' }}>HTML Format</option>
+                            <option value="ai_spin_instruction" {{ $setting->type === 'ai_spin_instruction' ? 'selected' : '' }}>Spin Instruction</option>
+                            <option value="ai_change_instruction" {{ $setting->type === 'ai_change_instruction' ? 'selected' : '' }}>Change Instruction</option>
+                            <option value="ai_metadata_prompt" {{ $setting->type === 'ai_metadata_prompt' ? 'selected' : '' }}>Metadata Prompt</option>
+                        </select>
+                        <textarea id="ai-content-{{ $setting->id }}" rows="6" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono">{{ $setting->content }}</textarea>
+                        <div class="flex gap-2">
+                            <button @click="updateSetting({{ $setting->id }}, document.getElementById('ai-name-{{ $setting->id }}').value, document.getElementById('ai-type-{{ $setting->id }}').value, document.getElementById('ai-content-{{ $setting->id }}').value)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Save</button>
+                            <button @click="editingAi = false" class="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+                @endforeach
+            @endif
+        </div>
+    </div>
 </div>
 @endsection
 

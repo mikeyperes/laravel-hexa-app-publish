@@ -334,6 +334,67 @@ class PublishPipelineController extends Controller
     }
 
     /**
+     * Generate article metadata: 10 title options, 15 categories, 15 tags.
+     * Uses Haiku for speed and cost efficiency.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function generateMetadata(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'article_html' => 'required|string',
+        ]);
+
+        $articleText = strip_tags($validated['article_html']);
+        $prompt = "Based on this article, generate exactly:\n\n1. 10 unique title options (compelling, SEO-friendly)\n2. 15 category suggestions (broad topics)\n3. 15 tag suggestions (specific keywords)\n\nArticle:\n" . mb_substr($articleText, 0, 3000) . "\n\nRespond ONLY in this exact JSON format, no other text:\n{\"titles\":[\"title1\",\"title2\",...],\"categories\":[\"cat1\",\"cat2\",...],\"tags\":[\"tag1\",\"tag2\",...]}";
+
+        $result = $this->anthropic->chat(
+            'You are a content metadata expert. Output ONLY valid JSON. No markdown, no explanation.',
+            $prompt,
+            'claude-haiku-4-5-20251001',
+            1024
+        );
+
+        if (!$result['success']) {
+            return response()->json(['success' => false, 'message' => $result['message']]);
+        }
+
+        $content = $result['data']['content'] ?? '';
+        // Extract JSON from response
+        $content = preg_replace('/^```json\s*/i', '', $content);
+        $content = preg_replace('/\s*```$/', '', $content);
+
+        $parsed = json_decode(trim($content), true);
+
+        if (!$parsed || !isset($parsed['titles'])) {
+            return response()->json(['success' => false, 'message' => 'Failed to parse AI response.', 'raw' => $content]);
+        }
+
+        // Log the API call
+        $usage = $result['data']['usage'] ?? [];
+        $apiKey = \hexa_core\Models\Setting::getValue('anthropic_api_key', '');
+        AiActivityLog::logCall([
+            'provider' => 'anthropic',
+            'model' => 'claude-haiku-4-5-20251001',
+            'agent' => 'pipeline-metadata',
+            'prompt_tokens' => $usage['input_tokens'] ?? 0,
+            'completion_tokens' => $usage['output_tokens'] ?? 0,
+            'system_prompt' => 'Content metadata expert',
+            'response_content' => $content,
+            'success' => true,
+            'api_key_masked' => $apiKey ? '...' . substr($apiKey, -4) : null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'titles' => array_slice($parsed['titles'] ?? [], 0, 10),
+            'categories' => array_slice($parsed['categories'] ?? [], 0, 15),
+            'tags' => array_slice($parsed['tags'] ?? [], 0, 15),
+        ]);
+    }
+
+    /**
      * Prepare content for WordPress: upload images, create categories/tags, validate HTML.
      *
      * @param Request $request
