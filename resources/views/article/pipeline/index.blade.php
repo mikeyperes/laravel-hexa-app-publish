@@ -530,24 +530,10 @@
                 <span>Total: <span class="font-medium text-gray-700" x-text="(tokenUsage?.input_tokens || 0) + (tokenUsage?.output_tokens || 0)"></span></span>
             </div>
 
-            {{-- Preview with visual/source toggle --}}
+            {{-- Spun content in TinyMCE editor --}}
             <div x-show="spunContent" x-cloak>
-                <div class="flex items-center justify-between mb-2">
-                    <p class="text-xs text-gray-500">Generated article preview</p>
-                    <button @click="spinSourceView = !spinSourceView" class="text-xs px-2 py-1 rounded border" :class="spinSourceView ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'">
-                        <span x-text="spinSourceView ? 'Visual' : 'HTML Source'"></span>
-                    </button>
-                </div>
-
-                {{-- Visual view --}}
-                <div x-show="!spinSourceView" class="border border-gray-200 rounded-lg bg-white max-h-[600px] overflow-y-auto">
-                    <div class="p-6 prose prose-lg max-w-none break-words" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.8;" x-html="spunContent"></div>
-                </div>
-
-                {{-- Source view --}}
-                <div x-show="spinSourceView" x-cloak>
-                    <textarea x-model="spunContent" rows="20" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono bg-gray-900 text-green-400"></textarea>
-                </div>
+                <p class="text-xs text-gray-500 mb-2">Generated article — edit directly below</p>
+                <x-hexa-tinymce name="spin-preview" value="" preset="wordpress" :height="700" id="spin-preview-editor" />
 
                 {{-- Action buttons --}}
                 <div class="mt-4 flex flex-wrap items-center gap-3">
@@ -559,16 +545,23 @@
                         <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         Re-spin
                     </button>
-                    <button @click="showChangeInput = !showChangeInput" class="bg-blue-100 text-blue-700 px-5 py-2 rounded-lg text-sm hover:bg-blue-200 inline-flex items-center gap-2">
+                    <button @click="showChangeInput = !showChangeInput; loadSmartEdits()" class="bg-blue-100 text-blue-700 px-5 py-2 rounded-lg text-sm hover:bg-blue-200 inline-flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
                         Request Changes
                     </button>
                 </div>
 
-                {{-- Change request input --}}
+                {{-- Change request input with Smart Edit Templates --}}
                 <div x-show="showChangeInput" x-cloak class="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <label class="block text-sm font-medium text-blue-800 mb-2">Quick templates</label>
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        <template x-for="tpl in smartEditTemplates" :key="tpl.id">
+                            <button @click="appendSmartEdit(tpl)" class="text-xs px-3 py-1.5 rounded-full border transition-colors" :class="appliedSmartEdits.includes(tpl.id) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'" x-text="tpl.name"></button>
+                        </template>
+                        <span x-show="smartEditTemplates.length === 0" class="text-xs text-gray-400">No templates configured</span>
+                    </div>
                     <label class="block text-sm font-medium text-blue-800 mb-2">What changes do you want?</label>
-                    <textarea x-model="spinChangeRequest" rows="3" class="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Make it more formal, add a conclusion paragraph, rewrite the intro..."></textarea>
+                    <textarea x-model="spinChangeRequest" rows="4" class="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Make it more formal, add a conclusion paragraph, rewrite the intro..."></textarea>
                     <button @click="requestSpinChanges()" :disabled="spinning || !spinChangeRequest.trim()" class="mt-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
                         <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         <span x-text="spinning ? 'Processing...' : 'Send to AI'"></span>
@@ -921,9 +914,10 @@ function publishPipeline() {
         spinning: false,
         spunContent: '',
         spunWordCount: 0,
-        spinSourceView: false,
         spinChangeRequest: '',
         showChangeInput: false,
+        smartEditTemplates: [],
+        appliedSmartEdits: [],
         tokenUsage: null,
         spinError: '',
 
@@ -1421,6 +1415,7 @@ function publishPipeline() {
                     this.spunContent = data.html;
                     this.spunWordCount = data.word_count;
                     this.tokenUsage = data.usage;
+                    this.setSpinEditor(data.html);
                     this.showNotification('success', data.message);
                 } else {
                     this.spinError = data.message;
@@ -1432,6 +1427,9 @@ function publishPipeline() {
         },
 
         acceptSpin() {
+            // Read latest content from spin TinyMCE editor
+            const spinEditor = tinymce.get('spin-preview-editor');
+            this.spunContent = spinEditor ? spinEditor.getContent() : this.spunContent;
             this.editorContent = this.spunContent;
             // Auto-extract title from first H1 tag
             if (!this.articleTitle) {
@@ -1447,7 +1445,11 @@ function publishPipeline() {
         },
 
         async requestSpinChanges() {
-            if (!this.spinChangeRequest.trim() || !this.spunContent) return;
+            if (!this.spinChangeRequest.trim()) return;
+            // Read latest from spin TinyMCE
+            const spinEditor = tinymce.get('spin-preview-editor');
+            const currentContent = spinEditor ? spinEditor.getContent() : this.spunContent;
+            if (!currentContent) return;
             this.spinning = true;
             this.spinError = '';
             try {
@@ -1455,7 +1457,7 @@ function publishPipeline() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
                     body: JSON.stringify({
-                        source_texts: [this.spunContent],
+                        source_texts: [currentContent],
                         template_id: this.selectedTemplateId || null,
                         preset_id: this.selectedPresetId || null,
                         model: this.aiModel,
@@ -1467,8 +1469,10 @@ function publishPipeline() {
                     this.spunContent = data.html;
                     this.spunWordCount = data.word_count;
                     this.tokenUsage = data.usage;
+                    this.setSpinEditor(data.html);
                     this.spinChangeRequest = '';
                     this.showChangeInput = false;
+                    this.appliedSmartEdits = [];
                     this.showNotification('success', 'Changes applied.');
                 } else {
                     this.spinError = data.message;
@@ -1477,6 +1481,35 @@ function publishPipeline() {
                 this.spinError = 'Network error.';
             }
             this.spinning = false;
+        },
+
+        setSpinEditor(html) {
+            this.$nextTick(() => {
+                const wait = setInterval(() => {
+                    const editor = tinymce.get('spin-preview-editor');
+                    if (editor) { clearInterval(wait); editor.setContent(html || ''); }
+                }, 200);
+            });
+        },
+
+        async loadSmartEdits() {
+            if (this.smartEditTemplates.length > 0) return;
+            try {
+                const resp = await fetch('{{ route("publish.smart-edits.index") }}?format=json', { headers: { 'Accept': 'application/json' } });
+                this.smartEditTemplates = await resp.json();
+            } catch (e) { this.smartEditTemplates = []; }
+        },
+
+        appendSmartEdit(tpl) {
+            if (this.appliedSmartEdits.includes(tpl.id)) {
+                // Remove it
+                this.appliedSmartEdits = this.appliedSmartEdits.filter(id => id !== tpl.id);
+                this.spinChangeRequest = this.spinChangeRequest.replace('[' + tpl.name + '] ' + tpl.prompt + '\n', '');
+            } else {
+                // Append it
+                this.appliedSmartEdits.push(tpl.id);
+                this.spinChangeRequest = this.spinChangeRequest + '[' + tpl.name + '] ' + tpl.prompt + '\n';
+            }
         },
 
         // ── Step 8: Editor ────────────────────────────────
