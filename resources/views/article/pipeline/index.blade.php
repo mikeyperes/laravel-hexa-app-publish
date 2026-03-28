@@ -650,7 +650,65 @@
                     Generating titles, categories & tags...
                 </div>
 
-                {{-- AI call cost notification --}}
+                {{-- Photo Search Panel --}}
+                <div class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h5 class="text-sm font-semibold text-gray-700">Photos</h5>
+                        <div class="flex items-center gap-2">
+                            <span x-show="selectedPreset?.image_preference" x-cloak class="text-xs text-gray-400" x-text="'Preset: ' + (selectedPreset?.image_preference || '')"></span>
+                            <button @click="showPhotoPanel = !showPhotoPanel" class="text-xs text-blue-600 hover:text-blue-800" x-text="showPhotoPanel ? 'Hide' : 'Show Search'"></button>
+                        </div>
+                    </div>
+
+                    {{-- AI photo suggestions --}}
+                    <div x-show="photoSuggestions.length > 0" class="mb-3">
+                        <p class="text-xs text-gray-500 mb-2">AI recommended photos:</p>
+                        <div class="flex flex-wrap gap-2">
+                            <template x-for="(ps, idx) in photoSuggestions" :key="idx">
+                                <button @click="photoSearch = ps.search_term; showPhotoPanel = true; searchPhotos()" class="text-xs px-3 py-1.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100" x-text="ps.search_term"></button>
+                            </template>
+                        </div>
+                    </div>
+
+                    {{-- Search panel --}}
+                    <div x-show="showPhotoPanel" x-cloak>
+                        <div class="flex gap-2 mb-3">
+                            <input type="text" x-model="photoSearch" @keydown.enter="searchPhotos()" placeholder="Search photos..." class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <button @click="searchPhotos()" :disabled="photoSearching" class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2">
+                                <svg x-show="photoSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                Search
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-400 mb-2">Sizes shown are originals. Final WordPress sizes confirmed during publish preparation.</p>
+                        <div x-show="photoResults.length > 0" x-cloak class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                            <template x-for="(photo, idx) in photoResults" :key="idx">
+                                <div class="relative group cursor-pointer" @click="insertingPhoto = photo; photoCaption = photo.alt || photo.description || articleTitle">
+                                    <img :src="photo.thumbnail || photo.url" :alt="photo.alt || ''" class="w-full h-24 object-cover rounded-lg border border-gray-200">
+                                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 rounded-lg transition-all flex items-center justify-center">
+                                        <span class="text-white text-xs font-medium opacity-0 group-hover:opacity-100">Insert</span>
+                                    </div>
+                                    <p class="text-[10px] text-gray-400 mt-1" x-text="(photo.width || '?') + 'x' + (photo.height || '?') + ' — ' + (photo.source || '')"></p>
+                                </div>
+                            </template>
+                        </div>
+
+                        {{-- Caption input for selected photo --}}
+                        <div x-show="insertingPhoto" x-cloak class="mt-3 bg-white border border-blue-200 rounded-lg p-3">
+                            <div class="flex items-start gap-3">
+                                <img :src="insertingPhoto?.thumbnail || insertingPhoto?.url" class="w-20 h-16 object-cover rounded border">
+                                <div class="flex-1">
+                                    <label class="block text-xs text-gray-500 mb-1">Caption</label>
+                                    <input type="text" x-model="photoCaption" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Photo caption...">
+                                    <div class="flex gap-2 mt-2">
+                                        <button @click="insertPhotoIntoEditor()" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-blue-700">Insert at Cursor</button>
+                                        <button @click="insertingPhoto = null" class="text-xs text-gray-500 hover:text-gray-700 px-2">Cancel</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 {{-- Action buttons + Quick links — same row --}}
                 <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
                     <div class="flex items-center gap-3">
@@ -665,6 +723,10 @@
                         <button @click="showChangeInput = !showChangeInput; loadSmartEdits()" class="bg-blue-100 text-blue-700 px-5 py-2 rounded-lg text-sm hover:bg-blue-200 inline-flex items-center gap-2">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
                             Request Changes
+                        </button>
+                        <button @click="saveDraftNow()" :disabled="savingDraft" class="bg-gray-200 text-gray-700 px-5 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-50 inline-flex items-center gap-2">
+                            <svg x-show="savingDraft" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <span x-text="savingDraft ? 'Saving...' : 'Save Draft'"></span>
                         </button>
                     </div>
                     <div class="flex items-center gap-4 text-xs text-gray-400">
@@ -761,6 +823,12 @@
                         <span class="text-gray-400 text-xs">Links</span>
                         <p class="font-medium text-gray-800" x-text="suggestedUrls.length + ' link(s)'"></p>
                     </div>
+                </div>
+
+                {{-- Article Preview --}}
+                <div class="mt-4 border-t border-gray-200 pt-3">
+                    <p class="text-xs text-gray-400 mb-2">Article Preview (first 600 characters)</p>
+                    <div class="text-sm text-gray-700 leading-relaxed break-words" x-html="spunContent ? spunContent.substring(0, 600) + '...' : 'No content'"></div>
                 </div>
             </div>
 
@@ -1114,6 +1182,13 @@ function publishPipeline() {
         selectedTags: [],
         metadataLoading: false,
         suggestedUrls: [],
+        photoSuggestions: [],
+        photoSearch: '',
+        photoSearching: false,
+        photoResults: [],
+        showPhotoPanel: false,
+        insertingPhoto: null,
+        photoCaption: '',
         lastAiCall: null,
         appliedSmartEdits: [],
         tokenUsage: null,
@@ -1635,6 +1710,7 @@ function publishPipeline() {
                     this.showNotification('success', data.message);
                     this.generateMetadata(data.html);
                     this.extractArticleLinks(data.html);
+                    if (data.photo_suggestions) this.photoSuggestions = data.photo_suggestions;
                 } else {
                     this.spinError = data.message;
                 }
@@ -1781,6 +1857,35 @@ function publishPipeline() {
                 title: a.textContent.trim() || a.getAttribute('href'),
                 nofollow: (a.getAttribute('rel') || '').includes('nofollow'),
             })).filter(l => l.url && l.url.startsWith('http'));
+        },
+
+        async searchPhotos() {
+            if (!this.photoSearch.trim()) return;
+            this.photoSearching = true;
+            this.photoResults = [];
+            try {
+                const resp = await fetch('{{ route("publish.search.images.post") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({ query: this.photoSearch, per_page: 15 })
+                });
+                const data = await resp.json();
+                this.photoResults = data.data?.photos || [];
+            } catch (e) { this.photoResults = []; }
+            this.photoSearching = false;
+        },
+
+        insertPhotoIntoEditor() {
+            if (!this.insertingPhoto) return;
+            const photo = this.insertingPhoto;
+            const caption = this.photoCaption || '';
+            const html = '<figure class="wp-block-image"><img src="' + (photo.url || photo.src) + '" alt="' + caption.replace(/"/g, '&quot;') + '"><figcaption>' + caption + '</figcaption></figure>';
+            const editor = tinymce.get('spin-preview-editor');
+            if (editor) {
+                editor.execCommand('mceInsertContent', false, html);
+            }
+            this.insertingPhoto = null;
+            this.photoCaption = '';
         },
 
         async loadSmartEdits() {

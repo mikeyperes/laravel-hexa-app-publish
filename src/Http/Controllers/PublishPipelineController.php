@@ -229,7 +229,7 @@ class PublishPipelineController extends Controller
             }
         }
 
-        $htmlInstruction = "\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title — the title is handled separately. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis — NEVER use ** or * markdown. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links with relevant supporting URLs where appropriate. Do NOT output markdown. Do NOT wrap in ```html code blocks. Output raw HTML tags directly.";
+        $htmlInstruction = "\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title — the title is handled separately. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis — NEVER use ** or * markdown. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links with relevant supporting URLs where appropriate. Do NOT output markdown. Do NOT wrap in ```html code blocks. Output raw HTML tags directly.\n\nPHOTO PLACEMENT: Insert HTML comments where photos should be placed, using this exact format: <!-- PHOTO: descriptive search term for stock photo | suggested caption text -->. Place 2-4 photo markers throughout the article at natural breaking points (after key paragraphs, between sections). The search term should be specific and visual (e.g. 'business executive speaking at podium' not just 'business').";
 
         $systemPrompt = !empty($systemParts)
             ? implode("\n\n", $systemParts) . $htmlInstruction
@@ -333,6 +333,18 @@ class PublishPipelineController extends Controller
             }, $lines));
         }
 
+        // Extract photo placement suggestions from HTML comments
+        $photoSuggestions = [];
+        if (preg_match_all('/<!--\s*PHOTO:\s*(.+?)\s*\|\s*(.+?)\s*-->/', $content, $photoMatches, PREG_SET_ORDER)) {
+            foreach ($photoMatches as $i => $match) {
+                $photoSuggestions[] = [
+                    'search_term' => trim($match[1]),
+                    'caption' => trim($match[2]),
+                    'position' => $i,
+                ];
+            }
+        }
+
         $plainText = strip_tags($content);
         $wordCount = str_word_count($plainText);
 
@@ -378,6 +390,7 @@ class PublishPipelineController extends Controller
             'user_name'  => auth()->user()?->name ?? 'System',
             'ip'         => request()->ip(),
             'timestamp_utc' => now()->utc()->format('Y-m-d H:i:s'),
+            'photo_suggestions' => $photoSuggestions,
         ]);
     }
 
