@@ -536,7 +536,7 @@
                     <template x-if="completedSteps.includes(7)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(7)"><span>7</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Spin Article</span>
+                <span class="font-semibold text-gray-800">Create Article</span>
                 <span x-show="spunContent" x-cloak class="text-sm text-green-600" x-text="spunWordCount + ' words'"></span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(7) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -577,8 +577,8 @@
                 {{-- Title textbox --}}
                 <div class="mb-3">
                     <label class="block text-xs text-gray-500 mb-1">Article Title</label>
-                    <div x-show="metadataLoading && !articleTitle" class="w-full border border-gray-200 rounded-lg px-4 py-3 bg-gray-50 animate-pulse h-[52px]"></div>
-                    <input x-show="!metadataLoading || articleTitle" type="text" x-model="articleTitle" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-lg font-bold" placeholder="Enter article title...">
+                    <div x-show="metadataLoading && !articleTitle" class="w-full border border-gray-200 rounded-lg px-4 py-3 bg-gray-50 animate-pulse h-[60px]"></div>
+                    <textarea x-show="!metadataLoading || articleTitle" x-model="articleTitle" rows="2" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-lg font-bold resize-none overflow-hidden" placeholder="Enter article title..." @input="$el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px'"></textarea>
                 </div>
 
                 <x-hexa-tinymce name="spin-preview" value="" preset="wordpress" :height="700" id="spin-preview-editor" />
@@ -622,13 +622,20 @@
                     </div>
                 </div>
 
-                {{-- Supporting URLs --}}
+                {{-- Article Links --}}
                 <div x-show="suggestedUrls.length > 0" x-cloak class="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h5 class="text-sm font-semibold text-gray-700 mb-2">Supporting URLs</h5>
+                    <h5 class="text-sm font-semibold text-gray-700 mb-2">Article Links <span class="font-normal text-gray-400" x-text="'(' + suggestedUrls.length + ')'"></span></h5>
                     <div class="space-y-2">
                         <template x-for="(link, idx) in suggestedUrls" :key="idx">
-                            <div class="flex items-center gap-2 text-sm">
-                                <a :href="link.url" target="_blank" class="text-blue-600 hover:underline break-all flex-1" x-text="link.title || link.url"></a>
+                            <div class="flex items-center gap-3 text-sm bg-white rounded-lg px-3 py-2 border border-gray-100">
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-gray-800 font-medium break-words" x-text="link.title"></p>
+                                    <a :href="link.url" target="_blank" class="text-blue-600 hover:underline text-xs break-all inline-flex items-center gap-1">
+                                        <span x-text="link.url"></span>
+                                        <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                    </a>
+                                </div>
+                                <button @click="link.nofollow = !link.nofollow" class="text-xs px-2 py-1 rounded flex-shrink-0" :class="link.nofollow ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'" x-text="link.nofollow ? 'nofollow' : 'follow'"></button>
                                 <button @click="suggestedUrls.splice(idx, 1)" class="text-red-400 hover:text-red-600 flex-shrink-0">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                 </button>
@@ -699,7 +706,7 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 8: Editor
+         Step 8: Publish
          ══════════════════════════════════════════════════════════════ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 8, 'opacity-50': !isStepAccessible(8) }">
         <button @click="toggleStep(8)" :disabled="!isStepAccessible(8)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
@@ -707,25 +714,76 @@
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                       :class="completedSteps.includes(8) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
                     <template x-if="completedSteps.includes(8)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(8)"><span>9</span></template>
+                    <template x-if="!completedSteps.includes(8)"><span>8</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Editor</span>
+                <span class="font-semibold text-gray-800">Publish</span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(8) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <div x-show="openSteps.includes(8)" x-cloak x-collapse class="px-4 pb-4">
-            {{-- Title --}}
-            <div class="mb-3">
-                <label class="block text-xs text-gray-500 mb-1">Article Title</label>
-                <input type="text" x-model="articleTitle" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-lg font-bold" placeholder="Enter article title...">
+            {{-- Review Section --}}
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                <h5 class="text-sm font-semibold text-gray-700 mb-3">Review Before Publishing</h5>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                    <div>
+                        <span class="text-gray-400 text-xs">Title</span>
+                        <p class="font-medium text-gray-800 break-words" x-text="articleTitle || 'No title set'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Word Count</span>
+                        <p class="font-medium text-gray-800" x-text="spunWordCount + ' words'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Website</span>
+                        <p class="font-medium text-gray-800" x-text="selectedSite ? selectedSite.name : 'Not selected'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">WP Template</span>
+                        <p class="font-medium text-gray-800" x-text="selectedPreset ? selectedPreset.name : 'None'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Follow Links</span>
+                        <p class="font-medium text-gray-800" x-text="selectedPreset?.follow_links || 'Default'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Publish Action</span>
+                        <p class="font-medium text-gray-800" x-text="publishAction === 'publish' ? 'Publish Immediately' : (publishAction === 'draft_wp' ? 'WordPress Draft' : 'Local Draft')"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Categories</span>
+                        <p class="font-medium text-gray-800 break-words" x-text="suggestedCategories.length ? suggestedCategories.join(', ') : 'None'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Tags</span>
+                        <p class="font-medium text-gray-800 break-words" x-text="suggestedTags.length ? suggestedTags.join(', ') : 'None'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Links</span>
+                        <p class="font-medium text-gray-800" x-text="suggestedUrls.length + ' link(s)'"></p>
+                    </div>
+                </div>
             </div>
 
-            {{-- TinyMCE editor via core component --}}
+            {{-- Publish Action Selection --}}
             <div class="mb-4">
-                <x-hexa-tinymce name="pipeline-body" value="" preset="wordpress" :height="500" id="pipeline-editor" />
+                <label class="block text-xs text-gray-500 mb-2">Publish Action</label>
+                <div class="space-y-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" x-model="publishAction" value="publish" class="text-blue-600">
+                        <span class="text-sm">Publish immediately to WordPress</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" x-model="publishAction" value="draft_wp" class="text-blue-600">
+                        <span class="text-sm">Save as WordPress draft</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" x-model="publishAction" value="draft_local" class="text-blue-600">
+                        <span class="text-sm">Save as local draft only</span>
+                    </label>
+                </div>
             </div>
 
-            {{-- Photos panel --}}
+            {{-- Prepare & Publish --}}
             <div class="border border-gray-200 rounded-lg p-3 mb-4">
                 <h5 class="text-sm font-semibold text-gray-700 mb-2">Insert Photos</h5>
                 <div class="flex gap-2 mb-2">
@@ -988,7 +1046,7 @@ function publishPipeline() {
         currentStep: 1,
         openSteps: [1],
         completedSteps: [],
-        stepLabels: ['User', 'WP Template', 'Website', 'Sources', 'Get Articles', 'AI Template', 'Spin', 'Editor', 'Prepare', 'Publish'],
+        stepLabels: ['User', 'WP Template', 'Website', 'Sources', 'Get Articles', 'AI Template', 'Create Article', 'Publish'],
 
         // Step 1 — User
         userSearch: '',
@@ -1609,7 +1667,6 @@ function publishPipeline() {
             }
             this.completeStep(7);
             this.openStep(8);
-            this.$nextTick(() => this.initEditor());
             this.autoSaveDraft();
         },
 
@@ -1707,6 +1764,7 @@ function publishPipeline() {
             this.suggestedUrls = Array.from(anchors).map(a => ({
                 url: a.getAttribute('href'),
                 title: a.textContent.trim() || a.getAttribute('href'),
+                nofollow: (a.getAttribute('rel') || '').includes('nofollow'),
             })).filter(l => l.url && l.url.startsWith('http'));
         },
 
