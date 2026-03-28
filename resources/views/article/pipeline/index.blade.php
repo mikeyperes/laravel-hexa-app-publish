@@ -988,7 +988,7 @@ function publishPipeline() {
                     if (state.aiModel) this.aiModel = state.aiModel;
                     if (state.articleTitle) this.articleTitle = state.articleTitle;
                     if (state.publishAction) this.publishAction = state.publishAction;
-                    if (state.spunContent) { this.spunContent = state.spunContent; this.spunWordCount = state.spunWordCount || 0; }
+                    if (state.spunContent) { this.spunContent = state.spunContent; this.spunWordCount = state.spunWordCount || 0; this.setSpinEditor(state.spunContent); }
                     if (state.editorContent) this.editorContent = state.editorContent;
                     if (state.tokenUsage) this.tokenUsage = state.tokenUsage;
                     // Reload presets/templates THEN re-select saved values
