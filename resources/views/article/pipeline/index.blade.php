@@ -1186,7 +1186,7 @@ function publishPipeline() {
                     if (state.aiModel) this.aiModel = state.aiModel;
                     if (state.articleTitle) this.articleTitle = state.articleTitle;
                     if (state.publishAction) this.publishAction = state.publishAction;
-                    if (state.spunContent) { this.spunContent = state.spunContent; this.spunWordCount = state.spunWordCount || 0; this.setSpinEditor(state.spunContent); }
+                    if (state.spunContent) { this.spunContent = state.spunContent; this.spunWordCount = state.spunWordCount || 0; this.setSpinEditor(state.spunContent); this.extractArticleLinks(state.spunContent); }
                     if (state.suggestedTitles) this.suggestedTitles = state.suggestedTitles;
                     if (state.suggestedCategories) this.suggestedCategories = state.suggestedCategories;
                     if (state.suggestedTags) this.suggestedTags = state.suggestedTags;
@@ -1718,10 +1718,25 @@ function publishPipeline() {
                     if (editor) {
                         clearInterval(wait);
                         editor.setContent(html || '');
-                        // Listen for changes to re-extract links
+                        // Auto-resize to fit content — no scrolling
+                        setTimeout(() => {
+                            const body = editor.getBody();
+                            if (body) {
+                                const h = body.scrollHeight + 80;
+                                editor.getContainer().style.height = Math.max(400, h) + 'px';
+                                editor.getContentAreaContainer().querySelector('iframe').style.height = Math.max(400, h) + 'px';
+                            }
+                        }, 300);
+                        // Listen for changes to re-extract links + auto-resize
                         editor.off('change keyup');
                         editor.on('change keyup', () => {
                             self.extractArticleLinks(editor.getContent());
+                            const body = editor.getBody();
+                            if (body) {
+                                const h = body.scrollHeight + 80;
+                                editor.getContainer().style.height = Math.max(400, h) + 'px';
+                                editor.getContentAreaContainer().querySelector('iframe').style.height = Math.max(400, h) + 'px';
+                            }
                         });
                     }
                 }, 200);
