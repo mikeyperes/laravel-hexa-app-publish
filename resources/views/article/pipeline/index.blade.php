@@ -666,64 +666,122 @@
                     Generating titles, categories & tags...
                 </div>
 
-                {{-- Photo Search Panel --}}
-                <div class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                {{-- Photo Suggestions Panel --}}
+                <div class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4" data-photo-section>
                     <div class="flex items-center justify-between mb-3">
                         <h5 class="text-sm font-semibold text-gray-700">Photos</h5>
-                        <div class="flex items-center gap-2">
-                            <span x-show="selectedPreset?.image_preference" x-cloak class="text-xs text-gray-400" x-text="'Preset: ' + (selectedPreset?.image_preference || '')"></span>
-                            <button @click="showPhotoPanel = !showPhotoPanel" class="text-xs text-blue-600 hover:text-blue-800" x-text="showPhotoPanel ? 'Hide' : 'Show Search'"></button>
-                        </div>
+                        <span x-show="autoFetchingPhotos" x-cloak class="text-xs text-purple-600 flex items-center gap-1">
+                            <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            Auto-loading photos...
+                        </span>
                     </div>
 
-                    {{-- AI photo suggestions --}}
-                    <div x-show="photoSuggestions.length > 0" class="mb-3">
-                        <p class="text-xs text-gray-500 mb-2">AI recommended photos:</p>
-                        <div class="flex flex-wrap gap-2">
-                            <template x-for="(ps, idx) in photoSuggestions" :key="idx">
-                                <button @click="photoSearch = ps.search_term; showPhotoPanel = true; searchPhotos()" class="text-xs px-3 py-1.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100" x-text="ps.search_term"></button>
-                            </template>
-                        </div>
-                    </div>
-
-                    {{-- Search panel --}}
-                    <div x-show="showPhotoPanel" x-cloak>
-                        <div class="flex gap-2 mb-3">
-                            <input type="text" x-model="photoSearch" @keydown.enter="searchPhotos()" placeholder="Search photos..." class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                            <button @click="searchPhotos()" :disabled="photoSearching" class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2">
-                                <svg x-show="photoSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                Search
-                            </button>
-                        </div>
-                        <p class="text-xs text-gray-400 mb-2">Sizes shown are originals. Final WordPress sizes confirmed during publish preparation.</p>
-                        <div x-show="photoResults.length > 0" x-cloak class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                            <template x-for="(photo, idx) in photoResults" :key="idx">
-                                <div class="relative group cursor-pointer" @click="insertingPhoto = photo; photoCaption = photo.alt || photo.description || articleTitle">
-                                    <img :src="photo.url_thumb || photo.url_large || photo.url_full" :alt="photo.alt || ''" class="w-full h-24 object-cover rounded-lg border border-gray-200">
-                                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 rounded-lg transition-all flex items-center justify-center">
-                                        <span class="text-white text-xs font-medium opacity-0 group-hover:opacity-100">Insert</span>
+                    {{-- AI photo suggestions — one per row with thumbnail --}}
+                    <div x-show="photoSuggestions.length > 0" class="space-y-2 mb-3">
+                        <template x-for="(ps, idx) in photoSuggestions" :key="idx">
+                            <div x-show="!ps.removed" class="border rounded-lg overflow-hidden" :class="ps.confirmed ? 'border-green-300 bg-green-50' : 'border-purple-200 bg-white'">
+                                <div class="flex items-center gap-3 p-3 cursor-pointer" @click="expandedSuggestion = expandedSuggestion === idx ? null : idx">
+                                    <div class="w-16 h-12 flex-shrink-0 rounded overflow-hidden bg-gray-100">
+                                        <img x-show="ps.autoPhoto" x-cloak :src="ps.autoPhoto?.url_thumb" class="w-full h-full object-cover">
+                                        <div x-show="!ps.autoPhoto" class="w-full h-full flex items-center justify-center text-gray-300">
+                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                        </div>
                                     </div>
-                                    <div class="flex items-center justify-between mt-1">
-                                        <span class="text-[10px] text-gray-400" x-text="(photo.width || '?') + 'x' + (photo.height || '?')"></span>
-                                        <span class="text-[10px] px-1.5 py-0.5 rounded font-medium" :class="photo.source === 'pexels' ? 'bg-green-100 text-green-700' : (photo.source === 'unsplash' ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700')" x-text="photo.source"></span>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-medium text-purple-700 break-words" x-text="ps.search_term"></p>
+                                        <p class="text-xs text-gray-500 break-words" x-text="ps.caption"></p>
+                                    </div>
+                                    <div class="flex items-center gap-1 flex-shrink-0">
+                                        <button @click.stop="confirmPhoto(idx)" x-show="!ps.confirmed && ps.autoPhoto" x-cloak class="p-1.5 rounded hover:bg-green-100 text-green-600" title="Confirm photo">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                        </button>
+                                        <span x-show="ps.confirmed" x-cloak class="text-xs text-green-600 font-medium px-1">Confirmed</span>
+                                        <button @click.stop="expandedSuggestion = expandedSuggestion === idx ? null : idx" class="p-1.5 rounded hover:bg-blue-100 text-blue-600" title="Change photo">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
+                                        </button>
+                                        <button @click.stop="removePhotoPlaceholder(idx)" class="p-1.5 rounded hover:bg-red-100 text-red-600" title="Remove">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                        </button>
+                                        <svg class="w-4 h-4 text-gray-400 transition-transform" :class="expandedSuggestion === idx ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                                     </div>
                                 </div>
-                            </template>
-                        </div>
-
-                        {{-- Caption input for selected photo --}}
-                        <div x-show="insertingPhoto" x-cloak class="mt-3 bg-white border border-blue-200 rounded-lg p-3">
-                            <div class="flex items-start gap-3">
-                                <img :src="insertingPhoto?.url_thumb || insertingPhoto?.url_large" class="w-20 h-16 object-cover rounded border">
-                                <div class="flex-1">
-                                    <label class="block text-xs text-gray-500 mb-1">Caption</label>
-                                    <input type="text" x-model="photoCaption" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Photo caption...">
-                                    <div class="flex gap-2 mt-2">
-                                        <button @click="insertPhotoIntoEditor()" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-blue-700">Insert at Cursor</button>
-                                        <button @click="insertingPhoto = null" class="text-xs text-gray-500 hover:text-gray-700 px-2">Cancel</button>
+                                <div x-show="expandedSuggestion === idx" x-cloak class="p-3 pt-0 border-t border-gray-100">
+                                    <div class="flex gap-2 mb-2">
+                                        <input type="text" :value="ps.search_term" @input="photoSuggestions[idx].search_term = $event.target.value" @keydown.enter="searchPhotosForSuggestion(idx)" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search...">
+                                        <button @click="searchPhotosForSuggestion(idx)" class="bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-gray-700">Search</button>
+                                    </div>
+                                    <div x-show="ps.searchResults && ps.searchResults.length > 0" x-cloak class="grid grid-cols-4 md:grid-cols-6 gap-2">
+                                        <template x-for="(photo, pidx) in (ps.searchResults || [])" :key="pidx">
+                                            <div class="cursor-pointer rounded-lg overflow-hidden border-2 hover:border-blue-400 transition-colors"
+                                                 :class="ps.autoPhoto && ps.autoPhoto.url_thumb === photo.url_thumb ? 'border-purple-400' : 'border-gray-200'"
+                                                 @click="selectPhotoForSuggestion(idx, photo)">
+                                                <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-16 object-cover">
+                                            </div>
+                                        </template>
                                     </div>
                                 </div>
                             </div>
+                        </template>
+                    </div>
+
+                    {{-- Manual photo search —  insert at cursor --}}
+                    <div class="border-t border-gray-200 pt-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <p class="text-xs text-gray-500">Manual search — insert at cursor position</p>
+                            <button @click="showPhotoPanel = !showPhotoPanel" class="text-xs text-blue-600 hover:text-blue-800" x-text="showPhotoPanel ? 'Hide Search' : 'Show Search'"></button>
+                        </div>
+                        <div x-show="showPhotoPanel" x-cloak>
+                            <div class="flex gap-2 mb-2">
+                                <input type="text" x-model="photoSearch" @keydown.enter="searchPhotos()" placeholder="Search photos..." class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <button @click="searchPhotos()" :disabled="photoSearching" class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2">
+                                    <svg x-show="photoSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                    Search
+                                </button>
+                            </div>
+                            <div x-show="photoResults.length > 0" x-cloak class="grid grid-cols-3 md:grid-cols-5 gap-2">
+                                <template x-for="(photo, pidx) in photoResults" :key="pidx">
+                                    <div class="relative group cursor-pointer" @click="insertingPhoto = photo; photoCaption = photo.alt || articleTitle">
+                                        <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-20 object-cover rounded-lg border border-gray-200">
+                                        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 rounded-lg transition-all flex items-center justify-center">
+                                            <span class="text-white text-xs font-medium opacity-0 group-hover:opacity-100">Select</span>
+                                        </div>
+                                        <div class="flex items-center justify-between mt-1">
+                                            <span class="text-[10px] text-gray-400" x-text="(photo.width || '?') + 'x' + (photo.height || '?')"></span>
+                                            <span class="text-[10px] px-1.5 py-0.5 rounded font-medium" :class="photo.source === 'pexels' ? 'bg-green-100 text-green-700' : (photo.source === 'unsplash' ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700')" x-text="photo.source"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                            <div x-show="insertingPhoto" x-cloak class="mt-3 bg-white border border-blue-200 rounded-lg p-3">
+                                <div class="flex items-start gap-3">
+                                    <img :src="insertingPhoto?.url_thumb || insertingPhoto?.url_large" class="w-20 h-16 object-cover rounded border">
+                                    <div class="flex-1">
+                                        <label class="block text-xs text-gray-500 mb-1">Caption</label>
+                                        <input type="text" x-model="photoCaption" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Photo caption...">
+                                        <div class="flex gap-2 mt-2">
+                                            <button @click="insertPhotoIntoEditor()" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-blue-700">Insert at Cursor</button>
+                                            <button @click="insertingPhoto = null" class="text-xs text-gray-500 hover:text-gray-700 px-2">Cancel</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- AI Photo Instructions (subtle expandable) --}}
+                    <div class="border-t border-gray-200 pt-3 mt-3" x-data="{ showInstructions: false }">
+                        <button @click="showInstructions = !showInstructions" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
+                            <svg class="w-3 h-3 transition-transform" :class="showInstructions ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                            AI Photo Instructions
+                        </button>
+                        <div x-show="showInstructions" x-cloak class="mt-2 text-xs text-gray-500 bg-gray-100 rounded p-3 break-words space-y-1">
+                            <p>AI was instructed to place photo markers at natural breaking points between sections. Search terms are specific and visual. Captions are complete sentences describing the photo in context.</p>
+                            <template x-if="selectedPreset?.image_preference">
+                                <p>Preset image preference: <span x-text="selectedPreset.image_preference" class="text-gray-700 font-medium"></span></p>
+                            </template>
+                            <template x-if="selectedTemplate?.photos_per_article">
+                                <p>Template photo count: <span x-text="selectedTemplate.photos_per_article" class="text-gray-700 font-medium"></span></p>
+                            </template>
                         </div>
                     </div>
                 </div>
@@ -1121,6 +1179,9 @@ function publishPipeline() {
         showPhotoPanel: false,
         insertingPhoto: null,
         photoCaption: '',
+        _photoSuggestionIdx: null,
+        expandedSuggestion: null,
+        autoFetchingPhotos: false,
         lastAiCall: null,
         tokenUsage: null,
         spinError: '',
@@ -1635,7 +1696,10 @@ function publishPipeline() {
                     this.showNotification('success', data.message);
                     this.generateMetadata(data.html);
                     this.extractArticleLinks(data.html);
-                    if (data.photo_suggestions) this.photoSuggestions = data.photo_suggestions;
+                    if (data.photo_suggestions) {
+                        this.photoSuggestions = data.photo_suggestions.map(ps => ({...ps, autoPhoto: null, confirmed: false, removed: false, searchResults: []}));
+                        this.autoFetchPhotos();
+                    }
                 } else {
                     this.spinError = data.message;
                 }
@@ -1719,29 +1783,62 @@ function publishPipeline() {
                     if (editor) {
                         clearInterval(wait);
                         editor.setContent(html || '');
-                        // Use TinyMCE autoresize — reinit with plugin
                         hexaReinitTinyMCE('spin-preview-editor', {
                             plugins: 'lists link image media table fullscreen wordcount code searchreplace autolink autoresize',
-                            toolbar: 'undo redo | blocks | bold italic underline strikethrough | bullist numlist | link image media | table | alignleft aligncenter alignright | outdent indent | fullscreen code searchreplace',
+                            toolbar: 'undo redo | blocks | bold italic underline strikethrough | bullist numlist | link image media | addPhotoBtn | table | alignleft aligncenter alignright | outdent indent | fullscreen code searchreplace',
                             menubar: true,
                             min_height: 400,
                             autoresize_bottom_margin: 50,
+                            content_style: '.photo-placeholder { cursor: pointer !important; } .photo-placeholder:hover { opacity: 0.9; }',
                             setup: function(ed) {
+                                // Custom "Add Photo" toolbar button
+                                ed.ui.registry.addButton('addPhotoBtn', {
+                                    icon: 'image',
+                                    tooltip: 'Add Photo at Cursor',
+                                    onAction: function() {
+                                        self._photoSuggestionIdx = null;
+                                        self.photoSearch = '';
+                                        self.showPhotoPanel = true;
+                                        self.$nextTick(() => {
+                                            document.querySelector('[data-photo-section]')?.scrollIntoView({behavior: 'smooth', block: 'center'});
+                                        });
+                                    }
+                                });
+
                                 ed.on('init', function() { ed.setContent(html || ''); });
                                 ed.on('change keyup', function() { self.extractArticleLinks(ed.getContent()); });
+
+                                // Handle clicks on photo placeholders and action buttons
                                 ed.on('click', function(e) {
-                                    const placeholder = e.target.closest('.photo-placeholder') || (e.target.classList && e.target.classList.contains('photo-placeholder') ? e.target : null);
+                                    const target = e.target;
+
+                                    // Action button: Confirm
+                                    if (target.classList && target.classList.contains('photo-confirm')) {
+                                        e.preventDefault();
+                                        const ph = target.closest('.photo-placeholder');
+                                        if (ph) self.confirmPhoto(parseInt(ph.getAttribute('data-idx')));
+                                        return;
+                                    }
+                                    // Action button: Change
+                                    if (target.classList && target.classList.contains('photo-change')) {
+                                        e.preventDefault();
+                                        const ph = target.closest('.photo-placeholder');
+                                        if (ph) self.changePhoto(parseInt(ph.getAttribute('data-idx')));
+                                        return;
+                                    }
+                                    // Action button: Remove
+                                    if (target.classList && target.classList.contains('photo-remove')) {
+                                        e.preventDefault();
+                                        const ph = target.closest('.photo-placeholder');
+                                        if (ph) self.removePhotoPlaceholder(parseInt(ph.getAttribute('data-idx')));
+                                        return;
+                                    }
+
+                                    // Clicking placeholder itself — scroll to its suggestion row
+                                    const placeholder = target.closest('.photo-placeholder') || (target.classList && target.classList.contains('photo-placeholder') ? target : null);
                                     if (placeholder) {
-                                        const term = placeholder.getAttribute('data-search');
-                                        const caption = placeholder.getAttribute('data-caption');
-                                        if (term) {
-                                            self.photoSearch = term;
-                                            self.photoCaption = caption || '';
-                                            self.showPhotoPanel = true;
-                                            self.searchPhotos();
-                                            // Mark this placeholder as the insertion target
-                                            self._photoInsertTarget = placeholder;
-                                        }
+                                        const idx = parseInt(placeholder.getAttribute('data-idx'));
+                                        if (!isNaN(idx)) self.changePhoto(idx);
                                     }
                                 });
                             }
@@ -1815,22 +1912,126 @@ function publishPipeline() {
             const figureHtml = '<figure class="wp-block-image"><img src="' + imgUrl + '" alt="' + caption.replace(/"/g, '&quot;') + '" style="max-width:100%;height:auto"><figcaption>' + caption + '</figcaption></figure>';
             const editor = tinymce.get('spin-preview-editor');
             if (editor) {
-                // If a photo placeholder was clicked, replace it
-                if (this._photoInsertTarget) {
-                    const dom = editor.dom;
-                    const el = editor.getBody().querySelector('.photo-placeholder[data-search="' + (this._photoInsertTarget.getAttribute('data-search') || '') + '"]');
-                    if (el) {
-                        dom.setOuterHTML(el, figureHtml);
+                if (this._photoSuggestionIdx !== null) {
+                    const placeholder = editor.getBody().querySelector('.photo-placeholder[data-idx="' + this._photoSuggestionIdx + '"]');
+                    if (placeholder) {
+                        editor.dom.setOuterHTML(placeholder, figureHtml);
+                        this.photoSuggestions[this._photoSuggestionIdx].autoPhoto = photo;
+                        this.photoSuggestions[this._photoSuggestionIdx].confirmed = true;
                     } else {
                         editor.execCommand('mceInsertContent', false, figureHtml);
                     }
-                    this._photoInsertTarget = null;
+                    this._photoSuggestionIdx = null;
                 } else {
                     editor.execCommand('mceInsertContent', false, figureHtml);
                 }
             }
             this.insertingPhoto = null;
             this.photoCaption = '';
+            this.showPhotoPanel = false;
+        },
+
+        // ── Photo Management ─────────────────────────────
+        async autoFetchPhotos() {
+            if (this.photoSuggestions.length === 0) return;
+            this.autoFetchingPhotos = true;
+            const promises = this.photoSuggestions.map(async (ps, idx) => {
+                try {
+                    const resp = await fetch('{{ route("publish.search.images.post") }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                        body: JSON.stringify({ query: ps.search_term, per_page: 6 })
+                    });
+                    const data = await resp.json();
+                    const photos = data.data?.photos || [];
+                    if (photos.length > 0) {
+                        this.photoSuggestions[idx].autoPhoto = photos[0];
+                        this.photoSuggestions[idx].searchResults = photos;
+                        this.updatePlaceholderInEditor(idx);
+                    }
+                } catch (e) { /* silently fail */ }
+            });
+            await Promise.all(promises);
+            this.autoFetchingPhotos = false;
+        },
+
+        updatePlaceholderInEditor(idx) {
+            const editor = tinymce.get('spin-preview-editor');
+            if (!editor) return;
+            const placeholder = editor.getBody().querySelector('.photo-placeholder[data-idx="' + idx + '"]');
+            if (!placeholder) return;
+            const ps = this.photoSuggestions[idx];
+            if (!ps || !ps.autoPhoto) return;
+            const thumbUrl = ps.autoPhoto.url_thumb || ps.autoPhoto.url_large;
+            placeholder.style.border = '2px solid #a78bfa';
+            placeholder.style.background = '#faf5ff';
+            placeholder.style.textAlign = 'left';
+            placeholder.style.padding = '8px 12px';
+            placeholder.innerHTML = '<div style="display:flex;align-items:center;gap:12px;">'
+                + '<img src="' + thumbUrl + '" style="width:120px;height:80px;object-fit:cover;border-radius:6px;flex-shrink:0;" />'
+                + '<div style="flex:1;min-width:0;">'
+                + '<p style="margin:0 0 4px;font-size:13px;color:#7c3aed;font-weight:600;">' + this._escHtml(ps.search_term) + '</p>'
+                + '<p style="margin:0 0 8px;font-size:12px;color:#6b7280;">' + this._escHtml(ps.caption) + '</p>'
+                + '<span class="photo-confirm" style="cursor:pointer;display:inline-block;background:#16a34a;color:white;padding:2px 8px;border-radius:4px;font-size:11px;margin-right:4px;font-weight:600;">Confirm</span>'
+                + '<span class="photo-change" style="cursor:pointer;display:inline-block;background:#2563eb;color:white;padding:2px 8px;border-radius:4px;font-size:11px;margin-right:4px;">Change</span>'
+                + '<span class="photo-remove" style="cursor:pointer;display:inline-block;background:#dc2626;color:white;padding:2px 8px;border-radius:4px;font-size:11px;">Remove</span>'
+                + '</div></div>';
+        },
+
+        _escHtml(str) {
+            return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        },
+
+        confirmPhoto(idx) {
+            const ps = this.photoSuggestions[idx];
+            if (!ps || !ps.autoPhoto) return;
+            const editor = tinymce.get('spin-preview-editor');
+            if (!editor) return;
+            const placeholder = editor.getBody().querySelector('.photo-placeholder[data-idx="' + idx + '"]');
+            if (!placeholder) return;
+            const photo = ps.autoPhoto;
+            const caption = ps.caption || '';
+            const imgUrl = photo.url_full || photo.url_large || photo.url_thumb;
+            const figureHtml = '<figure class="wp-block-image"><img src="' + imgUrl + '" alt="' + caption.replace(/"/g, '&quot;') + '" style="max-width:100%;height:auto"><figcaption>' + caption + '</figcaption></figure>';
+            editor.dom.setOuterHTML(placeholder, figureHtml);
+            this.photoSuggestions[idx].confirmed = true;
+        },
+
+        changePhoto(idx) {
+            this._photoSuggestionIdx = idx;
+            this.expandedSuggestion = idx;
+            this.$nextTick(() => {
+                document.querySelector('[data-photo-section]')?.scrollIntoView({behavior: 'smooth', block: 'center'});
+            });
+        },
+
+        removePhotoPlaceholder(idx) {
+            const editor = tinymce.get('spin-preview-editor');
+            if (editor) {
+                const placeholder = editor.getBody().querySelector('.photo-placeholder[data-idx="' + idx + '"]');
+                if (placeholder) editor.dom.remove(placeholder);
+            }
+            this.photoSuggestions[idx].removed = true;
+        },
+
+        async searchPhotosForSuggestion(idx) {
+            const ps = this.photoSuggestions[idx];
+            if (!ps || !ps.search_term.trim()) return;
+            try {
+                const resp = await fetch('{{ route("publish.search.images.post") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({ query: ps.search_term, per_page: 12 })
+                });
+                const data = await resp.json();
+                this.photoSuggestions[idx].searchResults = data.data?.photos || [];
+            } catch (e) { this.photoSuggestions[idx].searchResults = []; }
+        },
+
+        selectPhotoForSuggestion(idx, photo) {
+            this.photoSuggestions[idx].autoPhoto = photo;
+            this.photoSuggestions[idx].confirmed = false;
+            this.updatePlaceholderInEditor(idx);
         },
 
         async loadSmartEdits() {
@@ -1882,6 +2083,7 @@ function publishPipeline() {
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
                     body: JSON.stringify({
                         html: this.editorContent,
+                        title: this.articleTitle || 'article',
                         site_id: this.selectedSite.id,
                         categories: this.suggestedCategories,
                         tags: this.suggestedTags,
