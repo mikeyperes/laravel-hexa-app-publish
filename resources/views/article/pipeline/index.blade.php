@@ -66,9 +66,12 @@
         <div x-show="openSteps.includes(1)" x-cloak x-collapse class="px-4 pb-4">
             <div class="relative max-w-md">
                 <label class="block text-xs text-gray-500 mb-1">Search by name or email</label>
-                <input type="text" x-model="userSearch" @input.debounce.300ms="searchUsers()"
-                       placeholder="Type to search users..."
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                <div class="relative">
+                    <input type="text" x-model="userSearch" @input.debounce.300ms="searchUsers()"
+                           placeholder="Type to search users..."
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                    <svg x-show="userSearching" x-cloak class="absolute right-3 top-2.5 w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                </div>
                 <div x-show="userResults.length > 0" x-cloak class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                     <template x-for="user in userResults" :key="user.id">
                         <button type="button" @click="selectUser(user)"
@@ -413,6 +416,21 @@
                 </div>
             </div>
 
+            {{-- Extraction Activity Log --}}
+            <div x-show="checkLog.length > 0" x-cloak class="bg-gray-900 rounded-xl border border-gray-700 p-4 mb-4 max-h-48 overflow-y-auto">
+                <template x-for="(entry, idx) in checkLog" :key="idx">
+                    <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
+                        <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
+                        <span :class="{
+                            'text-green-400': entry.type === 'success',
+                            'text-red-400': entry.type === 'error',
+                            'text-blue-400': entry.type === 'info',
+                            'text-gray-400': entry.type === 'step',
+                        }" x-text="entry.message" class="break-words"></span>
+                    </div>
+                </template>
+            </div>
+
             <div x-show="checkResults.length > 0" x-cloak class="space-y-3">
                 <template x-for="(result, idx) in checkResults" :key="idx">
                     <div class="rounded-lg border" :class="approvedSources.includes(idx) ? 'border-green-400 bg-green-50 ring-1 ring-green-300' : (discardedSources.includes(idx) ? 'border-gray-200 bg-gray-100 opacity-40' : (result.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'))">
@@ -557,6 +575,50 @@
                     <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     <span x-text="spinning ? 'Spinning...' : (spunContent ? 'Re-spin' : 'Spin Article')"></span>
                 </button>
+            </div>
+
+            {{-- Custom prompt input --}}
+            <div class="mb-4">
+                <label class="block text-xs text-gray-500 mb-1">Custom Instructions <span class="text-gray-400">(takes precedence over template/preset)</span></label>
+                <textarea x-model="customPrompt" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Write in first person, focus on the financial impact, include expert quotes..."></textarea>
+            </div>
+
+            {{-- Prompt preview (expandable) --}}
+            <div class="mb-4" x-data="{ showPrompt: false }">
+                <button @click="showPrompt = !showPrompt" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
+                    <svg class="w-3 h-3 transition-transform" :class="showPrompt ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    View Full Prompt
+                </button>
+                <div x-show="showPrompt" x-cloak class="mt-2 bg-gray-900 text-gray-300 rounded-xl p-4 text-xs font-mono max-h-64 overflow-y-auto break-words space-y-2">
+                    <template x-if="customPrompt.trim()">
+                        <div>
+                            <p class="text-yellow-400 font-semibold">CUSTOM INSTRUCTIONS (priority):</p>
+                            <p class="text-yellow-200" x-text="customPrompt"></p>
+                        </div>
+                    </template>
+                    <template x-if="selectedTemplate">
+                        <div>
+                            <p class="text-blue-400 font-semibold">TEMPLATE:</p>
+                            <p x-show="selectedTemplate?.ai_prompt" x-text="selectedTemplate?.ai_prompt" class="text-blue-200"></p>
+                            <p x-show="selectedTemplate?.tone" class="text-gray-400">Tone: <span x-text="Array.isArray(selectedTemplate?.tone) ? selectedTemplate.tone.join(', ') : selectedTemplate?.tone" class="text-blue-200"></span></p>
+                            <p x-show="selectedTemplate?.article_type" class="text-gray-400">Type: <span x-text="selectedTemplate?.article_type" class="text-blue-200"></span></p>
+                            <p x-show="selectedTemplate?.word_count_min" class="text-gray-400">Words: <span x-text="(selectedTemplate?.word_count_min || '?') + '-' + (selectedTemplate?.word_count_max || '?')" class="text-blue-200"></span></p>
+                        </div>
+                    </template>
+                    <template x-if="selectedPreset">
+                        <div>
+                            <p class="text-purple-400 font-semibold">PRESET:</p>
+                            <p x-show="selectedPreset?.tone" class="text-gray-400">Tone: <span x-text="selectedPreset?.tone" class="text-purple-200"></span></p>
+                            <p x-show="selectedPreset?.article_format" class="text-gray-400">Format: <span x-text="selectedPreset?.article_format" class="text-purple-200"></span></p>
+                            <p x-show="selectedPreset?.follow_links" class="text-gray-400">Links: <span x-text="selectedPreset?.follow_links" class="text-purple-200"></span></p>
+                            <p x-show="selectedPreset?.image_preference" class="text-gray-400">Images: <span x-text="selectedPreset?.image_preference" class="text-purple-200"></span></p>
+                        </div>
+                    </template>
+                    <div>
+                        <p class="text-green-400 font-semibold">SOURCES:</p>
+                        <p class="text-gray-400" x-text="checkResults.filter(r => r.success).length + ' source article(s) will be provided'"></p>
+                    </div>
+                </div>
             </div>
 
             {{-- Spin error --}}
@@ -710,12 +772,12 @@
                                         <input type="text" :value="ps.search_term" @input="photoSuggestions[idx].search_term = $event.target.value" @keydown.enter="searchPhotosForSuggestion(idx)" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search...">
                                         <button @click="searchPhotosForSuggestion(idx)" class="bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-gray-700">Search</button>
                                     </div>
-                                    <div x-show="ps.searchResults && ps.searchResults.length > 0" x-cloak class="grid grid-cols-4 md:grid-cols-6 gap-2">
+                                    <div x-show="ps.searchResults && ps.searchResults.length > 0" x-cloak class="grid grid-cols-2 md:grid-cols-4 gap-2">
                                         <template x-for="(photo, pidx) in (ps.searchResults || [])" :key="pidx">
                                             <div class="cursor-pointer rounded-lg overflow-hidden border-2 hover:border-blue-400 transition-colors"
                                                  :class="ps.autoPhoto && ps.autoPhoto.url_thumb === photo.url_thumb ? 'border-purple-400' : 'border-gray-200'"
                                                  @click="selectPhotoForSuggestion(idx, photo)">
-                                                <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-16 object-cover">
+                                                <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-28 object-cover">
                                             </div>
                                         </template>
                                     </div>
@@ -1233,6 +1295,7 @@ function publishPipeline() {
 
         // Step 1 — User
         userSearch: '',
+        userSearching: false,
         userResults: [],
         selectedUser: null,
 
@@ -1264,6 +1327,7 @@ function publishPipeline() {
         checking: false,
         checkResults: [],
         checkPassCount: 0,
+        checkLog: [],
         checkUserAgent: 'chrome',
         extractMethod: 'auto',
         extractRetries: 1,
@@ -1282,6 +1346,7 @@ function publishPipeline() {
 
         // Step 7 — Model
         aiModel: 'claude-opus-4-6',
+        customPrompt: '',
 
         // Step 7 — Spin
         spinning: false,
@@ -1510,13 +1575,15 @@ function publishPipeline() {
 
         // ── Step 1: User Search ───────────────────────────
         async searchUsers() {
-            if (this.userSearch.length < 2) { this.userResults = []; return; }
+            if (this.userSearch.length < 2) { this.userResults = []; this.userSearching = false; return; }
+            this.userSearching = true;
             try {
                 const resp = await fetch(`{{ route('publish.users.search') }}?q=${encodeURIComponent(this.userSearch)}`, {
                     headers: { 'Accept': 'application/json' }
                 });
                 this.userResults = await resp.json();
             } catch (e) { this.userResults = []; }
+            this.userSearching = false;
         },
 
         async selectUser(user) {
@@ -1699,14 +1766,26 @@ function publishPipeline() {
             this.approvedSources = this.approvedSources.filter(i => i !== idx);
         },
 
+        _logCheck(type, message) {
+            const now = new Date();
+            const time = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            this.checkLog.push({ type, message, time });
+        },
+
         async checkAllSources() {
             if (this.sources.length === 0) return;
             this.checking = true;
             this.checkResults = [];
+            this.checkLog = [];
             this.expandedSources = [];
             this.approvedSources = [];
             this.discardedSources = [];
             this.checkPassCount = 0;
+
+            this._logCheck('info', 'Starting article extraction for ' + this.sources.length + ' source(s)...');
+            this.sources.forEach((s, i) => this._logCheck('step', (i + 1) + '. ' + s.url));
+            this._logCheck('info', 'Method: ' + this.extractMethod + ' | UA: ' + this.checkUserAgent + ' | Timeout: ' + this.extractTimeout + 's | Min words: ' + this.extractMinWords);
+            this._logCheck('info', 'Sending extraction request...');
 
             try {
                 const resp = await fetch('{{ route('publish.pipeline.check') }}', {
@@ -1726,7 +1805,6 @@ function publishPipeline() {
                 this.checkResults = data.results || [];
                 this.checkPassCount = this.checkResults.filter(r => r.success).length;
 
-                // Update sources with check info
                 this.checkResults.forEach((r, i) => {
                     if (this.sources[i]) {
                         this.sources[i].status = r.success ? 'verified' : 'failed';
@@ -1735,8 +1813,17 @@ function publishPipeline() {
                             this.sources[i].title = r.title;
                         }
                     }
+                    const icon = r.success ? 'success' : 'error';
+                    const url = this.sources[i]?.url || 'unknown';
+                    const detail = r.success
+                        ? r.word_count + ' words extracted' + (r.title ? ' — "' + r.title.substring(0, 60) + '"' : '')
+                        : (r.message || 'Extraction failed');
+                    this._logCheck(icon, url.substring(0, 80) + ' — ' + detail);
                 });
+
+                this._logCheck('success', 'Done. ' + this.checkPassCount + '/' + this.checkResults.length + ' sources extracted successfully.');
             } catch (e) {
+                this._logCheck('error', 'Network error: ' + (e.message || 'Request failed'));
                 this.showNotification('error', 'Failed to check sources');
             }
             this.checking = false;
@@ -1810,6 +1897,7 @@ function publishPipeline() {
                         template_id: this.selectedTemplateId || null,
                         preset_id: this.selectedPresetId || null,
                         model: this.aiModel,
+                        custom_prompt: this.customPrompt || null,
                     })
                 });
                 const data = await resp.json();
@@ -1980,7 +2068,7 @@ function publishPipeline() {
                                     const placeholder = target.closest('.photo-placeholder') || (target.classList && target.classList.contains('photo-placeholder') ? target : null);
                                     if (placeholder) {
                                         const idx = parseInt(placeholder.getAttribute('data-idx'));
-                                        if (!isNaN(idx)) self.changePhoto(idx);
+                                        if (!isNaN(idx)) self.viewPhotoInfo(idx);
                                     }
                                 });
                             }
@@ -2082,7 +2170,7 @@ function publishPipeline() {
                     const resp = await fetch('{{ route("publish.search.images.post") }}', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                        body: JSON.stringify({ query: ps.search_term, per_page: 6 })
+                        body: JSON.stringify({ query: ps.search_term, per_page: 12 })
                     });
                     const data = await resp.json();
                     const photos = data.data?.photos || [];
@@ -2188,7 +2276,7 @@ function publishPipeline() {
                 const resp = await fetch('{{ route("publish.search.images.post") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ query: ps.search_term, per_page: 12 })
+                    body: JSON.stringify({ query: ps.search_term, per_page: 20 })
                 });
                 const data = await resp.json();
                 this.photoSuggestions[idx].searchResults = data.data?.photos || [];

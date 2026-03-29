@@ -202,6 +202,7 @@ class PublishPipelineController extends Controller
             'preset_id'          => 'nullable|integer|exists:publish_presets,id',
             'model'              => 'required|string|max:100',
             'change_request'     => 'nullable|string|max:2000',
+            'custom_prompt'      => 'nullable|string|max:5000',
             'master_setting_ids' => 'nullable|array',
             'master_setting_ids.*' => 'integer|exists:publish_master_settings,id',
         ]);
@@ -268,6 +269,11 @@ class PublishPipelineController extends Controller
         $systemPrompt = !empty($systemParts)
             ? implode("\n\n", $systemParts) . $htmlInstruction
             : "You are a professional content writer. Rewrite the provided source articles into a new unique article." . $htmlInstruction;
+
+        // Custom prompt takes highest priority — prepended to system prompt
+        if (!empty($validated['custom_prompt'])) {
+            $systemPrompt = "=== PRIORITY INSTRUCTIONS (from user) ===\n{$validated['custom_prompt']}\n\n" . $systemPrompt;
+        }
 
         // Build user message from prompt template + sources
         $userParts = [];
