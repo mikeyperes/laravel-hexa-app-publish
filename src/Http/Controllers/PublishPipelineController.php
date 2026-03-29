@@ -18,6 +18,7 @@ use hexa_package_article_extractor\Services\ArticleExtractorService;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
 use hexa_package_wordpress\Services\WordPressService;
+use hexa_package_wptoolkit\Services\WpToolkitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -34,20 +35,41 @@ class PublishPipelineController extends Controller
     protected ArticleExtractorService $extractor;
     protected AnthropicService $anthropic;
     protected WordPressService $wp;
+    protected WpToolkitService $wptoolkit;
+
+    /** Connection mode constants */
+    const WP_MODE_REST = 'wp_rest_api';
+    const WP_MODE_SSH  = 'wptoolkit';
 
     /**
      * @param ArticleExtractorService $extractor
      * @param AnthropicService        $anthropic
      * @param WordPressService        $wp
+     * @param WpToolkitService        $wptoolkit
      */
     public function __construct(
         ArticleExtractorService $extractor,
         AnthropicService $anthropic,
-        WordPressService $wp
+        WordPressService $wp,
+        WpToolkitService $wptoolkit
     ) {
         $this->extractor = $extractor;
         $this->anthropic = $anthropic;
         $this->wp = $wp;
+        $this->wptoolkit = $wptoolkit;
+    }
+
+    /**
+     * Resolve the WHM server for a WP Toolkit site.
+     *
+     * @param PublishSite $site
+     * @return array{server: WhmServer|null, account: HostingAccount|null}
+     */
+    private function resolveWpToolkitServer(PublishSite $site): array
+    {
+        $account = HostingAccount::find($site->hosting_account_id);
+        $server = $account ? WhmServer::find($account->whm_server_id) : null;
+        return ['server' => $server, 'account' => $account];
     }
 
     /**
@@ -493,27 +515,33 @@ class PublishPipelineController extends Controller
         ]);
 
         $site = PublishSite::findOrFail($validated['site_id']);
+        $mode = $site->connection_type === self::WP_MODE_SSH ? self::WP_MODE_SSH : self::WP_MODE_REST;
 
-        // Auto-provision credentials for WP Toolkit sites
-        if (!$site->wp_username || !$site->wp_application_password) {
-            if ($site->connection_type === 'wptoolkit') {
-                $provision = $this->autoProvisionWpCredentials($site);
-                if (!$provision['success']) {
-                    return response()->json(['success' => false, 'message' => $provision['message']]);
-                }
-                $site->refresh();
-            } else {
+        // For REST mode, verify credentials exist
+        if ($mode === self::WP_MODE_REST && (!$site->wp_username || !$site->wp_application_password)) {
+            return response()->json([
+                'success' => false,
+                'message' => "Site '{$site->name}' has no WordPress credentials configured.",
+            ]);
+        }
+
+        // For SSH mode, resolve server
+        $server = null;
+        $installId = null;
+        if ($mode === self::WP_MODE_SSH) {
+            $resolved = $this->resolveWpToolkitServer($site);
+            $server = $resolved['server'];
+            $installId = $site->wordpress_install_id;
+            if (!$server || !$installId) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Site '{$site->name}' has no WordPress credentials configured. Go to site settings to add wp_username and application password.",
+                    'message' => "Site '{$site->name}' is missing WP Toolkit server or install ID configuration.",
                 ]);
             }
         }
 
         $html = $validated['html'];
         $siteUrl = $site->url;
-        $username = $site->wp_username;
-        $password = $site->wp_application_password;
         $checklist = [];
 
         // Step 1: Upload images to WordPress media library
@@ -522,31 +550,29 @@ class PublishPipelineController extends Controller
         $imageMap = [];
 
         if (!empty($imageUrls)) {
-            $checklist[] = ['step' => 'upload_images', 'label' => 'Uploading images to WordPress media library', 'status' => 'running'];
-
+            $checklist[] = ['step' => 'upload_images', 'label' => "Uploading images via {$mode}...", 'status' => 'running', 'detail' => ''];
             $imgIndex = 0;
             $articleTitle = $validated['title'] ?? 'article';
 
             foreach ($imageUrls as $imgUrl) {
-                // Skip if already on the same WP site
-                if (str_starts_with($imgUrl, rtrim($siteUrl, '/'))) {
-                    continue;
-                }
+                if (str_starts_with($imgUrl, rtrim($siteUrl, '/'))) continue;
 
-                // Extract alt text from the img tag
                 $altText = '';
                 if (preg_match('/<img[^>]+src\s*=\s*["\']' . preg_quote($imgUrl, '/') . '["\'][^>]*alt\s*=\s*["\']([^"\']*)["\'][^>]*>/i', $html, $altMatch)) {
                     $altText = $altMatch[1];
                 }
 
-                // Generate proper filename from alt text or article title
-                $slugBase = Str::slug($altText ?: $articleTitle, '-');
-                $slugBase = Str::limit($slugBase, 80, '');
+                $slugBase = Str::limit(Str::slug($altText ?: $articleTitle, '-'), 80, '');
                 $ext = pathinfo(parse_url($imgUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
                 $properFilename = $slugBase . '-' . (++$imgIndex) . '.' . $ext;
 
-                $uploadResult = $this->wp->uploadMedia($siteUrl, $username, $password, $imgUrl, $properFilename, $altText);
-                if ($uploadResult['success']) {
+                if ($mode === self::WP_MODE_SSH) {
+                    $uploadResult = $this->wptoolkit->wpCliUploadMedia($server, $installId, $imgUrl, $properFilename, $altText);
+                } else {
+                    $uploadResult = $this->wp->uploadMedia($siteUrl, $site->wp_username, $site->wp_application_password, $imgUrl, $properFilename, $altText);
+                }
+
+                if ($uploadResult['success'] && !empty($uploadResult['data']['media_url'])) {
                     $imageMap[$imgUrl] = $uploadResult['data']['media_url'];
                 }
             }
@@ -556,90 +582,81 @@ class PublishPipelineController extends Controller
             $checklist[count($checklist) - 1]['status'] = 'done';
             $checklist[count($checklist) - 1]['detail'] = "{$uploadedCount}/{$totalImages} images uploaded";
         } else {
-            $checklist[] = ['step' => 'upload_images', 'label' => 'Uploading images to WordPress media library', 'status' => 'skipped', 'detail' => 'No images found'];
+            $checklist[] = ['step' => 'upload_images', 'label' => 'Uploading images', 'status' => 'skipped', 'detail' => 'No images found'];
         }
 
         // Step 2: Replace image URLs in HTML
         if (!empty($imageMap)) {
-            $checklist[] = ['step' => 'replace_urls', 'label' => 'Replacing image URLs', 'status' => 'running'];
+            $checklist[] = ['step' => 'replace_urls', 'label' => 'Replacing image URLs', 'status' => 'done', 'detail' => count($imageMap) . ' URLs replaced'];
             foreach ($imageMap as $oldUrl => $newUrl) {
                 $html = str_replace($oldUrl, $newUrl, $html);
             }
-            $checklist[count($checklist) - 1]['status'] = 'done';
-            $checklist[count($checklist) - 1]['detail'] = count($imageMap) . ' URLs replaced';
         } else {
             $checklist[] = ['step' => 'replace_urls', 'label' => 'Replacing image URLs', 'status' => 'skipped', 'detail' => 'No replacements needed'];
         }
 
-        // Step 3: Create categories on WordPress
+        // Step 3: Create categories
         $categoryIds = [];
         $requestedCategories = $validated['categories'] ?? [];
         if (!empty($requestedCategories)) {
-            $checklist[] = ['step' => 'create_categories', 'label' => 'Creating categories on WordPress', 'status' => 'running'];
-
-            // Get existing categories
-            $existingCats = $this->wp->getCategories($siteUrl, $username, $password);
-            $existingCatMap = [];
-            if ($existingCats['success']) {
-                foreach ($existingCats['data'] as $cat) {
-                    $existingCatMap[strtolower($cat['name'])] = $cat['id'];
-                }
-            }
-
+            $checklist[] = ['step' => 'create_categories', 'label' => 'Creating categories...', 'status' => 'running', 'detail' => ''];
             foreach ($requestedCategories as $catName) {
-                $catNameLower = strtolower(trim($catName));
-                if (isset($existingCatMap[$catNameLower])) {
-                    $categoryIds[] = $existingCatMap[$catNameLower];
+                if ($mode === self::WP_MODE_SSH) {
+                    $catResult = $this->wptoolkit->wpCliCreateCategory($server, $installId, trim($catName));
+                    if ($catResult['success'] && isset($catResult['term_id'])) $categoryIds[] = $catResult['term_id'];
                 } else {
-                    // Create new category via WP REST API
-                    $catResult = $this->wpCreateTaxonomy($siteUrl, $username, $password, 'categories', $catName);
-                    if ($catResult) {
-                        $categoryIds[] = $catResult;
+                    $existingCats = $this->wp->getCategories($siteUrl, $site->wp_username, $site->wp_application_password);
+                    $existingCatMap = [];
+                    if ($existingCats['success']) {
+                        foreach ($existingCats['data'] as $cat) $existingCatMap[strtolower($cat['name'])] = $cat['id'];
+                    }
+                    $catNameLower = strtolower(trim($catName));
+                    if (isset($existingCatMap[$catNameLower])) {
+                        $categoryIds[] = $existingCatMap[$catNameLower];
+                    } else {
+                        $catResult = $this->wpCreateTaxonomy($siteUrl, $site->wp_username, $site->wp_application_password, 'categories', $catName);
+                        if ($catResult) $categoryIds[] = $catResult;
                     }
                 }
             }
-
             $checklist[count($checklist) - 1]['status'] = 'done';
             $checklist[count($checklist) - 1]['detail'] = count($categoryIds) . ' categories ready';
         } else {
-            $checklist[] = ['step' => 'create_categories', 'label' => 'Creating categories on WordPress', 'status' => 'skipped', 'detail' => 'No categories specified'];
+            $checklist[] = ['step' => 'create_categories', 'label' => 'Creating categories', 'status' => 'skipped', 'detail' => 'No categories specified'];
         }
 
-        // Step 4: Create tags on WordPress
+        // Step 4: Create tags
         $tagIds = [];
         $requestedTags = $validated['tags'] ?? [];
         if (!empty($requestedTags)) {
-            $checklist[] = ['step' => 'create_tags', 'label' => 'Creating tags on WordPress', 'status' => 'running'];
-
-            // Get existing tags
-            $existingTags = $this->wp->getTags($siteUrl, $username, $password);
-            $existingTagMap = [];
-            if ($existingTags['success']) {
-                foreach ($existingTags['data'] as $tag) {
-                    $existingTagMap[strtolower($tag['name'])] = $tag['id'];
-                }
-            }
-
+            $checklist[] = ['step' => 'create_tags', 'label' => 'Creating tags...', 'status' => 'running', 'detail' => ''];
             foreach ($requestedTags as $tagName) {
-                $tagNameLower = strtolower(trim($tagName));
-                if (isset($existingTagMap[$tagNameLower])) {
-                    $tagIds[] = $existingTagMap[$tagNameLower];
+                if ($mode === self::WP_MODE_SSH) {
+                    $tagResult = $this->wptoolkit->wpCliCreateTag($server, $installId, trim($tagName));
+                    if ($tagResult['success'] && isset($tagResult['term_id'])) $tagIds[] = $tagResult['term_id'];
                 } else {
-                    $tagResult = $this->wpCreateTaxonomy($siteUrl, $username, $password, 'tags', $tagName);
-                    if ($tagResult) {
-                        $tagIds[] = $tagResult;
+                    $existingTags = $this->wp->getTags($siteUrl, $site->wp_username, $site->wp_application_password);
+                    $existingTagMap = [];
+                    if ($existingTags['success']) {
+                        foreach ($existingTags['data'] as $tag) $existingTagMap[strtolower($tag['name'])] = $tag['id'];
+                    }
+                    $tagNameLower = strtolower(trim($tagName));
+                    if (isset($existingTagMap[$tagNameLower])) {
+                        $tagIds[] = $existingTagMap[$tagNameLower];
+                    } else {
+                        $tagResult = $this->wpCreateTaxonomy($siteUrl, $site->wp_username, $site->wp_application_password, 'tags', $tagName);
+                        if ($tagResult) $tagIds[] = $tagResult;
                     }
                 }
             }
-
             $checklist[count($checklist) - 1]['status'] = 'done';
             $checklist[count($checklist) - 1]['detail'] = count($tagIds) . ' tags ready';
         } else {
-            $checklist[] = ['step' => 'create_tags', 'label' => 'Creating tags on WordPress', 'status' => 'skipped', 'detail' => 'No tags specified'];
+            $checklist[] = ['step' => 'create_tags', 'label' => 'Creating tags', 'status' => 'skipped', 'detail' => 'No tags specified'];
         }
 
         // Step 5: Validate HTML
-        $checklist[] = ['step' => 'validate_html', 'label' => 'Validating HTML', 'status' => 'running'];
+        $checklist[] = ['step' => 'validate_html', 'label' => 'Validating HTML', 'status' => 'running', 'detail' => ''];
         $htmlValid = !empty(trim(strip_tags($html)));
         $checklist[count($checklist) - 1]['status'] = $htmlValid ? 'done' : 'failed';
         $checklist[count($checklist) - 1]['detail'] = $htmlValid ? 'HTML valid' : 'HTML is empty after processing';
@@ -675,46 +692,42 @@ class PublishPipelineController extends Controller
 
         $site = PublishSite::findOrFail($validated['site_id']);
 
-        // Auto-provision credentials for WP Toolkit sites
-        if (!$site->wp_username || !$site->wp_application_password) {
-            if ($site->connection_type === 'wptoolkit') {
-                $provision = $this->autoProvisionWpCredentials($site);
-                if (!$provision['success']) {
-                    return response()->json(['success' => false, 'message' => $provision['message']]);
-                }
-                $site->refresh();
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => "Site '{$site->name}' has no WordPress credentials configured.",
-                ]);
+        $mode = $site->connection_type === self::WP_MODE_SSH ? self::WP_MODE_SSH : self::WP_MODE_REST;
+
+        if ($mode === self::WP_MODE_REST && (!$site->wp_username || !$site->wp_application_password)) {
+            return response()->json(['success' => false, 'message' => "Site '{$site->name}' has no WordPress credentials."]);
+        }
+
+        if ($mode === self::WP_MODE_SSH) {
+            $resolved = $this->resolveWpToolkitServer($site);
+            $server = $resolved['server'];
+            $installId = $site->wordpress_install_id;
+            if (!$server || !$installId) {
+                return response()->json(['success' => false, 'message' => "Site '{$site->name}' is missing WP Toolkit configuration."]);
             }
+
+            $result = $this->wptoolkit->wpCliCreatePost(
+                $server,
+                $installId,
+                $validated['title'],
+                $validated['html'],
+                $validated['status'],
+                $validated['category_ids'] ?? [],
+                $validated['tag_ids'] ?? [],
+                ($validated['status'] === 'future' && !empty($validated['date'])) ? $validated['date'] : null
+            );
+        } else {
+            $postData = [
+                'title'   => $validated['title'],
+                'content' => $validated['html'],
+                'status'  => $validated['status'],
+            ];
+            if (!empty($validated['category_ids'])) $postData['categories'] = $validated['category_ids'];
+            if (!empty($validated['tag_ids'])) $postData['tags'] = $validated['tag_ids'];
+            if ($validated['status'] === 'future' && !empty($validated['date'])) $postData['date'] = $validated['date'];
+
+            $result = $this->wp->createPost($site->url, $site->wp_username, $site->wp_application_password, $postData);
         }
-
-        $postData = [
-            'title'   => $validated['title'],
-            'content' => $validated['html'],
-            'status'  => $validated['status'],
-        ];
-
-        if (!empty($validated['category_ids'])) {
-            $postData['categories'] = $validated['category_ids'];
-        }
-
-        if (!empty($validated['tag_ids'])) {
-            $postData['tags'] = $validated['tag_ids'];
-        }
-
-        if ($validated['status'] === 'future' && !empty($validated['date'])) {
-            $postData['date'] = $validated['date'];
-        }
-
-        $result = $this->wp->createPost(
-            $site->url,
-            $site->wp_username,
-            $site->wp_application_password,
-            $postData
-        );
 
         if (!$result['success']) {
             hexaLog('publish', 'pipeline_publish_failed', "Pipeline publish failed to {$site->name}: {$result['message']}");
