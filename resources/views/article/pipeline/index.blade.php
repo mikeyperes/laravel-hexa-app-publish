@@ -1030,20 +1030,28 @@
                 </template>
             </div>
 
-            {{-- Checklist summary --}}
-            <div x-show="prepareChecklist.length > 0" x-cloak class="space-y-1 mb-4">
+            {{-- Real-time Checklist with spinners --}}
+            <div x-show="prepareChecklist.length > 0" x-cloak class="space-y-2 mb-4">
                 <template x-for="(item, idx) in prepareChecklist" :key="idx">
-                    <div class="flex items-center gap-2 text-sm">
+                    <div class="flex items-center gap-3 text-sm">
+                        <template x-if="item.status === 'running'">
+                            <svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        </template>
                         <template x-if="item.status === 'done'">
-                            <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                         </template>
                         <template x-if="item.status === 'failed'">
-                            <svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </template>
                         <template x-if="item.status === 'skipped'">
-                            <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+                            <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
                         </template>
-                        <span class="text-gray-700" x-text="item.label"></span>
+                        <span :class="{
+                            'text-blue-700': item.status === 'running',
+                            'text-green-700': item.status === 'done',
+                            'text-red-700': item.status === 'failed',
+                            'text-gray-500': item.status === 'skipped',
+                        }" x-text="item.label"></span>
                         <span x-show="item.detail" class="text-xs text-gray-400" x-text="item.detail"></span>
                     </div>
                 </template>
@@ -1156,15 +1164,36 @@
                 </div>
 
                 {{-- Links --}}
-                <div class="flex flex-wrap gap-3">
+                <div class="flex flex-wrap gap-3 mb-4">
                     <a x-show="publishResult?.post_url" :href="publishResult?.post_url" target="_blank" class="inline-flex items-center gap-1 text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium">
                         View Post
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    </a>
+                    <a x-show="selectedSite?.url" :href="selectedSite?.url" target="_blank" class="inline-flex items-center gap-1 text-sm bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-medium">
+                        <span x-text="selectedSite?.name || 'WordPress Site'"></span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                     </a>
                     <a x-show="draftId" :href="'{{ url('article/drafts') }}/' + draftId" target="_blank" class="inline-flex items-center gap-1 text-sm bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 font-medium">
                         View Draft
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                     </a>
+                </div>
+
+                {{-- Activity Log in publish section --}}
+                <div x-show="prepareLog.length > 0" x-cloak class="bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto">
+                    <p class="text-xs text-gray-500 mb-2 font-semibold uppercase">Activity Log</p>
+                    <template x-for="(entry, idx) in prepareLog" :key="idx">
+                        <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
+                            <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
+                            <span :class="{
+                                'text-green-400': entry.type === 'success',
+                                'text-red-400': entry.type === 'error',
+                                'text-blue-400': entry.type === 'info',
+                                'text-yellow-400': entry.type === 'warning',
+                                'text-gray-400': entry.type === 'step',
+                            }" x-text="entry.message" class="break-words"></span>
+                        </div>
+                    </template>
                 </div>
             </div>
         </div>
@@ -2216,9 +2245,16 @@ function publishPipeline() {
                 return;
             }
             this.preparing = true;
-            this.prepareChecklist = [];
             this.prepareLog = [];
             this.prepareComplete = false;
+            this.prepareChecklist = [
+                { step: 'credentials', label: 'Checking WordPress credentials...', status: 'running', detail: '' },
+                { step: 'upload_images', label: 'Uploading images to WordPress media library...', status: 'running', detail: '' },
+                { step: 'replace_urls', label: 'Replacing image URLs...', status: 'running', detail: '' },
+                { step: 'create_categories', label: 'Creating categories on WordPress...', status: 'running', detail: '' },
+                { step: 'create_tags', label: 'Creating tags on WordPress...', status: 'running', detail: '' },
+                { step: 'validate_html', label: 'Validating HTML...', status: 'running', detail: '' },
+            ];
 
             this._logPrepare('info', 'Starting WordPress preparation for ' + this.selectedSite.name + '...');
             this._logPrepare('step', 'Site: ' + (this.selectedSite.url || this.selectedSite.name));
@@ -2226,7 +2262,7 @@ function publishPipeline() {
             this._logPrepare('step', 'Categories: ' + (this.suggestedCategories.length || 0) + ', Tags: ' + (this.suggestedTags.length || 0));
 
             try {
-                this._logPrepare('info', 'Sending request to prepare endpoint...');
+                this._logPrepare('info', 'Connecting to WordPress...');
 
                 const resp = await fetch('{{ route('publish.pipeline.prepare') }}', {
                     method: 'POST',
@@ -2256,13 +2292,13 @@ function publishPipeline() {
                     this._logPrepare('success', 'Preparation complete. Ready to publish.');
                     this.showNotification('success', 'Content prepared for WordPress');
                 } else {
-                    this.prepareChecklist = [];
+                    this.prepareChecklist.forEach(item => { if (item.status === 'running') item.status = 'failed'; });
                     this.prepareComplete = false;
                     this._logPrepare('error', data.message || 'Preparation failed');
                     this.showNotification('error', data.message || 'Preparation failed');
                 }
             } catch (e) {
-                this.prepareChecklist = [];
+                this.prepareChecklist.forEach(item => { if (item.status === 'running') item.status = 'failed'; });
                 this._logPrepare('error', 'Network error: ' + (e.message || 'Request failed'));
                 this.showNotification('error', 'Network error during preparation');
             }
