@@ -596,6 +596,22 @@
                     </div>
                 </div>
 
+                {{-- H2 Subtitles --}}
+                <div x-show="spunContent && spunContent.includes('<h2')" x-cloak class="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h5 class="text-sm font-semibold text-gray-700 mb-2">Article Sections</h5>
+                    <div class="space-y-1" x-html="(() => {
+                        const tmp = document.createElement('div');
+                        tmp.innerHTML = spunContent;
+                        const h2s = tmp.querySelectorAll('h2');
+                        return Array.from(h2s).map((h, i) => '<p class=\'text-sm text-gray-600\'><span class=\'text-gray-400 mr-2\'>' + (i+1) + '.</span>' + h.textContent + '</p>').join('');
+                    })()"></div>
+                </div>
+
+                {{-- Section divider --}}
+                <div class="mt-6 mb-4 border-t border-gray-200 pt-4">
+                    <h4 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Article Metadata</h4>
+                </div>
+
                 {{-- Categories & Tags --}}
                 <div x-show="suggestedCategories.length > 0 || suggestedTags.length > 0" x-cloak class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div x-show="suggestedCategories.length > 0" class="bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -1638,7 +1654,12 @@ function publishPipeline() {
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
                     body: JSON.stringify({
                         urls: [source.url],
-                        user_agent: this.checkUserAgent === 'chrome' ? 'googlebot' : 'chrome',
+                        user_agent: 'googlebot',
+                        method: 'readability',
+                        retries: 2,
+                        timeout: 30,
+                        min_words: 25,
+                        auto_fallback: true,
                     })
                 });
                 const data = await resp.json();
@@ -1979,28 +2000,12 @@ function publishPipeline() {
             }
         },
 
-        async searchPhotos() {
-            if (!this.photoSearch.trim()) return;
-            this.photoSearching = true;
-            this.photoResults = [];
-            try {
-                const resp = await fetch(`{{ route('publish.photos.search') }}?query=${encodeURIComponent(this.photoSearch)}`, {
-                    headers: { 'Accept': 'application/json' }
-                });
-                const data = await resp.json();
-                this.photoResults = (data.results || []).map(p => ({
-                    url: p.url || p.src?.medium || p.webformatURL || '',
-                    thumbnail: p.thumbnail || p.src?.tiny || p.previewURL || p.url || '',
-                    alt: p.alt || p.description || p.tags || '',
-                }));
-            } catch (e) { this.photoResults = []; }
-            this.photoSearching = false;
-        },
-
-        insertPhotoAtCursor(photo) {
-            if (this.editorInstance) {
-                this.editorInstance.insertContent(`<img src="${photo.url}" alt="${photo.alt || ''}" style="max-width:100%;height:auto;" />`);
-                this.editorContent = this.editorInstance.getContent();
+        // Old insertPhotoAtCursor removed — using insertPhotoIntoEditor instead
+        _oldInsertPhotoAtCursor(photo) {
+            // Kept as placeholder — actual insert uses insertPhotoIntoEditor()
+            this.insertingPhoto = photo;
+            this.photoCaption = photo.alt || '';
+            // User confirms via the caption form
             }
         },
 
