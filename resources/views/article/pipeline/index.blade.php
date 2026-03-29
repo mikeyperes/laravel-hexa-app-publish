@@ -1014,28 +1014,36 @@
                 <span x-text="preparing ? 'Preparing...' : 'Prepare for WordPress'"></span>
             </button>
 
-            {{-- Checklist --}}
-            <div x-show="prepareChecklist.length > 0" x-cloak class="space-y-2">
+            {{-- Activity Log — dark theme --}}
+            <div x-show="prepareLog.length > 0" x-cloak class="bg-gray-900 rounded-xl border border-gray-700 p-4 mb-4 max-h-64 overflow-y-auto" x-ref="prepareLogContainer">
+                <template x-for="(entry, idx) in prepareLog" :key="idx">
+                    <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
+                        <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
+                        <span :class="{
+                            'text-green-400': entry.type === 'success',
+                            'text-red-400': entry.type === 'error',
+                            'text-blue-400': entry.type === 'info',
+                            'text-yellow-400': entry.type === 'warning',
+                            'text-gray-400': entry.type === 'step',
+                        }" x-text="entry.message" class="break-words"></span>
+                    </div>
+                </template>
+            </div>
+
+            {{-- Checklist summary --}}
+            <div x-show="prepareChecklist.length > 0" x-cloak class="space-y-1 mb-4">
                 <template x-for="(item, idx) in prepareChecklist" :key="idx">
-                    <div class="flex items-center gap-3 text-sm">
-                        <template x-if="item.status === 'running'">
-                            <svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        </template>
+                    <div class="flex items-center gap-2 text-sm">
                         <template x-if="item.status === 'done'">
-                            <svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                         </template>
                         <template x-if="item.status === 'failed'">
-                            <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            <svg class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </template>
                         <template x-if="item.status === 'skipped'">
-                            <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+                            <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
                         </template>
-                        <span :class="{
-                            'text-blue-700': item.status === 'running',
-                            'text-green-700': item.status === 'done',
-                            'text-red-700': item.status === 'failed',
-                            'text-gray-500': item.status === 'skipped',
-                        }" x-text="item.label"></span>
+                        <span class="text-gray-700" x-text="item.label"></span>
                         <span x-show="item.detail" class="text-xs text-gray-400" x-text="item.detail"></span>
                     </div>
                 </template>
@@ -1100,15 +1108,61 @@
                 <p class="text-sm text-red-700" x-text="publishError"></p>
             </div>
 
-            {{-- Publish result --}}
-            <div x-show="publishResult" x-cloak class="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
-                <div class="flex items-center gap-2 mb-2">
+            {{-- Publish result — full post info --}}
+            <div x-show="publishResult" x-cloak class="mt-4 bg-green-50 border border-green-200 rounded-xl p-5">
+                <div class="flex items-center gap-2 mb-4">
                     <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                    <span class="font-semibold text-green-800" x-text="publishResult?.message || 'Published successfully!'"></span>
+                    <span class="font-semibold text-green-800 text-lg" x-text="publishResult?.message || 'Published successfully!'"></span>
                 </div>
-                <div x-show="publishResult?.post_url" class="mt-2">
-                    <a :href="publishResult?.post_url" target="_blank" class="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium">
+
+                {{-- Post info grid --}}
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm mb-4">
+                    <div>
+                        <span class="text-gray-400 text-xs">Title</span>
+                        <p class="font-medium text-gray-800 break-words" x-text="articleTitle || 'Untitled'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Word Count</span>
+                        <p class="font-medium text-gray-800" x-text="spunWordCount + ' words'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Website</span>
+                        <p class="font-medium text-gray-800" x-text="selectedSite?.name || 'Local'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Action</span>
+                        <p class="font-medium text-gray-800" x-text="publishAction === 'publish' ? 'Published' : (publishAction === 'draft_wp' ? 'WP Draft' : (publishAction === 'future' ? 'Scheduled' : 'Local Draft'))"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Categories</span>
+                        <p class="font-medium text-gray-800 break-words" x-text="suggestedCategories.length ? suggestedCategories.join(', ') : 'None'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Tags</span>
+                        <p class="font-medium text-gray-800 break-words" x-text="suggestedTags.length ? suggestedTags.join(', ') : 'None'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">Links</span>
+                        <p class="font-medium text-gray-800" x-text="suggestedUrls.length + ' link(s)'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400 text-xs">AI Model</span>
+                        <p class="font-medium text-gray-800" x-text="aiModel"></p>
+                    </div>
+                    <div x-show="draftId">
+                        <span class="text-gray-400 text-xs">Draft ID</span>
+                        <p class="font-medium text-gray-800" x-text="'#' + draftId"></p>
+                    </div>
+                </div>
+
+                {{-- Links --}}
+                <div class="flex flex-wrap gap-3">
+                    <a x-show="publishResult?.post_url" :href="publishResult?.post_url" target="_blank" class="inline-flex items-center gap-1 text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium">
                         View Post
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    </a>
+                    <a x-show="draftId" :href="'{{ url('article/drafts') }}/' + draftId" target="_blank" class="inline-flex items-center gap-1 text-sm bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 font-medium">
+                        View Draft
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                     </a>
                 </div>
@@ -1234,6 +1288,7 @@ function publishPipeline() {
         editorContent: '',
         preparing: false,
         prepareChecklist: [],
+        prepareLog: [],
         prepareComplete: false,
         preparedHtml: '',
         preparedCategoryIds: [],
@@ -2145,22 +2200,34 @@ function publishPipeline() {
         },
 
         // ── Step 9: Prepare ──────────────────────────────
+        _logPrepare(type, message) {
+            const now = new Date();
+            const time = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            this.prepareLog.push({ type, message, time });
+            this.$nextTick(() => {
+                const el = this.$refs.prepareLogContainer;
+                if (el) el.scrollTop = el.scrollHeight;
+            });
+        },
+
         async prepareForWp() {
             if (!this.selectedSite) {
                 this.showNotification('error', 'No WordPress site selected');
                 return;
             }
             this.preparing = true;
-            this.prepareChecklist = [
-                { step: 'upload_images', label: 'Uploading images to WordPress media library...', status: 'running', detail: '' },
-                { step: 'replace_urls', label: 'Replacing image URLs...', status: 'running', detail: '' },
-                { step: 'create_categories', label: 'Creating categories on WordPress...', status: 'running', detail: '' },
-                { step: 'create_tags', label: 'Creating tags on WordPress...', status: 'running', detail: '' },
-                { step: 'validate_html', label: 'Validating HTML...', status: 'running', detail: '' },
-            ];
+            this.prepareChecklist = [];
+            this.prepareLog = [];
             this.prepareComplete = false;
 
+            this._logPrepare('info', 'Starting WordPress preparation for ' + this.selectedSite.name + '...');
+            this._logPrepare('step', 'Site: ' + (this.selectedSite.url || this.selectedSite.name));
+            this._logPrepare('step', 'Title: ' + (this.articleTitle || 'Untitled'));
+            this._logPrepare('step', 'Categories: ' + (this.suggestedCategories.length || 0) + ', Tags: ' + (this.suggestedTags.length || 0));
+
             try {
+                this._logPrepare('info', 'Sending request to prepare endpoint...');
+
                 const resp = await fetch('{{ route('publish.pipeline.prepare') }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
@@ -2175,20 +2242,28 @@ function publishPipeline() {
                 const data = await resp.json();
 
                 if (data.success) {
-                    if (data.checklist) this.prepareChecklist = data.checklist;
+                    if (data.checklist) {
+                        this.prepareChecklist = data.checklist;
+                        data.checklist.forEach(item => {
+                            const icon = item.status === 'done' ? 'success' : (item.status === 'failed' ? 'error' : (item.status === 'skipped' ? 'warning' : 'info'));
+                            this._logPrepare(icon, item.label + (item.detail ? ' — ' + item.detail : ''));
+                        });
+                    }
                     this.preparedHtml = data.html || this.editorContent;
                     this.preparedCategoryIds = data.category_ids || [];
                     this.preparedTagIds = data.tag_ids || [];
                     this.prepareComplete = true;
+                    this._logPrepare('success', 'Preparation complete. Ready to publish.');
                     this.showNotification('success', 'Content prepared for WordPress');
                 } else {
-                    // Mark all checklist items as failed and clear spinners
                     this.prepareChecklist = [];
                     this.prepareComplete = false;
+                    this._logPrepare('error', data.message || 'Preparation failed');
                     this.showNotification('error', data.message || 'Preparation failed');
                 }
             } catch (e) {
-                this.prepareChecklist.forEach(item => { if (item.status === 'running') item.status = 'failed'; });
+                this.prepareChecklist = [];
+                this._logPrepare('error', 'Network error: ' + (e.message || 'Request failed'));
                 this.showNotification('error', 'Network error during preparation');
             }
             this.preparing = false;
@@ -2203,10 +2278,9 @@ function publishPipeline() {
             // Save local draft only
             if (this.publishAction === 'draft_local') {
                 await this.saveDraftNow();
-                this.publishResult = { message: 'Saved as local draft.', post_url: null };
+                this.publishResult = { message: 'Saved as local draft.', post_url: null, draft_id: this.draftId };
                 this.completeStep(10);
                 this.publishing = false;
-                this.autoSaveDraft();
                 return;
             }
 
