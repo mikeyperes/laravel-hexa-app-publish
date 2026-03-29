@@ -851,96 +851,6 @@
                 </div>
             </div>
 
-            {{-- Publish Action Selection --}}
-            <div class="mb-4">
-                <label class="block text-xs text-gray-500 mb-2">Publish Action</label>
-                <div class="space-y-2">
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" x-model="publishAction" value="publish" class="text-blue-600">
-                        <span class="text-sm">Publish immediately to WordPress</span>
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" x-model="publishAction" value="draft_wp" class="text-blue-600">
-                        <span class="text-sm">Save as WordPress draft</span>
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" x-model="publishAction" value="draft_local" class="text-blue-600">
-                        <span class="text-sm">Save as local draft only</span>
-                    </label>
-                </div>
-            </div>
-
-            {{-- Prepare & Publish --}}
-            <div class="border border-gray-200 rounded-lg p-3 mb-4">
-                <h5 class="text-sm font-semibold text-gray-700 mb-2">Insert Photos</h5>
-                <div class="flex gap-2 mb-2">
-                    <input type="text" x-model="photoSearch" @keydown.enter="searchPhotos()" placeholder="Search photos..." class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <button @click="searchPhotos()" :disabled="photoSearching" class="bg-gray-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2">
-                        <svg x-show="photoSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        Search
-                    </button>
-                </div>
-                <div x-show="photoResults.length > 0" x-cloak class="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
-                    <template x-for="(photo, idx) in photoResults" :key="idx">
-                        <button @click="insertPhotoAtCursor(photo)" class="w-20 h-20 rounded border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-400 flex-shrink-0">
-                            <img :src="photo.url_thumb || photo.url_large || photo.url_full" :alt="photo.alt || 'Photo'" class="w-full h-full object-cover">
-                        </button>
-                    </template>
-                </div>
-            </div>
-
-            {{-- Tags --}}
-            <div class="mb-4">
-                <h5 class="text-sm font-semibold text-gray-700 mb-2">Tags</h5>
-                <div class="flex flex-wrap gap-2 mb-2">
-                    <template x-for="(tag, idx) in suggestedTags" :key="idx">
-                        <span class="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
-                            <span x-text="tag"></span>
-                            <button @click="suggestedTags.splice(idx, 1)" class="text-blue-500 hover:text-blue-700">&times;</button>
-                        </span>
-                    </template>
-                </div>
-                <div class="flex gap-2">
-                    <input type="text" x-model="newTag" @keydown.enter.prevent="addTag()" placeholder="Add tag..." class="border border-gray-300 rounded-lg px-3 py-1 text-sm w-48">
-                    <button @click="addTag()" class="text-sm text-blue-600 hover:text-blue-800">+ Add</button>
-                </div>
-            </div>
-
-            {{-- Categories --}}
-            <div class="mb-4">
-                <h5 class="text-sm font-semibold text-gray-700 mb-2">Categories</h5>
-                <div class="flex flex-wrap gap-2 mb-2">
-                    <template x-for="(cat, idx) in suggestedCategories" :key="idx">
-                        <span class="inline-flex items-center gap-1 bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">
-                            <span x-text="cat"></span>
-                            <button @click="suggestedCategories.splice(idx, 1)" class="text-green-500 hover:text-green-700">&times;</button>
-                        </span>
-                    </template>
-                </div>
-                <div class="flex gap-2">
-                    <input type="text" x-model="newCategory" @keydown.enter.prevent="addCategory()" placeholder="Add category..." class="border border-gray-300 rounded-lg px-3 py-1 text-sm w-48">
-                    <button @click="addCategory()" class="text-sm text-green-600 hover:text-green-800">+ Add</button>
-                </div>
-            </div>
-
-            {{-- Links panel --}}
-            <div class="mb-4" x-show="articleLinks.length > 0" x-cloak>
-                <h5 class="text-sm font-semibold text-gray-700 mb-2">Article Links</h5>
-                <div class="space-y-2">
-                    <template x-for="(link, idx) in articleLinks" :key="idx">
-                        <div class="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
-                            <div class="flex-1 min-w-0">
-                                <p class="text-xs text-gray-500 break-all" x-text="link.href"></p>
-                                <p class="text-xs text-gray-700" x-text="'Text: ' + link.text"></p>
-                            </div>
-                            <button @click="toggleLinkFollow(idx)"
-                                    :class="link.nofollow ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'"
-                                    class="text-xs px-2 py-1 rounded" x-text="link.nofollow ? 'nofollow' : 'follow'"></button>
-                        </div>
-                    </template>
-                </div>
-            </div>
-
             <div class="flex gap-3">
                 <button @click="finishEditing()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to Prepare &rarr;</button>
                 <button @click="saveDraftNow()" :disabled="savingDraft" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-50 flex items-center gap-2">
@@ -1212,15 +1122,12 @@ function publishPipeline() {
         insertingPhoto: null,
         photoCaption: '',
         lastAiCall: null,
-        appliedSmartEdits: [],
         tokenUsage: null,
         spinError: '',
 
         // Step 8 — Publish (combined)
         articleTitle: '',
         editorContent: '',
-        editorInstance: null,
-        articleLinks: [],
         preparing: false,
         prepareChecklist: [],
         prepareComplete: false,
@@ -1946,89 +1853,8 @@ function publishPipeline() {
             }
         },
 
-        // ── Step 8: Editor ────────────────────────────────
-        initEditor() {
-            const self = this;
-            // Core component auto-inits. Set content and attach change listener.
-            const waitForEditor = setInterval(() => {
-                const editor = tinymce.get('pipeline-editor');
-                if (editor) {
-                    clearInterval(waitForEditor);
-                    self.editorInstance = editor;
-                    editor.setContent(self.editorContent);
-                    editor.on('change keyup', () => {
-                        self.editorContent = editor.getContent();
-                        self.extractLinks();
-                    });
-                }
-            }, 200);
-        },
-
-        extractLinks() {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = this.editorContent;
-            const anchors = tempDiv.querySelectorAll('a[href]');
-            this.articleLinks = Array.from(anchors).map(a => ({
-                href: a.getAttribute('href'),
-                text: a.textContent,
-                nofollow: (a.getAttribute('rel') || '').includes('nofollow'),
-            }));
-        },
-
-        toggleLinkFollow(idx) {
-            this.articleLinks[idx].nofollow = !this.articleLinks[idx].nofollow;
-            // Update the HTML
-            if (this.editorInstance) {
-                let html = this.editorInstance.getContent();
-                const link = this.articleLinks[idx];
-                const hrefEscaped = link.href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                if (link.nofollow) {
-                    html = html.replace(
-                        new RegExp(`(<a[^>]*href=["']${hrefEscaped}["'][^>]*)>`, 'gi'),
-                        (match, p1) => {
-                            if (p1.includes('rel=')) {
-                                return p1.replace(/rel=["'][^"']*["']/, 'rel="nofollow"') + '>';
-                            }
-                            return p1 + ' rel="nofollow">';
-                        }
-                    );
-                } else {
-                    html = html.replace(
-                        new RegExp(`(<a[^>]*href=["']${hrefEscaped}["'][^>]*)\s*rel=["']nofollow["']([^>]*)>`, 'gi'),
-                        '$1$2>'
-                    );
-                }
-                this.editorInstance.setContent(html);
-                this.editorContent = html;
-            }
-        },
-
-        // Old insertPhotoAtCursor removed — using insertPhotoIntoEditor instead
-        _oldInsertPhotoAtCursor(photo) {
-            this.insertingPhoto = photo;
-            this.photoCaption = photo.alt || '';
-        },
-
-        addTag() {
-            const tag = this.newTag.trim();
-            if (tag && !this.suggestedTags.includes(tag)) {
-                this.suggestedTags.push(tag);
-            }
-            this.newTag = '';
-        },
-
-        addCategory() {
-            const cat = this.newCategory.trim();
-            if (cat && !this.suggestedCategories.includes(cat)) {
-                this.suggestedCategories.push(cat);
-            }
-            this.newCategory = '';
-        },
-
+        // ── Step 8: Review → Prepare ────────────────────
         finishEditing() {
-            if (this.editorInstance) {
-                this.editorContent = this.editorInstance.getContent();
-            }
             this.completeStep(8);
             this.openStep(9);
             this.autoSaveDraft();
@@ -2143,9 +1969,6 @@ function publishPipeline() {
         // ── Draft ─────────────────────────────────────────
         async saveDraftNow() {
             this.savingDraft = true;
-            if (this.editorInstance) {
-                this.editorContent = this.editorInstance.getContent();
-            }
             try {
                 const resp = await fetch('{{ route('publish.pipeline.save-draft') }}', {
                     method: 'POST',
