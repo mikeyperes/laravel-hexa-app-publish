@@ -1197,20 +1197,11 @@ function publishPipeline() {
         tokenUsage: null,
         spinError: '',
 
-        // Step 8 — Editor
+        // Step 8 — Publish (combined)
         articleTitle: '',
         editorContent: '',
         editorInstance: null,
-        photoSearch: '',
-        photoSearching: false,
-        photoResults: [],
-        suggestedTags: [],
-        suggestedCategories: [],
-        newTag: '',
-        newCategory: '',
         articleLinks: [],
-
-        // Step 9 — Prepare
         preparing: false,
         prepareChecklist: [],
         prepareComplete: false,
