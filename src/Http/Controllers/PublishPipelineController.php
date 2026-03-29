@@ -239,7 +239,7 @@ class PublishPipelineController extends Controller
             }
         }
 
-        $htmlInstruction = "\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title — the title is handled separately. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis — NEVER use ** or * markdown. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links with relevant supporting URLs where appropriate. Do NOT output markdown. Do NOT wrap in ```html code blocks. Output raw HTML tags directly.\n\nPHOTO PLACEMENT: Insert HTML comments where photos should be placed, using this exact format: <!-- PHOTO: descriptive search term for stock photo | caption sentence -->. Place {$photoCount} photo markers throughout the article at natural breaking points (after key paragraphs, between sections). The search term should be specific and visual (e.g. 'business executive speaking at podium' not just 'business'). The caption MUST be a complete, natural sentence that describes what the photo shows in context of the article — NOT keywords or search terms. Good caption example: 'A team of engineers reviews the latest prototype in their research laboratory.' Bad caption example: 'engineers prototype research'. If you cannot write a meaningful caption, leave the caption field empty after the pipe character.";
+        $htmlInstruction = "\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title — the title is handled separately. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis — NEVER use ** or * markdown. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links with relevant supporting URLs where appropriate. Do NOT output markdown. Do NOT wrap in ```html code blocks. Output raw HTML tags directly.\n\nPHOTO PLACEMENT: Insert HTML comments where photos should be placed, using this exact format: <!-- PHOTO: descriptive search term for stock photo | alt text description -->. Place {$photoCount} photo markers throughout the article at natural breaking points (after key paragraphs, between sections). The search term should be specific and visual for finding stock photos (e.g. 'business executive speaking at podium' not just 'business'). The alt text should be a concise description of what the photo shows for accessibility (e.g. 'Business executive presenting quarterly results at company podium'). Keep alt text under 125 characters.";
 
         $systemPrompt = !empty($systemParts)
             ? implode("\n\n", $systemParts) . $htmlInstruction
@@ -351,7 +351,8 @@ class PublishPipelineController extends Controller
                 $caption = trim($match[2]);
                 $photoSuggestions[] = [
                     'search_term' => $searchTerm,
-                    'caption' => $caption,
+                    'alt_text' => $caption,
+                    'caption' => '',
                     'position' => $i,
                 ];
                 // Replace invisible comment with visible placeholder (includes data-idx for JS targeting)

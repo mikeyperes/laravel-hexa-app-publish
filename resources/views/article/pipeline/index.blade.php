@@ -689,7 +689,7 @@
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <p class="text-sm font-medium text-purple-700 break-words" x-text="ps.search_term"></p>
-                                        <p class="text-xs text-gray-500 break-words" x-text="ps.caption"></p>
+                                        <p class="text-xs text-gray-500 break-words" x-text="ps.alt_text || ps.caption"></p>
                                     </div>
                                     <div class="flex items-center gap-1 flex-shrink-0">
                                         <button @click.stop="confirmPhoto(idx)" x-show="!ps.confirmed && ps.autoPhoto" x-cloak class="p-1.5 rounded hover:bg-green-100 text-green-600" title="Confirm photo">
@@ -784,6 +784,48 @@
                             </template>
                         </div>
                     </div>
+                </div>
+
+                {{-- Photo Info Modal --}}
+                <div x-show="viewingPhotoIdx !== null && photoSuggestions[viewingPhotoIdx]" x-cloak data-photo-modal class="mt-4 bg-white border-2 border-purple-300 rounded-xl shadow-lg p-5">
+                    <template x-if="viewingPhotoIdx !== null && photoSuggestions[viewingPhotoIdx]">
+                        <div>
+                            <div class="flex items-start gap-4">
+                                <img :src="photoSuggestions[viewingPhotoIdx]?.autoPhoto?.url_large || photoSuggestions[viewingPhotoIdx]?.autoPhoto?.url_thumb" class="w-64 h-auto rounded-lg border border-gray-200">
+                                <div class="flex-1 space-y-3">
+                                    <div>
+                                        <p class="text-xs text-gray-400 mb-1">Search Term</p>
+                                        <p class="text-sm font-medium text-purple-700" x-text="photoSuggestions[viewingPhotoIdx]?.search_term"></p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-gray-400 mb-1">Source</p>
+                                        <p class="text-sm text-gray-700" x-text="(photoSuggestions[viewingPhotoIdx]?.autoPhoto?.source || '?') + ' — ' + (photoSuggestions[viewingPhotoIdx]?.autoPhoto?.width || '?') + 'x' + (photoSuggestions[viewingPhotoIdx]?.autoPhoto?.height || '?')"></p>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-400 mb-1">Alt Text</label>
+                                        <input type="text" x-model="photoSuggestions[viewingPhotoIdx].alt_text" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Descriptive alt text for accessibility...">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-400 mb-1">Caption (optional — displayed below photo)</label>
+                                        <input type="text" x-model="photoSuggestions[viewingPhotoIdx].caption" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Photo caption for display...">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-400 mb-1">WordPress Filename</label>
+                                        <input type="text" x-model="photoSuggestions[viewingPhotoIdx].suggestedFilename" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono" placeholder="article-photo-1.jpg">
+                                    </div>
+                                    <div class="flex gap-2 pt-2">
+                                        <button @click="confirmPhoto(viewingPhotoIdx)" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 inline-flex items-center gap-1">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                            Confirm
+                                        </button>
+                                        <button @click="changePhoto(viewingPhotoIdx)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Change</button>
+                                        <button @click="removePhotoPlaceholder(viewingPhotoIdx); viewingPhotoIdx = null" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700">Remove</button>
+                                        <button @click="viewingPhotoIdx = null" class="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
 
                 {{-- Action buttons + Quick links — same row --}}
@@ -1182,6 +1224,7 @@ function publishPipeline() {
         _photoSuggestionIdx: null,
         expandedSuggestion: null,
         autoFetchingPhotos: false,
+        viewingPhotoIdx: null,
         lastAiCall: null,
         tokenUsage: null,
         spinError: '',
@@ -1820,6 +1863,13 @@ function publishPipeline() {
                                 ed.on('click', function(e) {
                                     const target = e.target;
 
+                                    // Action button: View
+                                    if (target.classList && target.classList.contains('photo-view')) {
+                                        e.preventDefault();
+                                        const ph = target.closest('.photo-placeholder');
+                                        if (ph) self.viewPhotoInfo(parseInt(ph.getAttribute('data-idx')));
+                                        return;
+                                    }
                                     // Action button: Confirm
                                     if (target.classList && target.classList.contains('photo-confirm')) {
                                         e.preventDefault();
@@ -1977,22 +2027,40 @@ function publishPipeline() {
             }
             const ps = this.photoSuggestions[idx];
             if (!ps || !ps.autoPhoto) return;
-            const thumbUrl = ps.autoPhoto.url_thumb || ps.autoPhoto.url_large;
-            const newHtml = '<div class="photo-placeholder" contenteditable="false" data-idx="' + idx + '" data-search="' + this._escHtml(ps.search_term) + '" data-caption="' + this._escHtml(ps.caption) + '" style="border:2px solid #a78bfa;background:#faf5ff;border-radius:8px;padding:8px 12px;margin:16px 0;cursor:pointer;">'
-                + '<div style="display:flex;align-items:center;gap:12px;">'
-                + '<img src="' + thumbUrl + '" style="width:120px;height:80px;object-fit:cover;border-radius:6px;flex-shrink:0;" />'
-                + '<div style="flex:1;min-width:0;">'
-                + '<p style="margin:0 0 4px;font-size:13px;color:#7c3aed;font-weight:600;">' + this._escHtml(ps.search_term) + '</p>'
-                + '<p style="margin:0 0 8px;font-size:12px;color:#6b7280;">' + this._escHtml(ps.caption) + '</p>'
+            const thumbUrl = ps.autoPhoto.url_large || ps.autoPhoto.url_thumb;
+            const altText = ps.alt_text || ps.caption || '';
+            const newHtml = '<div class="photo-placeholder" contenteditable="false" data-idx="' + idx + '" data-search="' + this._escHtml(ps.search_term) + '" data-caption="' + this._escHtml(altText) + '" style="border:2px solid #a78bfa;background:#faf5ff;border-radius:8px;padding:12px;margin:16px 0;cursor:pointer;">'
+                + '<img src="' + thumbUrl + '" style="width:300px;max-width:100%;height:auto;object-fit:cover;border-radius:6px;display:block;margin-bottom:8px;" />'
+                + '<p style="margin:0 0 4px;font-size:12px;color:#7c3aed;font-weight:600;">' + this._escHtml(ps.search_term) + '</p>'
+                + '<p style="margin:0 0 8px;font-size:11px;color:#6b7280;">' + this._escHtml(altText) + '</p>'
+                + '<span class="photo-view" style="cursor:pointer;display:inline-block;background:#7c3aed;color:white;padding:2px 8px;border-radius:4px;font-size:11px;margin-right:4px;">View</span>'
                 + '<span class="photo-confirm" style="cursor:pointer;display:inline-block;background:#16a34a;color:white;padding:2px 8px;border-radius:4px;font-size:11px;margin-right:4px;font-weight:600;">Confirm</span>'
                 + '<span class="photo-change" style="cursor:pointer;display:inline-block;background:#2563eb;color:white;padding:2px 8px;border-radius:4px;font-size:11px;margin-right:4px;">Change</span>'
                 + '<span class="photo-remove" style="cursor:pointer;display:inline-block;background:#dc2626;color:white;padding:2px 8px;border-radius:4px;font-size:11px;">Remove</span>'
-                + '</div></div></div>';
+                + '</div>';
             editor.dom.setOuterHTML(placeholder, newHtml);
         },
 
         _escHtml(str) {
             return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        },
+
+        _slugify(str) {
+            return String(str || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 80);
+        },
+
+        viewPhotoInfo(idx) {
+            this.viewingPhotoIdx = idx;
+            const ps = this.photoSuggestions[idx];
+            if (!ps) return;
+            // Generate suggested filename if not already set
+            if (!ps.suggestedFilename) {
+                const ext = (ps.autoPhoto?.url_full || '').split('.').pop()?.split('?')[0] || 'jpg';
+                ps.suggestedFilename = this._slugify(ps.alt_text || ps.search_term) + '.' + ext;
+            }
+            this.$nextTick(() => {
+                document.querySelector('[data-photo-modal]')?.scrollIntoView({behavior: 'smooth', block: 'center'});
+            });
         },
 
         confirmPhoto(idx) {
@@ -2003,11 +2071,13 @@ function publishPipeline() {
             const placeholder = editor.getBody().querySelector('.photo-placeholder[data-idx="' + idx + '"]');
             if (!placeholder) return;
             const photo = ps.autoPhoto;
+            const altText = (ps.alt_text || '').replace(/"/g, '&quot;');
             const caption = ps.caption || '';
             const imgUrl = photo.url_full || photo.url_large || photo.url_thumb;
-            const figureHtml = '<figure class="wp-block-image"><img src="' + imgUrl + '" alt="' + caption.replace(/"/g, '&quot;') + '" style="max-width:100%;height:auto"><figcaption>' + caption + '</figcaption></figure>';
+            const figureHtml = '<figure class="wp-block-image"><img src="' + imgUrl + '" alt="' + altText + '" style="max-width:100%;height:auto">' + (caption ? '<figcaption>' + this._escHtml(caption) + '</figcaption>' : '') + '</figure>';
             editor.dom.setOuterHTML(placeholder, figureHtml);
             this.photoSuggestions[idx].confirmed = true;
+            this.viewingPhotoIdx = null;
         },
 
         changePhoto(idx) {
