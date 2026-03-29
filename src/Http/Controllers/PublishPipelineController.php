@@ -15,6 +15,8 @@ use hexa_app_publish\Models\PublishSite;
 use hexa_package_anthropic\Services\AnthropicService;
 use Illuminate\Support\Str;
 use hexa_package_article_extractor\Services\ArticleExtractorService;
+use hexa_package_whm\Models\HostingAccount;
+use hexa_package_whm\Models\WhmServer;
 use hexa_package_wordpress\Services\WordPressService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -492,11 +494,20 @@ class PublishPipelineController extends Controller
 
         $site = PublishSite::findOrFail($validated['site_id']);
 
+        // Auto-provision credentials for WP Toolkit sites
         if (!$site->wp_username || !$site->wp_application_password) {
-            return response()->json([
-                'success' => false,
-                'message' => "Site '{$site->name}' has no WordPress credentials configured.",
-            ]);
+            if ($site->connection_type === 'wptoolkit') {
+                $provision = $this->autoProvisionWpCredentials($site);
+                if (!$provision['success']) {
+                    return response()->json(['success' => false, 'message' => $provision['message']]);
+                }
+                $site->refresh();
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Site '{$site->name}' has no WordPress credentials configured. Go to site settings to add wp_username and application password.",
+                ]);
+            }
         }
 
         $html = $validated['html'];
@@ -664,11 +675,20 @@ class PublishPipelineController extends Controller
 
         $site = PublishSite::findOrFail($validated['site_id']);
 
+        // Auto-provision credentials for WP Toolkit sites
         if (!$site->wp_username || !$site->wp_application_password) {
-            return response()->json([
-                'success' => false,
-                'message' => "Site '{$site->name}' has no WordPress credentials configured.",
-            ]);
+            if ($site->connection_type === 'wptoolkit') {
+                $provision = $this->autoProvisionWpCredentials($site);
+                if (!$provision['success']) {
+                    return response()->json(['success' => false, 'message' => $provision['message']]);
+                }
+                $site->refresh();
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Site '{$site->name}' has no WordPress credentials configured.",
+                ]);
+            }
         }
 
         $postData = [
@@ -813,6 +833,77 @@ class PublishPipelineController extends Controller
         } catch (\Exception $e) {
             Log::error("wpCreateTaxonomy error: {$taxonomy}/{$name}", ['error' => $e->getMessage()]);
             return null;
+        }
+    }
+
+    /**
+     * Auto-provision WordPress REST API credentials for a WP Toolkit site.
+     * Uses wp-cli via SSH to get admin user and create an application password.
+     *
+     * @param PublishSite $site
+     * @return array{success: bool, message: string}
+     */
+    private function autoProvisionWpCredentials(PublishSite $site): array
+    {
+        if ($site->connection_type !== 'wptoolkit' || !$site->hosting_account_id || !$site->wordpress_install_id) {
+            return ['success' => false, 'message' => 'Site is not connected via WP Toolkit.'];
+        }
+
+        $account = HostingAccount::find($site->hosting_account_id);
+        if (!$account || !$account->whm_server_id) {
+            return ['success' => false, 'message' => 'Hosting account or server not found.'];
+        }
+
+        $server = WhmServer::find($account->whm_server_id);
+        if (!$server) {
+            return ['success' => false, 'message' => 'WHM server not found.'];
+        }
+
+        // SSH to server and use wp-cli to get admin user + create application password
+        $sshKey = config('hws.ssh.key_path', '/Users/mp/Projects/hexa-commands/id_localmap');
+        $sshHost = $server->hostname;
+        $cpanelUser = $account->username;
+        $installId = $site->wordpress_install_id;
+
+        try {
+            $ssh = new \phpseclib3\Net\SSH2($sshHost, 22, 15);
+            $key = \phpseclib3\Crypt\PublicKeyLoader::load(file_get_contents($sshKey));
+            if (!$ssh->login('root', $key)) {
+                return ['success' => false, 'message' => 'SSH login failed to ' . $sshHost];
+            }
+
+            // Get admin username via wp-toolkit
+            $cmd = "wp-toolkit --wp-cli -instance-id " . escapeshellarg((string) $installId) . " -- user list --role=administrator --field=user_login --format=csv 2>&1";
+            $output = trim($ssh->exec($cmd));
+            $lines = array_filter(explode("\n", $output), fn($l) => !empty(trim($l)) && trim($l) !== 'user_login');
+            $adminUser = trim($lines[array_key_first($lines)] ?? '');
+
+            if (empty($adminUser)) {
+                return ['success' => false, 'message' => 'Could not find WordPress admin user via wp-cli.'];
+            }
+
+            // Create application password
+            $appName = 'hexa-publish-' . date('Ymd');
+            $cmd = "wp-toolkit --wp-cli -instance-id " . escapeshellarg((string) $installId) . " -- user application-password create " . escapeshellarg($adminUser) . " " . escapeshellarg($appName) . " --porcelain 2>&1";
+            $appPassword = trim($ssh->exec($cmd));
+
+            if (empty($appPassword) || str_contains($appPassword, 'Error') || str_contains($appPassword, 'error')) {
+                return ['success' => false, 'message' => 'Failed to create application password: ' . Str::limit($appPassword, 200)];
+            }
+
+            // Save credentials to site
+            $site->update([
+                'wp_username' => $adminUser,
+                'wp_application_password' => $appPassword,
+            ]);
+
+            hexaLog('publish', 'wp_credentials_provisioned', "Auto-provisioned WP credentials for {$site->name}: user={$adminUser}");
+
+            return ['success' => true, 'message' => "Credentials provisioned for {$site->name} (user: {$adminUser})."];
+
+        } catch (\Exception $e) {
+            Log::error('autoProvisionWpCredentials failed', ['site' => $site->name, 'error' => $e->getMessage()]);
+            return ['success' => false, 'message' => 'SSH error: ' . $e->getMessage()];
         }
     }
 }
