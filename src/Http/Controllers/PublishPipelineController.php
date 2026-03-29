@@ -356,8 +356,7 @@ class PublishPipelineController extends Controller
                 ];
                 // Replace invisible comment with visible placeholder (includes data-idx for JS targeting)
                 $placeholder = '<div class="photo-placeholder" contenteditable="false" data-idx="' . $i . '" data-search="' . htmlspecialchars($searchTerm) . '" data-caption="' . htmlspecialchars($caption) . '" style="border:2px dashed #a78bfa;background:#f5f3ff;border-radius:8px;padding:12px 16px;margin:16px 0;cursor:pointer;text-align:center;color:#7c3aed;font-size:14px;">'
-                    . '&#128247; Insert Photo: <strong>' . htmlspecialchars($searchTerm) . '</strong>'
-                    . '<br><span style="font-size:12px;color:#9ca3af;">Loading photo suggestion...</span>'
+                    . '<span style="font-size:13px;">Loading photo...</span>'
                     . '</div>';
                 $content = preg_replace('/<!--\s*PHOTO:\s*' . preg_quote($match[1], '/') . '\s*\|\s*' . preg_quote($match[2], '/') . '\s*-->/', $placeholder, $content, 1);
             }

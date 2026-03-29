@@ -1789,6 +1789,8 @@ function publishPipeline() {
                             menubar: true,
                             min_height: 400,
                             autoresize_bottom_margin: 50,
+                            extended_valid_elements: 'div[*],span[*],img[*],figure[*],figcaption[*]',
+                            custom_elements: '~div',
                             content_style: '.photo-placeholder { cursor: pointer !important; } .photo-placeholder:hover { opacity: 0.9; }',
                             setup: function(ed) {
                                 // Custom "Add Photo" toolbar button
@@ -1961,19 +1963,23 @@ function publishPipeline() {
             this.autoFetchingPhotos = false;
         },
 
-        updatePlaceholderInEditor(idx) {
+        updatePlaceholderInEditor(idx, retries) {
+            retries = retries || 0;
             const editor = tinymce.get('spin-preview-editor');
-            if (!editor) return;
+            if (!editor || !editor.getBody()) {
+                if (retries < 10) { const self = this; setTimeout(() => self.updatePlaceholderInEditor(idx, retries + 1), 500); }
+                return;
+            }
             const placeholder = editor.getBody().querySelector('.photo-placeholder[data-idx="' + idx + '"]');
-            if (!placeholder) return;
+            if (!placeholder) {
+                if (retries < 10) { const self = this; setTimeout(() => self.updatePlaceholderInEditor(idx, retries + 1), 500); }
+                return;
+            }
             const ps = this.photoSuggestions[idx];
             if (!ps || !ps.autoPhoto) return;
             const thumbUrl = ps.autoPhoto.url_thumb || ps.autoPhoto.url_large;
-            placeholder.style.border = '2px solid #a78bfa';
-            placeholder.style.background = '#faf5ff';
-            placeholder.style.textAlign = 'left';
-            placeholder.style.padding = '8px 12px';
-            placeholder.innerHTML = '<div style="display:flex;align-items:center;gap:12px;">'
+            const newHtml = '<div class="photo-placeholder" contenteditable="false" data-idx="' + idx + '" data-search="' + this._escHtml(ps.search_term) + '" data-caption="' + this._escHtml(ps.caption) + '" style="border:2px solid #a78bfa;background:#faf5ff;border-radius:8px;padding:8px 12px;margin:16px 0;cursor:pointer;">'
+                + '<div style="display:flex;align-items:center;gap:12px;">'
                 + '<img src="' + thumbUrl + '" style="width:120px;height:80px;object-fit:cover;border-radius:6px;flex-shrink:0;" />'
                 + '<div style="flex:1;min-width:0;">'
                 + '<p style="margin:0 0 4px;font-size:13px;color:#7c3aed;font-weight:600;">' + this._escHtml(ps.search_term) + '</p>'
@@ -1981,7 +1987,8 @@ function publishPipeline() {
                 + '<span class="photo-confirm" style="cursor:pointer;display:inline-block;background:#16a34a;color:white;padding:2px 8px;border-radius:4px;font-size:11px;margin-right:4px;font-weight:600;">Confirm</span>'
                 + '<span class="photo-change" style="cursor:pointer;display:inline-block;background:#2563eb;color:white;padding:2px 8px;border-radius:4px;font-size:11px;margin-right:4px;">Change</span>'
                 + '<span class="photo-remove" style="cursor:pointer;display:inline-block;background:#dc2626;color:white;padding:2px 8px;border-radius:4px;font-size:11px;">Remove</span>'
-                + '</div></div>';
+                + '</div></div></div>';
+            editor.dom.setOuterHTML(placeholder, newHtml);
         },
 
         _escHtml(str) {
