@@ -1698,7 +1698,7 @@ function publishPipeline() {
                     this.extractArticleLinks(data.html);
                     if (data.photo_suggestions) {
                         this.photoSuggestions = data.photo_suggestions.map(ps => ({...ps, autoPhoto: null, confirmed: false, removed: false, searchResults: []}));
-                        this.autoFetchPhotos();
+                        // autoFetchPhotos() is called from ed.on('init') inside setSpinEditor to avoid race condition
                     }
                 } else {
                     this.spinError = data.message;
@@ -1805,7 +1805,13 @@ function publishPipeline() {
                                     }
                                 });
 
-                                ed.on('init', function() { ed.setContent(html || ''); });
+                                ed.on('init', function() {
+                                    ed.setContent(html || '');
+                                    // Auto-fetch photos AFTER editor is fully initialized
+                                    if (self.photoSuggestions.length > 0 && !self.photoSuggestions[0].autoPhoto) {
+                                        self.autoFetchPhotos();
+                                    }
+                                });
                                 ed.on('change keyup', function() { self.extractArticleLinks(ed.getContent()); });
 
                                 // Handle clicks on photo placeholders and action buttons
