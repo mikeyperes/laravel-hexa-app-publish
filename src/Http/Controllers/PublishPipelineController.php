@@ -337,11 +337,19 @@ class PublishPipelineController extends Controller
         $photoSuggestions = [];
         if (preg_match_all('/<!--\s*PHOTO:\s*(.+?)\s*\|\s*(.+?)\s*-->/', $content, $photoMatches, PREG_SET_ORDER)) {
             foreach ($photoMatches as $i => $match) {
+                $searchTerm = trim($match[1]);
+                $caption = trim($match[2]);
                 $photoSuggestions[] = [
-                    'search_term' => trim($match[1]),
-                    'caption' => trim($match[2]),
+                    'search_term' => $searchTerm,
+                    'caption' => $caption,
                     'position' => $i,
                 ];
+                // Replace invisible comment with visible placeholder
+                $placeholder = '<div class="photo-placeholder" data-search="' . htmlspecialchars($searchTerm) . '" data-caption="' . htmlspecialchars($caption) . '" style="border:2px dashed #a78bfa;background:#f5f3ff;border-radius:8px;padding:12px 16px;margin:16px 0;cursor:pointer;text-align:center;color:#7c3aed;font-size:14px;">'
+                    . '&#128247; Insert Photo: <strong>' . htmlspecialchars($searchTerm) . '</strong>'
+                    . '<br><span style="font-size:12px;color:#9ca3af;">Click to search &amp; insert — Caption: ' . htmlspecialchars($caption) . '</span>'
+                    . '</div>';
+                $content = preg_replace('/<!--\s*PHOTO:\s*' . preg_quote($match[1], '/') . '\s*\|\s*' . preg_quote($match[2], '/') . '\s*-->/', $placeholder, $content, 1);
             }
         }
 

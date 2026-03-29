@@ -683,11 +683,14 @@
                         <div x-show="photoResults.length > 0" x-cloak class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                             <template x-for="(photo, idx) in photoResults" :key="idx">
                                 <div class="relative group cursor-pointer" @click="insertingPhoto = photo; photoCaption = photo.alt || photo.description || articleTitle">
-                                    <img :src="photo.thumbnail || photo.url" :alt="photo.alt || ''" class="w-full h-24 object-cover rounded-lg border border-gray-200">
+                                    <img :src="photo.url_thumb || photo.url_large || photo.url_full" :alt="photo.alt || ''" class="w-full h-24 object-cover rounded-lg border border-gray-200">
                                     <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 rounded-lg transition-all flex items-center justify-center">
                                         <span class="text-white text-xs font-medium opacity-0 group-hover:opacity-100">Insert</span>
                                     </div>
-                                    <p class="text-[10px] text-gray-400 mt-1" x-text="(photo.width || '?') + 'x' + (photo.height || '?') + ' — ' + (photo.source || '')"></p>
+                                    <div class="flex items-center justify-between mt-1">
+                                        <span class="text-[10px] text-gray-400" x-text="(photo.width || '?') + 'x' + (photo.height || '?')"></span>
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded font-medium" :class="photo.source === 'pexels' ? 'bg-green-100 text-green-700' : (photo.source === 'unsplash' ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700')" x-text="photo.source"></span>
+                                    </div>
                                 </div>
                             </template>
                         </div>
@@ -695,7 +698,7 @@
                         {{-- Caption input for selected photo --}}
                         <div x-show="insertingPhoto" x-cloak class="mt-3 bg-white border border-blue-200 rounded-lg p-3">
                             <div class="flex items-start gap-3">
-                                <img :src="insertingPhoto?.thumbnail || insertingPhoto?.url" class="w-20 h-16 object-cover rounded border">
+                                <img :src="insertingPhoto?.url_thumb || insertingPhoto?.url_large" class="w-20 h-16 object-cover rounded border">
                                 <div class="flex-1">
                                     <label class="block text-xs text-gray-500 mb-1">Caption</label>
                                     <input type="text" x-model="photoCaption" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Photo caption...">
@@ -864,7 +867,7 @@
                 <div x-show="photoResults.length > 0" x-cloak class="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
                     <template x-for="(photo, idx) in photoResults" :key="idx">
                         <button @click="insertPhotoAtCursor(photo)" class="w-20 h-20 rounded border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-400 flex-shrink-0">
-                            <img :src="photo.thumbnail || photo.url" :alt="photo.alt || 'Photo'" class="w-full h-full object-cover">
+                            <img :src="photo.url_thumb || photo.url_large || photo.url_full" :alt="photo.alt || 'Photo'" class="w-full h-full object-cover">
                         </button>
                     </template>
                 </div>
@@ -1794,24 +1797,31 @@ function publishPipeline() {
                     if (editor) {
                         clearInterval(wait);
                         editor.setContent(html || '');
-                        // Auto-resize to fit content — no scrolling
-                        setTimeout(() => {
-                            const body = editor.getBody();
-                            if (body) {
-                                const h = body.scrollHeight + 80;
-                                editor.getContainer().style.height = Math.max(400, h) + 'px';
-                                editor.getContentAreaContainer().querySelector('iframe').style.height = Math.max(400, h) + 'px';
-                            }
-                        }, 300);
-                        // Listen for changes to re-extract links + auto-resize
-                        editor.off('change keyup');
-                        editor.on('change keyup', () => {
-                            self.extractArticleLinks(editor.getContent());
-                            const body = editor.getBody();
-                            if (body) {
-                                const h = body.scrollHeight + 80;
-                                editor.getContainer().style.height = Math.max(400, h) + 'px';
-                                editor.getContentAreaContainer().querySelector('iframe').style.height = Math.max(400, h) + 'px';
+                        // Use TinyMCE autoresize — reinit with plugin
+                        hexaReinitTinyMCE('spin-preview-editor', {
+                            plugins: 'lists link image media table fullscreen wordcount code searchreplace autolink autoresize',
+                            toolbar: 'undo redo | blocks | bold italic underline strikethrough | bullist numlist | link image media | table | alignleft aligncenter alignright | outdent indent | fullscreen code searchreplace',
+                            menubar: true,
+                            min_height: 400,
+                            autoresize_bottom_margin: 50,
+                            setup: function(ed) {
+                                ed.on('init', function() { ed.setContent(html || ''); });
+                                ed.on('change keyup', function() { self.extractArticleLinks(ed.getContent()); });
+                                ed.on('click', function(e) {
+                                    const placeholder = e.target.closest('.photo-placeholder') || (e.target.classList && e.target.classList.contains('photo-placeholder') ? e.target : null);
+                                    if (placeholder) {
+                                        const term = placeholder.getAttribute('data-search');
+                                        const caption = placeholder.getAttribute('data-caption');
+                                        if (term) {
+                                            self.photoSearch = term;
+                                            self.photoCaption = caption || '';
+                                            self.showPhotoPanel = true;
+                                            self.searchPhotos();
+                                            // Mark this placeholder as the insertion target
+                                            self._photoInsertTarget = placeholder;
+                                        }
+                                    }
+                                });
                             }
                         });
                     }
@@ -1879,10 +1889,23 @@ function publishPipeline() {
             if (!this.insertingPhoto) return;
             const photo = this.insertingPhoto;
             const caption = this.photoCaption || '';
-            const html = '<figure class="wp-block-image"><img src="' + (photo.url || photo.src) + '" alt="' + caption.replace(/"/g, '&quot;') + '"><figcaption>' + caption + '</figcaption></figure>';
+            const imgUrl = photo.url_full || photo.url_large || photo.url_thumb;
+            const figureHtml = '<figure class="wp-block-image"><img src="' + imgUrl + '" alt="' + caption.replace(/"/g, '&quot;') + '" style="max-width:100%;height:auto"><figcaption>' + caption + '</figcaption></figure>';
             const editor = tinymce.get('spin-preview-editor');
             if (editor) {
-                editor.execCommand('mceInsertContent', false, html);
+                // If a photo placeholder was clicked, replace it
+                if (this._photoInsertTarget) {
+                    const dom = editor.dom;
+                    const el = editor.getBody().querySelector('.photo-placeholder[data-search="' + (this._photoInsertTarget.getAttribute('data-search') || '') + '"]');
+                    if (el) {
+                        dom.setOuterHTML(el, figureHtml);
+                    } else {
+                        editor.execCommand('mceInsertContent', false, figureHtml);
+                    }
+                    this._photoInsertTarget = null;
+                } else {
+                    editor.execCommand('mceInsertContent', false, figureHtml);
+                }
             }
             this.insertingPhoto = null;
             this.photoCaption = '';
