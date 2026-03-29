@@ -4,7 +4,7 @@
 @section('header', 'Publish Article')
 
 @section('content')
-<div class="max-w-5xl mx-auto space-y-4" x-data="publishPipeline()">
+<div class="max-w-6xl mx-auto space-y-4" x-data="publishPipeline()">
 
     {{-- Clear button --}}
     <div x-show="completedSteps.length > 0" x-cloak class="flex justify-end">
@@ -1122,7 +1122,10 @@
         <template x-if="notification.type === 'error'">
             <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </template>
-        <span class="text-sm break-words" :class="notification.type === 'success' ? 'text-green-800' : 'text-red-800'" x-text="notification.message"></span>
+        <span class="text-sm break-words flex-1" :class="notification.type === 'success' ? 'text-green-800' : 'text-red-800'" x-text="notification.message"></span>
+        <button @click="notification.show = false" class="text-gray-400 hover:text-gray-600 flex-shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
     </div>
 </div>
 
@@ -2002,11 +2005,8 @@ function publishPipeline() {
 
         // Old insertPhotoAtCursor removed — using insertPhotoIntoEditor instead
         _oldInsertPhotoAtCursor(photo) {
-            // Kept as placeholder — actual insert uses insertPhotoIntoEditor()
             this.insertingPhoto = photo;
             this.photoCaption = photo.alt || '';
-            // User confirms via the caption form
-            }
         },
 
         addTag() {
@@ -2185,7 +2185,11 @@ function publishPipeline() {
         // ── Notifications ─────────────────────────────────
         showNotification(type, message) {
             this.notification = { show: true, type, message };
-            setTimeout(() => { this.notification.show = false; }, 4000);
+            // Errors stay permanently, success fades after 8 seconds
+            if (type === 'success') {
+                setTimeout(() => { this.notification.show = false; }, 8000);
+            }
+            // Errors stay until user dismisses or next action
         },
     };
 }
