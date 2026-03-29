@@ -2174,18 +2174,17 @@ function publishPipeline() {
                 });
                 const data = await resp.json();
 
-                if (data.checklist) {
-                    this.prepareChecklist = data.checklist;
-                }
-
-                this.preparedHtml = data.html || this.editorContent;
-                this.preparedCategoryIds = data.category_ids || [];
-                this.preparedTagIds = data.tag_ids || [];
-                this.prepareComplete = data.success;
-
                 if (data.success) {
+                    if (data.checklist) this.prepareChecklist = data.checklist;
+                    this.preparedHtml = data.html || this.editorContent;
+                    this.preparedCategoryIds = data.category_ids || [];
+                    this.preparedTagIds = data.tag_ids || [];
+                    this.prepareComplete = true;
                     this.showNotification('success', 'Content prepared for WordPress');
                 } else {
+                    // Mark all checklist items as failed and clear spinners
+                    this.prepareChecklist = [];
+                    this.prepareComplete = false;
                     this.showNotification('error', data.message || 'Preparation failed');
                 }
             } catch (e) {
