@@ -21,6 +21,7 @@ class PublishSite extends Model
         'wp_username',
         'wp_application_password',
         'status',
+        'default_author',
         'last_error',
         'last_connected_at',
         'notes',

@@ -163,15 +163,54 @@
             <template x-if="enabledSites.length > 0">
                 <div class="border border-gray-200 rounded-lg divide-y divide-gray-100">
                     <template x-for="site in enabledSites" :key="site.id">
-                        <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-                            <div class="flex-1 min-w-0">
-                                <p class="text-sm font-medium text-gray-900 break-words" x-text="site.name"></p>
-                                <a :href="site.url" target="_blank" class="text-xs text-blue-600 hover:underline break-words inline-flex items-center gap-1">
-                                    <span x-text="site.url"></span>
-                                    <svg class="w-3 h-3 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                                </a>
+                        <div class="px-4 py-3 hover:bg-gray-50" x-data="{ testingWrite: false, writeResult: null, loadingAuthors: false, authors: [], selectedAuthor: site.default_author || '', showAuthors: false }">
+                            <div class="flex items-center justify-between">
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-medium text-gray-900 break-words" x-text="site.name"></p>
+                                    <a :href="site.url" target="_blank" class="text-xs text-blue-600 hover:underline break-words inline-flex items-center gap-1">
+                                        <span x-text="site.url"></span>
+                                        <svg class="w-3 h-3 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                    </a>
+                                </div>
+                                <div class="flex items-center gap-2 flex-shrink-0 ml-3">
+                                    <button @click="
+                                        testingWrite = true; writeResult = null;
+                                        fetch('/publish/sites/' + site.id + '/test-write', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content } })
+                                            .then(r => r.json()).then(d => { writeResult = d; testingWrite = false; }).catch(() => { writeResult = { success: false, message: 'Network error' }; testingWrite = false; })
+                                    " :disabled="testingWrite" class="text-xs px-2 py-1 border rounded inline-flex items-center gap-1" :class="writeResult?.success ? 'border-green-300 text-green-700 bg-green-50' : (writeResult?.success === false ? 'border-red-300 text-red-700 bg-red-50' : 'border-gray-300 text-gray-600 hover:bg-gray-100')">
+                                        <svg x-show="testingWrite" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                        <span x-text="testingWrite ? 'Testing...' : (writeResult?.success ? 'Write OK' : (writeResult?.success === false ? 'Failed' : 'Test Write'))"></span>
+                                    </button>
+                                    <button @click="removeSite(site.id)" class="text-xs text-red-500 hover:text-red-700 px-2 py-1 border border-red-200 rounded hover:bg-red-50">Remove</button>
+                                </div>
                             </div>
-                            <button @click="removeSite(site.id)" class="text-xs text-red-500 hover:text-red-700 px-2 py-1 border border-red-200 rounded hover:bg-red-50 flex-shrink-0 ml-3">Remove</button>
+                            {{-- Write test error --}}
+                            <p x-show="writeResult?.success === false" x-cloak class="text-xs text-red-600 mt-1 break-words" x-text="writeResult?.message"></p>
+                            {{-- Author selection --}}
+                            <div class="mt-2 flex items-center gap-2">
+                                <button @click="
+                                    if (!showAuthors) { showAuthors = true; loadingAuthors = true;
+                                        fetch('/publish/sites/' + site.id + '/authors', { headers: { 'Accept': 'application/json' } })
+                                            .then(r => r.json()).then(d => { authors = d.authors || []; if (d.default_author) selectedAuthor = d.default_author; loadingAuthors = false; })
+                                            .catch(() => { loadingAuthors = false; });
+                                    } else { showAuthors = false; }
+                                " class="text-xs text-purple-600 hover:text-purple-800 inline-flex items-center gap-1">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                    <span x-text="selectedAuthor ? 'Author: ' + selectedAuthor : 'Set Default Author'"></span>
+                                </button>
+                                <svg x-show="loadingAuthors" class="w-3 h-3 animate-spin text-purple-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            </div>
+                            <div x-show="showAuthors && authors.length > 0" x-cloak class="mt-2 flex flex-wrap gap-2">
+                                <template x-for="author in authors" :key="author.user_login">
+                                    <button @click="
+                                        selectedAuthor = author.user_login;
+                                        fetch('/publish/sites/' + site.id + '/set-author', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content }, body: JSON.stringify({ author: author.user_login }) });
+                                    " class="text-xs px-2 py-1 rounded border" :class="selectedAuthor === author.user_login ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-purple-50'">
+                                        <span x-text="author.display_name || author.user_login"></span>
+                                        <span class="text-gray-400 ml-1" x-text="'(' + author.user_login + ')'"></span>
+                                    </button>
+                                </template>
+                            </div>
                         </div>
                     </template>
                 </div>

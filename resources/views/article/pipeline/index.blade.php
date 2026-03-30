@@ -1223,6 +1223,10 @@
                         <span class="text-gray-400 text-xs">Draft ID</span>
                         <p class="font-medium text-gray-800" x-text="'#' + draftId"></p>
                     </div>
+                    <div x-show="publishAuthor">
+                        <span class="text-gray-400 text-xs">Author</span>
+                        <p class="font-medium text-gray-800" x-text="publishAuthor"></p>
+                    </div>
                 </div>
 
                 {{-- Links --}}
@@ -1390,6 +1394,7 @@ function publishPipeline() {
 
         // Step 10 — Publish
         publishAction: 'draft_local',
+        publishAuthor: '',
         scheduleDate: '',
         publishing: false,
         publishResult: null,
@@ -1678,8 +1683,16 @@ function publishPipeline() {
         selectSite() {
             if (this.selectedSiteId) {
                 this.selectedSite = this.sites.find(s => s.id == this.selectedSiteId) || null;
+                // Fetch default author
+                if (this.selectedSite) {
+                    fetch('/publish/sites/' + this.selectedSiteId + '/authors', { headers: { 'Accept': 'application/json' } })
+                        .then(r => r.json()).then(d => {
+                            if (d.default_author) this.publishAuthor = d.default_author;
+                        }).catch(() => {});
+                }
             } else {
                 this.selectedSite = null;
+                this.publishAuthor = '';
             }
         },
 

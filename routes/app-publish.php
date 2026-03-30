@@ -45,6 +45,9 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::get('/publish/sites/{id}/edit', [PublishSiteController::class, 'edit'])->name('publish.sites.edit');
     Route::put('/publish/sites/{id}', [PublishSiteController::class, 'update'])->name('publish.sites.update');
     Route::post('/publish/sites/{id}/test', [PublishSiteController::class, 'testConnection'])->name('publish.sites.test');
+    Route::post('/publish/sites/{id}/test-write', [PublishSiteController::class, 'testWriteAccess'])->name('publish.sites.test-write');
+    Route::get('/publish/sites/{id}/authors', [PublishSiteController::class, 'getAuthors'])->name('publish.sites.authors');
+    Route::post('/publish/sites/{id}/set-author', [PublishSiteController::class, 'setDefaultAuthor'])->name('publish.sites.set-author');
 
     // Templates
     Route::get('/publish/templates', [PublishTemplateController::class, 'index'])->name('publish.templates.index');
