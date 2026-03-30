@@ -277,7 +277,8 @@
                     <div class="space-y-2 max-h-[600px] overflow-y-auto">
                         <template x-for="(article, idx) in newsResults" :key="idx">
                             <div class="border rounded-lg p-3" :class="sources.some(s => s.url === article.url) ? 'border-gray-100 bg-gray-50 opacity-60' : 'border-gray-200 hover:bg-gray-50'">
-                                <div class="flex items-start justify-between gap-3">
+                                <div class="flex items-start gap-3">
+                                    <img x-show="article.image" x-cloak :src="article.image" :alt="article.title" class="w-16 h-16 rounded object-cover flex-shrink-0 bg-gray-100" onerror="this.style.display='none'">
                                     <div class="flex-1 min-w-0">
                                         <p class="text-sm font-medium text-gray-900 break-words" x-text="article.title"></p>
                                         <p class="text-xs text-gray-500 mt-1 break-words line-clamp-2" x-text="article.description"></p>
