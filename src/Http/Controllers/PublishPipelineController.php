@@ -601,21 +601,21 @@ class PublishPipelineController extends Controller
             $checklist[] = ['step' => 'replace_urls', 'label' => 'Replacing image URLs', 'status' => 'skipped', 'detail' => 'No replacements needed'];
         }
 
-        // Step 3: Create categories
+        // Step 3: Create categories (batch for SSH mode)
         $categoryIds = [];
         $requestedCategories = $validated['categories'] ?? [];
         if (!empty($requestedCategories)) {
-            $checklist[] = ['step' => 'create_categories', 'label' => 'Creating categories...', 'status' => 'running', 'detail' => ''];
-            foreach ($requestedCategories as $catName) {
-                if ($mode === self::WP_MODE_SSH) {
-                    $catResult = $this->wptoolkit->wpCliCreateCategory($server, $installId, trim($catName));
-                    if ($catResult['success'] && isset($catResult['term_id'])) $categoryIds[] = $catResult['term_id'];
-                } else {
-                    $existingCats = $this->wp->getCategories($siteUrl, $site->wp_username, $site->wp_application_password);
-                    $existingCatMap = [];
-                    if ($existingCats['success']) {
-                        foreach ($existingCats['data'] as $cat) $existingCatMap[strtolower($cat['name'])] = $cat['id'];
-                    }
+            $checklist[] = ['step' => 'create_categories', 'label' => 'Creating ' . count($requestedCategories) . ' categories...', 'status' => 'running', 'detail' => ''];
+            if ($mode === self::WP_MODE_SSH) {
+                $batchResult = $this->wptoolkit->wpCliBatchCategories($server, $installId, $requestedCategories);
+                $categoryIds = $batchResult['term_ids'] ?? [];
+            } else {
+                $existingCats = $this->wp->getCategories($siteUrl, $site->wp_username, $site->wp_application_password);
+                $existingCatMap = [];
+                if ($existingCats['success']) {
+                    foreach ($existingCats['data'] as $cat) $existingCatMap[strtolower($cat['name'])] = $cat['id'];
+                }
+                foreach ($requestedCategories as $catName) {
                     $catNameLower = strtolower(trim($catName));
                     if (isset($existingCatMap[$catNameLower])) {
                         $categoryIds[] = $existingCatMap[$catNameLower];
@@ -626,26 +626,26 @@ class PublishPipelineController extends Controller
                 }
             }
             $checklist[count($checklist) - 1]['status'] = 'done';
-            $checklist[count($checklist) - 1]['detail'] = count($categoryIds) . ' categories ready';
+            $checklist[count($checklist) - 1]['detail'] = count($categoryIds) . '/' . count($requestedCategories) . ' categories ready';
         } else {
             $checklist[] = ['step' => 'create_categories', 'label' => 'Creating categories', 'status' => 'skipped', 'detail' => 'No categories specified'];
         }
 
-        // Step 4: Create tags
+        // Step 4: Create tags (batch for SSH mode)
         $tagIds = [];
         $requestedTags = $validated['tags'] ?? [];
         if (!empty($requestedTags)) {
-            $checklist[] = ['step' => 'create_tags', 'label' => 'Creating tags...', 'status' => 'running', 'detail' => ''];
-            foreach ($requestedTags as $tagName) {
-                if ($mode === self::WP_MODE_SSH) {
-                    $tagResult = $this->wptoolkit->wpCliCreateTag($server, $installId, trim($tagName));
-                    if ($tagResult['success'] && isset($tagResult['term_id'])) $tagIds[] = $tagResult['term_id'];
-                } else {
-                    $existingTags = $this->wp->getTags($siteUrl, $site->wp_username, $site->wp_application_password);
-                    $existingTagMap = [];
-                    if ($existingTags['success']) {
-                        foreach ($existingTags['data'] as $tag) $existingTagMap[strtolower($tag['name'])] = $tag['id'];
-                    }
+            $checklist[] = ['step' => 'create_tags', 'label' => 'Creating ' . count($requestedTags) . ' tags...', 'status' => 'running', 'detail' => ''];
+            if ($mode === self::WP_MODE_SSH) {
+                $batchResult = $this->wptoolkit->wpCliBatchTags($server, $installId, $requestedTags);
+                $tagIds = $batchResult['term_ids'] ?? [];
+            } else {
+                $existingTags = $this->wp->getTags($siteUrl, $site->wp_username, $site->wp_application_password);
+                $existingTagMap = [];
+                if ($existingTags['success']) {
+                    foreach ($existingTags['data'] as $tag) $existingTagMap[strtolower($tag['name'])] = $tag['id'];
+                }
+                foreach ($requestedTags as $tagName) {
                     $tagNameLower = strtolower(trim($tagName));
                     if (isset($existingTagMap[$tagNameLower])) {
                         $tagIds[] = $existingTagMap[$tagNameLower];
