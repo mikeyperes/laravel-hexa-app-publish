@@ -81,8 +81,18 @@ class PublishPipelineController extends Controller
     {
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
 
+        // Create draft immediately so we have a real ID
+        $draft = PublishArticle::create([
+            'article_id' => PublishArticle::generateArticleId(),
+            'title'      => 'Untitled',
+            'status'     => 'draft',
+            'created_by' => auth()->id(),
+            'user_id'    => auth()->id(),
+        ]);
+
         return view('app-publish::article.pipeline.index', [
-            'sites' => $sites,
+            'sites'   => $sites,
+            'draftId' => $draft->id,
         ]);
     }
 
