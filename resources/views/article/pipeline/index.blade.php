@@ -488,9 +488,9 @@
                                     </button>
                                 </div>
                                 {{-- Formatted view --}}
-                                <div x-show="!showRaw" class="px-6 pb-4 max-h-[400px] overflow-y-auto" style="font-size: 15px; line-height: 1.8; color: #374151;" x-html="result.formatted_html || result.text"></div>
+                                <div x-show="!showRaw" class="px-6 pb-4 overflow-hidden" style="font-size: 15px; line-height: 1.8; color: #374151;" x-html="result.formatted_html || result.text"></div>
                                 {{-- Raw text view --}}
-                                <div x-show="showRaw" x-cloak class="px-6 pb-4 max-h-[400px] overflow-y-auto">
+                                <div x-show="showRaw" x-cloak class="px-6 pb-4 overflow-hidden">
                                     <pre class="text-xs text-gray-500 bg-gray-50 rounded-lg p-4 whitespace-pre-wrap break-words font-mono" x-text="result.text"></pre>
                                 </div>
                                 {{-- Action buttons with separator --}}
@@ -726,6 +726,35 @@
                 <div x-show="metadataLoading" x-cloak class="mt-3 flex items-center gap-2 text-sm text-gray-500">
                     <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     Generating titles, categories & tags...
+                </div>
+
+                {{-- Featured Image --}}
+                <div x-show="featuredImageSearch" x-cloak class="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-4" x-data="{ featuredPhoto: null, featuredLoading: false }">
+                    <h5 class="text-sm font-semibold text-purple-800 mb-2">Featured Image</h5>
+                    <div class="flex items-start gap-4">
+                        <div class="w-48 h-32 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                            <img x-show="featuredPhoto" x-cloak :src="featuredPhoto?.url_large || featuredPhoto?.url_thumb" class="w-full h-full object-cover">
+                            <div x-show="!featuredPhoto && !featuredLoading" class="w-full h-full flex items-center justify-center text-gray-300">
+                                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            </div>
+                            <div x-show="featuredLoading" x-cloak class="w-full h-full flex items-center justify-center">
+                                <svg class="w-6 h-6 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            </div>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs text-purple-600 mb-1">AI suggested search:</p>
+                            <div class="flex gap-2 mb-2">
+                                <input type="text" x-model="$root.featuredImageSearch" class="flex-1 border border-purple-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Featured image search...">
+                                <button @click="
+                                    featuredLoading = true;
+                                    fetch('{{ route("publish.search.images.post") }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': $root.csrfToken }, body: JSON.stringify({ query: $root.featuredImageSearch, per_page: 1 }) })
+                                        .then(r => r.json()).then(d => { if (d.data?.photos?.[0]) featuredPhoto = d.data.photos[0]; featuredLoading = false; })
+                                        .catch(() => featuredLoading = false);
+                                " class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-purple-700">Search</button>
+                            </div>
+                            <p x-show="featuredPhoto" x-cloak class="text-xs text-gray-500" x-text="(featuredPhoto?.width || '?') + 'x' + (featuredPhoto?.height || '?') + ' — ' + (featuredPhoto?.source || '?')"></p>
+                        </div>
+                    </div>
                 </div>
 
                 {{-- Photo Suggestions Panel --}}
@@ -1458,6 +1487,8 @@ function publishPipeline() {
                     if (state.selectedTitleIdx !== undefined) { this.selectedTitleIdx = state.selectedTitleIdx; if (this.suggestedTitles[this.selectedTitleIdx]) this.articleTitle = this.suggestedTitles[this.selectedTitleIdx]; }
                     if (state.editorContent) this.editorContent = state.editorContent;
                     if (state.tokenUsage) this.tokenUsage = state.tokenUsage;
+                    if (state.photoSuggestions) this.photoSuggestions = state.photoSuggestions;
+                    if (state.featuredImageSearch) this.featuredImageSearch = state.featuredImageSearch;
                     // Reload presets/templates THEN re-select saved values
                     if (this.selectedUser) {
                         const savedPresetId = state.selectedPresetId;
@@ -1490,6 +1521,7 @@ function publishPipeline() {
             this.$watch('articleTitle', () => this.savePipelineState());
             this.$watch('spunContent', () => this.savePipelineState());
             this.$watch('editorContent', () => this.savePipelineState());
+            this.$watch('photoSuggestions', () => this.savePipelineState());
         },
 
         savePipelineState() {
@@ -1523,6 +1555,8 @@ function publishPipeline() {
                 selectedTitleIdx: this.selectedTitleIdx,
                 editorContent: this.editorContent,
                 tokenUsage: this.tokenUsage,
+                photoSuggestions: this.photoSuggestions,
+                featuredImageSearch: this.featuredImageSearch,
             };
             localStorage.setItem('publishPipelineState', JSON.stringify(state));
         },
