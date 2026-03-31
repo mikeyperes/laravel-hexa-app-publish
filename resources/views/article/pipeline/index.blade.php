@@ -451,20 +451,32 @@
                                 <svg x-show="!result.success" class="w-7 h-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             </span>
                             <div class="flex-1 min-w-0">
-                                <a :href="result.url" target="_blank" @click.stop class="text-sm font-medium break-all inline-flex items-center gap-1 hover:underline" :class="result.success ? 'text-green-800' : 'text-red-800'">
+                                <p x-show="result.title" class="text-base font-semibold text-gray-900 break-words" x-text="result.title"></p>
+                                <a :href="result.url" target="_blank" @click.stop class="text-xs break-all inline-flex items-center gap-1 hover:underline mt-1" :class="result.success ? 'text-blue-600' : 'text-red-600'">
                                     <span x-text="result.url"></span>
                                     <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                                 </a>
-                                <p x-show="result.title" class="text-xs text-gray-600 font-medium mt-0.5" x-text="result.title"></p>
-                                <p class="text-xs" :class="result.success ? 'text-green-600' : 'text-red-600'" x-text="result.message"></p>
-                                <p x-show="result.success" class="text-xs font-medium" :class="approvedSources.includes(idx) ? 'text-green-700' : (discardedSources.includes(idx) ? 'text-gray-400' : 'text-green-600')" x-text="'Successfully extracted ' + result.word_count + ' words' + (approvedSources.includes(idx) ? ' — Approved' : (discardedSources.includes(idx) ? ' — Discarded' : ' — click to expand'))"></p>
-                                <p x-show="!result.success" class="text-xs text-red-600 font-medium">Extraction failed — <button @click.stop="retrySingleSource(idx)" class="underline hover:text-red-800">retry with fallback settings</button></p>
+                                <div x-show="result.success" class="flex items-center gap-3 mt-2">
+                                    <span class="text-lg font-bold text-green-700" x-text="result.word_count + ' words'"></span>
+                                    <span class="text-xs text-gray-400" x-text="result.message"></span>
+                                </div>
+                                <p x-show="!result.success" class="text-sm text-red-600 font-medium mt-1">Extraction failed — <button @click.stop="retrySingleSource(idx)" class="underline hover:text-red-800">retry</button></p>
                             </div>
                             <div class="flex items-center gap-2 flex-shrink-0">
+                                <button x-show="result.success" @click.stop="approveSource(idx)" class="px-4 py-2 rounded-lg font-semibold text-sm transition-colors" :class="approvedSources.includes(idx) ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300'">
+                                    <svg class="w-5 h-5 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                                    <span x-text="approvedSources.includes(idx) ? 'Approved' : 'Approve'"></span>
+                                </button>
                                 <button x-show="!result.success" @click.stop="retrySingleSource(idx)" class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-blue-50 rounded">Retry</button>
-                                <svg x-show="result.success" class="w-4 h-4 text-gray-400 transition-transform" :class="expandedSources.includes(idx) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                <svg x-show="result.success" class="w-5 h-5 text-gray-400 transition-transform" :class="expandedSources.includes(idx) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                             </div>
                         </div>
+                        {{-- Plain text preview (always visible when extracted) --}}
+                        <div x-show="result.success && result.text && !expandedSources.includes(idx)" x-cloak class="px-4 pb-3">
+                            <p class="text-sm text-gray-600 line-clamp-3 break-words" x-text="result.text.substring(0, 300) + '...'"></p>
+                            <button @click.stop="toggleSourceExpand(idx)" class="text-xs text-blue-600 hover:underline mt-1">Read full article</button>
+                        </div>
+
                         {{-- Expanded article content --}}
                         <div x-show="expandedSources.includes(idx) && result.text" x-cloak x-data="{ showRaw: false }" class="border-t border-green-200">
                             <div class="bg-white rounded-b-lg shadow-sm">
@@ -752,8 +764,8 @@
                     <div x-show="photoSuggestions.length > 0" class="space-y-2 mb-3">
                         <template x-for="(ps, idx) in photoSuggestions" :key="idx">
                             <div x-show="!ps.removed" class="border rounded-lg overflow-hidden" :class="ps.confirmed ? 'border-green-300 bg-green-50' : 'border-purple-200 bg-white'">
-                                <div class="flex items-center gap-3 p-3 cursor-pointer" @click="expandedSuggestion = expandedSuggestion === idx ? null : idx">
-                                    <div class="w-16 h-12 flex-shrink-0 rounded overflow-hidden bg-gray-100">
+                                <div class="flex items-center gap-3 p-3 cursor-pointer" @click="expandedSuggestions.includes(idx) ? expandedSuggestions = expandedSuggestions.filter(i => i !== idx) : expandedSuggestions.push(idx)">
+                                    <div class="w-24 h-18 flex-shrink-0 rounded overflow-hidden bg-gray-100" style="width:96px;height:72px;">
                                         <img x-show="ps.autoPhoto" x-cloak :src="ps.autoPhoto?.url_thumb" class="w-full h-full object-cover">
                                         <div x-show="!ps.autoPhoto" class="w-full h-full flex items-center justify-center text-gray-300">
                                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
@@ -768,26 +780,29 @@
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                         </button>
                                         <span x-show="ps.confirmed" x-cloak class="text-xs text-green-600 font-medium px-1">Confirmed</span>
-                                        <button @click.stop="expandedSuggestion = expandedSuggestion === idx ? null : idx" class="p-1.5 rounded hover:bg-blue-100 text-blue-600" title="Change photo">
+                                        <button @click.stop="expandedSuggestions.includes(idx) ? expandedSuggestions = expandedSuggestions.filter(i => i !== idx) : expandedSuggestions.push(idx)" class="p-1.5 rounded hover:bg-blue-100 text-blue-600" title="Change photo">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
                                         </button>
                                         <button @click.stop="removePhotoPlaceholder(idx)" class="p-1.5 rounded hover:bg-red-100 text-red-600" title="Remove">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                         </button>
-                                        <svg class="w-4 h-4 text-gray-400 transition-transform" :class="expandedSuggestion === idx ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                        <svg class="w-4 h-4 text-gray-400 transition-transform" :class="expandedSuggestions.includes(idx) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                                     </div>
                                 </div>
-                                <div x-show="expandedSuggestion === idx" x-cloak class="p-3 pt-0 border-t border-gray-100">
+                                <div x-show="expandedSuggestions.includes(idx)" x-cloak class="p-3 pt-0 border-t border-gray-100">
                                     <div class="flex gap-2 mb-2">
                                         <input type="text" :value="ps.search_term" @input="photoSuggestions[idx].search_term = $event.target.value" @keydown.enter="searchPhotosForSuggestion(idx)" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search...">
-                                        <button @click="searchPhotosForSuggestion(idx)" class="bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-gray-700">Search</button>
+                                        <button @click="searchPhotosForSuggestion(idx)" :disabled="ps.searching" class="bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-gray-700 disabled:opacity-50 inline-flex items-center gap-1">
+                                            <svg x-show="ps.searching" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                            <span x-text="ps.searching ? 'Searching...' : 'Search'"></span>
+                                        </button>
                                     </div>
                                     <div x-show="ps.searchResults && ps.searchResults.length > 0" x-cloak class="grid grid-cols-2 md:grid-cols-4 gap-2">
                                         <template x-for="(photo, pidx) in (ps.searchResults || [])" :key="pidx">
                                             <div class="cursor-pointer rounded-lg overflow-hidden border-2 hover:border-blue-400 transition-colors"
                                                  :class="ps.autoPhoto && ps.autoPhoto.url_thumb === photo.url_thumb ? 'border-purple-400' : 'border-gray-200'"
                                                  @click="selectPhotoForSuggestion(idx, photo)">
-                                                <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-28 object-cover">
+                                                <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-44 object-cover">
                                             </div>
                                         </template>
                                     </div>
@@ -1388,7 +1403,7 @@ function publishPipeline() {
         insertingPhoto: null,
         photoCaption: '',
         _photoSuggestionIdx: null,
-        expandedSuggestion: null,
+        expandedSuggestions: [],
         autoFetchingPhotos: false,
         viewingPhotoIdx: null,
         lastAiCall: null,
@@ -2282,7 +2297,7 @@ function publishPipeline() {
 
         changePhoto(idx) {
             this._photoSuggestionIdx = idx;
-            this.expandedSuggestion = idx;
+            if (!this.expandedSuggestions.includes(idx)) this.expandedSuggestions.push(idx);
             this.$nextTick(() => {
                 document.querySelector('[data-photo-section]')?.scrollIntoView({behavior: 'smooth', block: 'center'});
             });
@@ -2300,6 +2315,7 @@ function publishPipeline() {
         async searchPhotosForSuggestion(idx) {
             const ps = this.photoSuggestions[idx];
             if (!ps || !ps.search_term.trim()) return;
+            this.photoSuggestions[idx].searching = true;
             try {
                 const resp = await fetch('{{ route("publish.search.images.post") }}', {
                     method: 'POST',
@@ -2309,6 +2325,7 @@ function publishPipeline() {
                 const data = await resp.json();
                 this.photoSuggestions[idx].searchResults = data.data?.photos || [];
             } catch (e) { this.photoSuggestions[idx].searchResults = []; }
+            this.photoSuggestions[idx].searching = false;
         },
 
         selectPhotoForSuggestion(idx, photo) {
