@@ -166,6 +166,7 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::post('/publishing/settings', [PublishMasterSettingController::class, 'store'])->name('publish.settings.master.store');
     Route::put('/publishing/settings/{id}', [PublishMasterSettingController::class, 'update'])->name('publish.settings.master.update');
     Route::delete('/publishing/settings/{id}', [PublishMasterSettingController::class, 'destroy'])->name('publish.settings.master.destroy');
+    Route::post('/publishing/settings/save-prompt', [PublishMasterSettingController::class, 'savePrompt'])->name('publish.settings.master.save-prompt');
 
     // ═══ Schedule ═══
     Route::get('/schedule', [PublishScheduleController::class, 'index'])->name('publish.schedule.index');

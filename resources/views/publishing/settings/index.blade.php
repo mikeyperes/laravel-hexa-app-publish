@@ -91,6 +91,71 @@
         @endif
     </div>
 
+    {{-- ═══ Master Spin Prompt ═══ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" x-data="{ savingPrompt: false, promptSaved: false }">
+        <div class="px-5 py-4 border-b border-gray-200">
+            <h3 class="font-semibold text-gray-800">Master Spin Prompt</h3>
+            <p class="text-xs text-gray-500 mt-1">This is the EXACT prompt sent to AI when spinning articles. Use shortcodes for dynamic values.</p>
+        </div>
+        <div class="p-5">
+            <textarea id="master-spin-prompt" rows="20" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm font-mono leading-relaxed" placeholder="Enter the master spin prompt...">{{ \hexa_app_publish\Models\PublishMasterSetting::where('type', 'master_spin_prompt')->where('is_active', true)->value('content') ?? 'You are a professional content writer. Rewrite the provided source articles into a single new unique article.
+
+{custom_instructions}
+
+{wordpress_guidelines}
+
+{spinning_guidelines}
+
+{preset_config}
+
+{template_config}
+
+CRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=""> for links. Do NOT output markdown.
+
+PHOTO PLACEMENT: Insert HTML comments for photos: <!-- PHOTO: descriptive search term | alt text description -->. Place {photo_count} photo markers at natural breaking points. Search terms must be specific and visual. Alt text under 125 characters.
+
+FEATURED IMAGE: Also output one line: <!-- FEATURED: descriptive search term for the article featured image -->
+
+METADATA: At the very end of your response, output a JSON block:
+<!-- METADATA: {"titles":["title1","title2",...10 titles],"categories":["cat1","cat2",...15 categories],"tags":["tag1","tag2",...15 tags]} -->
+
+The titles should be compelling and SEO-friendly. Categories are broad topics. Tags are specific keywords.
+
+{source_articles}' }}</textarea>
+
+            <div class="mt-3 flex items-center gap-3">
+                <button @click="
+                    savingPrompt = true; promptSaved = false;
+                    const content = document.getElementById('master-spin-prompt').value;
+                    fetch('/publishing/settings/save-prompt', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
+                        body: JSON.stringify({ content: content })
+                    }).then(r => r.json()).then(d => { savingPrompt = false; promptSaved = d.success; setTimeout(() => promptSaved = false, 3000); }).catch(() => savingPrompt = false);
+                " :disabled="savingPrompt" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+                    <svg x-show="savingPrompt" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    <span x-text="savingPrompt ? 'Saving...' : (promptSaved ? 'Saved!' : 'Save Prompt')"></span>
+                </button>
+                <span x-show="promptSaved" x-cloak class="text-sm text-green-600 font-medium">Saved successfully</span>
+            </div>
+
+            {{-- Shortcode Reference --}}
+            <div class="mt-4 bg-gray-50 rounded-lg p-4">
+                <h4 class="text-sm font-semibold text-gray-700 mb-2">Available Shortcodes</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-1 text-xs">
+                    <div><code class="bg-gray-200 px-1 rounded">{custom_instructions}</code> — User's custom input from pipeline</div>
+                    <div><code class="bg-gray-200 px-1 rounded">{wordpress_guidelines}</code> — WP publishing guidelines (from above)</div>
+                    <div><code class="bg-gray-200 px-1 rounded">{spinning_guidelines}</code> — AI spinning guidelines (from below)</div>
+                    <div><code class="bg-gray-200 px-1 rounded">{preset_config}</code> — WP preset: tone, format, links, images</div>
+                    <div><code class="bg-gray-200 px-1 rounded">{template_config}</code> — AI template: prompt, tone, type, word count</div>
+                    <div><code class="bg-gray-200 px-1 rounded">{photo_count}</code> — Number of photos (from template or default 2-4)</div>
+                    <div><code class="bg-gray-200 px-1 rounded">{source_articles}</code> — The actual source article texts</div>
+                    <div><code class="bg-gray-200 px-1 rounded">{featured_image_preference}</code> — Featured image preference from preset</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- ═══ Master AI Spinning Guidelines ═══ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
         <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">

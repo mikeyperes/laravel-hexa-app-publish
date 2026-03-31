@@ -227,113 +227,87 @@ class PublishPipelineController extends Controller
             'master_setting_ids.*' => 'integer|exists:publish_master_settings,id',
         ]);
 
-        // Load master settings (active ones, or specific IDs if provided)
-        if (!empty($validated['master_setting_ids'])) {
-            $masterSettings = PublishMasterSetting::whereIn('id', $validated['master_setting_ids'])
-                ->where('is_active', true)
-                ->orderBy('sort_order')
-                ->get();
-        } else {
-            $masterSettings = PublishMasterSetting::where('is_active', true)
-                ->orderBy('sort_order')
-                ->get();
+        // Load master spin prompt (or use default)
+        $masterPrompt = PublishMasterSetting::where('type', 'master_spin_prompt')
+            ->where('is_active', true)
+            ->value('content');
+
+        if (empty($masterPrompt)) {
+            $masterPrompt = "You are a professional content writer. Rewrite the provided source articles into a single new unique article.\n\n{custom_instructions}\n\n{wordpress_guidelines}\n\n{spinning_guidelines}\n\n{preset_config}\n\n{template_config}\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links. Do NOT output markdown.\n\nPHOTO PLACEMENT: Insert HTML comments for photos: <!-- PHOTO: descriptive search term | alt text description -->. Place {photo_count} photo markers at natural breaking points. Search terms must be specific and visual. Alt text under 125 characters.\n\nFEATURED IMAGE: Also output one line: <!-- FEATURED: descriptive search term for the article featured image -->\n\nMETADATA: At the very end of your response, output a JSON block:\n<!-- METADATA: {\"titles\":[\"title1\",\"title2\",...10 titles],\"categories\":[\"cat1\",\"cat2\",...15 categories],\"tags\":[\"tag1\",\"tag2\",...15 tags]} -->\n\nThe titles should be compelling and SEO-friendly. Categories are broad topics. Tags are specific keywords.\n\n{source_articles}";
         }
 
-        // Build system prompt from master settings
-        $systemParts = [];
+        // Load settings for shortcode replacement
+        $masterSettings = PublishMasterSetting::where('is_active', true)->orderBy('sort_order')->get();
 
+        // Build shortcode values
         $wpGuidelines = $masterSettings->where('type', 'wordpress_guidelines')->pluck('content')->implode("\n\n");
-        if ($wpGuidelines) {
-            $systemParts[] = "=== WordPress Publishing Guidelines ===\n{$wpGuidelines}";
-        }
-
         $spinGuidelines = $masterSettings->where('type', 'spinning_guidelines')->pluck('content')->implode("\n\n");
-        if ($spinGuidelines) {
-            $systemParts[] = "=== AI Spinning Guidelines ===\n{$spinGuidelines}";
-        }
 
-        // Add preset config if selected
+        $presetConfig = '';
         if (!empty($validated['preset_id'])) {
             $preset = PublishPreset::find($validated['preset_id']);
             if ($preset) {
-                $presetParts = [];
-                if ($preset->tone) {
-                    $presetParts[] = "tone={$preset->tone}";
-                }
-                if ($preset->article_format) {
-                    $presetParts[] = "format={$preset->article_format}";
-                }
-                if ($preset->follow_links) {
-                    $presetParts[] = "follow_links={$preset->follow_links}";
-                }
-                if ($preset->image_preference) {
-                    $presetParts[] = "image_preference={$preset->image_preference}";
-                }
-                if (!empty($presetParts)) {
-                    $systemParts[] = "=== Preset Configuration ===\n" . implode(', ', $presetParts);
-                }
+                $parts = [];
+                if ($preset->tone) $parts[] = "Tone: {$preset->tone}";
+                if ($preset->article_format) $parts[] = "Format: {$preset->article_format}";
+                if ($preset->follow_links) $parts[] = "Links: {$preset->follow_links}";
+                if ($preset->image_preference) $parts[] = "Images: {$preset->image_preference}";
+                $presetConfig = implode("\n", $parts);
             }
         }
 
-        // Determine photo count from template if available
+        $templateConfig = '';
         $photoCount = '2-4';
-        if (!empty($validated['template_id'])) {
-            $templateForPhotos = PublishTemplate::find($validated['template_id']);
-            if ($templateForPhotos && $templateForPhotos->photos_per_article) {
-                $photoCount = (string) $templateForPhotos->photos_per_article;
-            }
-        }
-
-        $htmlInstruction = "\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title — the title is handled separately. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis — NEVER use ** or * markdown. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links with relevant supporting URLs where appropriate. Do NOT output markdown. Do NOT wrap in ```html code blocks. Output raw HTML tags directly.\n\nPHOTO PLACEMENT: Insert HTML comments where photos should be placed, using this exact format: <!-- PHOTO: descriptive search term for stock photo | alt text description -->. Place {$photoCount} photo markers throughout the article at natural breaking points (after key paragraphs, between sections). The search term should be specific and visual for finding stock photos (e.g. 'business executive speaking at podium' not just 'business'). The alt text should be a concise description of what the photo shows for accessibility (e.g. 'Business executive presenting quarterly results at company podium'). Keep alt text under 125 characters.";
-
-        $systemPrompt = !empty($systemParts)
-            ? implode("\n\n", $systemParts) . $htmlInstruction
-            : "You are a professional content writer. Rewrite the provided source articles into a new unique article." . $htmlInstruction;
-
-        // Custom prompt takes highest priority — prepended to system prompt
-        if (!empty($validated['custom_prompt'])) {
-            $systemPrompt = "=== PRIORITY INSTRUCTIONS (from user) ===\n{$validated['custom_prompt']}\n\n" . $systemPrompt;
-        }
-
-        // Build user message from prompt template + sources
-        $userParts = [];
-
         if (!empty($validated['template_id'])) {
             $template = PublishTemplate::find($validated['template_id']);
             if ($template) {
-                $templateParts = [];
-                if ($template->ai_prompt) {
-                    $templateParts[] = $template->ai_prompt;
-                }
-                if ($template->tone) {
-                    $tones = is_array($template->tone) ? implode(', ', $template->tone) : $template->tone;
-                    $templateParts[] = "Tone: {$tones}";
-                }
-                if ($template->word_count_min || $template->word_count_max) {
-                    $templateParts[] = "Target word count: {$template->word_count_min} - {$template->word_count_max} words";
-                }
-                if ($template->article_type) {
-                    $templateParts[] = "Article type: {$template->article_type}";
-                }
-                if (!empty($templateParts)) {
-                    $userParts[] = implode("\n", $templateParts);
-                }
+                $parts = [];
+                if ($template->ai_prompt) $parts[] = $template->ai_prompt;
+                if ($template->tone) $parts[] = "Tone: " . (is_array($template->tone) ? implode(', ', $template->tone) : $template->tone);
+                if ($template->article_type) $parts[] = "Article type: {$template->article_type}";
+                if ($template->word_count_min || $template->word_count_max) $parts[] = "Target words: {$template->word_count_min}-{$template->word_count_max}";
+                $templateConfig = implode("\n", $parts);
+                if ($template->photos_per_article) $photoCount = (string) $template->photos_per_article;
             }
         }
 
-        // If this is a change request, treat source_texts as the existing article
+        // Build source articles text
+        $sourceTextsStr = '';
         if (!empty($validated['change_request'])) {
-            $userParts[] = "Below is an existing article. Apply the following changes:\n\nChanges requested: {$validated['change_request']}\n\n=== Current Article ===\n{$validated['source_texts'][0]}";
+            $sourceTextsStr = "Below is an existing article. Apply the following changes:\n\nChanges requested: {$validated['change_request']}\n\n=== Current Article ===\n{$validated['source_texts'][0]}";
         } else {
-            $userParts[] = "Below are the source articles to spin into a new unique article:\n";
-
+            $sourceTextsStr = "Below are the source articles to spin into a new unique article:\n";
             foreach ($validated['source_texts'] as $i => $text) {
                 $num = $i + 1;
-                $userParts[] = "=== Source {$num} ===\n{$text}";
+                $sourceTextsStr .= "\n=== Source {$num} ===\n{$text}";
             }
         }
 
-        $userMessage = implode("\n\n", $userParts);
+        // Replace all shortcodes
+        $systemPrompt = str_replace([
+            '{custom_instructions}',
+            '{wordpress_guidelines}',
+            '{spinning_guidelines}',
+            '{preset_config}',
+            '{template_config}',
+            '{photo_count}',
+            '{source_articles}',
+            '{featured_image_preference}',
+        ], [
+            !empty($validated['custom_prompt']) ? "=== PRIORITY INSTRUCTIONS ===\n{$validated['custom_prompt']}" : '',
+            $wpGuidelines ? "=== WordPress Guidelines ===\n{$wpGuidelines}" : '',
+            $spinGuidelines ? "=== Spinning Guidelines ===\n{$spinGuidelines}" : '',
+            $presetConfig ? "=== Preset Config ===\n{$presetConfig}" : '',
+            $templateConfig ? "=== Template Config ===\n{$templateConfig}" : '',
+            $photoCount,
+            $sourceTextsStr,
+            $preset->image_preference ?? '',
+        ], $masterPrompt);
+
+        // Clean up empty sections (double newlines from empty shortcodes)
+        $systemPrompt = preg_replace("/\n{3,}/", "\n\n", trim($systemPrompt));
+
+        $userMessage = 'Generate the article now.';
         $model = $validated['model'];
 
         $result = $this->anthropic->chat($systemPrompt, $userMessage, $model, 8192);
@@ -413,6 +387,22 @@ class PublishPipelineController extends Controller
             }
         }
 
+        // Extract FEATURED image suggestion
+        $featuredImage = null;
+        if (preg_match('/<!--\s*FEATURED:\s*(.+?)\s*-->/', $content, $featuredMatch)) {
+            $featuredImage = trim($featuredMatch[1]);
+            $content = preg_replace('/<!--\s*FEATURED:\s*.+?\s*-->/', '', $content);
+        }
+
+        // Extract METADATA (titles, categories, tags)
+        $metadata = ['titles' => [], 'categories' => [], 'tags' => []];
+        if (preg_match('/<!--\s*METADATA:\s*(\{.+?\})\s*-->/s', $content, $metaMatch)) {
+            $parsed = json_decode(trim($metaMatch[1]), true);
+            if ($parsed) $metadata = array_merge($metadata, $parsed);
+            $content = preg_replace('/<!--\s*METADATA:\s*\{.+?\}\s*-->/s', '', $content);
+        }
+
+        $content = trim($content);
         $plainText = strip_tags($content);
         $wordCount = str_word_count($plainText);
 
@@ -459,6 +449,9 @@ class PublishPipelineController extends Controller
             'ip'         => request()->ip(),
             'timestamp_utc' => now()->utc()->format('Y-m-d H:i:s'),
             'photo_suggestions' => $photoSuggestions,
+            'featured_image' => $featuredImage,
+            'metadata' => $metadata,
+            'resolved_prompt' => $systemPrompt,
         ]);
     }
 

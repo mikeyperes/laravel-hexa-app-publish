@@ -118,4 +118,34 @@ class PublishMasterSettingController extends Controller
             'message' => "Setting '{$name}' deleted successfully.",
         ]);
     }
+
+    /**
+     * Save the master spin prompt.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function savePrompt(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'content' => 'required|string',
+        ]);
+
+        $existing = PublishMasterSetting::where('type', 'master_spin_prompt')->first();
+        if ($existing) {
+            $existing->update(['content' => $validated['content']]);
+        } else {
+            PublishMasterSetting::create([
+                'name' => 'Master Spin Prompt',
+                'type' => 'master_spin_prompt',
+                'content' => $validated['content'],
+                'is_active' => true,
+                'sort_order' => 0,
+            ]);
+        }
+
+        hexaLog('publish', 'prompt_updated', 'Master spin prompt updated');
+
+        return response()->json(['success' => true, 'message' => 'Prompt saved.']);
+    }
 }

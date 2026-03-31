@@ -611,35 +611,13 @@
                     <svg class="w-3 h-3 transition-transform" :class="showPrompt ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                     View Full Prompt
                 </button>
-                <div x-show="showPrompt" x-cloak class="mt-2 bg-gray-900 text-gray-300 rounded-xl p-4 text-xs font-mono max-h-64 overflow-y-auto break-words space-y-2">
-                    <template x-if="customPrompt.trim()">
-                        <div>
-                            <p class="text-yellow-400 font-semibold">CUSTOM INSTRUCTIONS (priority):</p>
-                            <p class="text-yellow-200" x-text="customPrompt"></p>
-                        </div>
+                <div x-show="showPrompt" x-cloak class="mt-2 bg-gray-900 text-gray-300 rounded-xl p-4 text-xs font-mono overflow-y-auto break-words whitespace-pre-wrap" style="max-height:500px;">
+                    <template x-if="resolvedPrompt">
+                        <pre class="text-green-300 whitespace-pre-wrap break-words" x-text="resolvedPrompt"></pre>
                     </template>
-                    <template x-if="selectedTemplate">
-                        <div>
-                            <p class="text-blue-400 font-semibold">TEMPLATE:</p>
-                            <p x-show="selectedTemplate?.ai_prompt" x-text="selectedTemplate?.ai_prompt" class="text-blue-200"></p>
-                            <p x-show="selectedTemplate?.tone" class="text-gray-400">Tone: <span x-text="Array.isArray(selectedTemplate?.tone) ? selectedTemplate.tone.join(', ') : selectedTemplate?.tone" class="text-blue-200"></span></p>
-                            <p x-show="selectedTemplate?.article_type" class="text-gray-400">Type: <span x-text="selectedTemplate?.article_type" class="text-blue-200"></span></p>
-                            <p x-show="selectedTemplate?.word_count_min" class="text-gray-400">Words: <span x-text="(selectedTemplate?.word_count_min || '?') + '-' + (selectedTemplate?.word_count_max || '?')" class="text-blue-200"></span></p>
-                        </div>
+                    <template x-if="!resolvedPrompt">
+                        <p class="text-gray-500">Prompt will appear here after spinning. This shows the EXACT text sent to AI.</p>
                     </template>
-                    <template x-if="selectedPreset">
-                        <div>
-                            <p class="text-purple-400 font-semibold">PRESET:</p>
-                            <p x-show="selectedPreset?.tone" class="text-gray-400">Tone: <span x-text="selectedPreset?.tone" class="text-purple-200"></span></p>
-                            <p x-show="selectedPreset?.article_format" class="text-gray-400">Format: <span x-text="selectedPreset?.article_format" class="text-purple-200"></span></p>
-                            <p x-show="selectedPreset?.follow_links" class="text-gray-400">Links: <span x-text="selectedPreset?.follow_links" class="text-purple-200"></span></p>
-                            <p x-show="selectedPreset?.image_preference" class="text-gray-400">Images: <span x-text="selectedPreset?.image_preference" class="text-purple-200"></span></p>
-                        </div>
-                    </template>
-                    <div>
-                        <p class="text-green-400 font-semibold">SOURCES:</p>
-                        <p class="text-gray-400" x-text="checkResults.filter(r => r.success).length + ' source article(s) will be provided'"></p>
-                    </div>
                 </div>
             </div>
 
@@ -1432,6 +1410,8 @@ function publishPipeline() {
         // Draft
         draftId: {{ $draftId }},
         uploadedImages: {},
+        featuredImageSearch: '',
+        resolvedPrompt: '',
         savingDraft: false,
 
         // Notification
@@ -1952,11 +1932,27 @@ function publishPipeline() {
                     this.setSpinEditor(data.html);
                     this.lastAiCall = { user_name: data.user_name, model: data.model, provider: data.provider, usage: data.usage, cost: data.cost, ip: data.ip, timestamp_utc: data.timestamp_utc };
                     this.showNotification('success', data.message);
-                    this.generateMetadata(data.html);
                     this.extractArticleLinks(data.html);
+
+                    // Metadata from single prompt (titles, categories, tags)
+                    if (data.metadata) {
+                        this.suggestedTitles = data.metadata.titles || [];
+                        this.suggestedCategories = data.metadata.categories || [];
+                        this.suggestedTags = data.metadata.tags || [];
+                        this.selectedTitleIdx = 0;
+                        if (this.suggestedTitles.length > 0) this.articleTitle = this.suggestedTitles[0];
+                        this.selectedCategories = Array.from({length: Math.min(10, this.suggestedCategories.length)}, (_, i) => i);
+                        this.selectedTags = Array.from({length: Math.min(10, this.suggestedTags.length)}, (_, i) => i);
+                    }
+
+                    // Featured image
+                    if (data.featured_image) this.featuredImageSearch = data.featured_image;
+
+                    // Resolved prompt for preview
+                    if (data.resolved_prompt) this.resolvedPrompt = data.resolved_prompt;
+
                     if (data.photo_suggestions) {
                         this.photoSuggestions = data.photo_suggestions.map(ps => ({...ps, autoPhoto: null, confirmed: false, removed: false, searchResults: []}));
-                        // autoFetchPhotos() is called from ed.on('init') inside setSpinEditor to avoid race condition
                     }
                 } else {
                     this.spinError = data.message;
