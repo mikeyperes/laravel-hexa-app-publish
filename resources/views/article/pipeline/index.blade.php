@@ -245,14 +245,14 @@
                 {{-- Trending --}}
                 <div x-show="newsMode === 'trending'" class="space-y-2">
                     <div class="flex flex-wrap gap-2">
-                        <button @click="newsCategory = ''; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="!newsCategory ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">All</button>
-                        <button @click="newsCategory = 'technology'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'technology' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Technology</button>
-                        <button @click="newsCategory = 'business'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'business' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Business</button>
-                        <button @click="newsCategory = 'politics'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'politics' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Politics</button>
-                        <button @click="newsCategory = 'sports'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'sports' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Sports</button>
-                        <button @click="newsCategory = 'health'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'health' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Health</button>
-                        <button @click="newsCategory = 'entertainment'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'entertainment' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Entertainment</button>
-                        <button @click="newsCategory = 'science'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsCategory === 'science' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Science</button>
+                        <button @click="newsCategory = ''; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="!newsCategory ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">All</button>
+                        <button @click="newsCategory = 'technology'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'technology' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Technology</button>
+                        <button @click="newsCategory = 'business'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'business' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Business</button>
+                        <button @click="newsCategory = 'politics'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'politics' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Politics</button>
+                        <button @click="newsCategory = 'sports'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'sports' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Sports</button>
+                        <button @click="newsCategory = 'health'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'health' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Health</button>
+                        <button @click="newsCategory = 'entertainment'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'entertainment' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Entertainment</button>
+                        <button @click="newsCategory = 'science'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'science' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Science</button>
                     </div>
                 </div>
 
@@ -275,13 +275,19 @@
                         Search
                     </button>
                 </div>
-                <div x-show="newsResults.length > 0" x-cloak class="mt-3">
+                {{-- Loading spinner --}}
+                <div x-show="newsSearching" x-cloak class="mt-3 flex items-center gap-2 text-sm text-blue-600">
+                    <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Searching articles...
+                </div>
+
+                <div x-show="newsResults.length > 0 && !newsSearching" x-cloak class="mt-3">
                     <p class="text-xs text-gray-500 mb-2" x-text="newsResults.length + ' article(s) found'"></p>
                     <div class="space-y-2 max-h-[600px] overflow-y-auto">
                         <template x-for="(article, idx) in newsResults" :key="idx">
                             <div class="border rounded-lg p-3" :class="sources.some(s => s.url === article.url) ? 'border-gray-100 bg-gray-50 opacity-60' : 'border-gray-200 hover:bg-gray-50'">
                                 <div class="flex items-start gap-3">
-                                    <img x-show="article.image" x-cloak :src="article.image" :alt="article.title" class="w-16 h-16 rounded object-cover flex-shrink-0 bg-gray-100" onerror="this.style.display='none'">
+                                    <img x-show="article.image" x-cloak :src="article.image" :alt="article.title" loading="lazy" class="rounded object-cover flex-shrink-0 bg-gray-100" style="width:150px;height:100px;" onerror="this.style.display='none'">
                                     <div class="flex-1 min-w-0">
                                         <p class="text-sm font-medium text-gray-900 break-words" x-text="article.title"></p>
                                         <p class="text-xs text-gray-500 mt-1 break-words line-clamp-2" x-text="article.description"></p>
