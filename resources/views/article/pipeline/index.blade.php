@@ -2349,26 +2349,12 @@ function publishPipeline() {
             this.preparing = true;
             this.prepareLog = [];
             this.prepareComplete = false;
-            this.prepareChecklist = [
-                { step: 'credentials', label: 'Checking WordPress credentials...', status: 'running', detail: '' },
-                { step: 'upload_images', label: 'Uploading images to WordPress media library...', status: 'running', detail: '' },
-                { step: 'replace_urls', label: 'Replacing image URLs...', status: 'running', detail: '' },
-                { step: 'create_categories', label: 'Creating categories on WordPress...', status: 'running', detail: '' },
-                { step: 'create_tags', label: 'Creating tags on WordPress...', status: 'running', detail: '' },
-                { step: 'validate_html', label: 'Validating HTML...', status: 'running', detail: '' },
-            ];
-
-            this._logPrepare('info', 'Starting WordPress preparation for ' + this.selectedSite.name + '...');
-            this._logPrepare('step', 'Site: ' + (this.selectedSite.url || this.selectedSite.name));
-            this._logPrepare('step', 'Title: ' + (this.articleTitle || 'Untitled'));
-            this._logPrepare('step', 'Categories: ' + (this.suggestedCategories.length || 0) + ', Tags: ' + (this.suggestedTags.length || 0));
+            this.prepareChecklist = [];
 
             try {
-                this._logPrepare('info', 'Connecting to WordPress...');
-
                 const resp = await fetch('{{ route('publish.pipeline.prepare') }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
                     body: JSON.stringify({
                         html: this.editorContent,
                         title: this.articleTitle || 'article',
@@ -2377,31 +2363,46 @@ function publishPipeline() {
                         tags: this.suggestedTags,
                     })
                 });
-                const data = await resp.json();
 
-                if (data.success) {
-                    if (data.checklist) {
-                        this.prepareChecklist = data.checklist;
-                        data.checklist.forEach(item => {
-                            const icon = item.status === 'done' ? 'success' : (item.status === 'failed' ? 'error' : (item.status === 'skipped' ? 'warning' : 'info'));
-                            this._logPrepare(icon, item.label + (item.detail ? ' — ' + item.detail : ''));
-                        });
+                // Read SSE stream
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // Keep incomplete line in buffer
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const event = JSON.parse(line.substring(6));
+                                // Add to activity log
+                                this._logPrepare(event.type, event.message);
+
+                                // Handle final 'done' event
+                                if (event.type === 'done') {
+                                    if (event.success) {
+                                        this.preparedHtml = event.html || this.editorContent;
+                                        this.preparedCategoryIds = event.category_ids || [];
+                                        this.preparedTagIds = event.tag_ids || [];
+                                        this.prepareComplete = true;
+                                        this.showNotification('success', 'Content prepared for WordPress');
+                                    } else {
+                                        this.prepareComplete = false;
+                                        this.showNotification('error', event.message || 'Preparation failed');
+                                    }
+                                }
+                            } catch (parseErr) { /* skip malformed lines */ }
+                        }
                     }
-                    this.preparedHtml = data.html || this.editorContent;
-                    this.preparedCategoryIds = data.category_ids || [];
-                    this.preparedTagIds = data.tag_ids || [];
-                    this.prepareComplete = true;
-                    this._logPrepare('success', 'Preparation complete. Ready to publish.');
-                    this.showNotification('success', 'Content prepared for WordPress');
-                } else {
-                    this.prepareChecklist.forEach(item => { if (item.status === 'running') item.status = 'failed'; });
-                    this.prepareComplete = false;
-                    this._logPrepare('error', data.message || 'Preparation failed');
-                    this.showNotification('error', data.message || 'Preparation failed');
                 }
             } catch (e) {
-                this.prepareChecklist.forEach(item => { if (item.status === 'running') item.status = 'failed'; });
-                this._logPrepare('error', 'Network error: ' + (e.message || 'Request failed'));
+                this._logPrepare('error', 'Connection error: ' + (e.message || 'Request failed'));
                 this.showNotification('error', 'Network error during preparation');
             }
             this.preparing = false;
