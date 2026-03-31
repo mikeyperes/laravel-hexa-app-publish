@@ -85,7 +85,7 @@ class PublishPipelineController extends Controller
         $draft = PublishArticle::create([
             'article_id' => PublishArticle::generateArticleId(),
             'title'      => 'Untitled',
-            'status'     => 'draft',
+            'status'     => 'drafting',
             'created_by' => auth()->id(),
             'user_id'    => auth()->id(),
         ]);
