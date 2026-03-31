@@ -513,11 +513,12 @@ class PublishPipelineController extends Controller
     public function prepareForWordpress(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
     {
         $validated = $request->validate([
-            'html'       => 'required|string',
-            'title'      => 'nullable|string|max:500',
-            'site_id'    => 'required|integer|exists:publish_sites,id',
-            'categories' => 'nullable|array',
-            'tags'       => 'nullable|array',
+            'html'                => 'required|string',
+            'title'               => 'nullable|string|max:500',
+            'site_id'             => 'required|integer|exists:publish_sites,id',
+            'categories'          => 'nullable|array',
+            'tags'                => 'nullable|array',
+            'pipeline_session_id' => 'nullable|string|max:100',
         ]);
 
         $site = PublishSite::findOrFail($validated['site_id']);
@@ -565,6 +566,7 @@ class PublishPipelineController extends Controller
             preg_match_all('/<img[^>]+src\s*=\s*["\']([^"\']+)["\'][^>]*>/i', $html, $imgMatches);
             $imageUrls = array_unique($imgMatches[1] ?? []);
             $imageMap = [];
+            $wpImages = [];
 
             if (!empty($imageUrls)) {
                 $send('info', "Uploading " . count($imageUrls) . " image(s)...");
@@ -593,7 +595,17 @@ class PublishPipelineController extends Controller
 
                     if ($uploadResult['success'] && !empty($uploadResult['data']['media_url'])) {
                         $imageMap[$imgUrl] = $uploadResult['data']['media_url'];
-                        $send('success', "Uploaded: {$properFilename} → " . Str::limit($uploadResult['data']['media_url'], 80));
+                        $wpImages[] = [
+                            'source_url' => $imgUrl,
+                            'media_id' => $uploadResult['data']['media_id'] ?? null,
+                            'media_url' => $uploadResult['data']['media_url'],
+                            'sizes' => $uploadResult['data']['sizes'] ?? [],
+                            'filename' => $properFilename,
+                            'alt_text' => $altText,
+                        ];
+                        $send('success', "Uploaded: {$properFilename} → " . Str::limit($uploadResult['data']['media_url'], 80), [
+                            'wp_image' => $wpImages[count($wpImages) - 1],
+                        ]);
                     } else {
                         $send('warning', "Failed to upload: {$properFilename} — " . ($uploadResult['message'] ?? 'unknown error'));
                     }
@@ -680,6 +692,7 @@ class PublishPipelineController extends Controller
                 'html'         => $html,
                 'category_ids' => $categoryIds,
                 'tag_ids'      => $tagIds,
+                'wp_images'    => $wpImages,
             ]);
 
         }, 200, [
@@ -699,13 +712,25 @@ class PublishPipelineController extends Controller
     public function publishToWordpress(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'html'         => 'required|string',
-            'title'        => 'required|string|max:500',
-            'site_id'      => 'required|integer|exists:publish_sites,id',
-            'category_ids' => 'nullable|array',
-            'tag_ids'      => 'nullable|array',
-            'status'       => 'required|in:publish,draft,future',
-            'date'         => 'nullable|date',
+            'html'                => 'required|string',
+            'title'               => 'required|string|max:500',
+            'site_id'             => 'required|integer|exists:publish_sites,id',
+            'category_ids'        => 'nullable|array',
+            'tag_ids'             => 'nullable|array',
+            'status'              => 'required|in:publish,draft,future',
+            'date'                => 'nullable|date',
+            'pipeline_session_id' => 'nullable|string|max:100',
+            'categories'          => 'nullable|array',
+            'tags'                => 'nullable|array',
+            'wp_images'           => 'nullable|array',
+            'word_count'          => 'nullable|integer',
+            'ai_model'            => 'nullable|string|max:100',
+            'ai_cost'             => 'nullable|numeric',
+            'author'              => 'nullable|string|max:255',
+            'sources'             => 'nullable|array',
+            'template_id'         => 'nullable|integer',
+            'preset_id'           => 'nullable|integer',
+            'user_id'             => 'nullable|integer',
             'draft_id'     => 'nullable|integer|exists:publish_articles,id',
         ]);
 
@@ -753,28 +778,54 @@ class PublishPipelineController extends Controller
             return response()->json($result);
         }
 
-        // Update draft record if we have one
+        // Save or update the article record with comprehensive data
+        $articleData = [
+            'pipeline_session_id' => $validated['pipeline_session_id'] ?? null,
+            'user_id'             => $validated['user_id'] ?? auth()->id(),
+            'publish_site_id'     => $site->id,
+            'publish_template_id' => $validated['template_id'] ?? null,
+            'preset_id'           => $validated['preset_id'] ?? null,
+            'title'               => $validated['title'],
+            'body'                => $validated['html'],
+            'word_count'          => $validated['word_count'] ?? str_word_count(strip_tags($validated['html'])),
+            'ai_engine_used'      => $validated['ai_model'] ?? null,
+            'ai_cost'             => $validated['ai_cost'] ?? null,
+            'author'              => $validated['author'] ?? $site->default_author ?? null,
+            'status'              => 'completed',
+            'wp_post_id'          => $result['data']['post_id'] ?? null,
+            'wp_post_url'         => $result['data']['post_url'] ?? null,
+            'wp_status'           => $validated['status'],
+            'published_at'        => now(),
+            'source_articles'     => $validated['sources'] ?? null,
+            'categories'          => $validated['categories'] ?? null,
+            'tags'                => $validated['tags'] ?? null,
+            'wp_images'           => $validated['wp_images'] ?? null,
+            'links_injected'      => null,
+            'created_by'          => auth()->id(),
+        ];
+
         if (!empty($validated['draft_id'])) {
-            $draft = PublishArticle::find($validated['draft_id']);
-            if ($draft) {
-                $draft->update([
-                    'status'       => 'completed',
-                    'published_at' => now(),
-                    'wp_post_id'   => $result['data']['post_id'],
-                    'wp_post_url'  => $result['data']['post_url'],
-                    'wp_status'    => $result['data']['post_status'],
-                    'publish_site_id' => $site->id,
-                ]);
+            $article = PublishArticle::find($validated['draft_id']);
+            if ($article) {
+                $article->update($articleData);
+            } else {
+                $articleData['article_id'] = PublishArticle::generateArticleId();
+                $article = PublishArticle::create($articleData);
             }
+        } else {
+            $articleData['article_id'] = PublishArticle::generateArticleId();
+            $article = PublishArticle::create($articleData);
         }
 
-        hexaLog('publish', 'pipeline_published', "Pipeline published to {$site->name}: {$validated['title']} (WP ID: {$result['data']['post_id']})");
+        hexaLog('publish', 'pipeline_published', "Pipeline published to {$site->name}: {$validated['title']} (WP ID: {$result['data']['post_id']}, Article: {$article->article_id})");
 
         return response()->json([
-            'success'  => true,
-            'message'  => "Article published to {$site->name}. WP Post ID: {$result['data']['post_id']}.",
-            'post_id'  => $result['data']['post_id'],
-            'post_url' => $result['data']['post_url'],
+            'success'    => true,
+            'message'    => "Article published to {$site->name}. WP Post ID: {$result['data']['post_id']}.",
+            'post_id'    => $result['data']['post_id'],
+            'post_url'   => $result['data']['post_url'] ?? null,
+            'article_id' => $article->id,
+            'article_url' => route('publish.articles.show', $article->id),
         ]);
     }
 

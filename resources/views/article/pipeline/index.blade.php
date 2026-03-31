@@ -1244,6 +1244,10 @@
                         View Draft
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                     </a>
+                    <a x-show="publishResult?.article_url" :href="publishResult?.article_url" target="_blank" class="inline-flex items-center gap-1 text-sm bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium">
+                        Full Article Report
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    </a>
                 </div>
 
                 {{-- Activity Log in publish section --}}
@@ -1403,6 +1407,8 @@ function publishPipeline() {
 
         // Draft
         draftId: null,
+        pipelineSessionId: crypto.randomUUID(),
+        uploadedImages: {},
         savingDraft: false,
 
         // Notification
@@ -2361,6 +2367,7 @@ function publishPipeline() {
                         site_id: this.selectedSite.id,
                         categories: this.suggestedCategories,
                         tags: this.suggestedTags,
+                        pipeline_session_id: this.pipelineSessionId,
                     })
                 });
 
@@ -2384,12 +2391,20 @@ function publishPipeline() {
                                 // Add to activity log
                                 this._logPrepare(event.type, event.message);
 
+                                // Track uploaded images for duplicate prevention
+                                if (event.wp_image) {
+                                    this.uploadedImages[event.wp_image.source_url] = event.wp_image;
+                                }
+
                                 // Handle final 'done' event
                                 if (event.type === 'done') {
                                     if (event.success) {
                                         this.preparedHtml = event.html || this.editorContent;
                                         this.preparedCategoryIds = event.category_ids || [];
                                         this.preparedTagIds = event.tag_ids || [];
+                                        if (event.wp_images) {
+                                            event.wp_images.forEach(img => { this.uploadedImages[img.source_url] = img; });
+                                        }
                                         this.prepareComplete = true;
                                         this.showNotification('success', 'Content prepared for WordPress');
                                     } else {
@@ -2445,6 +2460,18 @@ function publishPipeline() {
                         status: wpStatus,
                         date: this.publishAction === 'future' ? this.scheduleDate : null,
                         draft_id: this.draftId,
+                        pipeline_session_id: this.pipelineSessionId,
+                        categories: this.suggestedCategories,
+                        tags: this.suggestedTags,
+                        wp_images: Object.values(this.uploadedImages),
+                        word_count: this.spunWordCount,
+                        ai_model: this.aiModel,
+                        ai_cost: this.lastAiCall?.cost || null,
+                        author: this.publishAuthor || null,
+                        sources: this.sources.map(s => ({ url: s.url, title: s.title })),
+                        template_id: this.selectedTemplateId || null,
+                        preset_id: this.selectedPresetId || null,
+                        user_id: this.selectedUser?.id || null,
                     })
                 });
                 const data = await resp.json();
