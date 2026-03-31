@@ -77,18 +77,28 @@ class PublishPipelineController extends Controller
      *
      * @return View
      */
-    public function index(): View
+    public function index(Request $request)
     {
-        $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
+        // If no ?id= in URL, create a new draft and redirect with id
+        if (!$request->has('id')) {
+            $draft = PublishArticle::create([
+                'article_id' => PublishArticle::generateArticleId(),
+                'title'      => 'Untitled',
+                'status'     => 'drafting',
+                'created_by' => auth()->id(),
+                'user_id'    => auth()->id(),
+            ]);
+            return redirect()->route('publish.pipeline', ['id' => $draft->id]);
+        }
 
-        // Create draft immediately so we have a real ID
-        $draft = PublishArticle::create([
-            'article_id' => PublishArticle::generateArticleId(),
-            'title'      => 'Untitled',
-            'status'     => 'drafting',
-            'created_by' => auth()->id(),
-            'user_id'    => auth()->id(),
-        ]);
+        // Load existing draft
+        $draftId = (int) $request->input('id');
+        $draft = PublishArticle::find($draftId);
+        if (!$draft) {
+            return redirect()->route('publish.pipeline');
+        }
+
+        $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
 
         return view('app-publish::article.pipeline.index', [
             'sites'   => $sites,
