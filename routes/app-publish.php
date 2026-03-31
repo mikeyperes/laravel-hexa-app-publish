@@ -134,11 +134,11 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::get('/article/editor/{id}', [PublishArticleController::class, 'editor'])->name('publish.editor.load');
 
     // ═══ Drafted Articles ═══
-    Route::get('/article/drafts', [PublishDraftController::class, 'index'])->name('publish.drafts.index');
-    Route::post('/article/drafts', [PublishDraftController::class, 'store'])->name('publish.drafts.store');
-    Route::get('/article/drafts/{id}', [PublishDraftController::class, 'show'])->name('publish.drafts.show');
-    Route::put('/article/drafts/{id}', [PublishDraftController::class, 'update'])->name('publish.drafts.update');
-    Route::delete('/article/drafts/{id}', [PublishDraftController::class, 'destroy'])->name('publish.drafts.destroy');
+    Route::get('/article/articles', [PublishDraftController::class, 'index'])->name('publish.drafts.index');
+    Route::post('/article/articles', [PublishDraftController::class, 'store'])->name('publish.drafts.store');
+    Route::get('/article/articles/{id}', [PublishDraftController::class, 'show'])->name('publish.drafts.show');
+    Route::put('/article/articles/{id}', [PublishDraftController::class, 'update'])->name('publish.drafts.update');
+    Route::delete('/article/articles/{id}', [PublishDraftController::class, 'destroy'])->name('publish.drafts.destroy');
 
     // ═══ Bookmarked Articles ═══
     Route::get('/article/bookmarks', [PublishBookmarkController::class, 'index'])->name('publish.bookmarks.index');

@@ -21,8 +21,7 @@ class PublishDraftController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = PublishArticle::where('status', 'drafting')
-            ->with(['creator', 'site']);
+        $query = PublishArticle::with(['creator', 'site']);
 
         if ($request->filled('user_id')) {
             $query->where('created_by', $request->input('user_id'));
