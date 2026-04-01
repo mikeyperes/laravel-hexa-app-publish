@@ -162,7 +162,7 @@
         <div x-show="openSteps.includes(3)" x-cloak x-collapse class="px-4 pb-4">
             <div class="max-w-md">
                 <label class="block text-xs text-gray-500 mb-1">WordPress Site</label>
-                <select x-model="selectedSiteId" @change="selectSite()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <select x-model="selectedSiteId" @change="selectSite()" x-effect="$el.value = selectedSiteId" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">-- Select a site --</option>
                     <template x-for="s in sites" :key="s.id">
                         <option :value="String(s.id)" x-text="s.name + ' (' + s.url + ')'"></option>
