@@ -26,6 +26,10 @@ class PublishArticle extends Model
         'article_type',
         'ai_engine_used',
         'ai_cost',
+        'resolved_prompt',
+        'ai_tokens_input',
+        'ai_tokens_output',
+        'ai_provider',
         'status',
         'delivery_mode',
         'source_articles',
@@ -45,6 +49,9 @@ class PublishArticle extends Model
         'scheduled_for',
         'created_by',
         'author',
+        'user_ip',
+        'photo_suggestions',
+        'featured_image_search',
         'notes',
     ];
 
@@ -52,6 +59,7 @@ class PublishArticle extends Model
         'source_articles' => 'array',
         'photos' => 'array',
         'wp_images' => 'array',
+        'photo_suggestions' => 'array',
         'links_injected' => 'array',
         'categories' => 'array',
         'tags' => 'array',
