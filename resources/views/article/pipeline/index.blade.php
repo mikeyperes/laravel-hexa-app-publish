@@ -729,28 +729,20 @@
                 </div>
 
                 {{-- Featured Image --}}
-                <div x-show="featuredImageSearch" x-cloak class="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-4" x-data="{ featuredPhoto: null, featuredLoading: false }">
+                <div x-show="featuredImageSearch" x-cloak class="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-4">
                     <h5 class="text-sm font-semibold text-purple-800 mb-2">Featured Image</h5>
                     <div class="flex items-start gap-4">
                         <div class="w-48 h-32 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                             <img x-show="featuredPhoto" x-cloak :src="featuredPhoto?.url_large || featuredPhoto?.url_thumb" class="w-full h-full object-cover">
-                            <div x-show="!featuredPhoto && !featuredLoading" class="w-full h-full flex items-center justify-center text-gray-300">
+                            <div x-show="!featuredPhoto" class="w-full h-full flex items-center justify-center text-gray-300">
                                 <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                            </div>
-                            <div x-show="featuredLoading" x-cloak class="w-full h-full flex items-center justify-center">
-                                <svg class="w-6 h-6 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             </div>
                         </div>
                         <div class="flex-1">
                             <p class="text-xs text-purple-600 mb-1">AI suggested search:</p>
                             <div class="flex gap-2 mb-2">
-                                <input type="text" x-model="$root.featuredImageSearch" class="flex-1 border border-purple-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Featured image search...">
-                                <button @click="
-                                    featuredLoading = true;
-                                    fetch('{{ route("publish.search.images.post") }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': $root.csrfToken }, body: JSON.stringify({ query: $root.featuredImageSearch, per_page: 1 }) })
-                                        .then(r => r.json()).then(d => { if (d.data?.photos?.[0]) featuredPhoto = d.data.photos[0]; featuredLoading = false; })
-                                        .catch(() => featuredLoading = false);
-                                " class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-purple-700">Search</button>
+                                <input type="text" x-model="featuredImageSearch" class="flex-1 border border-purple-300 rounded-lg px-3 py-1.5 text-sm">
+                                <button @click="searchFeaturedImage()" class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-purple-700">Search</button>
                             </div>
                             <p x-show="featuredPhoto" x-cloak class="text-xs text-gray-500" x-text="(featuredPhoto?.width || '?') + 'x' + (featuredPhoto?.height || '?') + ' — ' + (featuredPhoto?.source || '?')"></p>
                         </div>
@@ -804,7 +796,7 @@
                                             <span x-text="ps.searching ? 'Searching...' : 'Search'"></span>
                                         </button>
                                     </div>
-                                    <div x-show="ps.searchResults && ps.searchResults.length > 0" x-cloak class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                    <div x-show="ps.searchResults && ps.searchResults.length > 0" x-cloak class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
                                         <template x-for="(photo, pidx) in (ps.searchResults || [])" :key="pidx">
                                             <div class="cursor-pointer rounded-lg overflow-hidden border-2 hover:border-blue-400 transition-colors"
                                                  :class="ps.autoPhoto && ps.autoPhoto.url_thumb === photo.url_thumb ? 'border-purple-400' : 'border-gray-200'"
@@ -812,6 +804,24 @@
                                                 <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-44 object-cover">
                                             </div>
                                         </template>
+                                    </div>
+                                    {{-- Inline photo info (alt text, caption, filename) --}}
+                                    <div x-show="ps.autoPhoto" x-cloak class="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
+                                        <div class="flex items-center gap-2 text-xs text-gray-500">
+                                            <span x-text="(ps.autoPhoto?.source || '?') + ' — ' + (ps.autoPhoto?.width || '?') + 'x' + (ps.autoPhoto?.height || '?')"></span>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs text-gray-400 mb-0.5">Alt Text</label>
+                                            <input type="text" x-model="photoSuggestions[idx].alt_text" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Alt text...">
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs text-gray-400 mb-0.5">Caption</label>
+                                            <input type="text" x-model="photoSuggestions[idx].caption" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Caption...">
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs text-gray-400 mb-0.5">WordPress Filename</label>
+                                            <input type="text" x-model="photoSuggestions[idx].suggestedFilename" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono" placeholder="photo-1.jpg">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -880,46 +890,52 @@
                     </div>
                 </div>
 
-                {{-- Photo Info Modal --}}
-                <div x-show="viewingPhotoIdx !== null && photoSuggestions[viewingPhotoIdx]" x-cloak data-photo-modal class="mt-4 bg-white border-2 border-purple-300 rounded-xl shadow-lg p-5">
-                    <template x-if="viewingPhotoIdx !== null && photoSuggestions[viewingPhotoIdx]">
-                        <div>
-                            <div class="flex items-start gap-4">
-                                <img :src="photoSuggestions[viewingPhotoIdx]?.autoPhoto?.url_large || photoSuggestions[viewingPhotoIdx]?.autoPhoto?.url_thumb" class="w-64 h-auto rounded-lg border border-gray-200">
-                                <div class="flex-1 space-y-3">
-                                    <div>
-                                        <p class="text-xs text-gray-400 mb-1">Search Term</p>
-                                        <p class="text-sm font-medium text-purple-700" x-text="photoSuggestions[viewingPhotoIdx]?.search_term"></p>
-                                    </div>
-                                    <div>
-                                        <p class="text-xs text-gray-400 mb-1">Source</p>
-                                        <p class="text-sm text-gray-700" x-text="(photoSuggestions[viewingPhotoIdx]?.autoPhoto?.source || '?') + ' — ' + (photoSuggestions[viewingPhotoIdx]?.autoPhoto?.width || '?') + 'x' + (photoSuggestions[viewingPhotoIdx]?.autoPhoto?.height || '?')"></p>
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs text-gray-400 mb-1">Alt Text</label>
-                                        <input type="text" x-model="photoSuggestions[viewingPhotoIdx].alt_text" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Descriptive alt text for accessibility...">
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs text-gray-400 mb-1">Caption (optional — displayed below photo)</label>
-                                        <input type="text" x-model="photoSuggestions[viewingPhotoIdx].caption" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Photo caption for display...">
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs text-gray-400 mb-1">WordPress Filename</label>
-                                        <input type="text" x-model="photoSuggestions[viewingPhotoIdx].suggestedFilename" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono" placeholder="article-photo-1.jpg">
-                                    </div>
-                                    <div class="flex gap-2 pt-2">
-                                        <button @click="confirmPhoto(viewingPhotoIdx)" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 inline-flex items-center gap-1">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                            Confirm
-                                        </button>
-                                        <button @click="changePhoto(viewingPhotoIdx)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Change</button>
-                                        <button @click="removePhotoPlaceholder(viewingPhotoIdx); viewingPhotoIdx = null" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700">Remove</button>
-                                        <button @click="viewingPhotoIdx = null" class="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm">Close</button>
+                {{-- Photo Info Modal (centered overlay) --}}
+                <div x-show="viewingPhotoIdx !== null && photoSuggestions[viewingPhotoIdx]" x-cloak class="fixed inset-0 z-50 flex items-center justify-center" @click.self="viewingPhotoIdx = null">
+                    <div class="fixed inset-0 bg-black bg-opacity-50"></div>
+                    <div class="relative bg-white rounded-xl shadow-2xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" @click.stop>
+                        <button @click="viewingPhotoIdx = null" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                        <template x-if="viewingPhotoIdx !== null && photoSuggestions[viewingPhotoIdx]">
+                            <div>
+                                <div class="flex items-start gap-5">
+                                    <img :src="photoSuggestions[viewingPhotoIdx]?.autoPhoto?.url_large || photoSuggestions[viewingPhotoIdx]?.autoPhoto?.url_thumb" class="w-64 h-auto rounded-lg border border-gray-200 flex-shrink-0">
+                                    <div class="flex-1 space-y-3">
+                                        <div>
+                                            <p class="text-xs text-gray-400">Search Term</p>
+                                            <p class="text-sm font-medium text-purple-700" x-text="photoSuggestions[viewingPhotoIdx]?.search_term"></p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-gray-400">Source</p>
+                                            <p class="text-sm text-gray-700" x-text="(photoSuggestions[viewingPhotoIdx]?.autoPhoto?.source || '?') + ' — ' + (photoSuggestions[viewingPhotoIdx]?.autoPhoto?.width || '?') + 'x' + (photoSuggestions[viewingPhotoIdx]?.autoPhoto?.height || '?')"></p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs text-gray-400 mb-1">Alt Text</label>
+                                            <input type="text" x-model="photoSuggestions[viewingPhotoIdx].alt_text" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs text-gray-400 mb-1">Caption</label>
+                                            <input type="text" x-model="photoSuggestions[viewingPhotoIdx].caption" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Photo caption...">
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs text-gray-400 mb-1">WordPress Filename</label>
+                                            <input type="text" x-model="photoSuggestions[viewingPhotoIdx].suggestedFilename" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono">
+                                        </div>
+                                        <div class="flex gap-2 pt-2">
+                                            <button @click="confirmPhoto(viewingPhotoIdx); viewingPhotoIdx = null" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 inline-flex items-center gap-1">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                Confirm
+                                            </button>
+                                            <button @click="changePhoto(viewingPhotoIdx); viewingPhotoIdx = null" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Change</button>
+                                            <button @click="removePhotoPlaceholder(viewingPhotoIdx); viewingPhotoIdx = null" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700">Remove</button>
+                                            <button @click="viewingPhotoIdx = null" class="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm">Close</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </template>
+                        </template>
+                    </div>
                 </div>
 
                 {{-- Action buttons + Quick links — same row --}}
@@ -1440,6 +1456,7 @@ function publishPipeline() {
         draftId: {{ $draftId }},
         uploadedImages: {},
         featuredImageSearch: '',
+        featuredPhoto: null,
         resolvedPrompt: '',
         savingDraft: false,
 
@@ -1980,7 +1997,12 @@ function publishPipeline() {
                     }
 
                     // Featured image
-                    if (data.featured_image) this.featuredImageSearch = data.featured_image;
+                    if (data.featured_image) {
+                        this.featuredImageSearch = data.featured_image;
+                        // Auto-fetch featured image
+                        fetch('{{ route("publish.search.images.post") }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken }, body: JSON.stringify({ query: data.featured_image, per_page: 1 }) })
+                            .then(r => r.json()).then(d => { if (d.data?.photos?.[0]) this.featuredPhoto = d.data.photos[0]; }).catch(() => {});
+                    }
 
                     // Resolved prompt for preview
                     if (data.resolved_prompt) this.resolvedPrompt = data.resolved_prompt;
@@ -2205,6 +2227,19 @@ function publishPipeline() {
                 this.photoResults = data.data?.photos || [];
             } catch (e) { this.photoResults = []; }
             this.photoSearching = false;
+        },
+
+        async searchFeaturedImage() {
+            if (!this.featuredImageSearch.trim()) return;
+            try {
+                const resp = await fetch('{{ route("publish.search.images.post") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({ query: this.featuredImageSearch, per_page: 1 })
+                });
+                const data = await resp.json();
+                if (data.data?.photos?.[0]) this.featuredPhoto = data.data.photos[0];
+            } catch (e) {}
         },
 
         insertPhotoIntoEditor() {
