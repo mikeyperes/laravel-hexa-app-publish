@@ -513,7 +513,7 @@
                                     </button>
                                 </div>
                                 {{-- Formatted view --}}
-                                <div x-show="!showRaw" class="px-6 pb-4 overflow-hidden" style="font-size: 15px; line-height: 1.8; color: #374151;"><div class="prose max-w-none" style="--tw-prose-img-margin-top:0.5em;--tw-prose-img-margin-bottom:0.5em;" x-html="(result.formatted_html || result.text || '').replace(/<img /g, '<img style=\'max-width:100%;height:auto;\' ')"></div></div>
+                                <div x-show="!showRaw" class="px-6 pb-4 overflow-hidden" style="font-size: 15px; line-height: 1.8; color: #374151;"><div class="prose max-w-none" style="max-width:100%;overflow:hidden;" x-html="result.formatted_html || result.text || ''"></div><style>.prose img, .prose video, .prose iframe, .prose figure { max-width: 100% !important; height: auto !important; width: auto !important; }</style></div>
                                 {{-- Raw text view --}}
                                 <div x-show="showRaw" x-cloak class="px-6 pb-4 overflow-hidden">
                                     <pre class="text-xs text-gray-500 bg-gray-50 rounded-lg p-4 whitespace-pre-wrap break-words font-mono" x-text="result.text"></pre>
