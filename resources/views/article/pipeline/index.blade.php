@@ -314,7 +314,7 @@
                                 <div class="flex items-start gap-3">
                                     <img x-show="article.image" x-cloak :src="article.image" :alt="article.title" loading="lazy" class="rounded object-cover flex-shrink-0 bg-gray-100" style="width:150px;height:100px;" onerror="this.style.display='none'">
                                     <div class="flex-1 min-w-0">
-                                        <p class="text-sm font-medium text-gray-900 break-words" x-text="article.title"></p>
+                                        <p class="text-base font-semibold text-gray-900 break-words" x-text="article.title"></p>
                                         <p class="text-xs text-gray-500 mt-1 break-words line-clamp-2" x-text="article.description"></p>
                                         <div class="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
                                             <span x-text="article.source_name"></span>
@@ -513,7 +513,9 @@
                                     </button>
                                 </div>
                                 {{-- Formatted view --}}
-                                <div x-show="!showRaw" class="px-6 pb-4 overflow-hidden" style="font-size: 15px; line-height: 1.8; color: #374151;"><div class="prose max-w-none" style="max-width:100%;overflow:hidden;" x-html="result.formatted_html || result.text || ''"></div><style>.prose img, .prose video, .prose iframe, .prose figure { max-width: 100% !important; height: auto !important; width: auto !important; }</style></div>
+                                <div x-show="!showRaw" class="px-6 pb-4">
+                                    <iframe :srcdoc="'<html><head><style>*{max-width:100%!important;box-sizing:border-box}body{margin:0;padding:0;font-family:-apple-system,sans-serif;font-size:15px;line-height:1.8;color:#374151;overflow-x:hidden}img,video,iframe,figure{max-width:100%!important;height:auto!important;width:auto!important}</style></head><body>' + (result.formatted_html || result.text || '') + '</body></html>'" sandbox="allow-same-origin" class="w-full border-0" style="min-height:300px;" onload="this.style.height = this.contentDocument.body.scrollHeight + 'px'"></iframe>
+                                </div>
                                 {{-- Raw text view --}}
                                 <div x-show="showRaw" x-cloak class="px-6 pb-4 overflow-hidden">
                                     <pre class="text-xs text-gray-500 bg-gray-50 rounded-lg p-4 whitespace-pre-wrap break-words font-mono" x-text="result.text"></pre>
