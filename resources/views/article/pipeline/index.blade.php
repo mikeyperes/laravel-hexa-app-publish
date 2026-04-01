@@ -165,7 +165,7 @@
                 <select x-model="selectedSiteId" @change="selectSite()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">-- Select a site --</option>
                     <template x-for="s in sites" :key="s.id">
-                        <option :value="s.id" x-text="s.name + ' (' + s.url + ')'"></option>
+                        <option :value="String(s.id)" x-text="s.name + ' (' + s.url + ')'"></option>
                     </template>
                 </select>
             </div>
