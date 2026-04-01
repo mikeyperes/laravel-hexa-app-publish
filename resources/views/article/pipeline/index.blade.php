@@ -496,28 +496,23 @@
                                 <svg x-show="result.success" class="w-5 h-5 text-gray-400 transition-transform" :class="expandedSources.includes(idx) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                             </div>
                         </div>
-                        {{-- Plain text preview (always visible when extracted) --}}
-                        <div x-show="result.success && result.text && !expandedSources.includes(idx)" x-cloak class="px-4 pb-3">
-                            <p class="text-sm text-gray-600 line-clamp-3 break-words" x-text="result.text.substring(0, 300) + '...'"></p>
-                            <button @click.stop="toggleSourceExpand(idx)" class="text-xs text-blue-600 hover:underline mt-1">Read full article</button>
-                        </div>
-
-                        {{-- Expanded article content --}}
-                        <div x-show="expandedSources.includes(idx) && result.text" x-cloak x-data="{ showRaw: false }" class="border-t border-green-200">
+                        {{-- Extracted article content — expand/collapse, default EXPANDED --}}
+                        <div x-show="result.success && result.text" x-cloak x-data="{ showRaw: false, collapsed: false }" class="border-t border-green-200">
                             <div class="bg-white rounded-b-lg shadow-sm">
-                                {{-- Content header with raw toggle --}}
                                 <div class="flex items-center justify-between px-6 pt-4 pb-2">
-                                    <span class="text-xs text-gray-400">Extracted content</span>
+                                    <button @click.stop="collapsed = !collapsed" class="text-xs text-gray-400 hover:text-gray-600 inline-flex items-center gap-1">
+                                        <svg class="w-3 h-3 transition-transform" :class="collapsed ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                        <span x-text="collapsed ? 'Show extracted content' : 'Extracted content'"></span>
+                                    </button>
                                     <button @click.stop="showRaw = !showRaw" class="text-xs px-2 py-0.5 rounded border transition-colors" :class="showRaw ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400'" title="Toggle formatted/raw view">
                                         &lt;/&gt;
                                     </button>
                                 </div>
-                                {{-- Formatted view --}}
-                                <div x-show="!showRaw" class="px-6 pb-4">
-                                    <iframe :srcdoc="'<html><head><style>*{max-width:100%!important;box-sizing:border-box}body{margin:0;padding:0;font-family:-apple-system,sans-serif;font-size:15px;line-height:1.8;color:#374151;overflow-x:hidden}img,video,iframe,figure{max-width:100%!important;height:auto!important;width:auto!important}</style></head><body>' + (result.formatted_html || result.text || '') + '</body></html>'" sandbox="allow-same-origin" class="w-full border-0" style="min-height:300px;" onload="this.style.height = this.contentDocument.body.scrollHeight + 'px'"></iframe>
+                                {{-- Full content — NO scroll, NO iframe, NO max-height --}}
+                                <div x-show="!collapsed && !showRaw" class="px-6 pb-4" style="font-size:15px;line-height:1.8;color:#374151;">
+                                    <div class="prose max-w-none break-words" x-html="(result.formatted_html || result.text || '').replace(/<img[^>]*>/gi, function(m) { return m.replace(/<img /, '<img style=\"max-width:100%;height:auto;\" '); })"></div>
                                 </div>
-                                {{-- Raw text view --}}
-                                <div x-show="showRaw" x-cloak class="px-6 pb-4 overflow-hidden">
+                                <div x-show="!collapsed && showRaw" x-cloak class="px-6 pb-4">
                                     <pre class="text-xs text-gray-500 bg-gray-50 rounded-lg p-4 whitespace-pre-wrap break-words font-mono" x-text="result.text"></pre>
                                 </div>
                                 {{-- Action buttons with separator --}}
