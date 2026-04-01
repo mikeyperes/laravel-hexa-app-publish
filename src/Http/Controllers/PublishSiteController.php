@@ -285,7 +285,7 @@ class PublishSiteController extends Controller
         }
 
         $escapedId = escapeshellarg((string) $site->wordpress_install_id);
-        $cmd = "wp-toolkit --wp-cli -instance-id {$escapedId} -- user list --role=administrator,editor,author --fields=user_login,display_name,roles --format=json 2>/dev/null";
+        $cmd = "wp-toolkit --wp-cli -instance-id {$escapedId} -- user list --role=administrator --fields=user_login,display_name --format=json 2>/dev/null";
         $output = trim($ssh['connection']->exec($cmd));
 
         // Filter PHP warnings

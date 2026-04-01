@@ -627,7 +627,7 @@
             </div>
 
             {{-- Author selection --}}
-            <div class="mb-4 flex flex-wrap items-end gap-3" x-show="publishAuthor || siteAuthors.length > 0">
+            <div class="mb-4 flex flex-wrap items-end gap-3" x-show="selectedSite">
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Publish As</label>
                     <select x-model="publishAuthor" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -670,6 +670,22 @@
             {{-- Spin error --}}
             <div x-show="spinError" x-cloak class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
                 <p class="text-sm text-red-700" x-text="spinError"></p>
+            </div>
+
+            {{-- Create Article Activity Log --}}
+            <div x-show="spinLog.length > 0" x-cloak class="mb-4" x-data="{ showSpinLog: false }">
+                <button @click="showSpinLog = !showSpinLog" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 mb-1">
+                    <svg class="w-3 h-3 transition-transform" :class="showSpinLog ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    Activity Log (<span x-text="spinLog.length"></span> entries)
+                </button>
+                <div x-show="showSpinLog" x-cloak class="bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto">
+                    <template x-for="(entry, idx) in spinLog" :key="idx">
+                        <div class="flex items-start gap-2 py-0.5 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
+                            <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
+                            <span :class="{ 'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info', 'text-gray-400': entry.type === 'step', 'text-yellow-400': entry.type === 'warning' }" x-text="entry.message" class="break-words"></span>
+                        </div>
+                    </template>
+                </div>
             </div>
 
             {{-- Token usage --}}
@@ -1544,6 +1560,7 @@ function publishPipeline() {
         featuredPhoto: null,
         resolvedPrompt: '',
         articleDescription: '',
+        spinLog: [],
         siteAuthors: [],
         siteConnectionLog: [],
         siteConnectionStatus: null,
@@ -2074,9 +2091,21 @@ function publishPipeline() {
         },
 
         // ── Step 7: Spin ──────────────────────────────────
+        _logSpin(type, message) {
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            this.spinLog.push({ type, message, time });
+        },
+
         async spinArticle() {
             this.spinning = true;
             this.spinError = '';
+            this.spinLog = [];
+            this._logSpin('info', 'Starting article spin...');
+            this._logSpin('step', 'Model: ' + this.aiModel);
+            this._logSpin('step', 'Sources: ' + this.checkResults.filter(r => r.success).length);
+            if (this.customPrompt) this._logSpin('step', 'Custom instructions: ' + this.customPrompt.substring(0, 100));
+            if (this.selectedTemplate) this._logSpin('step', 'Template: ' + this.selectedTemplate.name);
+            if (this.selectedPreset) this._logSpin('step', 'Preset: ' + this.selectedPreset.name);
 
             // Collect verified source texts
             const sourceTexts = this.checkResults
@@ -2110,10 +2139,13 @@ function publishPipeline() {
                     this.setSpinEditor(data.html);
                     this.lastAiCall = { user_name: data.user_name, model: data.model, provider: data.provider, usage: data.usage, cost: data.cost, ip: data.ip, timestamp_utc: data.timestamp_utc };
                     this.showNotification('success', data.message);
+                    this._logSpin('success', 'Article generated — ' + data.word_count + ' words');
+                    this._logSpin('info', 'Model: ' + (data.model || this.aiModel) + ' | Cost: $' + (data.cost || 0).toFixed(4) + ' | Tokens: ' + ((data.usage?.input_tokens || 0) + '+' + (data.usage?.output_tokens || 0)));
                     this.extractArticleLinks(data.html);
 
                     // Metadata from single prompt (titles, categories, tags)
                     if (data.metadata) {
+                        this._logSpin('success', 'Metadata: ' + (data.metadata.titles?.length || 0) + ' titles, ' + (data.metadata.categories?.length || 0) + ' categories, ' + (data.metadata.tags?.length || 0) + ' tags');
                         this.suggestedTitles = data.metadata.titles || [];
                         this.suggestedCategories = data.metadata.categories || [];
                         this.suggestedTags = data.metadata.tags || [];
@@ -2140,9 +2172,11 @@ function publishPipeline() {
                     }
                 } else {
                     this.spinError = data.message;
+                    this._logSpin('error', 'Spin failed: ' + data.message);
                 }
             } catch (e) {
                 this.spinError = 'Network error during spinning.';
+                this._logSpin('error', 'Network error: ' + (e.message || 'Request failed'));
             }
             this.spinning = false;
         },
