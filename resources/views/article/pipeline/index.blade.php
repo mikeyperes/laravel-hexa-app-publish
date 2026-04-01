@@ -164,12 +164,32 @@
                     </template>
                 </select>
             </div>
-            <div x-show="selectedSite" x-cloak class="mt-3 flex items-center gap-2 bg-green-50 rounded-lg px-3 py-2">
-                <span class="w-2 h-2 rounded-full bg-green-500"></span>
-                <span class="text-sm text-green-800" x-text="selectedSite ? selectedSite.name + ' - ' + selectedSite.url : ''"></span>
+            <div x-show="selectedSite" x-cloak class="mt-3">
+                <div class="flex items-center gap-2 rounded-lg px-3 py-2" :class="siteConnectionStatus === true ? 'bg-green-50' : (siteConnectionStatus === false ? 'bg-red-50' : 'bg-gray-50')">
+                    <template x-if="siteConnectionStatus === null">
+                        <svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    </template>
+                    <template x-if="siteConnectionStatus === true">
+                        <svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </template>
+                    <template x-if="siteConnectionStatus === false">
+                        <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </template>
+                    <span class="text-sm" :class="siteConnectionStatus === true ? 'text-green-800' : (siteConnectionStatus === false ? 'text-red-800' : 'text-gray-600')" x-text="selectedSite ? selectedSite.name + ' — ' + selectedSite.url : ''"></span>
+                </div>
+
+                {{-- Connection activity log --}}
+                <div x-show="siteConnectionLog.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
+                    <template x-for="(entry, idx) in siteConnectionLog" :key="idx">
+                        <div class="flex items-start gap-2 py-0.5 text-xs font-mono">
+                            <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
+                            <span :class="{ 'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info' }" x-text="entry.message" class="break-words"></span>
+                        </div>
+                    </template>
+                </div>
             </div>
             <div class="mt-3">
-                <button @click="confirmSite()" :disabled="!selectedSite" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">Continue &rarr;</button>
+                <button @click="confirmSite()" :disabled="!selectedSite || siteConnectionStatus === null" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">Continue &rarr;</button>
             </div>
         </div>
     </div>
@@ -599,6 +619,25 @@
                 </button>
             </div>
 
+            {{-- Author selection --}}
+            <div class="mb-4 flex flex-wrap items-end gap-3" x-show="publishAuthor || siteAuthors.length > 0">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Publish As</label>
+                    <select x-model="publishAuthor" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">— Default author —</option>
+                        <template x-for="a in siteAuthors" :key="a.user_login">
+                            <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
+                        </template>
+                    </select>
+                </div>
+            </div>
+
+            {{-- Short description --}}
+            <div class="mb-4">
+                <label class="block text-xs text-gray-500 mb-1">Article Description / Excerpt</label>
+                <textarea x-model="articleDescription" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Short summary for SEO meta description and excerpt..."></textarea>
+            </div>
+
             {{-- Custom prompt input --}}
             <div class="mb-4">
                 <label class="block text-xs text-gray-500 mb-1">Custom Instructions <span class="text-gray-400">(takes precedence over template/preset)</span></label>
@@ -1013,51 +1052,90 @@
         </button>
         <div x-show="openSteps.includes(8)" x-cloak x-collapse class="px-4 pb-4">
             {{-- Review Section --}}
-            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-                <h5 class="text-sm font-semibold text-gray-700 mb-3">Review Before Publishing</h5>
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+            <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 space-y-4">
+                <h5 class="text-base font-semibold text-gray-800">Review Before Publishing</h5>
+
+                {{-- Title --}}
+                <div>
+                    <p class="text-xs text-gray-400">Title</p>
+                    <p class="text-lg font-bold text-gray-900 break-words" x-text="articleTitle || 'No title set'"></p>
+                </div>
+
+                {{-- Description --}}
+                <div x-show="articleDescription">
+                    <p class="text-xs text-gray-400">Description</p>
+                    <p class="text-sm text-gray-700 break-words" x-text="articleDescription"></p>
+                </div>
+
+                {{-- Key info grid --}}
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
-                        <span class="text-gray-400 text-xs">Title</span>
-                        <p class="font-medium text-gray-800 break-words" x-text="articleTitle || 'No title set'"></p>
+                        <p class="text-xs text-gray-400">Website</p>
+                        <p class="text-sm font-medium text-gray-800" x-text="selectedSite ? selectedSite.name : 'Not selected'"></p>
+                        <p x-show="selectedSite" class="text-xs text-gray-400 break-all" x-text="selectedSite?.url"></p>
                     </div>
                     <div>
-                        <span class="text-gray-400 text-xs">Word Count</span>
-                        <p class="font-medium text-gray-800" x-text="spunWordCount + ' words'"></p>
+                        <p class="text-xs text-gray-400">Author</p>
+                        <p class="text-sm font-medium text-gray-800" x-text="publishAuthor || 'Default'"></p>
                     </div>
                     <div>
-                        <span class="text-gray-400 text-xs">Website</span>
-                        <p class="font-medium text-gray-800" x-text="selectedSite ? selectedSite.name : 'Not selected'"></p>
+                        <p class="text-xs text-gray-400">Word Count</p>
+                        <p class="text-sm font-bold text-gray-800" x-text="spunWordCount + ' words'"></p>
                     </div>
                     <div>
-                        <span class="text-gray-400 text-xs">WP Template</span>
-                        <p class="font-medium text-gray-800" x-text="selectedPreset ? selectedPreset.name : 'None'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Follow Links</span>
-                        <p class="font-medium text-gray-800" x-text="selectedPreset?.follow_links || 'Default'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Publish Action</span>
-                        <p class="font-medium text-gray-800" x-text="publishAction === 'publish' ? 'Publish Immediately' : (publishAction === 'draft_wp' ? 'WordPress Draft' : 'Local Draft')"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Categories</span>
-                        <p class="font-medium text-gray-800 break-words" x-text="suggestedCategories.length ? suggestedCategories.join(', ') : 'None'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Tags</span>
-                        <p class="font-medium text-gray-800 break-words" x-text="suggestedTags.length ? suggestedTags.join(', ') : 'None'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Links</span>
-                        <p class="font-medium text-gray-800" x-text="suggestedUrls.length + ' link(s)'"></p>
+                        <p class="text-xs text-gray-400">AI Model</p>
+                        <p class="text-sm font-mono text-gray-800" x-text="aiModel"></p>
                     </div>
                 </div>
 
-                {{-- Article Preview --}}
-                <div class="mt-4 border-t border-gray-200 pt-3">
-                    <p class="text-xs text-gray-400 mb-2">Article Preview (first 600 characters)</p>
-                    <div class="text-sm text-gray-700 leading-relaxed break-words" x-html="spunContent ? spunContent.substring(0, 600) + '...' : 'No content'"></div>
+                {{-- Categories & Tags --}}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-xs text-gray-400 mb-1">Categories (<span x-text="suggestedCategories.filter((c,i) => selectedCategories.includes(i)).length"></span>)</p>
+                        <div class="flex flex-wrap gap-1">
+                            <template x-for="(cat, idx) in suggestedCategories" :key="idx">
+                                <span x-show="selectedCategories.includes(idx)" class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800" x-text="cat"></span>
+                            </template>
+                        </div>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400 mb-1">Tags (<span x-text="suggestedTags.filter((t,i) => selectedTags.includes(i)).length"></span>)</p>
+                        <div class="flex flex-wrap gap-1">
+                            <template x-for="(tag, idx) in suggestedTags" :key="idx">
+                                <span x-show="selectedTags.includes(idx)" class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800" x-text="tag"></span>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Photos + Links summary --}}
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <p class="text-xs text-gray-400">Photos</p>
+                        <p class="text-sm text-gray-800" x-text="photoSuggestions.filter(p => !p.removed).length + ' photo(s)'"></p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400">Links</p>
+                        <p class="text-sm text-gray-800" x-text="suggestedUrls.length + ' link(s)'"></p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400">WP Template</p>
+                        <p class="text-sm text-gray-800" x-text="selectedPreset ? selectedPreset.name : 'None'"></p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400">Link Follow</p>
+                        <p class="text-sm text-gray-800" x-text="selectedPreset?.follow_links || 'Default'"></p>
+                    </div>
+                </div>
+
+                {{-- Sources --}}
+                <div>
+                    <p class="text-xs text-gray-400 mb-1">Sources (<span x-text="sources.length"></span>)</p>
+                    <div class="space-y-1">
+                        <template x-for="(s, idx) in sources" :key="idx">
+                            <p class="text-xs text-gray-600 break-all" x-text="s.title || s.url"></p>
+                        </template>
+                    </div>
                 </div>
             </div>
 
@@ -1458,6 +1536,10 @@ function publishPipeline() {
         featuredImageSearch: '',
         featuredPhoto: null,
         resolvedPrompt: '',
+        articleDescription: '',
+        siteAuthors: [],
+        siteConnectionLog: [],
+        siteConnectionStatus: null,
         savingDraft: false,
 
         // Notification
@@ -1744,17 +1826,42 @@ function publishPipeline() {
         selectSite() {
             if (this.selectedSiteId) {
                 this.selectedSite = this.sites.find(s => s.id == this.selectedSiteId) || null;
-                // Fetch default author
                 if (this.selectedSite) {
+                    // Fetch authors
+                    this.siteAuthors = [];
                     fetch('/publish/sites/' + this.selectedSiteId + '/authors', { headers: { 'Accept': 'application/json' } })
                         .then(r => r.json()).then(d => {
+                            this.siteAuthors = d.authors || [];
                             if (d.default_author) this.publishAuthor = d.default_author;
                         }).catch(() => {});
+
+                    // Test connection
+                    this.siteConnectionLog = [];
+                    this.siteConnectionStatus = null;
+                    this._logSiteConnection('info', 'Testing connection to ' + this.selectedSite.name + '...');
+                    fetch('/publish/sites/' + this.selectedSiteId + '/test-write', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken }
+                    }).then(r => r.json()).then(d => {
+                        this.siteConnectionStatus = d.success;
+                        this._logSiteConnection(d.success ? 'success' : 'error', d.message || (d.success ? 'Connected' : 'Failed'));
+                    }).catch(e => {
+                        this.siteConnectionStatus = false;
+                        this._logSiteConnection('error', 'Connection test failed: ' + (e.message || 'Network error'));
+                    });
                 }
             } else {
                 this.selectedSite = null;
                 this.publishAuthor = '';
+                this.siteAuthors = [];
+                this.siteConnectionLog = [];
+                this.siteConnectionStatus = null;
             }
+        },
+
+        _logSiteConnection(type, message) {
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            this.siteConnectionLog.push({ type, message, time });
         },
 
         confirmSite() {
@@ -1993,6 +2100,7 @@ function publishPipeline() {
                         this.suggestedTitles = data.metadata.titles || [];
                         this.suggestedCategories = data.metadata.categories || [];
                         this.suggestedTags = data.metadata.tags || [];
+                        if (data.metadata.description) this.articleDescription = data.metadata.description;
                         this.selectedTitleIdx = 0;
                         if (this.suggestedTitles.length > 0) this.articleTitle = this.suggestedTitles[0];
                         this.selectedCategories = Array.from({length: Math.min(10, this.suggestedCategories.length)}, (_, i) => i);
