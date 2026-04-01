@@ -152,10 +152,10 @@
                 <span class="font-semibold text-gray-800">Select Website</span>
                 <span x-show="selectedSite && siteConnectionStatus === null" x-cloak class="text-sm text-blue-500 inline-flex items-center gap-1">
                     <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="selectedSite?.name + ' — Checking...'"></span>
+                    <span x-text="selectedSite?.name + ' — Checking WordPress connection...'"></span>
                 </span>
-                <span x-show="selectedSite && siteConnectionStatus === true" x-cloak class="text-sm text-green-600" x-text="selectedSite?.name + ' ✓'"></span>
-                <span x-show="selectedSite && siteConnectionStatus === false" x-cloak class="text-sm text-red-600" x-text="selectedSite?.name + ' ✗ Connection failed'"></span>
+                <span x-show="selectedSite && siteConnectionStatus === true" x-cloak class="text-sm text-green-600" x-text="selectedSite?.name + ' — WordPress connection established'"></span>
+                <span x-show="selectedSite && siteConnectionStatus === false" x-cloak class="text-sm text-red-600" x-text="selectedSite?.name + ' — WordPress connection failed'"></span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(3) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
@@ -1852,13 +1852,13 @@ function publishPipeline() {
                     // Test connection
                     this.siteConnectionLog = [];
                     this.siteConnectionStatus = null;
-                    this._logSiteConnection('info', 'Testing connection to ' + this.selectedSite.name + '...');
+                    this._logSiteConnection('info', 'Checking WordPress connection to ' + this.selectedSite.name + '...');
                     fetch('/publish/sites/' + this.selectedSiteId + '/test-write', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken }
                     }).then(r => r.json()).then(d => {
                         this.siteConnectionStatus = d.success;
-                        this._logSiteConnection(d.success ? 'success' : 'error', d.message || (d.success ? 'Connected — write access confirmed' : 'Failed'));
+                        this._logSiteConnection(d.success ? 'success' : 'error', d.success ? 'WordPress connection established — write access confirmed' : (d.message || 'WordPress connection failed'));
                         if (d.success) { this.completeStep(3); this.openStep(4); }
                     }).catch(e => {
                         this.siteConnectionStatus = false;
