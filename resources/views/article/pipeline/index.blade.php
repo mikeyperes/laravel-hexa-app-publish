@@ -162,10 +162,10 @@
         <div x-show="openSteps.includes(3)" x-cloak x-collapse class="px-4 pb-4">
             <div class="max-w-md">
                 <label class="block text-xs text-gray-500 mb-1">WordPress Site</label>
-                <select x-model="selectedSiteId" @change="selectSite()" x-effect="$el.value = selectedSiteId" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <select x-model="selectedSiteId" @change="selectSite()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">-- Select a site --</option>
                     <template x-for="s in sites" :key="s.id">
-                        <option :value="String(s.id)" x-text="s.name + ' (' + s.url + ')'"></option>
+                        <option :value="String(s.id)" :selected="String(s.id) === selectedSiteId" x-text="s.name + ' (' + s.url + ')'"></option>
                     </template>
                 </select>
             </div>
@@ -1575,8 +1575,13 @@ function publishPipeline() {
                     if (state.selectedSiteId) {
                         this.selectedSiteId = String(state.selectedSiteId);
                         this.selectedSite = state.selectedSite || null;
-                        // Trigger connection check on restore
-                        this.$nextTick(() => this.selectSite());
+                        // Reset connection status — will be re-tested
+                        this.siteConnectionStatus = null;
+                        // Wait for DOM to render options, then select and test
+                        setTimeout(() => {
+                            this.selectedSiteId = String(state.selectedSiteId);
+                            this.selectSite();
+                        }, 100);
                     }
                     if (state.sources) this.sources = state.sources;
                     if (state.checkResults) { this.checkResults = state.checkResults; this.checkPassCount = state.checkResults.filter(r => r.success).length; }
