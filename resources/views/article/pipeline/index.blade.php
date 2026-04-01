@@ -626,19 +626,6 @@
                 </button>
             </div>
 
-            {{-- Author selection --}}
-            <div class="mb-4 flex flex-wrap items-end gap-3" x-show="selectedSite">
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Publish As</label>
-                    <select x-model="publishAuthor" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">— Default author —</option>
-                        <template x-for="a in siteAuthors" :key="a.user_login">
-                            <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
-                        </template>
-                    </select>
-                </div>
-            </div>
-
             {{-- Short description --}}
             <div class="mb-4">
                 <label class="block text-xs text-gray-500 mb-1">Article Description / Excerpt</label>
@@ -670,22 +657,6 @@
             {{-- Spin error --}}
             <div x-show="spinError" x-cloak class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
                 <p class="text-sm text-red-700" x-text="spinError"></p>
-            </div>
-
-            {{-- Create Article Activity Log --}}
-            <div x-show="spinLog.length > 0" x-cloak class="mb-4" x-data="{ showSpinLog: false }">
-                <button @click="showSpinLog = !showSpinLog" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 mb-1">
-                    <svg class="w-3 h-3 transition-transform" :class="showSpinLog ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    Activity Log (<span x-text="spinLog.length"></span> entries)
-                </button>
-                <div x-show="showSpinLog" x-cloak class="bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto">
-                    <template x-for="(entry, idx) in spinLog" :key="idx">
-                        <div class="flex items-start gap-2 py-0.5 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
-                            <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
-                            <span :class="{ 'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info', 'text-gray-400': entry.type === 'step', 'text-yellow-400': entry.type === 'warning' }" x-text="entry.message" class="break-words"></span>
-                        </div>
-                    </template>
-                </div>
             </div>
 
             {{-- Token usage --}}
@@ -995,6 +966,39 @@
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                {{-- Author selection --}}
+                <div class="mt-4 flex flex-wrap items-center gap-3" x-show="selectedSite">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Publish As</label>
+                        <div class="flex items-center gap-2">
+                            <select x-model="publishAuthor" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <option value="">— Default author —</option>
+                                <template x-for="a in siteAuthors" :key="a.user_login">
+                                    <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
+                                </template>
+                            </select>
+                            <svg x-show="loadingAuthors" x-cloak class="w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <span x-show="!loadingAuthors && siteAuthors.length > 0" x-cloak class="text-xs text-gray-400" x-text="siteAuthors.length + ' authors'"></span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Create Article Activity Log (collapsible at bottom) --}}
+                <div x-show="spinLog.length > 0" x-cloak class="mt-4" x-data="{ showLog: false }">
+                    <button @click="showLog = !showLog" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
+                        <svg class="w-3 h-3 transition-transform" :class="showLog ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        Activity Log (<span x-text="$root.spinLog.length"></span> entries)
+                    </button>
+                    <div x-show="showLog" x-cloak class="mt-1 bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto">
+                        <template x-for="(entry, idx) in $root.spinLog" :key="idx">
+                            <div class="flex items-start gap-2 py-0.5 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
+                                <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
+                                <span :class="{ 'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info', 'text-gray-400': entry.type === 'step', 'text-yellow-400': entry.type === 'warning' }" x-text="entry.message" class="break-words"></span>
                             </div>
                         </template>
                     </div>
@@ -1562,6 +1566,7 @@ function publishPipeline() {
         articleDescription: '',
         spinLog: [],
         siteAuthors: [],
+        loadingAuthors: false,
         siteConnectionLog: [],
         siteConnectionStatus: null,
         savingDraft: false,
@@ -1860,28 +1865,30 @@ function publishPipeline() {
             if (this.selectedSiteId) {
                 this.selectedSite = this.sites.find(s => s.id == this.selectedSiteId) || null;
                 if (this.selectedSite) {
-                    // Fetch authors
+                    // Single call: test connection + fetch authors
                     this.siteAuthors = [];
-                    fetch('/publish/sites/' + this.selectedSiteId + '/authors', { headers: { 'Accept': 'application/json' } })
-                        .then(r => r.json()).then(d => {
-                            this.siteAuthors = d.authors || [];
-                            if (d.default_author) this.publishAuthor = d.default_author;
-                        }).catch(() => {});
-
-                    // Test connection
                     this.siteConnectionLog = [];
                     this.siteConnectionStatus = null;
+                    this.loadingAuthors = true;
                     this._logSiteConnection('info', 'Checking WordPress connection to ' + this.selectedSite.name + '...');
                     fetch('/publish/sites/' + this.selectedSiteId + '/test-write', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken }
                     }).then(r => r.json()).then(d => {
                         this.siteConnectionStatus = d.success;
-                        this._logSiteConnection(d.success ? 'success' : 'error', d.success ? 'WordPress connection established — write access confirmed' : (d.message || 'WordPress connection failed'));
+                        this._logSiteConnection(d.success ? 'success' : 'error', d.message || (d.success ? 'WordPress connection established' : 'WordPress connection failed'));
+                        // Authors come back in the same response
+                        if (d.authors) {
+                            this.siteAuthors = d.authors;
+                            this._logSiteConnection('info', d.authors.length + ' WordPress authors loaded');
+                        }
+                        if (d.default_author) this.publishAuthor = d.default_author;
                         if (d.success) { this.completeStep(3); this.openStep(4); }
+                        this.loadingAuthors = false;
                     }).catch(e => {
                         this.siteConnectionStatus = false;
                         this._logSiteConnection('error', 'Connection test failed: ' + (e.message || 'Network error'));
+                        this.loadingAuthors = false;
                     });
                 }
             } else {

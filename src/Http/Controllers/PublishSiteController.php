@@ -251,10 +251,26 @@ class PublishSiteController extends Controller
         $site = PublishSite::findOrFail($id);
         $resolved = $this->resolveServer($site);
         if (!$resolved['server'] || !$site->wordpress_install_id) {
-            return response()->json(['success' => false, 'message' => 'Server or install ID not configured.']);
+            return response()->json(['success' => false, 'message' => 'Server or install ID not configured.', 'authors' => []]);
         }
 
+        // Single SSH session: test write + get authors
         $result = $this->wptoolkit->wpCliTestWriteAccess($resolved['server'], $site->wordpress_install_id);
+
+        // Fetch authors on the same connection
+        $authors = [];
+        if ($result['success']) {
+            $ssh = $this->wptoolkit->getConnection($resolved['server']);
+            if ($ssh['success']) {
+                $escapedId = escapeshellarg((string) $site->wordpress_install_id);
+                $cmd = "wp-toolkit --wp-cli -instance-id {$escapedId} -- user list --role=administrator --fields=user_login,display_name --format=json 2>/dev/null";
+                $output = trim($ssh['connection']->exec($cmd));
+                foreach (explode("\n", $output) as $line) {
+                    $line = trim($line);
+                    if (str_starts_with($line, '[')) { $authors = json_decode($line, true) ?: []; break; }
+                }
+            }
+        }
 
         $site->update([
             'status' => $result['success'] ? 'connected' : 'error',
@@ -262,6 +278,8 @@ class PublishSiteController extends Controller
             'last_error' => $result['success'] ? null : $result['message'],
         ]);
 
+        $result['authors'] = $authors;
+        $result['default_author'] = $site->default_author;
         return response()->json($result);
     }
 
