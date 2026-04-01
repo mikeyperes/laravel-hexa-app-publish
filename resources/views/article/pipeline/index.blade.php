@@ -497,23 +497,17 @@
                             </div>
                         </div>
                         {{-- Extracted article content — expand/collapse, default EXPANDED --}}
-                        <div x-show="result.success && result.text" x-cloak x-data="{ showRaw: false, collapsed: false }" class="border-t border-green-200">
+                        <div x-show="result.success && result.text" x-cloak class="border-t border-green-200">
                             <div class="bg-white rounded-b-lg shadow-sm">
                                 <div class="flex items-center justify-between px-6 pt-4 pb-2">
-                                    <button @click.stop="collapsed = !collapsed" class="text-xs text-gray-400 hover:text-gray-600 inline-flex items-center gap-1">
-                                        <svg class="w-3 h-3 transition-transform" :class="collapsed ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                                        <span x-text="collapsed ? 'Show extracted content' : 'Extracted content'"></span>
-                                    </button>
-                                    <button @click.stop="showRaw = !showRaw" class="text-xs px-2 py-0.5 rounded border transition-colors" :class="showRaw ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400'" title="Toggle formatted/raw view">
-                                        &lt;/&gt;
+                                    <button @click.stop="expandedSources.includes(idx) ? expandedSources = expandedSources.filter(i => i !== idx) : expandedSources.push(idx)" class="text-xs text-gray-400 hover:text-gray-600 inline-flex items-center gap-1">
+                                        <svg class="w-3 h-3 transition-transform" :class="expandedSources.includes(idx) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                        <span x-text="expandedSources.includes(idx) ? 'Extracted content' : 'Show extracted content'"></span>
                                     </button>
                                 </div>
                                 {{-- Full content — NO scroll, NO iframe, NO max-height --}}
-                                <div x-show="!collapsed && !showRaw" class="px-6 pb-4" style="font-size:15px;line-height:1.8;color:#374151;">
-                                    <div class="prose max-w-none break-words" x-html="(result.formatted_html || result.text || '').replace(/<img[^>]*>/gi, function(m) { return m.replace(/<img /, '<img style=\"max-width:100%;height:auto;\" '); })"></div>
-                                </div>
-                                <div x-show="!collapsed && showRaw" x-cloak class="px-6 pb-4">
-                                    <pre class="text-xs text-gray-500 bg-gray-50 rounded-lg p-4 whitespace-pre-wrap break-words font-mono" x-text="result.text"></pre>
+                                <div x-show="expandedSources.includes(idx)" class="px-6 pb-4" style="font-size:15px;line-height:1.8;color:#374151;">
+                                    <div class="prose max-w-none break-words" x-html="(result.formatted_html || result.text || '').replace(/<img[^>]*>/gi, function(m) { return m.replace(/<img /i, '<img style=\'max-width:100%;height:auto;\' '); })"></div>
                                 </div>
                                 {{-- Action buttons with separator --}}
                                 <div x-show="result.success" class="px-6 py-3 border-t border-gray-100 flex items-center gap-3">
