@@ -1572,8 +1572,12 @@ function publishPipeline() {
                     if (state.currentStep) this.currentStep = state.currentStep;
                     if (state.openSteps) this.openSteps = state.openSteps;
                     if (state.completedSteps) this.completedSteps = state.completedSteps;
-                    if (state.selectedSiteId) this.selectedSiteId = String(state.selectedSiteId);
-                    if (state.selectedSite) this.selectedSite = state.selectedSite;
+                    if (state.selectedSiteId) {
+                        this.selectedSiteId = String(state.selectedSiteId);
+                        this.selectedSite = state.selectedSite || null;
+                        // Trigger connection check on restore
+                        this.$nextTick(() => this.selectSite());
+                    }
                     if (state.sources) this.sources = state.sources;
                     if (state.checkResults) { this.checkResults = state.checkResults; this.checkPassCount = state.checkResults.filter(r => r.success).length; }
                     if (state.approvedSources) this.approvedSources = state.approvedSources;
