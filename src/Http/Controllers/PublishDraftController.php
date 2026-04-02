@@ -4,22 +4,23 @@ namespace hexa_app_publish\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
 use hexa_app_publish\Models\PublishArticle;
+use hexa_app_publish\Services\ArticleDeleteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * PublishDraftController — CRUD for draft articles (status = drafting).
+ * PublishDraftController — CRUD for articles (all statuses).
  */
 class PublishDraftController extends Controller
 {
     /**
-     * List draft articles, optionally filtered by user.
+     * List all articles with optional search.
      *
      * @param Request $request
-     * @return View
+     * @return View|JsonResponse
      */
-    public function index(Request $request): View
+    public function index(Request $request): View|JsonResponse
     {
         $query = PublishArticle::with(['creator', 'site']);
 
@@ -27,10 +28,27 @@ class PublishDraftController extends Controller
             $query->where('created_by', $request->input('user_id'));
         }
 
-        $drafts = $query->orderByDesc('updated_at')->paginate(25);
+        if ($request->filled('q')) {
+            $q = $request->input('q');
+            $query->where(function ($qb) use ($q) {
+                $qb->where('title', 'like', "%{$q}%")
+                    ->orWhere('article_id', 'like', "%{$q}%")
+                    ->orWhereHas('site', fn($s) => $s->where('name', 'like', "%{$q}%"));
+            });
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        $articles = $query->orderByDesc('updated_at')->paginate(100);
+
+        if ($request->wantsJson()) {
+            return response()->json(['success' => true, 'data' => $articles]);
+        }
 
         return view('app-publish::article.drafts.index', [
-            'drafts' => $drafts,
+            'drafts' => $articles,
         ]);
     }
 
@@ -68,10 +86,11 @@ class PublishDraftController extends Controller
     }
 
     /**
-     * Show a single draft for editing.
+     * Show a single article.
      *
+     * @param Request $request
      * @param int $id
-     * @return View
+     * @return View|JsonResponse
      */
     public function show(Request $request, int $id): View|JsonResponse
     {
@@ -82,13 +101,13 @@ class PublishDraftController extends Controller
         }
 
         return view('app-publish::article.drafts.index', [
-            'drafts'      => PublishArticle::where('status', 'drafting')->orderByDesc('updated_at')->paginate(25),
-            'editDraft'   => $draft,
+            'drafts'    => PublishArticle::orderByDesc('updated_at')->paginate(100),
+            'editDraft' => $draft,
         ]);
     }
 
     /**
-     * Update a draft article.
+     * Update an article.
      *
      * @param Request $request
      * @param int $id
@@ -96,7 +115,7 @@ class PublishDraftController extends Controller
      */
     public function update(Request $request, int $id): JsonResponse
     {
-        $draft = PublishArticle::whereIn('status', ['drafting', 'draft'])->findOrFail($id);
+        $draft = PublishArticle::findOrFail($id);
 
         $validated = $request->validate([
             'title'      => 'required|string|max:500',
@@ -104,38 +123,67 @@ class PublishDraftController extends Controller
             'excerpt'    => 'nullable|string|max:1000',
             'created_by' => 'nullable|integer|exists:users,id',
             'notes'      => 'nullable|string',
-            'status'     => 'nullable|in:draft,drafting',
+            'status'     => 'nullable|string',
         ]);
 
         $draft->update($validated);
 
-        hexaLog('publish', 'draft_updated', "Draft updated: {$draft->title}");
+        hexaLog('publish', 'draft_updated', "Article updated: {$draft->title}");
 
         return response()->json([
             'success' => true,
-            'message' => "Draft '{$draft->title}' updated successfully.",
+            'message' => "Article '{$draft->title}' updated.",
             'article' => $draft,
         ]);
     }
 
     /**
-     * Delete a draft article.
+     * Delete an article (local + WP if published).
      *
      * @param int $id
      * @return JsonResponse
      */
     public function destroy(int $id): JsonResponse
     {
-        $draft = PublishArticle::where('status', 'drafting')->findOrFail($id);
-        $title = $draft->title;
+        $article = PublishArticle::findOrFail($id);
+        $deleteService = app(ArticleDeleteService::class);
+        $result = $deleteService->delete($article);
 
-        $draft->delete();
+        return response()->json([
+            'success' => $result['success'],
+            'message' => 'Article deleted.',
+            'log'     => $result['log'],
+        ]);
+    }
 
-        hexaLog('publish', 'draft_deleted', "Draft deleted: {$title}");
+    /**
+     * Bulk delete articles.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function bulkDestroy(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|exists:publish_articles,id',
+        ]);
+
+        $deleteService = app(ArticleDeleteService::class);
+        $allLogs = [];
+
+        foreach ($validated['ids'] as $id) {
+            $article = PublishArticle::find($id);
+            if ($article) {
+                $result = $deleteService->delete($article);
+                $allLogs[$id] = $result['log'];
+            }
+        }
 
         return response()->json([
             'success' => true,
-            'message' => "Draft '{$title}' deleted successfully.",
+            'message' => count($validated['ids']) . ' article(s) deleted.',
+            'logs'    => $allLogs,
         ]);
     }
 }

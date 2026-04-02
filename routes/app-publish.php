@@ -140,6 +140,7 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::get('/article/articles/{id}', [PublishDraftController::class, 'show'])->name('publish.drafts.show');
     Route::put('/article/articles/{id}', [PublishDraftController::class, 'update'])->name('publish.drafts.update');
     Route::delete('/article/articles/{id}', [PublishDraftController::class, 'destroy'])->name('publish.drafts.destroy');
+    Route::post('/article/articles/bulk-delete', [PublishDraftController::class, 'bulkDestroy'])->name('publish.drafts.bulk-destroy');
 
     // ═══ Bookmarked Articles ═══
     Route::get('/article/bookmarks', [PublishBookmarkController::class, 'index'])->name('publish.bookmarks.index');
