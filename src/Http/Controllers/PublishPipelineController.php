@@ -1032,7 +1032,8 @@ class PublishPipelineController extends Controller
 
         $text = strip_tags($validated['text']);
         $results = [];
-        $threshold = (float) Setting::getValue('ai_detection_threshold', 90);
+        // Threshold = max AI % allowed (e.g. 10 = up to 10% AI is OK)
+        $threshold = (float) Setting::getValue('ai_detection_threshold', 10);
 
         // Run each enabled detector
         $detectors = [
@@ -1050,17 +1051,18 @@ class PublishPipelineController extends Controller
 
                 $result = $service->detect($text);
 
-                // Normalize score to 0-100 human percentage
-                $humanScore = null;
+                // Normalize score to 0-100 AI percentage (higher = more AI)
+                $aiScore = null;
+                $debugMode = $service->isDebugMode();
                 if ($result['success']) {
                     if ($key === 'gptzero') {
-                        $humanScore = round((1 - ($result['data']['completely_generated_prob'] ?? 0)) * 100, 1);
+                        $aiScore = round(($result['data']['completely_generated_prob'] ?? 0) * 100, 1);
                     } elseif ($key === 'copyleaks') {
-                        $humanScore = round(100 - ($result['data']['ai_score'] ?? 0), 1);
+                        $aiScore = round((float) ($result['data']['ai_score'] ?? 0), 1);
                     } elseif ($key === 'zerogpt') {
-                        $humanScore = round($result['data']['is_human_written'] ?? 0, 1);
+                        $aiScore = round((float) ($result['data']['fake_percentage'] ?? 0), 1);
                     } elseif ($key === 'originality') {
-                        $humanScore = round(($result['data']['original_score'] ?? 0) * 100, 1);
+                        $aiScore = round((float) ($result['data']['ai_score'] ?? 0) * 100, 1);
                     }
                 }
 
@@ -1070,9 +1072,9 @@ class PublishPipelineController extends Controller
                     'article_id' => $validated['article_id'] ?? null,
                     'text' => $text,
                     'response' => $result['data']['raw'] ?? $result,
-                    'score' => $humanScore,
+                    'score' => $aiScore,
                     'cost' => $result['data']['cost'] ?? null,
-                    'debug_mode' => $service->isDebugMode(),
+                    'debug_mode' => $debugMode,
                     'success' => $result['success'],
                     'error' => $result['message'] ?? null,
                 ]);
@@ -1080,19 +1082,20 @@ class PublishPipelineController extends Controller
                 $results[$key] = [
                     'name' => $info['name'],
                     'success' => $result['success'],
-                    'human_score' => $humanScore,
-                    'passes' => $humanScore !== null && $humanScore >= $threshold,
+                    'ai_score' => $aiScore,
+                    'passes' => $aiScore !== null && $aiScore <= $threshold,
+                    'debug_mode' => $debugMode,
                     'message' => $result['message'] ?? '',
                     'sentences' => $result['data']['sentences'] ?? [],
                     'raw' => $result['data']['raw'] ?? null,
-                    'text_sent' => Str::limit($text, 200),
                 ];
             } catch (\Exception $e) {
                 $results[$key] = [
                     'name' => $info['name'],
                     'success' => false,
-                    'human_score' => null,
+                    'ai_score' => null,
                     'passes' => false,
+                    'debug_mode' => false,
                     'message' => 'Error: ' . $e->getMessage(),
                     'sentences' => [],
                     'raw' => null,

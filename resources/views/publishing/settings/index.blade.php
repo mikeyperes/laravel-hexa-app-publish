@@ -92,11 +92,11 @@
     </div>
 
     {{-- ═══ AI Detection Threshold ═══ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" x-data="{ threshold: {{ \hexa_core\Models\Setting::getValue('ai_detection_threshold', 90) }}, saving: false, saved: false }">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" x-data="{ threshold: {{ \hexa_core\Models\Setting::getValue('ai_detection_threshold', 10) }}, saving: false, saved: false }">
         <h3 class="font-semibold text-gray-800 mb-1">AI Detection Threshold</h3>
-        <p class="text-sm text-gray-500 mb-3">Minimum human score (%) required to pass AI detection. Articles below this threshold will be flagged for re-spinning with humanization instructions.</p>
+        <p class="text-sm text-gray-500 mb-3">Maximum AI percentage allowed. Articles above this threshold will be flagged for re-spinning. Example: 10 means up to 10% AI content is acceptable.</p>
         <div class="flex items-center gap-3">
-            <input type="number" x-model="threshold" min="50" max="100" class="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <input type="number" x-model="threshold" min="0" max="100" class="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm">
             <span class="text-sm text-gray-500">%</span>
             <button @click="
                 saving = true; saved = false;

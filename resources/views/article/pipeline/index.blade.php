@@ -627,6 +627,134 @@
                 <textarea x-model="customPrompt" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Write in first person, focus on the financial impact, include expert quotes..."></textarea>
             </div>
 
+            {{-- ═══ AI Detection Scan ═══ --}}
+            <div class="mb-4 bg-gray-900 rounded-xl border border-gray-700 p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <h5 class="text-sm font-semibold text-white uppercase tracking-wide flex items-center gap-2">
+                        <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        AI Detection Scan
+                    </h5>
+                    <div class="flex items-center gap-3">
+                        {{-- Enable/disable toggle (persisted) --}}
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-400" x-text="aiDetectionEnabled ? 'Enabled' : 'Disabled'"></span>
+                            <button @click="toggleAiDetection()" type="button"
+                                class="relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                                :class="aiDetectionEnabled ? 'bg-purple-500' : 'bg-gray-600'"
+                                role="switch" :aria-checked="aiDetectionEnabled">
+                                <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                                    :class="aiDetectionEnabled ? 'translate-x-5' : 'translate-x-0'"></span>
+                            </button>
+                        </div>
+                        <span x-show="aiDetectionEnabled && aiDetectionThreshold !== null" x-cloak class="text-xs text-gray-400">Max AI: <span class="text-white" x-text="aiDetectionThreshold + '%'"></span></span>
+                        <button x-show="aiDetectionEnabled && !aiDetecting && spunContent" @click="runAiDetection()" class="text-xs text-purple-400 hover:text-purple-300 inline-flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            Re-scan
+                        </button>
+                    </div>
+                </div>
+
+                {{-- Disabled state --}}
+                <div x-show="!aiDetectionEnabled" x-cloak class="text-sm text-gray-500 text-center py-3">
+                    AI detection is disabled. Toggle on to scan articles after spinning.
+                </div>
+
+                {{-- Enabled content --}}
+                <div x-show="aiDetectionEnabled" x-cloak>
+                    {{-- Detector rows --}}
+                    <div class="space-y-2">
+                        <template x-for="(det, key) in aiDetectionResults" :key="key">
+                            <div class="bg-gray-800 rounded-lg p-3">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <template x-if="det.loading">
+                                            <svg class="w-5 h-5 text-purple-400 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                        </template>
+                                        <template x-if="!det.loading && det.success && det.passes">
+                                            <svg class="w-5 h-5 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        </template>
+                                        <template x-if="!det.loading && det.success && !det.passes">
+                                            <svg class="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        </template>
+                                        <template x-if="!det.loading && !det.success">
+                                            <svg class="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                                        </template>
+                                        <span class="text-sm font-medium text-white" x-text="det.name"></span>
+                                        <span x-show="det.debug_mode" x-cloak class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-900 text-yellow-300">DEBUG</span>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <template x-if="!det.loading && det.ai_score !== null && det.ai_score !== undefined">
+                                            <span class="text-lg font-bold" :class="det.passes ? 'text-green-400' : 'text-red-400'" x-text="det.ai_score + '% AI'"></span>
+                                        </template>
+                                        <template x-if="!det.loading && (det.ai_score === null || det.ai_score === undefined) && !det.success">
+                                            <span class="text-xs text-yellow-400">Error</span>
+                                        </template>
+                                        <template x-if="det.loading">
+                                            <span class="text-xs text-gray-500">Scanning...</span>
+                                        </template>
+                                        <template x-if="!det.loading && det.success">
+                                            <span class="px-2 py-0.5 rounded text-xs font-medium" :class="det.passes ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'" x-text="det.passes ? 'PASS' : 'FAIL'"></span>
+                                        </template>
+                                        <button x-show="!det.loading && det.raw" @click="det.showRaw = !det.showRaw" class="text-xs text-gray-500 hover:text-gray-300" title="View raw response">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                <p x-show="!det.loading && !det.success && det.message" x-cloak class="text-xs text-yellow-400 mt-1 break-words" x-text="det.message"></p>
+                                {{-- Flagged sentences with checkboxes --}}
+                                <div x-show="!det.loading && det.sentences && det.sentences.length > 0" x-cloak class="mt-2">
+                                    <p class="text-xs text-red-400 mb-1">Flagged sentences:</p>
+                                    <div class="space-y-1">
+                                        <template x-for="(s, si) in (det.sentences || [])" :key="key + '_' + si">
+                                            <label class="flex items-start gap-2 text-xs text-gray-400 bg-gray-900 rounded px-2 py-1.5 cursor-pointer hover:bg-gray-800">
+                                                <input type="checkbox" :checked="selectedFlaggedSentences.includes(key + '_' + si)" @change="toggleFlaggedSentence(key + '_' + si, s)" class="mt-0.5 rounded border-gray-600 text-red-500 bg-gray-800">
+                                                <span class="break-words" x-text="s"></span>
+                                            </label>
+                                        </template>
+                                    </div>
+                                </div>
+                                <div x-show="det.showRaw" x-cloak class="mt-2 bg-gray-900 rounded-lg p-3 text-xs text-gray-400 font-mono break-words whitespace-pre-wrap" x-text="JSON.stringify(det.raw, null, 2)"></div>
+                            </div>
+                        </template>
+                    </div>
+
+                    {{-- Overall verdict --}}
+                    <div x-show="!aiDetecting && Object.keys(aiDetectionResults).length > 0" x-cloak class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex items-center gap-2">
+                            <template x-if="aiDetectionAllPass">
+                                <div class="flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    <span class="text-sm font-semibold text-green-400">All detectors passed</span>
+                                </div>
+                            </template>
+                            <template x-if="!aiDetectionAllPass">
+                                <div class="flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                                    <span class="text-sm font-semibold text-red-400">Article flagged -- above AI threshold</span>
+                                </div>
+                            </template>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button x-show="!aiDetectionAllPass" @click="processDetectionRespin()" :disabled="spinning" class="bg-red-600 text-white px-4 py-2 rounded-lg text-xs hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-2">
+                                <svg x-show="spinning" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                Process Changes & Respin
+                            </button>
+                            <button x-show="!aiDetectionAllPass" @click="ignoreDetection()" class="text-gray-400 hover:text-gray-200 px-3 py-2 text-xs">Ignore & Continue</button>
+                        </div>
+                    </div>
+
+                    {{-- No detectors enabled --}}
+                    <div x-show="!aiDetecting && Object.keys(aiDetectionResults).length === 0 && aiDetectionRan" x-cloak class="text-sm text-gray-500 text-center py-2">
+                        No AI detectors are enabled. Configure in <a href="{{ route('publish.settings.master') }}" class="text-purple-400 hover:text-purple-300">Settings</a>.
+                    </div>
+
+                    {{-- Waiting state --}}
+                    <div x-show="!aiDetectionRan && !aiDetecting" x-cloak class="text-xs text-gray-500 text-center py-2">
+                        Detection runs automatically after spin completes.
+                    </div>
+                </div>
+            </div>
+
             {{-- Prompt preview (expandable) --}}
             <div class="mb-4" x-data="{ showPrompt: false }">
                 <button @click="showPrompt = !showPrompt" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
@@ -973,112 +1101,6 @@
                             </select>
                             <svg x-show="loadingAuthors" x-cloak class="w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             <span x-show="!loadingAuthors && siteAuthors.length > 0" x-cloak class="text-xs text-gray-400" x-text="siteAuthors.length + ' authors'"></span>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- ═══ AI Detection Scan ═══ --}}
-                <div x-show="spunContent" x-cloak class="mt-4">
-                    <div class="bg-gray-900 rounded-xl border border-gray-700 p-5">
-                        <div class="flex items-center justify-between mb-4">
-                            <h5 class="text-sm font-semibold text-white uppercase tracking-wide flex items-center gap-2">
-                                <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-                                AI Detection Scan
-                            </h5>
-                            <div class="flex items-center gap-3">
-                                <span x-show="aiDetectionThreshold" x-cloak class="text-xs text-gray-400">Threshold: <span class="text-white" x-text="aiDetectionThreshold + '%'"></span></span>
-                                <button x-show="!aiDetecting && spunContent" @click="runAiDetection()" class="text-xs text-purple-400 hover:text-purple-300 inline-flex items-center gap-1">
-                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                    Re-scan
-                                </button>
-                            </div>
-                        </div>
-
-                        {{-- Detector rows --}}
-                        <div class="space-y-2">
-                            <template x-for="(det, key) in aiDetectionResults" :key="key">
-                                <div class="bg-gray-800 rounded-lg p-3">
-                                    <div class="flex items-center justify-between">
-                                        <div class="flex items-center gap-3">
-                                            <template x-if="det.loading">
-                                                <svg class="w-5 h-5 text-purple-400 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                            </template>
-                                            <template x-if="!det.loading && det.success && det.passes">
-                                                <svg class="w-5 h-5 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                            </template>
-                                            <template x-if="!det.loading && det.success && !det.passes">
-                                                <svg class="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                            </template>
-                                            <template x-if="!det.loading && !det.success">
-                                                <svg class="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
-                                            </template>
-                                            <span class="text-sm font-medium text-white" x-text="det.name"></span>
-                                        </div>
-                                        <div class="flex items-center gap-3">
-                                            <template x-if="!det.loading && det.human_score !== null && det.human_score !== undefined">
-                                                <span class="text-lg font-bold" :class="det.passes ? 'text-green-400' : 'text-red-400'" x-text="det.human_score + '%'"></span>
-                                            </template>
-                                            <template x-if="!det.loading && (det.human_score === null || det.human_score === undefined) && !det.success">
-                                                <span class="text-xs text-yellow-400">Error</span>
-                                            </template>
-                                            <template x-if="det.loading">
-                                                <span class="text-xs text-gray-500">Scanning...</span>
-                                            </template>
-                                            <template x-if="!det.loading && det.success">
-                                                <span class="px-2 py-0.5 rounded text-xs font-medium" :class="det.passes ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'" x-text="det.passes ? 'PASS' : 'FAIL'"></span>
-                                            </template>
-                                            <button x-show="!det.loading && det.raw" @click="det.showRaw = !det.showRaw" class="text-xs text-gray-500 hover:text-gray-300" title="View raw response">
-                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <p x-show="!det.loading && !det.success && det.message" x-cloak class="text-xs text-yellow-400 mt-1 break-words" x-text="det.message"></p>
-                                    <div x-show="!det.loading && det.sentences && det.sentences.length > 0" x-cloak class="mt-2">
-                                        <p class="text-xs text-red-400 mb-1">Flagged sentences:</p>
-                                        <div class="space-y-1">
-                                            <template x-for="(s, si) in (det.sentences || [])" :key="si">
-                                                <p class="text-xs text-gray-400 bg-gray-900 rounded px-2 py-1 break-words" x-text="s"></p>
-                                            </template>
-                                        </div>
-                                    </div>
-                                    <div x-show="det.showRaw" x-cloak class="mt-2 bg-gray-900 rounded-lg p-3 text-xs text-gray-400 font-mono break-words whitespace-pre-wrap" x-text="JSON.stringify(det.raw, null, 2)"></div>
-                                </div>
-                            </template>
-                        </div>
-
-                        {{-- Overall verdict --}}
-                        <div x-show="!aiDetecting && Object.keys(aiDetectionResults).length > 0" x-cloak class="mt-4 flex flex-wrap items-center justify-between gap-3">
-                            <div class="flex items-center gap-2">
-                                <template x-if="aiDetectionAllPass">
-                                    <div class="flex items-center gap-2">
-                                        <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-                                        <span class="text-sm font-semibold text-green-400">All detectors passed</span>
-                                    </div>
-                                </template>
-                                <template x-if="!aiDetectionAllPass">
-                                    <div class="flex items-center gap-2">
-                                        <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
-                                        <span class="text-sm font-semibold text-red-400">Article flagged -- below threshold</span>
-                                    </div>
-                                </template>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <button x-show="!aiDetectionAllPass" @click="processDetectionRespin()" :disabled="spinning" class="bg-red-600 text-white px-4 py-2 rounded-lg text-xs hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-2">
-                                    <svg x-show="spinning" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                    Process Changes & Respin
-                                </button>
-                                <button x-show="!aiDetectionAllPass" @click="ignoreDetection()" class="text-gray-400 hover:text-gray-200 px-3 py-2 text-xs">Ignore & Continue</button>
-                            </div>
-                        </div>
-
-                        {{-- No detectors enabled --}}
-                        <div x-show="!aiDetecting && Object.keys(aiDetectionResults).length === 0 && aiDetectionRan" x-cloak class="text-sm text-gray-500 text-center py-2">
-                            No AI detectors are enabled. Configure detectors in <a href="{{ route('publish.settings.master') }}" class="text-purple-400 hover:text-purple-300">Settings</a>.
-                        </div>
-
-                        {{-- Waiting state --}}
-                        <div x-show="!aiDetectionRan && !aiDetecting" x-cloak class="text-xs text-gray-500 text-center py-2">
-                            Detection will run automatically after spin completes.
                         </div>
                     </div>
                 </div>
@@ -1664,9 +1686,12 @@ function publishPipeline() {
         // AI Detection
         aiDetecting: false,
         aiDetectionResults: {},
-        aiDetectionThreshold: 90,
+        aiDetectionThreshold: 10,
         aiDetectionAllPass: false,
         aiDetectionRan: false,
+        aiDetectionEnabled: localStorage.getItem('aiDetectionEnabled') !== 'false',
+        selectedFlaggedSentences: [],
+        selectedFlaggedTexts: {},
 
         siteAuthors: [],
         loadingAuthors: false,
@@ -2364,23 +2389,40 @@ function publishPipeline() {
         },
 
         // ── AI Detection ──────────────────────────────────
+        toggleAiDetection() {
+            this.aiDetectionEnabled = !this.aiDetectionEnabled;
+            localStorage.setItem('aiDetectionEnabled', this.aiDetectionEnabled ? 'true' : 'false');
+        },
+
+        toggleFlaggedSentence(id, text) {
+            const idx = this.selectedFlaggedSentences.indexOf(id);
+            if (idx === -1) {
+                this.selectedFlaggedSentences.push(id);
+                this.selectedFlaggedTexts[id] = text;
+            } else {
+                this.selectedFlaggedSentences.splice(idx, 1);
+                delete this.selectedFlaggedTexts[id];
+            }
+        },
+
         async runAiDetection() {
-            if (!this.spunContent) return;
+            if (!this.spunContent || !this.aiDetectionEnabled) return;
             this.aiDetecting = true;
             this.aiDetectionRan = true;
             this.aiDetectionAllPass = false;
+            this.selectedFlaggedSentences = [];
+            this.selectedFlaggedTexts = {};
 
             // Initialize all detectors with loading state
             this.aiDetectionResults = {
-                gptzero: { name: 'GPTZero', loading: true, success: false, human_score: null, passes: false, message: '', sentences: [], raw: null, showRaw: false },
-                copyleaks: { name: 'Copyleaks', loading: true, success: false, human_score: null, passes: false, message: '', sentences: [], raw: null, showRaw: false },
-                zerogpt: { name: 'ZeroGPT', loading: true, success: false, human_score: null, passes: false, message: '', sentences: [], raw: null, showRaw: false },
-                originality: { name: 'Originality', loading: true, success: false, human_score: null, passes: false, message: '', sentences: [], raw: null, showRaw: false },
+                gptzero: { name: 'GPTZero', loading: true, success: false, ai_score: null, passes: false, debug_mode: false, message: '', sentences: [], raw: null, showRaw: false },
+                copyleaks: { name: 'Copyleaks', loading: true, success: false, ai_score: null, passes: false, debug_mode: false, message: '', sentences: [], raw: null, showRaw: false },
+                zerogpt: { name: 'ZeroGPT', loading: true, success: false, ai_score: null, passes: false, debug_mode: false, message: '', sentences: [], raw: null, showRaw: false },
+                originality: { name: 'Originality', loading: true, success: false, ai_score: null, passes: false, debug_mode: false, message: '', sentences: [], raw: null, showRaw: false },
             };
 
             this._logSpin('info', 'Running AI detection scan...');
 
-            // Get plain text from the editor
             const spinEditor = tinymce.get('spin-preview-editor');
             const html = spinEditor ? spinEditor.getContent() : this.spunContent;
             const tmp = document.createElement('div');
@@ -2399,7 +2441,6 @@ function publishPipeline() {
                     this.aiDetectionThreshold = data.threshold;
                     this.aiDetectionAllPass = data.all_pass;
 
-                    // Update each detector result
                     const updatedResults = {};
                     for (const [key, result] of Object.entries(data.results)) {
                         updatedResults[key] = { ...result, loading: false, showRaw: false };
@@ -2408,14 +2449,13 @@ function publishPipeline() {
 
                     const passCount = Object.values(data.results).filter(r => r.passes).length;
                     const totalCount = Object.values(data.results).length;
-                    this._logSpin(data.all_pass ? 'success' : 'warning', 'AI Detection: ' + passCount + '/' + totalCount + ' passed (threshold: ' + data.threshold + '%)');
+                    this._logSpin(data.all_pass ? 'success' : 'warning', 'AI Detection: ' + passCount + '/' + totalCount + ' passed (max ' + data.threshold + '% AI)');
                 } else {
                     this._logSpin('error', 'AI detection failed: ' + (data.message || 'Unknown error'));
                     this.aiDetectionResults = {};
                 }
             } catch (e) {
                 this._logSpin('error', 'AI detection network error: ' + (e.message || 'Request failed'));
-                // Mark all as failed
                 const failed = {};
                 for (const key of Object.keys(this.aiDetectionResults)) {
                     failed[key] = { ...this.aiDetectionResults[key], loading: false, success: false, message: 'Network error' };
@@ -2425,21 +2465,24 @@ function publishPipeline() {
             this.aiDetecting = false;
         },
 
-        /**
-         * Collect flagged sentences from failing detectors and populate the change request
-         * with humanization instructions for re-spinning.
-         */
         processDetectionRespin() {
-            const flagged = [];
-            for (const [key, det] of Object.entries(this.aiDetectionResults)) {
-                if (!det.passes && det.sentences && det.sentences.length > 0) {
-                    flagged.push('[' + det.name + '] flagged: ' + det.sentences.join('; '));
+            // Use selected checkboxes if any, otherwise all flagged from failing detectors
+            const selected = Object.values(this.selectedFlaggedTexts);
+            let flagged = [];
+
+            if (selected.length > 0) {
+                flagged = selected;
+            } else {
+                for (const [key, det] of Object.entries(this.aiDetectionResults)) {
+                    if (!det.passes && det.sentences && det.sentences.length > 0) {
+                        flagged.push(...det.sentences);
+                    }
                 }
             }
 
             const humanizePrompt = flagged.length > 0
-                ? 'The following parts were flagged as AI-generated by detection tools. Rewrite them to sound more natural and human:\n\n' + flagged.join('\n\n') + '\n\nMake the writing more conversational, vary sentence length, use natural transitions, and avoid formulaic patterns.'
-                : 'This article was flagged as AI-generated. Rewrite it to sound more natural and human. Make the writing more conversational, vary sentence length, use natural transitions, add personal observations, and avoid formulaic or overly structured patterns.';
+                ? 'The following sentences were flagged as AI-generated. Rewrite them to sound more natural and human:\n\n' + flagged.map(s => '- ' + s).join('\n') + '\n\nMake the writing more conversational, vary sentence length, use natural transitions, and avoid formulaic patterns.'
+                : 'This article was flagged as AI-generated. Rewrite it to sound more natural and human. Vary sentence length, use natural transitions, and avoid formulaic patterns.';
 
             this.spinChangeRequest = humanizePrompt;
             this.showChangeInput = true;
@@ -2449,9 +2492,6 @@ function publishPipeline() {
             });
         },
 
-        /**
-         * Ignore detection failures and proceed to Accept & Edit.
-         */
         ignoreDetection() {
             this.acceptSpin();
         },
