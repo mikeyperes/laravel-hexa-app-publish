@@ -120,7 +120,8 @@
             <h3 class="font-semibold text-gray-800">Spun Article — After</h3>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="showBody ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="showBody" x-cloak class="mt-3 prose max-w-none text-sm break-words">{!! $article->body !!}</div>
+        @php $cleanBody = preg_replace('/<div[^>]*class="photo-placeholder"[^>]*>.*?<\/div>/s', '', $article->body); @endphp
+        <div x-show="showBody" x-cloak class="mt-3 prose max-w-none text-sm break-words">{!! $cleanBody !!}</div>
     </div>
     @endif
 
