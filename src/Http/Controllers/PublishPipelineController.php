@@ -79,15 +79,29 @@ class PublishPipelineController extends Controller
      */
     public function index(Request $request)
     {
-        // If no ?id= in URL, create a new draft and redirect with id
+        // If no ?id= in URL, reuse an existing empty draft or create one
         if (!$request->has('id')) {
-            $draft = PublishArticle::create([
-                'article_id' => PublishArticle::generateArticleId(),
-                'title'      => 'Untitled',
-                'status'     => 'drafting',
-                'created_by' => auth()->id(),
-                'user_id'    => auth()->id(),
-            ]);
+            $draft = PublishArticle::where('created_by', auth()->id())
+                ->where('status', 'drafting')
+                ->where(function ($q) {
+                    $q->whereNull('body')->orWhere('body', '');
+                })
+                ->where(function ($q) {
+                    $q->where('title', 'Untitled')->orWhereNull('title')->orWhere('title', '');
+                })
+                ->orderByDesc('id')
+                ->first();
+
+            if (!$draft) {
+                $draft = PublishArticle::create([
+                    'article_id' => PublishArticle::generateArticleId(),
+                    'title'      => 'Untitled',
+                    'status'     => 'drafting',
+                    'created_by' => auth()->id(),
+                    'user_id'    => auth()->id(),
+                ]);
+            }
+
             return redirect()->route('publish.pipeline', ['id' => $draft->id]);
         }
 
