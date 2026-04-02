@@ -119,14 +119,28 @@
     Templates
 </a>
 
-<a href="{{ route('publish.campaigns.index') }}"
-   class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
-          {{ request()->routeIs('publish.campaigns.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
-    <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-    </svg>
-    Campaigns
-</a>
+{{-- Campaigns group --}}
+<div class="space-y-0.5">
+    <p class="px-3 pt-3 pb-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Campaigns</p>
+    <a href="{{ route('campaigns.index') }}"
+       class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
+              {{ request()->routeIs('campaigns.index') || request()->routeIs('campaigns.show') || request()->routeIs('campaigns.edit') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+        <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        All Campaigns
+    </a>
+    <a href="{{ route('campaigns.create') }}"
+       class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
+              {{ request()->routeIs('campaigns.create') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+        <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Create Campaign
+    </a>
+    <a href="{{ route('campaigns.presets.index') }}"
+       class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
+              {{ request()->routeIs('campaigns.presets.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+        <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+        Campaign Presets
+    </a>
+</div>
 
 <a href="{{ route('publish.articles.index') }}"
    class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150

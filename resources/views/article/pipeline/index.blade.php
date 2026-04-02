@@ -242,13 +242,9 @@
                 <div x-show="newsMode === 'trending'" class="space-y-2">
                     <div class="flex flex-wrap gap-2">
                         <button @click="newsCategory = ''; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="!newsCategory ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">All</button>
-                        <button @click="newsCategory = 'technology'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'technology' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Technology</button>
-                        <button @click="newsCategory = 'business'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'business' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Business</button>
-                        <button @click="newsCategory = 'politics'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'politics' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Politics</button>
-                        <button @click="newsCategory = 'sports'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'sports' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Sports</button>
-                        <button @click="newsCategory = 'health'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'health' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Health</button>
-                        <button @click="newsCategory = 'entertainment'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'entertainment' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Entertainment</button>
-                        <button @click="newsCategory = 'science'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === 'science' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">Science</button>
+                        @foreach($newsCategories as $cat)
+                        <button @click="newsCategory = '{{ $cat }}'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === '{{ $cat }}' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">{{ ucfirst($cat) }}</button>
+                        @endforeach
                     </div>
                 </div>
 
@@ -256,14 +252,9 @@
                 <div x-show="newsMode === 'genre'" class="flex gap-2">
                     <select x-model="newsCategory" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="">Select genre...</option>
-                        <option value="technology">Technology</option>
-                        <option value="business">Business</option>
-                        <option value="health">Health</option>
-                        <option value="sports">Sports</option>
-                        <option value="science">Science</option>
-                        <option value="entertainment">Entertainment</option>
-                        <option value="politics">Politics</option>
-                        <option value="world">World</option>
+                        @foreach($newsCategories as $cat)
+                        <option value="{{ $cat }}">{{ ucfirst($cat) }}</option>
+                        @endforeach
                     </select>
                     <input type="text" x-model="newsSearch" @keydown.enter="searchNews()" placeholder="Optional keyword..." class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <button @click="searchNews()" :disabled="newsSearching" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
