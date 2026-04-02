@@ -130,14 +130,14 @@
 
 CRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=""> for links. Do NOT output markdown.
 
-PHOTO PLACEMENT: Insert HTML comments for photos: <!-- PHOTO: descriptive search term | alt text description -->. Place {photo_count} photo markers at natural breaking points. Search terms must be specific and visual. Alt text under 125 characters.
+PHOTO PLACEMENT: Insert HTML comments for photos: <!-- PHOTO: descriptive search term | alt text | caption | seo-filename -->. Place {photo_count} photo markers at natural breaking points. Search terms must be specific and visual. Alt text under 125 characters. Caption is a short sentence describing the photo. seo-filename is a lowercase-hyphenated name (no extension).
 
 FEATURED IMAGE: Also output one line: <!-- FEATURED: descriptive search term for the article featured image -->
 
 METADATA: At the very end of your response, output a JSON block:
-<!-- METADATA: {"titles":["title1","title2",...10 titles],"categories":["cat1","cat2",...15 categories],"tags":["tag1","tag2",...15 tags]} -->
+<!-- METADATA: {"titles":["title1","title2",...10 titles],"categories":["cat1","cat2",...15 categories],"tags":["tag1","tag2",...15 tags],"description":"SEO meta description under 160 chars","seo":{"og_title":"Open Graph title","og_description":"OG description under 200 chars","og_type":"article","twitter_card":"summary_large_image","focus_keyphrase":"primary keyword phrase","canonical_slug":"url-friendly-slug"}} -->
 
-The titles should be compelling and SEO-friendly. Categories are broad topics. Tags are specific keywords.
+The titles should be compelling and SEO-friendly. Categories are broad topics. Tags are specific keywords. The SEO section provides Open Graph and Twitter meta tags for social sharing.
 
 {source_articles}' }}</textarea>
 

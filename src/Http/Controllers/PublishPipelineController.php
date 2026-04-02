@@ -368,22 +368,26 @@ class PublishPipelineController extends Controller
         }
 
         // Extract photo placement suggestions from HTML comments
+        // Supports: <!-- PHOTO: search | alt | caption | filename --> or legacy <!-- PHOTO: search | alt -->
         $photoSuggestions = [];
-        if (preg_match_all('/<!--\s*PHOTO:\s*(.+?)\s*\|\s*(.+?)\s*-->/', $content, $photoMatches, PREG_SET_ORDER)) {
+        if (preg_match_all('/<!--\s*PHOTO:\s*(.+?)\s*-->/', $content, $photoMatches, PREG_SET_ORDER)) {
             foreach ($photoMatches as $i => $match) {
-                $searchTerm = trim($match[1]);
-                $caption = trim($match[2]);
+                $parts = array_map('trim', explode('|', $match[1]));
+                $searchTerm = $parts[0] ?? '';
+                $altText = $parts[1] ?? $searchTerm;
+                $caption = $parts[2] ?? '';
+                $seoFilename = $parts[3] ?? Str::slug($searchTerm);
                 $photoSuggestions[] = [
                     'search_term' => $searchTerm,
-                    'alt_text' => $caption,
-                    'caption' => '',
+                    'alt_text' => $altText,
+                    'caption' => $caption,
+                    'suggestedFilename' => $seoFilename,
                     'position' => $i,
                 ];
-                // Replace invisible comment with visible placeholder (includes data-idx for JS targeting)
-                $placeholder = '<div class="photo-placeholder" contenteditable="false" data-idx="' . $i . '" data-search="' . htmlspecialchars($searchTerm) . '" data-caption="' . htmlspecialchars($caption) . '" style="border:2px dashed #a78bfa;background:#f5f3ff;border-radius:8px;padding:12px 16px;margin:16px 0;cursor:pointer;text-align:center;color:#7c3aed;font-size:14px;">'
+                $placeholder = '<div class="photo-placeholder" contenteditable="false" data-idx="' . $i . '" data-search="' . htmlspecialchars($searchTerm) . '" data-caption="' . htmlspecialchars($altText) . '" style="border:2px dashed #a78bfa;background:#f5f3ff;border-radius:8px;padding:12px 16px;margin:16px 0;cursor:pointer;text-align:center;color:#7c3aed;font-size:14px;">'
                     . '<span style="font-size:13px;">Loading photo...</span>'
                     . '</div>';
-                $content = preg_replace('/<!--\s*PHOTO:\s*' . preg_quote($match[1], '/') . '\s*\|\s*' . preg_quote($match[2], '/') . '\s*-->/', $placeholder, $content, 1);
+                $content = preg_replace('/<!--\s*PHOTO:\s*' . preg_quote($match[1], '/') . '\s*-->/', $placeholder, $content, 1);
             }
         }
 
@@ -532,6 +536,8 @@ class PublishPipelineController extends Controller
             'categories'          => 'nullable|array',
             'tags'                => 'nullable|array',
             'pipeline_session_id' => 'nullable|string|max:100',
+            'draft_id'            => 'nullable|integer',
+            'photo_suggestions'   => 'nullable|array',
         ]);
 
         $site = PublishSite::findOrFail($validated['site_id']);
@@ -586,38 +592,48 @@ class PublishPipelineController extends Controller
                 $imgIndex = 0;
                 $articleTitle = $validated['title'] ?? 'article';
 
+                // Photo suggestions from frontend (keyed by source URL for caption/description lookup)
+                $photoMeta = [];
+                foreach ($validated['photo_suggestions'] ?? [] as $ps) {
+                    if (!empty($ps['autoPhoto']['url_large'])) {
+                        $photoMeta[$ps['autoPhoto']['url_large']] = $ps;
+                    }
+                }
+                $draftId = $validated['draft_id'] ?? 0;
+
                 foreach ($imageUrls as $imgUrl) {
                     if (str_starts_with($imgUrl, rtrim($siteUrl, '/'))) continue;
 
-                    $altText = '';
-                    if (preg_match('/<img[^>]+src\s*=\s*["\']' . preg_quote($imgUrl, '/') . '["\'][^>]*alt\s*=\s*["\']([^"\']*)["\'][^>]*>/i', $html, $altMatch)) {
+                    // Look up photo suggestion data for this URL
+                    $ps = $photoMeta[$imgUrl] ?? null;
+                    $altText = $ps['alt_text'] ?? '';
+                    $caption = $ps['caption'] ?? '';
+                    $seoName = $ps['suggestedFilename'] ?? '';
+
+                    // Fallback: extract alt from img tag
+                    if (!$altText && preg_match('/<img[^>]+src\s*=\s*["\']' . preg_quote($imgUrl, '/') . '["\'][^>]*alt\s*=\s*["\']([^"\']*)["\'][^>]*>/i', $html, $altMatch)) {
                         $altText = $altMatch[1];
                     }
 
-                    $slugBase = Str::limit(Str::slug($altText ?: $articleTitle, '-'), 80, '');
+                    // Filename: hexa_{draftId}_{seoname}.ext
+                    $slugBase = $seoName ?: Str::limit(Str::slug($altText ?: $articleTitle, '-'), 60, '');
                     $ext = pathinfo(parse_url($imgUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
-                    $properFilename = $slugBase . '-' . (++$imgIndex) . '.' . $ext;
+                    $properFilename = 'hexa_' . $draftId . '_' . $slugBase . '.' . $ext;
+                    $description = $altText; // Use alt as description for SEO
 
                     $send('step', "Uploading: {$properFilename}...");
 
                     if ($mode === self::WP_MODE_SSH) {
-                        $uploadResult = $wptoolkit->wpCliUploadMedia($server, $installId, $imgUrl, $properFilename, $altText);
+                        $uploadResult = $wptoolkit->wpCliUploadMedia($server, $installId, $imgUrl, $properFilename, $altText, $caption, $description);
                     } else {
                         $uploadResult = $wp->uploadMedia($siteUrl, $site->wp_username, $site->wp_application_password, $imgUrl, $properFilename, $altText);
                     }
 
                     if ($uploadResult['success'] && !empty($uploadResult['data']['media_url'])) {
                         $imageMap[$imgUrl] = $uploadResult['data']['media_url'];
-                        $wpImages[] = [
-                            'source_url' => $imgUrl,
-                            'media_id' => $uploadResult['data']['media_id'] ?? null,
-                            'media_url' => $uploadResult['data']['media_url'],
-                            'sizes' => $uploadResult['data']['sizes'] ?? [],
-                            'filename' => $properFilename,
-                            'alt_text' => $altText,
-                        ];
+                        $wpImages[] = $uploadResult['data'];
                         $send('success', "Uploaded: {$properFilename} → " . Str::limit($uploadResult['data']['media_url'], 80), [
-                            'wp_image' => $wpImages[count($wpImages) - 1],
+                            'wp_image' => $uploadResult['data'],
                         ]);
                     } else {
                         $send('warning', "Failed to upload: {$properFilename} — " . ($uploadResult['message'] ?? 'unknown error'));
