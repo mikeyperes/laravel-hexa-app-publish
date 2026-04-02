@@ -86,7 +86,7 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 2: Select WordPress Template
+         Step 2: Website & Template
          ══════════════════════════════════════════════════════════════ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 2, 'opacity-50': !isStepAccessible(2) }">
         <button @click="toggleStep(2)" :disabled="!isStepAccessible(2)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
@@ -96,86 +96,63 @@
                     <template x-if="completedSteps.includes(2)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(2)"><span>2</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Select WordPress Template</span>
-                <span x-show="selectedPreset" x-cloak class="text-sm text-green-600" x-text="selectedPreset ? selectedPreset.name : ''"></span>
+                <span class="font-semibold text-gray-800">Website & Template</span>
+                <span x-show="selectedSite && siteConnectionStatus === true" x-cloak class="text-sm text-green-600" x-text="selectedSite?.name"></span>
+                <span x-show="selectedSite && siteConnectionStatus === null" x-cloak class="text-sm text-blue-500 inline-flex items-center gap-1">
+                    <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Connecting...
+                </span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(2) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(2)" x-cloak x-collapse class="px-4 pb-4">
-            {{-- Loading indicator --}}
-            <div x-show="presetsLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
-                <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                Loading presets...
-            </div>
-            <div x-show="!presetsLoading" class="max-w-md">
-                <label class="block text-xs text-gray-500 mb-1">User's Presets</label>
-                <select x-model="selectedPresetId" @change="selectPreset()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">-- No preset (configure manually) --</option>
-                    <template x-for="p in presets" :key="p.id">
-                        <option :value="p.id" x-text="p.name"></option>
-                    </template>
-                </select>
-            </div>
-            <div x-show="selectedPreset" x-cloak class="mt-3 bg-gray-50 rounded-lg p-3 text-sm space-y-1">
-                <p><span class="text-gray-500">Tone:</span> <span class="font-medium" x-text="selectedPreset?.tone || 'Not set'"></span></p>
-                <p><span class="text-gray-500">Format:</span> <span class="font-medium" x-text="selectedPreset?.article_format || 'Not set'"></span></p>
-                <p><span class="text-gray-500">Follow Links:</span> <span class="font-medium" x-text="selectedPreset?.follow_links || 'Not set'"></span></p>
-                <p><span class="text-gray-500">Publish Action:</span> <span class="font-medium" x-text="selectedPreset?.default_publish_action || 'Not set'"></span></p>
-            </div>
-            <div class="mt-3">
-                <button @click="completeStep(2); openStep(3)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
-                    <span x-text="selectedPreset ? 'Continue with Preset' : 'Skip Preset'"></span> &rarr;
-                </button>
-            </div>
-        </div>
-    </div>
+        <div x-show="openSteps.includes(2)" x-cloak x-collapse class="px-4 pb-4 space-y-4">
 
-    {{-- ══════════════════════════════════════════════════════════════
-         Step 3: Select Website
-         ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 3, 'opacity-50': !isStepAccessible(3) }">
-        <button @click="toggleStep(3)" :disabled="!isStepAccessible(3)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
-            <div class="flex items-center gap-3">
-                <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                      :class="completedSteps.includes(3) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
-                    <template x-if="completedSteps.includes(3)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(3)"><span>3</span></template>
-                </span>
-                <span class="font-semibold text-gray-800">Select Website</span>
-                <span x-show="selectedSite && siteConnectionStatus === null" x-cloak class="text-sm text-blue-500 inline-flex items-center gap-1">
-                    <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="selectedSite?.name + ' — Checking WordPress connection...'"></span>
-                </span>
-                <span x-show="selectedSite && siteConnectionStatus === true" x-cloak class="text-sm text-green-600" x-text="selectedSite?.name + ' — WordPress connection established'"></span>
-                <span x-show="selectedSite && siteConnectionStatus === false" x-cloak class="text-sm text-red-600" x-text="selectedSite?.name + ' — WordPress connection failed'"></span>
+            {{-- WP Template (auto-loaded, edit to change) --}}
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h5 class="text-sm font-semibold text-gray-700">WordPress Template</h5>
+                    <button @click="editingPreset = !editingPreset" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingPreset ? 'Cancel' : 'Edit'"></button>
+                </div>
+                {{-- Display current preset --}}
+                <div x-show="!editingPreset && selectedPreset" class="text-sm space-y-1">
+                    <p class="font-medium text-gray-800" x-text="selectedPreset?.name || 'None'"></p>
+                    <p class="text-xs text-gray-500"><span class="text-gray-400">Tone:</span> <span x-text="selectedPreset?.tone || '—'"></span> &middot; <span class="text-gray-400">Format:</span> <span x-text="selectedPreset?.article_format || '—'"></span></p>
+                </div>
+                <div x-show="!editingPreset && !selectedPreset" class="text-xs text-gray-400">No template selected — using defaults.</div>
+                {{-- Edit mode --}}
+                <div x-show="editingPreset" x-cloak class="mt-2">
+                    <div x-show="presetsLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
+                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Loading...
+                    </div>
+                    <select x-show="!presetsLoading" x-model="selectedPresetId" @change="selectPreset(); editingPreset = false" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">-- No preset --</option>
+                        <template x-for="p in presets" :key="p.id">
+                            <option :value="p.id" x-text="p.name"></option>
+                        </template>
+                    </select>
+                </div>
             </div>
-            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(3) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div x-show="openSteps.includes(3)" x-cloak x-collapse class="px-4 pb-4">
-            <div class="max-w-md">
+
+            {{-- Website selection --}}
+            <div>
                 <label class="block text-xs text-gray-500 mb-1">WordPress Site</label>
-                <select x-model="selectedSiteId" @change="selectSite()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <select x-model="selectedSiteId" @change="selectSite()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
                     <option value="">-- Select a site --</option>
                     <template x-for="s in sites" :key="s.id">
                         <option :value="String(s.id)" :selected="String(s.id) === selectedSiteId" x-text="s.name + ' (' + s.url + ')'"></option>
                     </template>
                 </select>
             </div>
-            <div x-show="selectedSite" x-cloak class="mt-3">
+
+            {{-- Connection status --}}
+            <div x-show="selectedSite" x-cloak>
                 <div class="flex items-center gap-2 rounded-lg px-3 py-2" :class="siteConnectionStatus === true ? 'bg-green-50' : (siteConnectionStatus === false ? 'bg-red-50' : 'bg-gray-50')">
-                    <template x-if="siteConnectionStatus === null">
-                        <svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    </template>
-                    <template x-if="siteConnectionStatus === true">
-                        <svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    </template>
-                    <template x-if="siteConnectionStatus === false">
-                        <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    </template>
+                    <template x-if="siteConnectionStatus === null"><svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
+                    <template x-if="siteConnectionStatus === true"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                    <template x-if="siteConnectionStatus === false"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
                     <span class="text-sm" :class="siteConnectionStatus === true ? 'text-green-800' : (siteConnectionStatus === false ? 'text-red-800' : 'text-gray-600')" x-text="selectedSite ? selectedSite.name + ' — ' + selectedSite.url : ''"></span>
                 </div>
-
-                {{-- Connection activity log --}}
                 <div x-show="siteConnectionLog.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
                     <template x-for="(entry, idx) in siteConnectionLog" :key="idx">
                         <div class="flex items-start gap-2 py-0.5 text-xs font-mono">
@@ -184,9 +161,6 @@
                         </div>
                     </template>
                 </div>
-            </div>
-            <div class="mt-3">
-                <button @click="confirmSite()" :disabled="!selectedSite || siteConnectionStatus === null" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">Continue &rarr;</button>
             </div>
         </div>
     </div>
@@ -1433,16 +1407,17 @@ function publishPipeline() {
         currentStep: 1,
         openSteps: [1],
         completedSteps: [],
-        stepLabels: ['User', 'WP Template', 'Website', 'Sources', 'Get Articles', 'AI Template', 'Create Article', 'Review & Publish'],
+        stepLabels: ['User', 'Website & Template', 'Find Articles', 'Fetch Articles from Source', 'AI Configuration', 'Create Article', 'Review & Publish'],
 
         // Step 1 — User
         selectedUser: null,
 
-        // Step 2 — Preset
+        // Step 2 — Preset + Website
         presets: [],
         presetsLoading: false,
         selectedPresetId: '',
         selectedPreset: null,
+        editingPreset: false,
 
         // Step 3 — Website
         sites: @json($sites ?? []),
@@ -1864,7 +1839,7 @@ function publishPipeline() {
                             this._logSiteConnection('info', d.authors.length + ' WordPress authors loaded');
                         }
                         if (d.default_author) this.publishAuthor = d.default_author;
-                        if (d.success) { this.completeStep(3); if (!this._restoring) this.openStep(4); }
+                        if (d.success) { this.completeStep(2); if (!this._restoring) this.openStep(3); }
                         this.loadingAuthors = false;
                     }).catch(e => {
                         this.siteConnectionStatus = false;
