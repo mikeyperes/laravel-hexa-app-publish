@@ -37,7 +37,7 @@
                 @else
                     <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{{ ucfirst($campaign->status) }}</span>
                 @endif
-                <a href="{{ route('publish.campaigns.edit', $campaign->id) }}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Edit</a>
+                <a href="{{ route('campaigns.edit', $campaign->id) }}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Edit</a>
             </div>
         </div>
         <div x-show="actionResult" x-cloak class="mt-3 rounded-lg px-4 py-2 text-sm" :class="actionSuccess ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'">
@@ -104,8 +104,8 @@
 function campaignActions() {
     return {
         acting: false, actionResult: '', actionSuccess: false,
-        async activate() { await this.doAction('{{ route("publish.campaigns.activate", $campaign->id) }}'); },
-        async pause() { await this.doAction('{{ route("publish.campaigns.pause", $campaign->id) }}'); },
+        async activate() { await this.doAction('{{ route("campaigns.activate", $campaign->id) }}'); },
+        async pause() { await this.doAction('{{ route("campaigns.pause", $campaign->id) }}'); },
         async doAction(url) {
             this.acting = true; this.actionResult = '';
             try {

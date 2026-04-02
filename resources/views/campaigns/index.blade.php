@@ -7,7 +7,7 @@
 <div class="space-y-4">
 
     <div class="flex flex-wrap items-center gap-3">
-        <form method="GET" action="{{ route('publish.campaigns.index') }}" class="flex flex-wrap items-center gap-2 flex-1">
+        <form method="GET" action="{{ route('campaigns.index') }}" class="flex flex-wrap items-center gap-2 flex-1">
             <input type="text" name="search" value="{{ request('search') }}"
                 class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-48" placeholder="Search name/topic...">
             <select name="account_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -25,7 +25,7 @@
             </select>
             <button type="submit" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Filter</button>
         </form>
-        <a href="{{ route('publish.campaigns.create') }}" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">+ New Campaign</a>
+        <a href="{{ route('campaigns.create') }}" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">+ New Campaign</a>
     </div>
 
     <p class="text-sm text-gray-500">{{ $campaigns->count() }} campaign(s)</p>
@@ -53,7 +53,7 @@
                     @foreach($campaigns as $c)
                     <tr class="hover:bg-gray-50">
                         <td class="px-5 py-3">
-                            <a href="{{ route('publish.campaigns.show', $c->id) }}" class="text-blue-600 hover:text-blue-800 font-medium break-words">{{ $c->name }}</a>
+                            <a href="{{ route('campaigns.show', $c->id) }}" class="text-blue-600 hover:text-blue-800 font-medium break-words">{{ $c->name }}</a>
                             <p class="text-xs text-gray-400 font-mono">{{ $c->campaign_id }}</p>
                         </td>
                         <td class="px-5 py-3 text-gray-600 break-words">{{ $c->account->name }}</td>

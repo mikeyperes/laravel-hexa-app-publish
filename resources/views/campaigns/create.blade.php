@@ -132,7 +132,7 @@
                 <svg x-show="saving" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
                 <span x-text="saving ? 'Creating...' : 'Create Campaign'"></span>
             </button>
-            <a href="{{ route('publish.campaigns.index') }}" class="text-sm text-gray-500 hover:text-gray-700">Cancel</a>
+            <a href="{{ route('campaigns.index') }}" class="text-sm text-gray-500 hover:text-gray-700">Cancel</a>
         </div>
 
         <div x-show="resultMessage" x-cloak class="rounded-lg px-4 py-3 text-sm" :class="resultSuccess ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'">
@@ -171,7 +171,7 @@ function campaignForm() {
         async save() {
             this.saving = true; this.resultMessage = '';
             try {
-                const res = await fetch('{{ route("publish.campaigns.store") }}', {
+                const res = await fetch('{{ route("campaigns.store") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' },
                     body: JSON.stringify(this.form)
