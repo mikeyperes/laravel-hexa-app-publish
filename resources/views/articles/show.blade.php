@@ -20,7 +20,7 @@
                         <span>Author: <span class="font-medium text-gray-700">{{ $article->author }}</span></span>
                     @endif
                     @if($article->creator)
-                        <span>Created by: <a href="{{ route('publish.users.show', $article->creator->id) }}" class="text-blue-600 hover:underline">{{ $article->creator->name }}</a> ({{ $article->creator->email }})</span>
+                        <span>Created by: <a href="{{ route('publish.accounts.show', $article->creator->id) }}" class="text-blue-600 hover:underline">{{ $article->creator->name }}</a> ({{ $article->creator->email }})</span>
                     @endif
                 </div>
                 <div class="flex flex-wrap gap-3 mt-1 text-xs text-gray-400">

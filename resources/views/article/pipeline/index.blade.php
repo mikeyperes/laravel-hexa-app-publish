@@ -1183,7 +1183,7 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 8: Publish
+         Step 8: Review & Publish (combined)
          ══════════════════════════════════════════════════════════════ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 8, 'opacity-50': !isStepAccessible(8) }">
         <button @click="toggleStep(8)" :disabled="!isStepAccessible(8)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
@@ -1193,92 +1193,51 @@
                     <template x-if="completedSteps.includes(8)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(8)"><span>8</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Publish</span>
+                <span class="font-semibold text-gray-800">Review & Publish</span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(8) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <div x-show="openSteps.includes(8)" x-cloak x-collapse class="px-4 pb-4">
-            {{-- Review Section --}}
-            <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 space-y-4">
-                <h5 class="text-base font-semibold text-gray-800">Review Before Publishing</h5>
 
-                {{-- Title --}}
-                <div>
-                    <p class="text-xs text-gray-400">Title</p>
-                    <p class="text-lg font-bold text-gray-900 break-words" x-text="articleTitle || 'No title set'"></p>
-                </div>
+            {{-- ═══ Review Section (row layout) ═══ --}}
+            <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 space-y-3">
+                <h5 class="text-base font-semibold text-gray-800 mb-2">Review</h5>
 
-                {{-- Description --}}
-                <div x-show="articleDescription">
-                    <p class="text-xs text-gray-400">Description</p>
-                    <p class="text-sm text-gray-700 break-words" x-text="articleDescription"></p>
-                </div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Title</span><p class="text-sm font-bold text-gray-900 break-words" x-text="articleTitle || 'No title set'"></p></div>
+                <div x-show="articleDescription" class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Description</span><p class="text-sm text-gray-700 break-words" x-text="articleDescription"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Website</span><p class="text-sm text-gray-800"><span x-text="selectedSite ? selectedSite.name : 'Not selected'"></span> <span x-show="selectedSite" class="text-xs text-gray-400 break-all" x-text="'(' + (selectedSite?.url || '') + ')'"></span></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Author</span><p class="text-sm text-gray-800" x-text="publishAuthor || 'Default'"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Word Count</span><p class="text-sm font-bold text-gray-800" x-text="spunWordCount + ' words'"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">AI Model</span><p class="text-sm font-mono text-gray-800" x-text="aiModel"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">WP Template</span><p class="text-sm text-gray-800" x-text="selectedPreset ? selectedPreset.name : 'None'"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Photos</span><p class="text-sm text-gray-800" x-text="photoSuggestions.filter(p => !p.removed).length + ' photo(s)'"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Links</span><p class="text-sm text-gray-800" x-text="suggestedUrls.length + ' link(s)'"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Draft ID</span><p class="text-sm text-gray-800" x-text="'#' + draftId"></p></div>
 
-                {{-- Key info grid --}}
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                        <p class="text-xs text-gray-400">Website</p>
-                        <p class="text-sm font-medium text-gray-800" x-text="selectedSite ? selectedSite.name : 'Not selected'"></p>
-                        <p x-show="selectedSite" class="text-xs text-gray-400 break-all" x-text="selectedSite?.url"></p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-gray-400">Author</p>
-                        <p class="text-sm font-medium text-gray-800" x-text="publishAuthor || 'Default'"></p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-gray-400">Word Count</p>
-                        <p class="text-sm font-bold text-gray-800" x-text="spunWordCount + ' words'"></p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-gray-400">AI Model</p>
-                        <p class="text-sm font-mono text-gray-800" x-text="aiModel"></p>
+                {{-- Categories --}}
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
+                    <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Categories</span>
+                    <div class="flex flex-wrap gap-1">
+                        <template x-for="(cat, idx) in suggestedCategories" :key="idx">
+                            <span x-show="selectedCategories.includes(idx)" class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800" x-text="cat"></span>
+                        </template>
                     </div>
                 </div>
 
-                {{-- Categories & Tags --}}
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <p class="text-xs text-gray-400 mb-1">Categories (<span x-text="suggestedCategories.filter((c,i) => selectedCategories.includes(i)).length"></span>)</p>
-                        <div class="flex flex-wrap gap-1">
-                            <template x-for="(cat, idx) in suggestedCategories" :key="idx">
-                                <span x-show="selectedCategories.includes(idx)" class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800" x-text="cat"></span>
-                            </template>
-                        </div>
-                    </div>
-                    <div>
-                        <p class="text-xs text-gray-400 mb-1">Tags (<span x-text="suggestedTags.filter((t,i) => selectedTags.includes(i)).length"></span>)</p>
-                        <div class="flex flex-wrap gap-1">
-                            <template x-for="(tag, idx) in suggestedTags" :key="idx">
-                                <span x-show="selectedTags.includes(idx)" class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800" x-text="tag"></span>
-                            </template>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- Photos + Links summary --}}
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                        <p class="text-xs text-gray-400">Photos</p>
-                        <p class="text-sm text-gray-800" x-text="photoSuggestions.filter(p => !p.removed).length + ' photo(s)'"></p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-gray-400">Links</p>
-                        <p class="text-sm text-gray-800" x-text="suggestedUrls.length + ' link(s)'"></p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-gray-400">WP Template</p>
-                        <p class="text-sm text-gray-800" x-text="selectedPreset ? selectedPreset.name : 'None'"></p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-gray-400">Link Follow</p>
-                        <p class="text-sm text-gray-800" x-text="selectedPreset?.follow_links || 'Default'"></p>
+                {{-- Tags --}}
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
+                    <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Tags</span>
+                    <div class="flex flex-wrap gap-1">
+                        <template x-for="(tag, idx) in suggestedTags" :key="idx">
+                            <span x-show="selectedTags.includes(idx)" class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800" x-text="tag"></span>
+                        </template>
                     </div>
                 </div>
 
                 {{-- Sources --}}
-                <div>
-                    <p class="text-xs text-gray-400 mb-1">Sources (<span x-text="sources.length"></span>)</p>
-                    <div class="space-y-1">
+                <div class="flex items-start gap-3 py-1.5">
+                    <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Sources</span>
+                    <div class="space-y-0.5">
                         <template x-for="(s, idx) in sources" :key="idx">
                             <p class="text-xs text-gray-600 break-all" x-text="s.title || s.url"></p>
                         </template>
@@ -1286,255 +1245,165 @@
                 </div>
             </div>
 
-            <div class="flex gap-3">
-                <button @click="finishEditing()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to Prepare &rarr;</button>
-                <button @click="saveDraftNow()" :disabled="savingDraft" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-50 flex items-center gap-2">
-                    <svg x-show="savingDraft" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="savingDraft ? 'Saving...' : 'Save Draft'"></span>
+            {{-- ═══ SEO Preview ═══ --}}
+            <div x-show="articleDescription || articleTitle" class="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-4 space-y-3">
+                <h5 class="text-sm font-semibold text-gray-700">SEO Preview</h5>
+                <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Meta Title</span><p class="text-sm text-blue-700 font-medium break-words" x-text="articleTitle || ''"></p></div>
+                <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Meta Description</span><p class="text-sm text-gray-600 break-words" x-text="articleDescription || ''"></p></div>
+                <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Title</span><p class="text-sm text-gray-700 break-words" x-text="articleTitle || ''"></p></div>
+                <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Description</span><p class="text-sm text-gray-600 break-words" x-text="articleDescription || ''"></p></div>
+                <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Type</span><p class="text-sm text-gray-600">article</p></div>
+                <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Twitter Card</span><p class="text-sm text-gray-600">summary_large_image</p></div>
+                <div x-show="featuredPhoto" class="flex items-start gap-3 py-1"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Image</span><p class="text-sm text-gray-600 break-all" x-text="featuredPhoto?.url_large || featuredPhoto?.url_thumb || ''"></p></div>
+            </div>
+
+            {{-- ═══ Prepare for WordPress ═══ --}}
+            <div class="border border-gray-200 rounded-xl p-5 mb-4">
+                <h5 class="text-sm font-semibold text-gray-700 mb-3">Prepare for WordPress</h5>
+
+                <button @click="prepareForWp()" :disabled="preparing || prepareComplete" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 mb-4">
+                    <svg x-show="preparing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    <span x-text="preparing ? 'Preparing...' : (prepareComplete ? 'Prepared' : 'Prepare for WordPress')"></span>
                 </button>
-            </div>
-        </div>
-    </div>
 
-    {{-- ══════════════════════════════════════════════════════════════
-         Step 9: Prepare for WordPress
-         ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 9, 'opacity-50': !isStepAccessible(9) }">
-        <button @click="toggleStep(9)" :disabled="!isStepAccessible(9)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
-            <div class="flex items-center gap-3">
-                <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                      :class="completedSteps.includes(9) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
-                    <template x-if="completedSteps.includes(9)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(9)"><span>9</span></template>
-                </span>
-                <span class="font-semibold text-gray-800">Prepare for WordPress</span>
-            </div>
-            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(9) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div x-show="openSteps.includes(9)" x-cloak x-collapse class="px-4 pb-4">
-            {{-- WordPress Publishing Summary --}}
-            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-                <h5 class="text-sm font-semibold text-gray-700 mb-3">Publishing Settings</h5>
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                    <div>
-                        <span class="text-gray-400 text-xs">Website</span>
-                        <p class="font-medium text-gray-800" x-text="selectedSite ? selectedSite.name : 'Not selected'"></p>
-                        <p x-show="selectedSite" class="text-xs text-gray-500 break-all" x-text="selectedSite?.url"></p>
+                {{-- Checklist --}}
+                <div x-show="prepareChecklist.length > 0" x-cloak class="space-y-2 mb-4">
+                    <template x-for="(item, idx) in prepareChecklist" :key="idx">
+                        <div class="flex items-center gap-3 text-sm">
+                            <template x-if="item.status === 'running'"><svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
+                            <template x-if="item.status === 'done'"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></template>
+                            <template x-if="item.status === 'failed'"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></template>
+                            <template x-if="item.status === 'skipped'"><svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg></template>
+                            <span :class="{'text-blue-700': item.status === 'running', 'text-green-700': item.status === 'done', 'text-red-700': item.status === 'failed', 'text-gray-500': item.status === 'skipped'}" x-text="item.label"></span>
+                            <span x-show="item.detail" class="text-xs text-gray-400" x-text="item.detail"></span>
+                        </div>
+                    </template>
+                </div>
+
+                {{-- Uploaded photos report --}}
+                <div x-show="uploadedImages && Object.keys(uploadedImages).length > 0" x-cloak class="mt-4">
+                    <h6 class="text-xs font-semibold text-gray-500 uppercase mb-2">Uploaded Photos</h6>
+                    <div class="space-y-3">
+                        <template x-for="(img, imgKey) in uploadedImages" :key="imgKey">
+                            <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs space-y-1">
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Filename</span><span class="font-mono text-gray-800 break-all" x-text="img.filename || '—'"></span></div>
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Media ID</span><span class="text-gray-800" x-text="img.media_id || '—'"></span></div>
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">File Path</span><span class="font-mono text-gray-600 break-all" x-text="img.file_path || '—'"></span></div>
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">File Size</span><span class="text-gray-800" x-text="img.file_size ? (Math.round(img.file_size / 1024) + ' KB') : '—'"></span></div>
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Alt Text</span><span class="text-gray-700 break-words" x-text="img.alt_text || '—'"></span></div>
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Caption</span><span class="text-gray-700 break-words" x-text="img.caption || '—'"></span></div>
+                                <div x-show="img.sizes" class="mt-1 pt-1 border-t border-gray-200">
+                                    <p class="text-gray-400 mb-1">WordPress Sizes:</p>
+                                    <template x-for="(url, sizeName) in (img.sizes || {})" :key="sizeName">
+                                        <div class="flex items-start gap-3 py-0.5"><span class="text-gray-400 w-20 flex-shrink-0" x-text="sizeName"></span><a :href="url" target="_blank" class="text-blue-600 hover:underline break-all inline-flex items-center gap-1" x-text="url"><svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
                     </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">WP Template</span>
-                        <p class="font-medium text-gray-800" x-text="selectedPreset ? selectedPreset.name : 'None'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Follow Links</span>
-                        <p class="font-medium text-gray-800" x-text="selectedPreset?.follow_links || 'Default'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Publish Action</span>
-                        <p class="font-medium text-gray-800" x-text="publishAction === 'publish' ? 'Publish Immediately' : (publishAction === 'draft_wp' ? 'WordPress Draft' : (publishAction === 'draft_local' ? 'Local Draft' : publishAction))"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Categories</span>
-                        <p class="font-medium text-gray-800" x-text="suggestedCategories.length ? suggestedCategories.join(', ') : 'None'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Tags</span>
-                        <p class="font-medium text-gray-800" x-text="suggestedTags.length ? suggestedTags.join(', ') : 'None'"></p>
-                    </div>
+                </div>
+
+                {{-- Activity Log --}}
+                <div x-show="prepareLog.length > 0" x-cloak class="mt-4 bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto" x-ref="prepareLogContainer">
+                    <p class="text-xs text-gray-500 mb-2 font-semibold uppercase">Activity Log</p>
+                    <template x-for="(entry, idx) in prepareLog" :key="idx">
+                        <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
+                            <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
+                            <span :class="{'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info', 'text-yellow-400': entry.type === 'warning', 'text-gray-400': entry.type === 'step'}" x-text="entry.message" class="break-words"></span>
+                        </div>
+                    </template>
                 </div>
             </div>
 
-            <button @click="prepareForWp()" :disabled="preparing" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 mb-4">
-                <svg x-show="preparing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                <span x-text="preparing ? 'Preparing...' : 'Prepare for WordPress'"></span>
-            </button>
+            {{-- ═══ Publish Action ═══ --}}
+            <div class="border border-gray-200 rounded-xl p-5 mb-4">
+                <h5 class="text-sm font-semibold text-gray-700 mb-3">Publish</h5>
 
-            {{-- Activity Log — dark theme --}}
-            <div x-show="prepareLog.length > 0" x-cloak class="bg-gray-900 rounded-xl border border-gray-700 p-4 mb-4 max-h-64 overflow-y-auto" x-ref="prepareLogContainer">
-                <template x-for="(entry, idx) in prepareLog" :key="idx">
-                    <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
-                        <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
-                        <span :class="{
-                            'text-green-400': entry.type === 'success',
-                            'text-red-400': entry.type === 'error',
-                            'text-blue-400': entry.type === 'info',
-                            'text-yellow-400': entry.type === 'warning',
-                            'text-gray-400': entry.type === 'step',
-                        }" x-text="entry.message" class="break-words"></span>
+                <div class="max-w-md space-y-3 mb-4">
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="publishAction" value="publish" class="text-blue-600"><span class="text-sm">Publish immediately</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="publishAction" value="draft_local" class="text-blue-600"><span class="text-sm">Save as local draft</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="publishAction" value="draft_wp" class="text-blue-600"><span class="text-sm">Push as WordPress draft</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="publishAction" value="future" class="text-blue-600"><span class="text-sm">Schedule</span></label>
                     </div>
-                </template>
-            </div>
-
-            {{-- Real-time Checklist with spinners --}}
-            <div x-show="prepareChecklist.length > 0" x-cloak class="space-y-2 mb-4">
-                <template x-for="(item, idx) in prepareChecklist" :key="idx">
-                    <div class="flex items-center gap-3 text-sm">
-                        <template x-if="item.status === 'running'">
-                            <svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        </template>
-                        <template x-if="item.status === 'done'">
-                            <svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        </template>
-                        <template x-if="item.status === 'failed'">
-                            <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </template>
-                        <template x-if="item.status === 'skipped'">
-                            <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
-                        </template>
-                        <span :class="{
-                            'text-blue-700': item.status === 'running',
-                            'text-green-700': item.status === 'done',
-                            'text-red-700': item.status === 'failed',
-                            'text-gray-500': item.status === 'skipped',
-                        }" x-text="item.label"></span>
-                        <span x-show="item.detail" class="text-xs text-gray-400" x-text="item.detail"></span>
+                    <div x-show="publishAction === 'future'" x-cloak>
+                        <label class="block text-xs text-gray-500 mb-1">Schedule Date & Time</label>
+                        <input type="datetime-local" x-model="scheduleDate" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     </div>
-                </template>
-            </div>
-
-            <div class="mt-3" x-show="prepareComplete" x-cloak>
-                <button @click="completeStep(9); openStep(10)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to Publish &rarr;</button>
-            </div>
-        </div>
-    </div>
-
-    {{-- ══════════════════════════════════════════════════════════════
-         Step 10: Publish
-         ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 10, 'opacity-50': !isStepAccessible(10) }">
-        <button @click="toggleStep(10)" :disabled="!isStepAccessible(10)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
-            <div class="flex items-center gap-3">
-                <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                      :class="completedSteps.includes(10) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
-                    <template x-if="completedSteps.includes(10)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(10)"><span>10</span></template>
-                </span>
-                <span class="font-semibold text-gray-800">Publish</span>
-            </div>
-            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(10) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div x-show="openSteps.includes(10)" x-cloak x-collapse class="px-4 pb-4">
-            <div class="max-w-md space-y-3 mb-4">
-                <label class="block text-xs text-gray-500 mb-1">Publish Action</label>
-                <div class="space-y-2">
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" x-model="publishAction" value="publish" class="text-blue-600">
-                        <span class="text-sm">Publish immediately</span>
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" x-model="publishAction" value="draft_local" class="text-blue-600">
-                        <span class="text-sm">Save as local draft</span>
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" x-model="publishAction" value="draft_wp" class="text-blue-600">
-                        <span class="text-sm">Push as WordPress draft</span>
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" x-model="publishAction" value="future" class="text-blue-600">
-                        <span class="text-sm">Schedule</span>
-                    </label>
                 </div>
 
-                <div x-show="publishAction === 'future'" x-cloak>
-                    <label class="block text-xs text-gray-500 mb-1">Schedule Date & Time</label>
-                    <input type="datetime-local" x-model="scheduleDate" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <div class="flex gap-3">
+                    <button @click="publishArticle()" :disabled="publishing" class="bg-green-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
+                        <svg x-show="publishing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        <span x-text="publishing ? 'Publishing...' : 'Publish'"></span>
+                    </button>
+                    <button @click="saveDraftNow()" :disabled="savingDraft" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-50 flex items-center gap-2">
+                        <svg x-show="savingDraft" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        <span x-text="savingDraft ? 'Saving...' : 'Save Draft'"></span>
+                    </button>
+                </div>
+
+                {{-- Publish error --}}
+                <div x-show="publishError" x-cloak class="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
+                    <p class="text-sm text-red-700" x-text="publishError"></p>
                 </div>
             </div>
 
-            <button @click="publishArticle()" :disabled="publishing" class="bg-green-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
-                <svg x-show="publishing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                <span x-text="publishing ? 'Publishing...' : 'Publish'"></span>
-            </button>
-
-            {{-- Publish error --}}
-            <div x-show="publishError" x-cloak class="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
-                <p class="text-sm text-red-700" x-text="publishError"></p>
-            </div>
-
-            {{-- Publish result — full post info --}}
-            <div x-show="publishResult" x-cloak class="mt-4 bg-green-50 border border-green-200 rounded-xl p-5">
+            {{-- ═══ Publish Result — full post + photo report ═══ --}}
+            <div x-show="publishResult" x-cloak class="bg-green-50 border border-green-200 rounded-xl p-5">
                 <div class="flex items-center gap-2 mb-4">
                     <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                     <span class="font-semibold text-green-800 text-lg" x-text="publishResult?.message || 'Published successfully!'"></span>
                 </div>
 
-                {{-- Post info grid --}}
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm mb-4">
-                    <div>
-                        <span class="text-gray-400 text-xs">Title</span>
-                        <p class="font-medium text-gray-800 break-words" x-text="articleTitle || 'Untitled'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Word Count</span>
-                        <p class="font-medium text-gray-800" x-text="spunWordCount + ' words'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Website</span>
-                        <p class="font-medium text-gray-800" x-text="selectedSite?.name || 'Local'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Action</span>
-                        <p class="font-medium text-gray-800" x-text="publishAction === 'publish' ? 'Published' : (publishAction === 'draft_wp' ? 'WP Draft' : (publishAction === 'future' ? 'Scheduled' : 'Local Draft'))"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Categories</span>
-                        <p class="font-medium text-gray-800 break-words" x-text="suggestedCategories.length ? suggestedCategories.join(', ') : 'None'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Tags</span>
-                        <p class="font-medium text-gray-800 break-words" x-text="suggestedTags.length ? suggestedTags.join(', ') : 'None'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">Links</span>
-                        <p class="font-medium text-gray-800" x-text="suggestedUrls.length + ' link(s)'"></p>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 text-xs">AI Model</span>
-                        <p class="font-medium text-gray-800" x-text="aiModel"></p>
-                    </div>
-                    <div x-show="draftId">
-                        <span class="text-gray-400 text-xs">Draft ID</span>
-                        <p class="font-medium text-gray-800" x-text="'#' + draftId"></p>
-                    </div>
-                    <div x-show="publishAuthor">
-                        <span class="text-gray-400 text-xs">Author</span>
-                        <p class="font-medium text-gray-800" x-text="publishAuthor"></p>
+                {{-- Post details (row layout) --}}
+                <div class="space-y-2 mb-4">
+                    <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Title</span><p class="text-sm font-medium text-gray-800 break-words" x-text="articleTitle || 'Untitled'"></p></div>
+                    <div x-show="publishResult?.post_url" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Post URL</span><a :href="publishResult?.post_url" target="_blank" class="text-sm text-blue-600 hover:underline break-all inline-flex items-center gap-1" x-text="publishResult?.post_url"></a></div>
+                    <div x-show="publishResult?.post_id" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">WP Post ID</span><p class="text-sm font-mono text-gray-800" x-text="publishResult?.post_id"></p></div>
+                    <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Post Type</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? 'Published' : (publishAction === 'draft_wp' ? 'WP Draft' : (publishAction === 'future' ? 'Scheduled' : 'Local Draft'))"></p></div>
+                    <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Author</span><p class="text-sm text-gray-800" x-text="publishAuthor || 'Default'"></p></div>
+                    <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Website</span><p class="text-sm text-gray-800" x-text="selectedSite?.name || 'Local'"></p></div>
+                    <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Word Count</span><p class="text-sm text-gray-800" x-text="spunWordCount + ' words'"></p></div>
+                    <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">AI Model</span><p class="text-sm font-mono text-gray-800" x-text="aiModel"></p></div>
+                    <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Draft ID</span><p class="text-sm text-gray-800" x-text="'#' + draftId"></p></div>
+                    <div x-show="featuredPhoto?.url_large" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Featured Image</span><a :href="featuredPhoto?.url_large" target="_blank" class="text-sm text-blue-600 hover:underline break-all" x-text="featuredPhoto?.url_large"></a></div>
+                    <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Date Created</span><p class="text-sm text-gray-800" x-text="new Date().toLocaleString()"></p></div>
+                    <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Categories</span><p class="text-sm text-gray-800 break-words" x-text="suggestedCategories.length ? suggestedCategories.join(', ') : 'None'"></p></div>
+                    <div class="flex items-start gap-3 py-1"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Tags</span><p class="text-sm text-gray-800 break-words" x-text="suggestedTags.length ? suggestedTags.join(', ') : 'None'"></p></div>
+                </div>
+
+                {{-- Uploaded photos full report --}}
+                <div x-show="uploadedImages && Object.keys(uploadedImages).length > 0" x-cloak>
+                    <h6 class="text-sm font-semibold text-gray-700 mb-2">Photos</h6>
+                    <div class="space-y-3">
+                        <template x-for="(img, imgKey) in uploadedImages" :key="imgKey">
+                            <div class="bg-white border border-gray-200 rounded-lg p-3 text-xs space-y-1">
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Filename</span><span class="font-mono text-gray-800 break-all" x-text="img.filename || '—'"></span></div>
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Media ID</span><span class="text-gray-800" x-text="img.media_id || '—'"></span></div>
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">File Path</span><span class="font-mono text-gray-600 break-all" x-text="img.file_path || '—'"></span></div>
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">File Size</span><span class="text-gray-800" x-text="img.file_size ? (Math.round(img.file_size / 1024) + ' KB') : '—'"></span></div>
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Alt Text</span><span class="text-gray-700 break-words" x-text="img.alt_text || '—'"></span></div>
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Caption</span><span class="text-gray-700 break-words" x-text="img.caption || '—'"></span></div>
+                                <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Description</span><span class="text-gray-700 break-words" x-text="img.description || '—'"></span></div>
+                                <div x-show="img.sizes" class="mt-1 pt-1 border-t border-gray-200">
+                                    <p class="text-gray-400 mb-1">WordPress Sizes:</p>
+                                    <template x-for="(url, sizeName) in (img.sizes || {})" :key="sizeName">
+                                        <div class="flex items-start gap-3 py-0.5"><span class="text-gray-400 w-20 flex-shrink-0" x-text="sizeName"></span><a :href="url" target="_blank" class="text-blue-600 hover:underline break-all" x-text="url"></a></div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
-                {{-- Links --}}
-                <div class="flex flex-wrap gap-3 mb-4">
-                    <a x-show="publishResult?.post_url" :href="publishResult?.post_url" target="_blank" class="inline-flex items-center gap-1 text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium">
-                        View Post
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                    </a>
-                    <a x-show="selectedSite?.url" :href="selectedSite?.url" target="_blank" class="inline-flex items-center gap-1 text-sm bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-medium">
-                        <span x-text="selectedSite?.name || 'WordPress Site'"></span>
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                    </a>
-                    <a x-show="draftId" :href="'{{ url('article/drafts') }}/' + draftId" target="_blank" class="inline-flex items-center gap-1 text-sm bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 font-medium">
-                        View Draft
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                    </a>
-                    <a x-show="publishResult?.article_url" :href="publishResult?.article_url" target="_blank" class="inline-flex items-center gap-1 text-sm bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium">
-                        Full Article Report
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                    </a>
-                </div>
-
-                {{-- Activity Log in publish section --}}
-                <div x-show="prepareLog.length > 0" x-cloak class="bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto">
+                {{-- Activity Log --}}
+                <div x-show="prepareLog.length > 0" x-cloak class="mt-4 bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto">
                     <p class="text-xs text-gray-500 mb-2 font-semibold uppercase">Activity Log</p>
                     <template x-for="(entry, idx) in prepareLog" :key="idx">
                         <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
                             <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
-                            <span :class="{
-                                'text-green-400': entry.type === 'success',
-                                'text-red-400': entry.type === 'error',
-                                'text-blue-400': entry.type === 'info',
-                                'text-yellow-400': entry.type === 'warning',
-                                'text-gray-400': entry.type === 'step',
-                            }" x-text="entry.message" class="break-words"></span>
+                            <span :class="{'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info', 'text-yellow-400': entry.type === 'warning', 'text-gray-400': entry.type === 'step'}" x-text="entry.message" class="break-words"></span>
                         </div>
                     </template>
                 </div>
@@ -1572,7 +1441,7 @@ function publishPipeline() {
         currentStep: 1,
         openSteps: [1],
         completedSteps: [],
-        stepLabels: ['User', 'WP Template', 'Website', 'Sources', 'Get Articles', 'AI Template', 'Create Article', 'Publish'],
+        stepLabels: ['User', 'WP Template', 'Website', 'Sources', 'Get Articles', 'AI Template', 'Create Article', 'Review & Publish'],
 
         // Step 1 — User
         userSearch: '',
@@ -2839,14 +2708,7 @@ function publishPipeline() {
             }
         },
 
-        // ── Step 8: Review → Prepare ────────────────────
-        finishEditing() {
-            this.completeStep(8);
-            this.openStep(9);
-            this.autoSaveDraft();
-        },
-
-        // ── Step 9: Prepare ──────────────────────────────
+        // ── Step 8: Review & Publish ────────────────────
         _logPrepare(type, message) {
             const now = new Date();
             const time = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -2943,7 +2805,7 @@ function publishPipeline() {
             if (this.publishAction === 'draft_local') {
                 await this.saveDraftNow();
                 this.publishResult = { message: 'Saved as local draft.', post_url: null, draft_id: this.draftId };
-                this.completeStep(10);
+                this.completeStep(8);
                 this.publishing = false;
                 return;
             }
@@ -2994,7 +2856,7 @@ function publishPipeline() {
 
                 if (data.success) {
                     this.publishResult = data;
-                    this.completeStep(10);
+                    this.completeStep(8);
                     this.showNotification('success', data.message);
                 } else {
                     this.publishError = data.message;
