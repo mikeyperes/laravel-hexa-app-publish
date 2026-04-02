@@ -162,6 +162,11 @@
                     </template>
                 </div>
             </div>
+
+            {{-- Next button — always visible when site selected --}}
+            <div x-show="selectedSite" class="mt-3">
+                <button @click="completeStep(2); openStep(3)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Next &rarr;</button>
+            </div>
         </div>
     </div>
 
