@@ -50,7 +50,7 @@ class AiDetectionLog extends Model
             'cost' => $data['cost'] ?? null,
             'debug_mode' => $data['debug_mode'] ?? false,
             'success' => $data['success'] ?? true,
-            'error_message' => $data['error'] ?? null,
+            'error_message' => \Illuminate\Support\Str::limit($data['error'] ?? '', 250),
         ]);
     }
 
