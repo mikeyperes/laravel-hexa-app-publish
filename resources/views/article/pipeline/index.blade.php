@@ -497,13 +497,13 @@
             </div>
 
             <div class="mt-3" x-show="checkResults.length > 0 && checkPassCount > 0" x-cloak>
-                <button @click="completeStep(4); openStep(5)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to AI Configuration &rarr;</button>
+                <button @click="completeStep(4); openStep(5)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to AI & Spin &rarr;</button>
             </div>
         </div>
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 5: AI Configuration
+         Step 5: AI & Spin
          ══════════════════════════════════════════════════════════════ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 5, 'opacity-50': !isStepAccessible(5) }">
         <button @click="toggleStep(5)" :disabled="!isStepAccessible(5)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
@@ -513,7 +513,7 @@
                     <template x-if="completedSteps.includes(5)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(5)"><span>5</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">AI Configuration</span>
+                <span class="font-semibold text-gray-800">AI & Spin</span>
                 <span x-show="selectedTemplate" x-cloak class="text-sm text-green-600" x-text="selectedTemplate?.name || ''"></span>
                 <span x-show="spunContent" x-cloak class="text-sm text-green-600" x-text="spunWordCount + ' words'"></span>
             </div>
@@ -1409,7 +1409,7 @@ function publishPipeline() {
         currentStep: 1,
         openSteps: [1],
         completedSteps: [],
-        stepLabels: ['User', 'Website & Template', 'Find Articles', 'Fetch Articles from Source', 'AI Configuration', 'Create Article', 'Review & Publish'],
+        stepLabels: ['User', 'Website & Template', 'Find Articles', 'Fetch Articles from Source', 'AI & Spin', 'Create Article', 'Review & Publish'],
 
         // Step 1 — User
         selectedUser: null,
@@ -1616,7 +1616,8 @@ function publishPipeline() {
                     }
                 } catch (e) { /* ignore corrupt state */ }
                 // Clear restoring flag after all async init settles
-                setTimeout(() => { this._restoring = false; }, 500);
+                // Clear after SSH connection test could complete (up to 30s)
+                setTimeout(() => { this._restoring = false; }, 30000);
             }
 
             this.$watch('currentStep', () => this.savePipelineState());
