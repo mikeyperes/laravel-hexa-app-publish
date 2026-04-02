@@ -166,22 +166,22 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 4: Provide Sources
+         Step 3: Find Articles
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 4, 'opacity-50': !isStepAccessible(4) }">
-        <button @click="toggleStep(4)" :disabled="!isStepAccessible(4)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 3, 'opacity-50': !isStepAccessible(3) }">
+        <button @click="toggleStep(3)" :disabled="!isStepAccessible(3)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                      :class="completedSteps.includes(4) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
-                    <template x-if="completedSteps.includes(4)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(4)"><span>4</span></template>
+                      :class="completedSteps.includes(3) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
+                    <template x-if="completedSteps.includes(3)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
+                    <template x-if="!completedSteps.includes(3)"><span>3</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Provide Sources</span>
+                <span class="font-semibold text-gray-800">Find Articles</span>
                 <span x-show="sources.length > 0" x-cloak class="text-sm text-green-600" x-text="sources.length + ' source(s)'"></span>
             </div>
-            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(4) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(3) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(4)" x-cloak x-collapse class="px-4 pb-4">
+        <div x-show="openSteps.includes(3)" x-cloak x-collapse class="px-4 pb-4">
             {{-- Tabs --}}
             <div class="flex border-b border-gray-200 mb-4">
                 <button @click="sourceTab = 'paste'" :class="sourceTab === 'paste' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">Paste Links</button>
@@ -340,29 +340,29 @@
             </div>
 
             <div class="mt-3" x-show="sources.length > 0" x-cloak>
-                <button @click="completeStep(4); openStep(5)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to Get Articles &rarr;</button>
+                <button @click="completeStep(3); openStep(4)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to Fetch &rarr;</button>
             </div>
         </div>
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 5: Get Articles
+         Step 4: Fetch Articles from Source
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 5, 'opacity-50': !isStepAccessible(5) }">
-        <button @click="toggleStep(5)" :disabled="!isStepAccessible(5)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 4, 'opacity-50': !isStepAccessible(4) }">
+        <button @click="toggleStep(4)" :disabled="!isStepAccessible(4)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                      :class="completedSteps.includes(5) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
-                    <template x-if="completedSteps.includes(5)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(5)"><span>5</span></template>
+                      :class="completedSteps.includes(4) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
+                    <template x-if="completedSteps.includes(4)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
+                    <template x-if="!completedSteps.includes(4)"><span>4</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Get Articles</span>
+                <span class="font-semibold text-gray-800">Fetch Articles from Source</span>
                 <span x-show="checkResults.length > 0" x-cloak class="text-sm" :class="checkPassCount === sources.length ? 'text-green-600' : 'text-yellow-600'"
                       x-text="checkPassCount + '/' + sources.length + ' extracted'"></span>
             </div>
-            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(5) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(4) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(5)" x-cloak x-collapse class="px-4 pb-4">
+        <div x-show="openSteps.includes(4)" x-cloak x-collapse class="px-4 pb-4">
             {{-- Extraction Options --}}
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
                 <div class="flex flex-wrap items-end gap-3">
@@ -497,73 +497,54 @@
             </div>
 
             <div class="mt-3" x-show="checkResults.length > 0 && checkPassCount > 0" x-cloak>
-                <button @click="completeStep(5); openStep(6)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue &rarr;</button>
+                <button @click="completeStep(4); openStep(5)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to AI Configuration &rarr;</button>
             </div>
         </div>
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 6: Select AI Template
+         Step 5: AI Configuration
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 6, 'opacity-50': !isStepAccessible(6) }">
-        <button @click="toggleStep(6)" :disabled="!isStepAccessible(6)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 5, 'opacity-50': !isStepAccessible(5) }">
+        <button @click="toggleStep(5)" :disabled="!isStepAccessible(5)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                      :class="completedSteps.includes(6) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
-                    <template x-if="completedSteps.includes(6)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(6)"><span>6</span></template>
+                      :class="completedSteps.includes(5) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
+                    <template x-if="completedSteps.includes(5)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
+                    <template x-if="!completedSteps.includes(5)"><span>5</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Select AI Template</span>
-                <span x-show="selectedTemplate" x-cloak class="text-sm text-green-600" x-text="selectedTemplate ? selectedTemplate.name : ''"></span>
-            </div>
-            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(6) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div x-show="openSteps.includes(6)" x-cloak x-collapse class="px-4 pb-4">
-            {{-- Loading indicator --}}
-            <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
-                <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                Loading templates...
-            </div>
-            <div x-show="!templatesLoading" class="max-w-md">
-                <label class="block text-xs text-gray-500 mb-1">User's AI Templates</label>
-                <select x-model="selectedTemplateId" @change="selectTemplate()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">-- No template (configure manually) --</option>
-                    <template x-for="t in templates" :key="t.id">
-                        <option :value="t.id" x-text="t.name"></option>
-                    </template>
-                </select>
-            </div>
-            <div x-show="selectedTemplate" x-cloak class="mt-3 bg-gray-50 rounded-lg p-3 text-sm space-y-1">
-                <p><span class="text-gray-500">AI Engine:</span> <span class="font-medium" x-text="selectedTemplate?.ai_engine || 'Not set'"></span></p>
-                <p><span class="text-gray-500">Tone:</span> <span class="font-medium" x-text="Array.isArray(selectedTemplate?.tone) ? selectedTemplate.tone.join(', ') : (selectedTemplate?.tone || 'Not set')"></span></p>
-                <p><span class="text-gray-500">Word Count:</span> <span class="font-medium" x-text="(selectedTemplate?.word_count_min || '—') + ' - ' + (selectedTemplate?.word_count_max || '—')"></span></p>
-                <p x-show="selectedTemplate?.description"><span class="text-gray-500">Description:</span> <span class="font-medium" x-text="selectedTemplate?.description"></span></p>
-            </div>
-            <div class="mt-3">
-                <button @click="completeStep(6); openStep(7)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
-                    <span x-text="selectedTemplate ? 'Continue with Template' : 'Skip Template'"></span> &rarr;
-                </button>
-            </div>
-        </div>
-    </div>
-
-    {{-- ══════════════════════════════════════════════════════════════
-         Step 7: Spin Article (model selector + spin combined)
-         ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 7, 'opacity-50': !isStepAccessible(7) }">
-        <button @click="toggleStep(7)" :disabled="!isStepAccessible(7)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
-            <div class="flex items-center gap-3">
-                <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                      :class="completedSteps.includes(7) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
-                    <template x-if="completedSteps.includes(7)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(7)"><span>7</span></template>
-                </span>
-                <span class="font-semibold text-gray-800">Create Article</span>
+                <span class="font-semibold text-gray-800">AI Configuration</span>
+                <span x-show="selectedTemplate" x-cloak class="text-sm text-green-600" x-text="selectedTemplate?.name || ''"></span>
                 <span x-show="spunContent" x-cloak class="text-sm text-green-600" x-text="spunWordCount + ' words'"></span>
             </div>
-            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(7) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(5) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(7)" x-cloak x-collapse class="px-4 pb-4">
+        <div x-show="openSteps.includes(5)" x-cloak x-collapse class="px-4 pb-4">
+
+            {{-- AI Template (auto-loaded, edit to change) --}}
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h5 class="text-sm font-semibold text-gray-700">AI Template</h5>
+                    <button @click="editingTemplate = !editingTemplate" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingTemplate ? 'Cancel' : 'Edit'"></button>
+                </div>
+                <div x-show="!editingTemplate && selectedTemplate" class="text-sm space-y-1">
+                    <p class="font-medium text-gray-800" x-text="selectedTemplate?.name || 'None'"></p>
+                    <p class="text-xs text-gray-500"><span class="text-gray-400">Engine:</span> <span x-text="selectedTemplate?.ai_engine || '—'"></span> &middot; <span class="text-gray-400">Tone:</span> <span x-text="Array.isArray(selectedTemplate?.tone) ? selectedTemplate.tone.join(', ') : (selectedTemplate?.tone || '—')"></span> &middot; <span class="text-gray-400">Words:</span> <span x-text="(selectedTemplate?.word_count_min || '—') + '-' + (selectedTemplate?.word_count_max || '—')"></span></p>
+                </div>
+                <div x-show="!editingTemplate && !selectedTemplate" class="text-xs text-gray-400">No AI template selected — using defaults.</div>
+                <div x-show="editingTemplate" x-cloak class="mt-2">
+                    <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
+                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Loading...
+                    </div>
+                    <select x-show="!templatesLoading" x-model="selectedTemplateId" @change="selectTemplate(); editingTemplate = false" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">-- No template --</option>
+                        <template x-for="t in templates" :key="t.id">
+                            <option :value="t.id" x-text="t.name"></option>
+                        </template>
+                    </select>
+                </div>
+            </div>
             <div class="flex flex-wrap items-end gap-3 mb-4">
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">AI Model</label>
@@ -751,6 +732,27 @@
                 <span>Completion tokens: <span class="font-medium text-gray-700" x-text="tokenUsage?.output_tokens || 0"></span></span>
                 <span>Total: <span class="font-medium text-gray-700" x-text="(tokenUsage?.input_tokens || 0) + (tokenUsage?.output_tokens || 0)"></span></span>
             </div>
+
+        </div>
+    </div>
+
+    {{-- ══════════════════════════════════════════════════════════════
+         Step 6: Create Article
+         ══════════════════════════════════════════════════════════════ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 6, 'opacity-50': !isStepAccessible(6) }">
+        <button @click="toggleStep(6)" :disabled="!isStepAccessible(6)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+            <div class="flex items-center gap-3">
+                <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
+                      :class="completedSteps.includes(6) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
+                    <template x-if="completedSteps.includes(6)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
+                    <template x-if="!completedSteps.includes(6)"><span>6</span></template>
+                </span>
+                <span class="font-semibold text-gray-800">Create Article</span>
+                <span x-show="spunContent" x-cloak class="text-sm text-green-600" x-text="spunWordCount + ' words'"></span>
+            </div>
+            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(6) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div x-show="openSteps.includes(6)" x-cloak x-collapse class="px-4 pb-4">
 
             {{-- Spun content in TinyMCE editor --}}
             <div x-show="spunContent" x-cloak>
@@ -1149,21 +1151,21 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 8: Review & Publish (combined)
+         Step 7: Review & Publish
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 8, 'opacity-50': !isStepAccessible(8) }">
-        <button @click="toggleStep(8)" :disabled="!isStepAccessible(8)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 7, 'opacity-50': !isStepAccessible(7) }">
+        <button @click="toggleStep(7)" :disabled="!isStepAccessible(7)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                      :class="completedSteps.includes(8) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
-                    <template x-if="completedSteps.includes(8)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
-                    <template x-if="!completedSteps.includes(8)"><span>8</span></template>
+                      :class="completedSteps.includes(7) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
+                    <template x-if="completedSteps.includes(7)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
+                    <template x-if="!completedSteps.includes(7)"><span>7</span></template>
                 </span>
                 <span class="font-semibold text-gray-800">Review & Publish</span>
             </div>
-            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(8) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(7) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(8)" x-cloak x-collapse class="px-4 pb-4">
+        <div x-show="openSteps.includes(7)" x-cloak x-collapse class="px-4 pb-4">
 
             {{-- ═══ Review Section (row layout) ═══ --}}
             <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 space-y-3">
@@ -1452,11 +1454,12 @@ function publishPipeline() {
         approvedSources: [],
         discardedSources: [],
 
-        // Step 6 — AI Template
+        // Step 5 — AI Template + Config
         templates: [],
         templatesLoading: false,
         selectedTemplateId: '',
         selectedTemplate: null,
+        editingTemplate: false,
 
         // Step 7 — Model
         aiModel: 'claude-opus-4-6',
@@ -2136,6 +2139,9 @@ function publishPipeline() {
 
                     // Auto-run AI detection after spin
                     this.$nextTick(() => this.runAiDetection());
+                    // Auto-advance to Create Article step
+                    this.completeStep(5);
+                    this.openStep(6);
                 } else {
                     this.spinError = data.message;
                     this._logSpin('error', 'Spin failed: ' + data.message);
@@ -2168,8 +2174,8 @@ function publishPipeline() {
             if (this.selectedTags.length > 0 && this.suggestedTags.length > 0) {
                 this.suggestedTags = this.suggestedTags.filter((t, i) => this.selectedTags.includes(i));
             }
-            this.completeStep(7);
-            this.openStep(8);
+            this.completeStep(6);
+            this.openStep(7);
             this.autoSaveDraft();
         },
 
@@ -2755,7 +2761,7 @@ function publishPipeline() {
             if (this.publishAction === 'draft_local') {
                 await this.saveDraftNow();
                 this.publishResult = { message: 'Saved as local draft.', post_url: null, draft_id: this.draftId };
-                this.completeStep(8);
+                this.completeStep(7);
                 this.publishing = false;
                 return;
             }
@@ -2806,7 +2812,7 @@ function publishPipeline() {
 
                 if (data.success) {
                     this.publishResult = data;
-                    this.completeStep(8);
+                    this.completeStep(7);
                     this.showNotification('success', data.message);
                 } else {
                     this.publishError = data.message;
