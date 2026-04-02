@@ -3,7 +3,8 @@
 use Illuminate\Support\Facades\Route;
 use hexa_app_publish\Http\Controllers\PublishAccountController;
 use hexa_app_publish\Http\Controllers\PublishSiteController;
-use hexa_app_publish\Http\Controllers\PublishCampaignController;
+use hexa_app_publish\Campaigns\Http\Controllers\CampaignController;
+use hexa_app_publish\Campaigns\Http\Controllers\CampaignPresetController;
 use hexa_app_publish\Http\Controllers\AiActivityController;
 use hexa_app_publish\Http\Controllers\AiSmartEditController;
 use hexa_app_publish\Http\Controllers\PublishArticleController;
@@ -58,16 +59,23 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::put('/publish/templates/{id}', [PublishTemplateController::class, 'update'])->name('publish.templates.update');
     Route::delete('/publish/templates/{id}', [PublishTemplateController::class, 'destroy'])->name('publish.templates.destroy');
 
-    // Campaigns
-    Route::get('/publish/campaigns', [PublishCampaignController::class, 'index'])->name('publish.campaigns.index');
-    Route::get('/publish/campaigns/create', [PublishCampaignController::class, 'create'])->name('publish.campaigns.create');
-    Route::post('/publish/campaigns', [PublishCampaignController::class, 'store'])->name('publish.campaigns.store');
-    Route::get('/publish/campaigns/{id}', [PublishCampaignController::class, 'show'])->name('publish.campaigns.show');
-    Route::get('/publish/campaigns/{id}/edit', [PublishCampaignController::class, 'edit'])->name('publish.campaigns.edit');
-    Route::put('/publish/campaigns/{id}', [PublishCampaignController::class, 'update'])->name('publish.campaigns.update');
-    Route::post('/publish/campaigns/{id}/activate', [PublishCampaignController::class, 'activate'])->name('publish.campaigns.activate');
-    Route::post('/publish/campaigns/{id}/pause', [PublishCampaignController::class, 'pause'])->name('publish.campaigns.pause');
-    Route::post('/publish/campaigns/{id}/duplicate', [PublishCampaignController::class, 'duplicate'])->name('publish.campaigns.duplicate');
+    // ═══ Campaigns ═══
+    Route::get('/campaigns', [CampaignController::class, 'index'])->name('campaigns.index');
+    Route::get('/campaigns/create', [CampaignController::class, 'create'])->name('campaigns.create');
+    Route::post('/campaigns', [CampaignController::class, 'store'])->name('campaigns.store');
+    // Campaign Presets (before {id} wildcard)
+    Route::get('/campaigns/presets', [CampaignPresetController::class, 'index'])->name('campaigns.presets.index');
+    Route::post('/campaigns/presets', [CampaignPresetController::class, 'store'])->name('campaigns.presets.store');
+    Route::get('/campaigns/presets/{id}', [CampaignPresetController::class, 'show'])->name('campaigns.presets.show');
+    Route::put('/campaigns/presets/{id}', [CampaignPresetController::class, 'update'])->name('campaigns.presets.update');
+    Route::delete('/campaigns/presets/{id}', [CampaignPresetController::class, 'destroy'])->name('campaigns.presets.destroy');
+    // Campaign CRUD
+    Route::get('/campaigns/{id}', [CampaignController::class, 'show'])->name('campaigns.show');
+    Route::get('/campaigns/{id}/edit', [CampaignController::class, 'edit'])->name('campaigns.edit');
+    Route::put('/campaigns/{id}', [CampaignController::class, 'update'])->name('campaigns.update');
+    Route::post('/campaigns/{id}/activate', [CampaignController::class, 'activate'])->name('campaigns.activate');
+    Route::post('/campaigns/{id}/pause', [CampaignController::class, 'pause'])->name('campaigns.pause');
+    Route::post('/campaigns/{id}/duplicate', [CampaignController::class, 'duplicate'])->name('campaigns.duplicate');
 
     // AI Activity
     Route::get('/publish/ai-activity', [AiActivityController::class, 'index'])->name('publish.ai-activity.index');
