@@ -91,6 +91,24 @@
         @endif
     </div>
 
+    {{-- ═══ AI Detection Threshold ═══ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" x-data="{ threshold: {{ \hexa_core\Models\Setting::getValue('ai_detection_threshold', 90) }}, saving: false, saved: false }">
+        <h3 class="font-semibold text-gray-800 mb-1">AI Detection Threshold</h3>
+        <p class="text-sm text-gray-500 mb-3">Minimum human score (%) required to pass AI detection. Articles below this threshold will be flagged for re-spinning with humanization instructions.</p>
+        <div class="flex items-center gap-3">
+            <input type="number" x-model="threshold" min="50" max="100" class="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <span class="text-sm text-gray-500">%</span>
+            <button @click="
+                saving = true; saved = false;
+                fetch('{{ route('publish.settings.master.save-setting') }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content }, body: JSON.stringify({ setting_key: 'ai_detection_threshold', setting_value: threshold.toString() }) })
+                .then(r => r.json()).then(d => { saving = false; saved = d.success; setTimeout(() => saved = false, 3000); }).catch(() => saving = false);
+            " :disabled="saving" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+                <svg x-show="saving" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                <span x-text="saving ? 'Saving...' : (saved ? 'Saved!' : 'Save')"></span>
+            </button>
+        </div>
+    </div>
+
     {{-- ═══ Master Spin Prompt ═══ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" x-data="{ savingPrompt: false, promptSaved: false }">
         <div class="px-5 py-4 border-b border-gray-200">

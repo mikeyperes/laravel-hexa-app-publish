@@ -3,6 +3,7 @@
 namespace hexa_app_publish\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
+use hexa_core\Models\Setting;
 use hexa_app_publish\Models\PublishMasterSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -147,5 +148,25 @@ class PublishMasterSettingController extends Controller
         hexaLog('publish', 'prompt_updated', 'Master spin prompt updated');
 
         return response()->json(['success' => true, 'message' => 'Prompt saved.']);
+    }
+
+    /**
+     * Save a key/value setting via Setting::setValue().
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function saveSetting(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'setting_key'   => 'required|string|max:255',
+            'setting_value' => 'required|string|max:1000',
+        ]);
+
+        Setting::setValue($validated['setting_key'], $validated['setting_value']);
+
+        hexaLog('publish', 'setting_saved', "Setting updated: {$validated['setting_key']} = {$validated['setting_value']}");
+
+        return response()->json(['success' => true, 'message' => 'Setting saved.']);
     }
 }

@@ -128,6 +128,7 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::post('/article/publish/prepare', [PublishPipelineController::class, 'prepareForWordpress'])->name('publish.pipeline.prepare');
     Route::post('/article/publish/publish', [PublishPipelineController::class, 'publishToWordpress'])->name('publish.pipeline.publish');
     Route::post('/article/publish/save-draft', [PublishPipelineController::class, 'saveDraft'])->name('publish.pipeline.save-draft');
+    Route::post('/article/publish/detect-ai', [PublishPipelineController::class, 'detectAi'])->name('publish.pipeline.detect-ai');
 
     // ═══ Article Editor ═══
     Route::get('/article/editor', [PublishArticleController::class, 'editor'])->name('publish.editor');
@@ -167,6 +168,7 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::put('/publishing/settings/{id}', [PublishMasterSettingController::class, 'update'])->name('publish.settings.master.update');
     Route::delete('/publishing/settings/{id}', [PublishMasterSettingController::class, 'destroy'])->name('publish.settings.master.destroy');
     Route::post('/publishing/settings/save-prompt', [PublishMasterSettingController::class, 'savePrompt'])->name('publish.settings.master.save-prompt');
+    Route::post('/publishing/settings/save-setting', [PublishMasterSettingController::class, 'saveSetting'])->name('publish.settings.master.save-setting');
 
     // ═══ Schedule ═══
     Route::get('/schedule', [PublishScheduleController::class, 'index'])->name('publish.schedule.index');

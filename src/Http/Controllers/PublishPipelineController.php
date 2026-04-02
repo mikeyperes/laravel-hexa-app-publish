@@ -1015,4 +1015,98 @@ class PublishPipelineController extends Controller
             return ['success' => false, 'message' => 'SSH error: ' . $e->getMessage()];
         }
     }
+
+    /**
+     * Run AI detection on article text using all enabled detectors.
+     * Returns results per detector with scores and flagged sentences.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function detectAi(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'text' => 'required|string|min:10',
+            'article_id' => 'nullable|integer',
+        ]);
+
+        $text = strip_tags($validated['text']);
+        $results = [];
+        $threshold = (float) Setting::getValue('ai_detection_threshold', 90);
+
+        // Run each enabled detector
+        $detectors = [
+            'gptzero' => ['class' => \hexa_package_gptzero\Services\GptZeroService::class, 'name' => 'GPTZero'],
+            'copyleaks' => ['class' => \hexa_package_copyleaks\Services\CopyleaksService::class, 'name' => 'Copyleaks'],
+            'zerogpt' => ['class' => \hexa_package_zerogpt\Services\ZeroGptService::class, 'name' => 'ZeroGPT'],
+            'originality' => ['class' => \hexa_package_originality\Services\OriginalityService::class, 'name' => 'Originality'],
+        ];
+
+        foreach ($detectors as $key => $info) {
+            try {
+                if (!class_exists($info['class'])) continue;
+                $service = app($info['class']);
+                if (!$service->isEnabled() || !$service->getApiKey()) continue;
+
+                $result = $service->detect($text);
+
+                // Normalize score to 0-100 human percentage
+                $humanScore = null;
+                if ($result['success']) {
+                    if ($key === 'gptzero') {
+                        $humanScore = round((1 - ($result['data']['completely_generated_prob'] ?? 0)) * 100, 1);
+                    } elseif ($key === 'copyleaks') {
+                        $humanScore = round(100 - ($result['data']['ai_score'] ?? 0), 1);
+                    } elseif ($key === 'zerogpt') {
+                        $humanScore = round($result['data']['is_human_written'] ?? 0, 1);
+                    } elseif ($key === 'originality') {
+                        $humanScore = round(($result['data']['original_score'] ?? 0) * 100, 1);
+                    }
+                }
+
+                // Log the call
+                \hexa_app_publish\Models\AiDetectionLog::logCall([
+                    'detector' => $key,
+                    'article_id' => $validated['article_id'] ?? null,
+                    'text' => $text,
+                    'response' => $result['data']['raw'] ?? $result,
+                    'score' => $humanScore,
+                    'cost' => $result['data']['cost'] ?? null,
+                    'debug_mode' => $service->isDebugMode(),
+                    'success' => $result['success'],
+                    'error' => $result['message'] ?? null,
+                ]);
+
+                $results[$key] = [
+                    'name' => $info['name'],
+                    'success' => $result['success'],
+                    'human_score' => $humanScore,
+                    'passes' => $humanScore !== null && $humanScore >= $threshold,
+                    'message' => $result['message'] ?? '',
+                    'sentences' => $result['data']['sentences'] ?? [],
+                    'raw' => $result['data']['raw'] ?? null,
+                    'text_sent' => Str::limit($text, 200),
+                ];
+            } catch (\Exception $e) {
+                $results[$key] = [
+                    'name' => $info['name'],
+                    'success' => false,
+                    'human_score' => null,
+                    'passes' => false,
+                    'message' => 'Error: ' . $e->getMessage(),
+                    'sentences' => [],
+                    'raw' => null,
+                ];
+            }
+        }
+
+        $allPass = !empty($results) && collect($results)->where('success', true)->every(fn($r) => $r['passes']);
+
+        return response()->json([
+            'success' => true,
+            'threshold' => $threshold,
+            'all_pass' => $allPass,
+            'results' => $results,
+        ]);
+    }
 }
