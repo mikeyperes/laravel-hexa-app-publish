@@ -67,28 +67,20 @@
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(1) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <div x-show="openSteps.includes(1)" x-cloak x-collapse class="px-4 pb-4">
-            <div class="relative max-w-md">
-                <label class="block text-xs text-gray-500 mb-1">Search by name or email</label>
-                <div class="relative">
-                    <input type="text" x-model="userSearch" @input.debounce.300ms="searchUsers()"
-                           placeholder="Type to search users..."
-                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
-                    <svg x-show="userSearching" x-cloak class="absolute right-3 top-2.5 w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                </div>
-                <div x-show="userResults.length > 0" x-cloak class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    <template x-for="user in userResults" :key="user.id">
-                        <button type="button" @click="selectUser(user)"
-                                class="block w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors">
-                            <span class="font-medium" x-text="user.name"></span>
-                            <span class="text-gray-400 ml-1" x-text="'(' + user.email + ')'"></span>
-                        </button>
-                    </template>
-                </div>
-            </div>
-            <div x-show="selectedUser" x-cloak class="mt-3 flex items-center gap-2 bg-blue-50 rounded-lg px-3 py-2">
-                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                <span class="text-sm font-medium text-blue-800" x-text="selectedUser ? selectedUser.name + ' (' + selectedUser.email + ')' : ''"></span>
-                <button @click="clearUser()" class="ml-auto text-red-500 hover:text-red-700 text-xs">Clear</button>
+            <div class="max-w-md"
+                 @hexa-search-selected.window="if ($event.detail.component_id === 'pipeline-user') selectUser($event.detail.item)"
+                 @hexa-search-cleared.window="if ($event.detail.component_id === 'pipeline-user') clearUser()">
+                <x-hexa-smart-search
+                    url="{{ route('api.search.users') }}"
+                    name="user_id"
+                    label="Search by name or email"
+                    placeholder="Type to search users..."
+                    display-field="name"
+                    subtitle-field="email"
+                    value-field="id"
+                    id="pipeline-user"
+                    show-id
+                />
             </div>
         </div>
     </div>
@@ -1444,9 +1436,6 @@ function publishPipeline() {
         stepLabels: ['User', 'WP Template', 'Website', 'Sources', 'Get Articles', 'AI Template', 'Create Article', 'Review & Publish'],
 
         // Step 1 — User
-        userSearch: '',
-        userSearching: false,
-        userResults: [],
         selectedUser: null,
 
         // Step 2 — Preset
@@ -1765,23 +1754,9 @@ function publishPipeline() {
             }
         },
 
-        // ── Step 1: User Search ───────────────────────────
-        async searchUsers() {
-            if (this.userSearch.length < 2) { this.userResults = []; this.userSearching = false; return; }
-            this.userSearching = true;
-            try {
-                const resp = await fetch(`{{ route('publish.users.search') }}?q=${encodeURIComponent(this.userSearch)}`, {
-                    headers: { 'Accept': 'application/json' }
-                });
-                this.userResults = await resp.json();
-            } catch (e) { this.userResults = []; }
-            this.userSearching = false;
-        },
-
+        // ── Step 1: User Selection ───────────────────────────
         async selectUser(user) {
             this.selectedUser = user;
-            this.userSearch = '';
-            this.userResults = [];
             this.completeStep(1);
             this.openStep(2);
             await Promise.all([this.loadUserPresets(), this.loadUserTemplates()]);
