@@ -28,9 +28,12 @@ class CampaignPresetController extends Controller
             return response()->json(['success' => true, 'data' => $presets, 'news_categories' => $newsCategories]);
         }
 
+        $editPreset = $request->filled('id') ? CampaignPreset::find($request->input('id')) : null;
+
         return view('app-publish::campaigns.presets.index', [
             'presets' => $presets,
             'newsCategories' => $newsCategories,
+            'editPreset' => $editPreset,
         ]);
     }
 
@@ -51,6 +54,7 @@ class CampaignPresetController extends Controller
             'genre' => 'nullable|string|max:100',
             'trending_categories' => 'nullable|array',
             'auto_select_sources' => 'nullable|boolean',
+            'ai_instructions' => 'nullable|string|max:5000',
         ]);
 
         $validated['created_by'] = auth()->id();
@@ -99,6 +103,7 @@ class CampaignPresetController extends Controller
             'genre' => 'nullable|string|max:100',
             'trending_categories' => 'nullable|array',
             'auto_select_sources' => 'nullable|boolean',
+            'ai_instructions' => 'nullable|string|max:5000',
         ]);
 
         $preset->update($validated);

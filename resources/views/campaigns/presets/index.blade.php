@@ -97,6 +97,12 @@
                 </button>
             </div>
 
+            {{-- AI Instructions --}}
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Additional Instructions (AI feed)</label>
+                <textarea x-model="form.ai_instructions" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Custom AI instructions that will be fed into the prompt when this campaign runs..."></textarea>
+            </div>
+
             {{-- Save --}}
             <div class="flex gap-3">
                 <button @click="savePreset()" :disabled="saving" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
@@ -156,7 +162,13 @@ function campaignPresets() {
         editId: null,
         saving: false, saveResult: '', saveSuccess: false,
         keywordsText: '',
-        form: { user_id: null, name: '', keywords: [], local_preference: '', source_method: 'trending', genre: '', trending_categories: [], auto_select_sources: false },
+        form: { user_id: null, name: '', keywords: [], local_preference: '', source_method: 'trending', genre: '', trending_categories: [], auto_select_sources: false, ai_instructions: '' },
+
+        init() {
+            @if(isset($editPreset) && $editPreset)
+                this.editPreset(@json($editPreset));
+            @endif
+        },
 
         toggleTrendingCat(cat) {
             const idx = this.form.trending_categories.indexOf(cat);
@@ -165,7 +177,7 @@ function campaignPresets() {
         },
 
         resetFormFields() {
-            this.form = { user_id: null, name: '', keywords: [], local_preference: '', source_method: 'trending', genre: '', trending_categories: [], auto_select_sources: false };
+            this.form = { user_id: null, name: '', keywords: [], local_preference: '', source_method: 'trending', genre: '', trending_categories: [], auto_select_sources: false, ai_instructions: '' };
             this.keywordsText = '';
             this.saveResult = '';
         },
@@ -183,6 +195,7 @@ function campaignPresets() {
                 genre: preset.genre || '',
                 trending_categories: preset.trending_categories || [],
                 auto_select_sources: preset.auto_select_sources || false,
+                ai_instructions: preset.ai_instructions || '',
             };
             this.keywordsText = (preset.keywords || []).join(', ');
             this.showForm = true;

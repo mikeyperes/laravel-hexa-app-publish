@@ -21,6 +21,7 @@ class CampaignPreset extends Model
         'genre',
         'trending_categories',
         'auto_select_sources',
+        'ai_instructions',
         'is_active',
         'created_by',
     ];
