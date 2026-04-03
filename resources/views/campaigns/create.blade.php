@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('title', isset($editCampaign) ? 'Edit Campaign — ' . $editCampaign->name : 'Create Campaign')
-@section('header', isset($editCampaign) ? 'Edit Campaign' : 'Create Campaign')
+@section('header', isset($editCampaign) && $editCampaign->name !== 'Untitled Campaign' ? $editCampaign->name : 'Create Campaign')
 
 @section('content')
 <div class="max-w-3xl mx-auto space-y-6" x-data="campaignCreate()">
@@ -17,8 +17,11 @@
         <div class="max-w-md"
              @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-user') form.user_id = $event.detail.item.id"
              @hexa-search-cleared.window="if ($event.detail.component_id === 'campaign-user') form.user_id = null">
+            @php
+                $selectedUser = (isset($editCampaign) && $editCampaign->user) ? json_encode(['id' => $editCampaign->user->id, 'name' => $editCampaign->user->name, 'email' => $editCampaign->user->email]) : null;
+            @endphp
             <x-hexa-smart-search url="{{ route('api.search.users') }}" name="user_id" placeholder="Search users..." display-field="name" subtitle-field="email" value-field="id" id="campaign-user" show-id
-                :selected="isset($editCampaign) && $editCampaign->user ? json_encode(['id' => $editCampaign->user->id, 'name' => $editCampaign->user->name, 'email' => $editCampaign->user->email]) : 'null'" />
+                :selected="$selectedUser" />
         </div>
     </div>
 
