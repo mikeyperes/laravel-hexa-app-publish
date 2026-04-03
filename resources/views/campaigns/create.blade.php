@@ -331,7 +331,7 @@ function campaignCreate() {
 
             // If site is selected, restore cached connection or auto-test
             if (this.form.publish_site_id) {
-                const savedConn = localStorage.getItem('campaignSiteConnection');
+                const savedConn = localStorage.getItem('campaignSiteConnection_' + this.editId);
                 let restored = false;
                 if (savedConn) {
                     try {
@@ -443,7 +443,7 @@ function campaignCreate() {
             }
             this.siteTesting = false;
             // Cache connection result
-            localStorage.setItem('campaignSiteConnection', JSON.stringify({
+            localStorage.setItem('campaignSiteConnection_' + this.editId, JSON.stringify({
                 site_id: this.form.publish_site_id,
                 status: this.siteStatus,
                 message: this.siteMessage,
@@ -523,7 +523,24 @@ function campaignCreate() {
         async runNow() {
             if (!this.editId) return;
             this.runningNow = true;
-            alert('Run Now — coming in Phase 3 (campaign execution engine)');
+            this.saveSuccess = null;
+            this.saveResult = '';
+            try {
+                const r = await fetch('/campaigns/' + this.editId + '/run-now', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ mode: this.form.delivery_mode || 'draft' }),
+                });
+                const d = await r.json();
+                this.saveSuccess = d.success;
+                this.saveResult = d.message || (d.success ? 'Campaign executed.' : 'Run failed.');
+                if (d.article_url) {
+                    this.saveResult += ' <a href="' + d.article_url + '" target="_blank" class="underline">View Article</a>';
+                }
+            } catch(e) {
+                this.saveSuccess = false;
+                this.saveResult = 'Error: ' + e.message;
+            }
             this.runningNow = false;
         },
     };

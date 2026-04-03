@@ -1271,16 +1271,6 @@
                     </div>
                 </div>
 
-                {{-- Activity Log (during prepare, hidden after publish result shows) --}}
-                <div x-show="prepareLog.length > 0 && !publishResult" x-cloak class="mt-4 bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto" x-ref="prepareLogContainer">
-                    <p class="text-xs text-gray-500 mb-2 font-semibold uppercase">Activity Log</p>
-                    <template x-for="(entry, idx) in prepareLog" :key="idx">
-                        <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
-                            <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
-                            <span :class="{'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info', 'text-yellow-400': entry.type === 'warning', 'text-gray-400': entry.type === 'step'}" x-text="entry.message" class="break-words"></span>
-                        </div>
-                    </template>
-                </div>
             </div>
 
             {{-- ═══ Publish Action ═══ --}}
@@ -1366,7 +1356,7 @@
                 </div>
 
                 {{-- Activity Log --}}
-                <div x-show="prepareLog.length > 0" x-cloak class="mt-4 bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto">
+                <div x-show="prepareLog.length > 0" x-cloak class="mt-4 bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto" x-ref="prepareLogContainer">
                     <p class="text-xs text-gray-500 mb-2 font-semibold uppercase">Activity Log</p>
                     <template x-for="(entry, idx) in prepareLog" :key="idx">
                         <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">

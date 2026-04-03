@@ -66,7 +66,7 @@ class RunCampaignsCommand extends Command
                     $this->line("    Article {$i} scheduled for: {$scheduledFor->format('H:i')}");
                 }
 
-                $result = $runService->run($campaign, $publishMode);
+                $result = $runService->run($campaign, $publishMode, $scheduledFor);
 
                 foreach ($result['log'] as $entry) {
                     $prefix = match ($entry['type']) {

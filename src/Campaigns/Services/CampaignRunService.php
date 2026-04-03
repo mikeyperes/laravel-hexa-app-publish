@@ -9,6 +9,7 @@ use hexa_core\Models\Setting;
 use hexa_package_anthropic\Services\AnthropicService;
 use hexa_package_article_extractor\Services\ArticleExtractorService;
 use hexa_package_wptoolkit\Services\WpToolkitService;
+use hexa_package_wordpress\Services\WordPressService;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
 use Illuminate\Support\Str;
@@ -25,17 +26,20 @@ class CampaignRunService
     protected ArticleExtractorService $extractor;
     protected AnthropicService $anthropic;
     protected WpToolkitService $wptoolkit;
+    protected WordPressService $wp;
 
     /**
      * @param ArticleExtractorService $extractor
      * @param AnthropicService $anthropic
      * @param WpToolkitService $wptoolkit
+     * @param WordPressService $wp
      */
-    public function __construct(ArticleExtractorService $extractor, AnthropicService $anthropic, WpToolkitService $wptoolkit)
+    public function __construct(ArticleExtractorService $extractor, AnthropicService $anthropic, WpToolkitService $wptoolkit, WordPressService $wp)
     {
         $this->extractor = $extractor;
         $this->anthropic = $anthropic;
         $this->wptoolkit = $wptoolkit;
+        $this->wp = $wp;
     }
 
     /**
@@ -43,9 +47,10 @@ class CampaignRunService
      *
      * @param PublishCampaign $campaign
      * @param string $mode 'draft' or 'publish'
+     * @param \Carbon\Carbon|null $scheduledFor When to publish (drip scheduling)
      * @return array{success: bool, log: array, article: ?PublishArticle}
      */
-    public function run(PublishCampaign $campaign, string $mode = 'draft'): array
+    public function run(PublishCampaign $campaign, string $mode = 'draft', ?\Carbon\Carbon $scheduledFor = null): array
     {
         $log = [];
         $log[] = $this->entry('info', "Starting campaign: {$campaign->name} (mode: {$mode})");
@@ -113,6 +118,7 @@ class CampaignRunService
             'ai_engine_used' => $campaign->ai_engine ?? 'claude-sonnet-4-6',
             'author' => $campaign->author,
             'user_ip' => '0.0.0.0',
+            'scheduled_for' => $scheduledFor,
         ]);
         $log[] = $this->entry('info', "Article created: {$article->article_id}");
 
@@ -146,23 +152,37 @@ class CampaignRunService
             return ['success' => false, 'log' => $log, 'article' => $article];
         }
 
-        // 6. Publish or save as draft
-        if (in_array($mode, ['publish', 'wp-draft']) && $server && $installId) {
-            $log[] = $this->entry('step', 'Publishing to WordPress...');
+        // 6. Publish or save as draft (SSH via WP Toolkit, REST via WordPressService)
+        $isWpAction = in_array($mode, ['publish', 'wp-draft']);
+        $connectionType = $site->connection_type ?? 'wptoolkit';
+        $canSsh = ($connectionType === 'wptoolkit') && $server && $installId;
+        $canRest = ($connectionType !== 'wptoolkit') && $site->wp_username && $site->wp_application_password;
+
+        if ($isWpAction && ($canSsh || $canRest)) {
+            $log[] = $this->entry('step', 'Publishing to WordPress via ' . ($canSsh ? 'SSH' : 'REST') . '...');
             try {
                 $postStatus = $mode === 'wp-draft' ? 'draft' : ($campaign->post_status ?? 'draft');
-                $postResult = $this->wptoolkit->wpCliCreatePost(
-                    $server,
-                    $installId,
-                    $article->title ?? 'Untitled',
-                    $article->body ?? '',
-                    $postStatus
-                );
+
+                if ($canSsh) {
+                    $postResult = $this->wptoolkit->wpCliCreatePost(
+                        $server,
+                        $installId,
+                        $article->title ?? 'Untitled',
+                        $article->body ?? '',
+                        $postStatus
+                    );
+                } else {
+                    $postResult = $this->wp->createPost($site->url, $site->wp_username, $site->wp_application_password, [
+                        'title'   => $article->title ?? 'Untitled',
+                        'content' => $article->body ?? '',
+                        'status'  => $postStatus,
+                    ]);
+                }
 
                 if ($postResult['success']) {
                     $wpPostId = $postResult['data']['post_id'] ?? null;
-                    // wpCliCreatePost returns only post_id, build URL from site
-                    $wpPostUrl = $wpPostId ? rtrim($site->url, '/') . '/?p=' . $wpPostId : '';
+                    // SSH returns only post_id; REST returns post_url — build fallback from site URL
+                    $wpPostUrl = $postResult['data']['post_url'] ?? ($wpPostId ? rtrim($site->url, '/') . '/?p=' . $wpPostId : '');
                     $isActualPublish = ($postStatus === 'publish');
                     $article->update([
                         'wp_post_id' => $wpPostId,
@@ -179,6 +199,9 @@ class CampaignRunService
             } catch (\Exception $e) {
                 $log[] = $this->entry('error', 'Publish error: ' . $e->getMessage());
             }
+        } else if ($isWpAction && !$canSsh && !$canRest) {
+            $log[] = $this->entry('warning', 'Site has no valid SSH or REST credentials — saving as local draft.');
+            $article->update(['status' => 'drafting', 'delivery_mode' => 'draft-local']);
         } else {
             $article->update(['status' => 'drafting', 'delivery_mode' => 'draft-local']);
             $log[] = $this->entry('success', 'Saved as local draft.');
@@ -218,7 +241,9 @@ class CampaignRunService
         $urls = [];
         $searchQuery = implode(' ', $keywords ?: ['latest news']);
 
-        if (class_exists(\hexa_package_currents_news\Services\CurrentsNewsService::class)) {
+        if (!class_exists(\hexa_package_currents_news\Services\CurrentsNewsService::class)) {
+            Log::warning('[CampaignRun] CurrentsNewsService not available — install the currents-news package and configure API key.');
+        } else {
             try {
                 $newsService = app(\hexa_package_currents_news\Services\CurrentsNewsService::class);
                 $results = $newsService->searchArticles($searchQuery, 'en', null, $genre);

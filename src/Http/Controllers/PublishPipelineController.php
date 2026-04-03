@@ -832,6 +832,10 @@ class PublishPipelineController extends Controller
             return response()->json($result);
         }
 
+        // SSH wpCliCreatePost returns only post_id (no post_url) — build it from site URL
+        $wpPostId = $result['data']['post_id'] ?? null;
+        $wpPostUrl = $result['data']['post_url'] ?? ($wpPostId ? rtrim($site->url, '/') . '/?p=' . $wpPostId : null);
+
         // Save or update the article record with comprehensive data
         $articleData = [
             'pipeline_session_id' => $validated['pipeline_session_id'] ?? null,
@@ -853,8 +857,8 @@ class PublishPipelineController extends Controller
             'user_ip'             => request()->ip(),
             'author'              => $validated['author'] ?? $site->default_author ?? null,
             'status'              => 'completed',
-            'wp_post_id'          => $result['data']['post_id'] ?? null,
-            'wp_post_url'         => $result['data']['post_url'] ?? null,
+            'wp_post_id'          => $wpPostId,
+            'wp_post_url'         => $wpPostUrl,
             'wp_status'           => $validated['status'],
             'published_at'        => now(),
             'source_articles'     => $validated['sources'] ?? null,
@@ -878,13 +882,13 @@ class PublishPipelineController extends Controller
             $article = PublishArticle::create($articleData);
         }
 
-        hexaLog('publish', 'pipeline_published', "Pipeline published to {$site->name}: {$validated['title']} (WP ID: {$result['data']['post_id']}, Article: {$article->article_id})");
+        hexaLog('publish', 'pipeline_published', "Pipeline published to {$site->name}: {$validated['title']} (WP ID: {$wpPostId}, Article: {$article->article_id})");
 
         return response()->json([
             'success'    => true,
-            'message'    => "Article published to {$site->name}. WP Post ID: {$result['data']['post_id']}.",
-            'post_id'    => $result['data']['post_id'],
-            'post_url'   => $result['data']['post_url'] ?? null,
+            'message'    => "Article published to {$site->name}. WP Post ID: {$wpPostId}.",
+            'post_id'    => $wpPostId,
+            'post_url'   => $wpPostUrl,
             'article_id' => $article->id,
             'article_url' => route('publish.articles.show', $article->id),
         ]);
