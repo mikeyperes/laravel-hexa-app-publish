@@ -306,6 +306,11 @@ function campaignCreate() {
                             this.siteStatus = conn.status;
                             this.siteMessage = conn.message;
                             this.siteAuthors = conn.authors;
+                            // Re-sync author dropdown after options render
+                            const savedAuthor = this.form.author;
+                            if (savedAuthor) {
+                                this.$nextTick(() => { this.form.author = ''; this.$nextTick(() => { this.form.author = savedAuthor; }); });
+                            }
                             restored = true;
                         }
                     } catch(e) {}
@@ -385,6 +390,11 @@ function campaignCreate() {
                 if (d.authors) {
                     this.siteAuthors = d.authors;
                     this.siteLog.push({ type: 'info', message: d.authors.length + ' authors loaded', time: time() });
+                    // Re-sync author after options render — force Alpine to match saved value
+                    const savedAuthor = this.form.author;
+                    if (savedAuthor) {
+                        this.$nextTick(() => { this.form.author = ''; this.$nextTick(() => { this.form.author = savedAuthor; }); });
+                    }
                 }
                 if (d.default_author && !this.form.author) {
                     this.form.author = d.default_author;
