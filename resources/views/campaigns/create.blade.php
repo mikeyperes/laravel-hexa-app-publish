@@ -178,12 +178,13 @@
         <h3 class="font-semibold text-gray-800">Publishing</h3>
 
         <div>
-            <label class="block text-xs text-gray-500 mb-2">Post Status</label>
-            <div class="space-y-2">
-                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="form.post_status" value="publish" class="text-blue-600"><span class="text-sm">Publish immediately</span></label>
-                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="form.post_status" value="draft" class="text-blue-600"><span class="text-sm">Spawn as draft (pending approval)</span></label>
-                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="form.post_status" value="pending" class="text-blue-600"><span class="text-sm">Pending review</span></label>
-            </div>
+            <label class="block text-xs text-gray-500 mb-2">Publish Action</label>
+            <select x-model="form.delivery_mode" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+                <option value="auto-publish">Publish Immediately</option>
+                <option value="draft-local">Save as Local Draft</option>
+                <option value="draft-wordpress">Save as WordPress Draft</option>
+                <option value="review">Schedule for Later</option>
+            </select>
         </div>
 
         {{-- Auto-publish is controlled by Campaign Preset --}}
@@ -241,6 +242,7 @@ function campaignCreate() {
                 'auto_publish' => $editCampaign->auto_publish ?? false,
                 'author' => $editCampaign->author ?? '',
                 'post_status' => $editCampaign->post_status ?? 'draft',
+                'delivery_mode' => $editCampaign->delivery_mode ?? 'draft-local',
                 'articles_per_interval' => $editCampaign->articles_per_interval ?? 1,
                 'interval_unit' => $editCampaign->interval_unit ?? 'daily',
                 'timezone' => $editCampaign->timezone ?? 'America/New_York',
@@ -255,7 +257,7 @@ function campaignCreate() {
         const initialForm = saved ? JSON.parse(saved) : {
             user_id: null, campaign_preset_id: '', publish_template_id: '', preset_id: '', publish_site_id: '',
             name: '', description: '', topic: '', keywords: [], auto_publish: false,
-            author: '', post_status: 'draft', articles_per_interval: 1, interval_unit: 'daily',
+            author: '', post_status: 'draft', delivery_mode: 'draft-local', articles_per_interval: 1, interval_unit: 'daily',
             timezone: 'America/New_York', run_at_time: '09:00', drip_interval_minutes: 60, notes: ''
         };
     @endif
