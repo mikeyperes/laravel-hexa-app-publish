@@ -78,6 +78,7 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::post('/campaigns/{id}/pause', [CampaignController::class, 'pause'])->name('campaigns.pause');
     Route::post('/campaigns/{id}/duplicate', [CampaignController::class, 'duplicate'])->name('campaigns.duplicate');
     Route::post('/campaigns/{id}/run-now', [CampaignController::class, 'runNow'])->name('campaigns.run-now');
+    Route::delete('/campaigns/{id}', [CampaignController::class, 'destroy'])->name('campaigns.destroy');
 
     // AI Activity
     Route::get('/publish/ai-activity', [AiActivityController::class, 'index'])->name('publish.ai-activity.index');

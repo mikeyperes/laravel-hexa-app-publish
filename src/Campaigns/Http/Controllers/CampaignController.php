@@ -225,6 +225,23 @@ class CampaignController extends Controller
     }
 
     /**
+     * Delete a campaign.
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function destroy(int $id): JsonResponse
+    {
+        $campaign = PublishCampaign::findOrFail($id);
+        $name = $campaign->name;
+        $campaign->delete();
+
+        hexaLog('campaigns', 'campaign_deleted', "Campaign deleted: {$name}");
+
+        return response()->json(['success' => true, 'message' => "Campaign '{$name}' deleted."]);
+    }
+
+    /**
      * Show edit form for a campaign.
      *
      * @param int $id

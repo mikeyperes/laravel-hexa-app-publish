@@ -47,6 +47,7 @@
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Articles</th>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Next Run</th>
+                        <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase w-10"></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -79,6 +80,17 @@
                             </div>
                         </td>
                         <td class="px-5 py-3 text-xs text-gray-500">{{ $c->next_run_at ? $c->next_run_at->diffForHumans() : '—' }}</td>
+                        <td class="px-5 py-3" x-data="{ deleting: false }">
+                            <button @click="
+                                if (!confirm('Delete campaign {{ addslashes($c->name) }}?')) return;
+                                deleting = true;
+                                fetch('/campaigns/{{ $c->id }}', { method: 'DELETE', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content, 'Accept': 'application/json' } })
+                                    .then(r => r.json()).then(d => { if (d.success) location.reload(); else { alert(d.message); deleting = false; } })
+                                    .catch(() => deleting = false);
+                            " :disabled="deleting" class="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-50">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            </button>
+                        </td>
                     </tr>
                     @endforeach
                 </tbody>
