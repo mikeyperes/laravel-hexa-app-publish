@@ -21,47 +21,52 @@
         </div>
     </div>
 
-    {{-- Campaign Preset --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div class="flex items-center justify-between mb-3">
-            <h3 class="font-semibold text-gray-800">Campaign Preset</h3>
-            <a href="{{ route('campaigns.presets.index') }}" class="text-xs text-blue-600 hover:text-blue-800">Manage Presets</a>
-        </div>
-        <select x-model="form.campaign_preset_id" @change="loadPreset()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-            <option value="">-- No preset --</option>
-            @foreach($campaignPresets as $cp)
-                <option value="{{ $cp->id }}">{{ $cp->name }} ({{ ucfirst($cp->source_method) }}{{ $cp->genre ? ' — ' . ucfirst($cp->genre) : '' }})</option>
-            @endforeach
-        </select>
-        <div x-show="presetInfo" x-cloak class="mt-2 text-xs text-gray-500 bg-gray-50 rounded-lg p-3 break-words" x-text="presetInfo"></div>
-    </div>
+    {{-- Templates & Presets --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+        <h3 class="font-semibold text-gray-800">Templates & Presets</h3>
 
-    {{-- AI Template --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div class="flex items-center justify-between mb-3">
-            <h3 class="font-semibold text-gray-800">AI Template</h3>
-            <a href="{{ route('publish.templates.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage Templates</a>
+        {{-- Campaign Preset --}}
+        <div>
+            <div class="flex items-center justify-between mb-1">
+                <label class="text-xs text-gray-500">Campaign Preset</label>
+                <a href="{{ route('campaigns.presets.index') }}" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
+            </div>
+            <select x-model="form.campaign_preset_id" @change="loadPreset()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+                <option value="">-- No preset --</option>
+                @foreach($campaignPresets as $cp)
+                    <option value="{{ $cp->id }}">{{ $cp->name }} ({{ ucfirst($cp->source_method) }}{{ $cp->genre ? ' — ' . ucfirst($cp->genre) : '' }})</option>
+                @endforeach
+            </select>
+            <div x-show="presetInfo" x-cloak class="mt-1 text-xs text-gray-500 break-words" x-text="presetInfo"></div>
         </div>
-        <select x-model="form.publish_template_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-            <option value="">-- Default --</option>
-            @foreach($aiTemplates as $t)
-                <option value="{{ $t->id }}">{{ $t->name }}</option>
-            @endforeach
-        </select>
-    </div>
 
-    {{-- WordPress Preset --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div class="flex items-center justify-between mb-3">
-            <h3 class="font-semibold text-gray-800">WordPress Preset</h3>
-            <a href="{{ route('publish.presets.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage Presets</a>
+        {{-- AI Template --}}
+        <div>
+            <div class="flex items-center justify-between mb-1">
+                <label class="text-xs text-gray-500">AI Template</label>
+                <a href="{{ route('publish.templates.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
+            </div>
+            <select x-model="form.publish_template_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+                <option value="">-- Default --</option>
+                @foreach($aiTemplates as $t)
+                    <option value="{{ $t->id }}">{{ $t->name }}</option>
+                @endforeach
+            </select>
         </div>
-        <select x-model="form.preset_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-            <option value="">-- Default --</option>
-            @foreach($wpPresets as $p)
-                <option value="{{ $p->id }}">{{ $p->name }}</option>
-            @endforeach
-        </select>
+
+        {{-- WordPress Preset --}}
+        <div>
+            <div class="flex items-center justify-between mb-1">
+                <label class="text-xs text-gray-500">WordPress Preset</label>
+                <a href="{{ route('publish.presets.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
+            </div>
+            <select x-model="form.preset_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+                <option value="">-- Default --</option>
+                @foreach($wpPresets as $p)
+                    <option value="{{ $p->id }}">{{ $p->name }}</option>
+                @endforeach
+            </select>
+        </div>
     </div>
 
     {{-- WordPress Site --}}
@@ -278,10 +283,7 @@ function campaignCreate() {
                 this.loadPreset();
             }
 
-            // Test site if already selected
-            if (this.form.publish_site_id) {
-                this.testSiteConnection();
-            }
+            // Do NOT auto-test site on page load — only test when user changes dropdown
         },
 
         calculatePostTime(index) {
