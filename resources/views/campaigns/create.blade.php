@@ -18,7 +18,7 @@
              @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-user') { form.user_id = $event.detail.item.id; loadUserPresets($event.detail.item.id); }"
              @hexa-search-cleared.window="if ($event.detail.component_id === 'campaign-user') form.user_id = null">
             @php
-                $selectedUser = (isset($editCampaign) && $editCampaign->user) ? json_encode(['id' => $editCampaign->user->id, 'name' => $editCampaign->user->name, 'email' => $editCampaign->user->email]) : null;
+                $selectedUser = (isset($editCampaign) && $editCampaign->user) ? ['id' => $editCampaign->user->id, 'name' => $editCampaign->user->name, 'email' => $editCampaign->user->email] : null;
             @endphp
             <x-hexa-smart-search url="{{ route('api.search.users') }}" name="user_id" placeholder="Search users..." display-field="name" subtitle-field="email" value-field="id" id="campaign-user" show-id
                 :selected="$selectedUser" />
@@ -47,7 +47,7 @@
         {{-- AI Template --}}
         <div>
             <div class="flex items-center justify-between mb-1">
-                <label class="text-xs text-gray-500">AI Template</label>
+                <label class="text-xs text-gray-500 inline-flex items-center gap-1">AI Template <svg x-show="loadingPresets" x-cloak class="w-3 h-3 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></label>
                 <a href="{{ route('publish.templates.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
             </div>
             <select x-model="form.publish_template_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
@@ -61,7 +61,7 @@
         {{-- WordPress Preset --}}
         <div>
             <div class="flex items-center justify-between mb-1">
-                <label class="text-xs text-gray-500">WordPress Preset</label>
+                <label class="text-xs text-gray-500 inline-flex items-center gap-1">WordPress Preset <svg x-show="loadingPresets" x-cloak class="w-3 h-3 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></label>
                 <a href="{{ route('publish.presets.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
             </div>
             <select x-model="form.preset_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
@@ -273,15 +273,22 @@ function campaignCreate() {
         siteMessage: '',
         siteLog: [],
         siteAuthors: [],
+        loadingPresets: false,
 
         _saveTimer: null,
 
+        _initialized: false,
+
         init() {
-            // Auto-save to DB on any form change (debounced 2s)
-            this.$watch('form', () => {
-                clearTimeout(this._saveTimer);
-                this._saveTimer = setTimeout(() => this.autoSave(), 2000);
-            }, { deep: true });
+            // Delay watch to avoid auto-saving on initial hydration
+            setTimeout(() => {
+                this._initialized = true;
+                this.$watch('form', () => {
+                    if (!this._initialized) return;
+                    clearTimeout(this._saveTimer);
+                    this._saveTimer = setTimeout(() => this.autoSave(), 2000);
+                }, { deep: true });
+            }, 3000);
 
             // Auto-select default presets if not already set
             const defaultPreset = presets.find(p => p.is_default);
@@ -324,6 +331,7 @@ function campaignCreate() {
 
         async loadUserPresets(userId) {
             if (!userId) return;
+            this.loadingPresets = true;
             try {
                 // Load WP presets for this user and auto-select default
                 const presetsResp = await fetch('{{ route("publish.presets.index") }}?user_id=' + userId + '&format=json', { headers: { 'Accept': 'application/json' } });
@@ -343,6 +351,7 @@ function campaignCreate() {
                     this.form.publish_template_id = String(defaultAi.id);
                 }
             } catch(e) { /* silent */ }
+            this.loadingPresets = false;
         },
 
         calculatePostTime(index) {
