@@ -90,7 +90,7 @@
                 <template x-if="!siteTesting && siteStatus === false"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
                 <template x-if="!siteTesting && siteStatus === null"><svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
                 <span class="text-sm" :class="siteStatus === true ? 'text-green-800' : (siteStatus === false ? 'text-red-800' : 'text-gray-600')" x-text="siteMessage || 'Site selected — click Test to verify connection'"></span>
-                <button x-show="!siteTesting && siteStatus !== true" @click="testSiteConnection()" class="text-xs text-blue-600 hover:text-blue-800 ml-2">Test</button>
+                <button x-show="!siteTesting" @click="testSiteConnection()" class="text-xs text-blue-600 hover:text-blue-800 ml-2" x-text="siteStatus === true ? 'Retest' : 'Test'"></button>
             </div>
             {{-- Connection log --}}
             <div x-show="siteLog.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
@@ -306,10 +306,10 @@ function campaignCreate() {
                             this.siteStatus = conn.status;
                             this.siteMessage = conn.message;
                             this.siteAuthors = conn.authors;
-                            // Re-sync author dropdown after options render
+                            // Re-sync author dropdown — timeout for DOM to render options
                             const savedAuthor = this.form.author;
                             if (savedAuthor) {
-                                this.$nextTick(() => { this.form.author = ''; this.$nextTick(() => { this.form.author = savedAuthor; }); });
+                                setTimeout(() => { this.form.author = ''; setTimeout(() => { this.form.author = savedAuthor; }, 50); }, 200);
                             }
                             restored = true;
                         }
@@ -390,10 +390,10 @@ function campaignCreate() {
                 if (d.authors) {
                     this.siteAuthors = d.authors;
                     this.siteLog.push({ type: 'info', message: d.authors.length + ' authors loaded', time: time() });
-                    // Re-sync author after options render — force Alpine to match saved value
+                    // Re-sync author — timeout for DOM to render options
                     const savedAuthor = this.form.author;
                     if (savedAuthor) {
-                        this.$nextTick(() => { this.form.author = ''; this.$nextTick(() => { this.form.author = savedAuthor; }); });
+                        setTimeout(() => { this.form.author = ''; setTimeout(() => { this.form.author = savedAuthor; }, 50); }, 200);
                     }
                 }
                 if (d.default_author && !this.form.author) {
