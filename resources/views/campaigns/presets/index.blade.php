@@ -85,8 +85,8 @@
             {{-- Auto-select toggle --}}
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-sm font-medium text-gray-700">Auto-select Sources</p>
-                    <p class="text-xs text-gray-400">System automatically picks articles based on preferences</p>
+                    <p class="text-sm font-medium text-gray-700">Automatically Publish</p>
+                    <p class="text-xs text-gray-400">System handles everything: topics, articles, photos, spinning, publishing. No manual steps.</p>
                 </div>
                 <button @click="form.auto_select_sources = !form.auto_select_sources" type="button"
                     class="relative inline-flex h-7 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"

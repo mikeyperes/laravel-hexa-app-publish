@@ -77,11 +77,27 @@ class CampaignController extends Controller
      */
     public function create(Request $request): View
     {
+        // {id_in_url}: auto-create draft campaign if no ?id=
+        if (!$request->filled('id')) {
+            $site = PublishSite::where('status', 'connected')->first();
+            $campaign = PublishCampaign::create([
+                'name' => 'Untitled Campaign',
+                'campaign_id' => PublishCampaign::generateCampaignId(),
+                'publish_account_id' => $site ? ($site->publish_account_id ?: null) : null,
+                'publish_site_id' => $site ? $site->id : null,
+                'status' => 'draft',
+                'articles_per_interval' => 1,
+                'interval_unit' => 'daily',
+                'created_by' => auth()->id(),
+            ]);
+            return redirect()->route('campaigns.create', ['id' => $campaign->id]);
+        }
+
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
         $campaignPresets = \hexa_app_publish\Campaigns\Models\CampaignPreset::orderBy('name')->get();
         $aiTemplates = PublishTemplate::orderBy('name')->get();
         $wpPresets = PublishPreset::orderBy('name')->get();
-        $editCampaign = $request->filled('id') ? PublishCampaign::find($request->input('id')) : null;
+        $editCampaign = PublishCampaign::find($request->input('id'));
         $timezones = \DateTimeZone::listIdentifiers(\DateTimeZone::ALL);
 
         return view('app-publish::campaigns.create', [

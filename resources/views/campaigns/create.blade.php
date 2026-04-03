@@ -168,20 +168,7 @@
             </div>
         </div>
 
-        {{-- Auto-publish toggle --}}
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="text-sm font-medium text-gray-700">Automatically Publish</p>
-                <p class="text-xs text-gray-400">System handles everything: topics, articles, photos, spinning, publishing. No manual steps.</p>
-            </div>
-            <button @click="form.auto_publish = !form.auto_publish" type="button"
-                class="relative inline-flex h-7 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-                :class="form.auto_publish ? 'bg-green-500' : 'bg-gray-300'"
-                role="switch" :aria-checked="form.auto_publish">
-                <span class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                    :class="form.auto_publish ? 'translate-x-7' : 'translate-x-0'"></span>
-            </button>
-        </div>
+        {{-- Auto-publish is controlled by Campaign Preset --}}
     </div>
 
     {{-- AI Instructions --}}
