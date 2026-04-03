@@ -75,7 +75,7 @@ class CampaignController extends Controller
      * @param Request $request
      * @return View
      */
-    public function create(Request $request): View
+    public function create(Request $request): View|\Illuminate\Http\RedirectResponse
     {
         // {id_in_url}: auto-create draft campaign if no ?id=
         if (!$request->filled('id')) {
