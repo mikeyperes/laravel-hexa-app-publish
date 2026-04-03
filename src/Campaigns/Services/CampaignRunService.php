@@ -60,7 +60,7 @@ class CampaignRunService
 
         $account = HostingAccount::find($site->hosting_account_id);
         $server = $account ? WhmServer::find($account->whm_server_id) : null;
-        $installId = $site->wptoolkit_instance_id;
+        $installId = $site->wordpress_install_id;
 
         // 2. Find source articles (from campaign preset keywords/genre)
         $log[] = $this->entry('step', 'Finding source articles...');
@@ -76,7 +76,7 @@ class CampaignRunService
         $sourceTexts = [];
         foreach ($sourceUrls as $url) {
             try {
-                $result = $this->extractor->extractFromUrl($url);
+                $result = $this->extractor->extract($url);
                 if ($result['success'] && !empty($result['data']['text'])) {
                     $sourceTexts[] = [
                         'url' => $url,
@@ -147,17 +147,17 @@ class CampaignRunService
         }
 
         // 6. Publish or save as draft
-        if ($mode === 'publish' && $server && $installId) {
+        if (in_array($mode, ['publish', 'wp-draft']) && $server && $installId) {
             $log[] = $this->entry('step', 'Publishing to WordPress...');
             try {
-                $postStatus = $campaign->post_status ?? 'draft';
-                $postResult = $this->wptoolkit->wpCliCreatePost($server, $installId, [
-                    'post_title' => $article->title,
-                    'post_content' => $article->body,
-                    'post_status' => $postStatus,
-                    'post_author' => $campaign->author ?? '',
-                    'post_excerpt' => $article->excerpt ?? '',
-                ]);
+                $postStatus = $mode === 'wp-draft' ? 'draft' : ($campaign->post_status ?? 'draft');
+                $postResult = $this->wptoolkit->wpCliCreatePost(
+                    $server,
+                    $installId,
+                    $article->title ?? 'Untitled',
+                    $article->body ?? '',
+                    $postStatus
+                );
 
                 if ($postResult['success']) {
                     $wpPostId = $postResult['data']['post_id'] ?? null;
@@ -262,7 +262,7 @@ class CampaignRunService
         }
 
         $model = $campaign->ai_engine ?? 'claude-sonnet-4-6';
-        $result = $this->anthropic->sendMessage($prompt, $model, 'You are a professional content writer.');
+        $result = $this->anthropic->chat('You are a professional content writer.', $prompt, $model);
 
         if (!$result['success']) {
             return ['success' => false, 'message' => $result['message'] ?? 'AI call failed'];

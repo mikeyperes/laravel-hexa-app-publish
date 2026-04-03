@@ -45,9 +45,24 @@ class RunCampaignsCommand extends Command
             $this->line("  Campaign: {$campaign->name} ({$campaign->campaign_id})");
 
             $count = $campaign->articles_per_interval;
+            $dripMinutes = $campaign->drip_interval_minutes ?? 60;
+
             for ($i = 0; $i < $count; $i++) {
-                $mode = $campaign->auto_publish ? ($campaign->post_status ?? 'draft') : 'draft';
-                $publishMode = ($mode === 'publish') ? 'publish' : 'draft';
+                // Map delivery_mode to run mode
+                $publishMode = match ($campaign->delivery_mode) {
+                    'auto-publish' => 'publish',
+                    'draft-wordpress' => 'wp-draft',
+                    'draft-local' => 'draft',
+                    'review' => 'draft',
+                    'notify' => 'draft',
+                    default => 'draft',
+                };
+
+                // Drip delay between articles (skip first)
+                if ($i > 0 && $dripMinutes > 0) {
+                    $this->line("    Waiting {$dripMinutes}min before next article...");
+                    sleep($dripMinutes * 60);
+                }
 
                 $result = $runService->run($campaign, $publishMode);
 

@@ -1570,12 +1570,14 @@ function publishPipeline() {
                     if (state.selectedSiteId) {
                         this.selectedSiteId = String(state.selectedSiteId);
                         this.selectedSite = state.selectedSite || null;
-                        // Restore site without re-testing connection
+                        // Restore site + connection state without re-testing
                         this.siteConnectionStatus = state.siteConnectionStatus ?? null;
-                        setTimeout(() => {
+                        if (state.siteConnectionLog) this.siteConnectionLog = state.siteConnectionLog;
+                        if (state.siteAuthors) this.siteAuthors = state.siteAuthors;
+                        this.$nextTick(() => {
                             this.selectedSiteId = String(state.selectedSiteId);
                             this.selectedSite = this.sites.find(s => s.id == state.selectedSiteId) || state.selectedSite || null;
-                        }, 100);
+                        });
                     }
                     if (state.sources) this.sources = state.sources;
                     if (state.checkResults) { this.checkResults = state.checkResults; this.checkPassCount = state.checkResults.filter(r => r.success).length; }
@@ -1611,12 +1613,12 @@ function publishPipeline() {
                                 this.selectedTemplateId = String(savedTemplateId);
                                 this.selectedTemplate = this.templates.find(t => t.id == savedTemplateId) || savedTemplate;
                             }
+                            this._restoring = false;
                         });
+                    } else {
+                        this._restoring = false;
                     }
-                } catch (e) { /* ignore corrupt state */ }
-                // Clear restoring flag after all async init settles
-                // Clear after SSH connection test could complete (up to 30s)
-                setTimeout(() => { this._restoring = false; }, 30000);
+                } catch (e) { this._restoring = false; }
             }
 
             this.$watch('currentStep', () => this.savePipelineState());
@@ -1648,6 +1650,8 @@ function publishPipeline() {
                 selectedSiteId: this.selectedSiteId,
                 selectedSite: this.selectedSite,
                 siteConnectionStatus: this.siteConnectionStatus,
+                siteConnectionLog: this.siteConnectionLog,
+                siteAuthors: this.siteAuthors,
                 sources: this.sources,
                 checkResults: this.checkResults,
                 approvedSources: this.approvedSources,
@@ -1865,14 +1869,7 @@ function publishPipeline() {
             this.siteConnectionLog.push({ type, message, time });
         },
 
-        confirmSite() {
-            if (this.selectedSite) {
-                this.completeStep(3);
-                this.openStep(4);
-            }
-        },
-
-        // ── Step 4: Sources ───────────────────────────────
+        // ── Step 3: Sources ───────────────────────────────
         addPastedUrls() {
             const urls = this.pasteText.split('\n').map(u => u.trim()).filter(u => u && u.startsWith('http'));
             urls.forEach(url => {
