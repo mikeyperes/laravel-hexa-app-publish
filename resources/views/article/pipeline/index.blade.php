@@ -1570,12 +1570,11 @@ function publishPipeline() {
                     if (state.selectedSiteId) {
                         this.selectedSiteId = String(state.selectedSiteId);
                         this.selectedSite = state.selectedSite || null;
-                        // Reset connection status — will be re-tested
-                        this.siteConnectionStatus = null;
-                        // Wait for DOM to render options, then select and test
+                        // Restore site without re-testing connection
+                        this.siteConnectionStatus = state.siteConnectionStatus ?? null;
                         setTimeout(() => {
                             this.selectedSiteId = String(state.selectedSiteId);
-                            this.selectSite();
+                            this.selectedSite = this.sites.find(s => s.id == state.selectedSiteId) || state.selectedSite || null;
                         }, 100);
                     }
                     if (state.sources) this.sources = state.sources;
@@ -1648,6 +1647,7 @@ function publishPipeline() {
                 selectedTemplate: this.selectedTemplate,
                 selectedSiteId: this.selectedSiteId,
                 selectedSite: this.selectedSite,
+                siteConnectionStatus: this.siteConnectionStatus,
                 sources: this.sources,
                 checkResults: this.checkResults,
                 approvedSources: this.approvedSources,
