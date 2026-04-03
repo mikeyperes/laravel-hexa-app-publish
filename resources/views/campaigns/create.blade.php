@@ -376,13 +376,16 @@ function campaignCreate() {
                 }
 
                 // Load AI templates for this user and auto-select default
-                const templatesResp = await fetch('{{ route("publish.templates.index") }}?account_id=' + userId + '&format=json', { headers: { 'Accept': 'application/json' } });
+                const templatesResp = await fetch('{{ route("publish.templates.index") }}?user_id=' + userId + '&format=json', { headers: { 'Accept': 'application/json' } });
                 const templatesData = await templatesResp.json();
                 const userTemplates = templatesData.data || templatesData || [];
                 const defaultAi = userTemplates.find(t => t.is_default);
                 if (defaultAi && !this.form.publish_template_id) {
                     this.form.publish_template_id = String(defaultAi.id);
                 }
+                // Populate fields from selected presets
+                if (this.form.preset_id) this.loadWpPreset();
+                if (this.form.publish_template_id) this.loadAiTemplate();
             } catch(e) { /* silent */ }
             this.loadingPresets = false;
         },

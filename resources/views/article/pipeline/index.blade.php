@@ -102,7 +102,7 @@
                 </span>
                 <span class="font-semibold text-gray-800">Website & Template</span>
                 <span x-show="selectedSite && siteConnectionStatus === true" x-cloak class="text-sm text-green-600" x-text="selectedSite?.name"></span>
-                <span x-show="selectedSite && siteConnectionStatus === null" x-cloak class="text-sm text-blue-500 inline-flex items-center gap-1">
+                <span x-show="selectedSite && siteConnectionStatus === null && loadingAuthors" x-cloak class="text-sm text-blue-500 inline-flex items-center gap-1">
                     <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     Connecting...
                 </span>
@@ -1789,7 +1789,7 @@ function publishPipeline() {
             if (!this.selectedUser) return;
             this.templatesLoading = true;
             try {
-                const resp = await fetch(`{{ route('publish.templates.index') }}?account_id=${this.selectedUser.id}&format=json`, {
+                const resp = await fetch(`{{ route('publish.templates.index') }}?user_id=${this.selectedUser.id}&format=json`, {
                     headers: { 'Accept': 'application/json' }
                 });
                 const data = await resp.json();
@@ -2785,7 +2785,6 @@ function publishPipeline() {
                         tag_ids: this.preparedTagIds,
                         status: wpStatus,
                         date: this.publishAction === 'future' ? this.scheduleDate : null,
-                        draft_id: this.draftId,
                         draft_id: this.draftId,
                         categories: this.suggestedCategories,
                         tags: this.suggestedTags,
