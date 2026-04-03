@@ -270,7 +270,18 @@ function campaignCreate() {
                 this.loadPreset();
             }
 
-            // Do NOT auto-test site on page load — only test when user changes dropdown
+            // Restore site connection status from localStorage (don't re-test)
+            const savedConn = localStorage.getItem('campaignSiteConnection');
+            if (savedConn) {
+                try {
+                    const conn = JSON.parse(savedConn);
+                    if (conn.site_id == this.form.publish_site_id) {
+                        this.siteStatus = conn.status;
+                        this.siteMessage = conn.message;
+                        this.siteAuthors = conn.authors || [];
+                    }
+                } catch(e) {}
+            }
         },
 
         calculatePostTime(index) {
@@ -316,6 +327,13 @@ function campaignCreate() {
                 this.siteLog.push({ type: 'error', message: e.message, time: time() });
             }
             this.siteTesting = false;
+            // Cache connection result
+            localStorage.setItem('campaignSiteConnection', JSON.stringify({
+                site_id: this.form.publish_site_id,
+                status: this.siteStatus,
+                message: this.siteMessage,
+                authors: this.siteAuthors,
+            }));
         },
 
         loadPreset() {

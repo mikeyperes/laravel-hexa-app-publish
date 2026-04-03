@@ -77,19 +77,28 @@ class CampaignController extends Controller
      */
     public function create(Request $request): View|\Illuminate\Http\RedirectResponse
     {
-        // {id_in_url}: auto-create draft campaign if no ?id=
+        // {id_in_url}: reuse existing untitled draft or create one
         if (!$request->filled('id')) {
-            $site = PublishSite::where('status', 'connected')->first();
-            $campaign = PublishCampaign::create([
-                'name' => 'Untitled Campaign',
-                'campaign_id' => PublishCampaign::generateCampaignId(),
-                'publish_account_id' => $site ? ($site->publish_account_id ?: null) : null,
-                'publish_site_id' => $site ? $site->id : null,
-                'status' => 'draft',
-                'articles_per_interval' => 1,
-                'interval_unit' => 'daily',
-                'created_by' => auth()->id(),
-            ]);
+            $campaign = PublishCampaign::where('created_by', auth()->id())
+                ->where('status', 'draft')
+                ->where('name', 'Untitled Campaign')
+                ->orderByDesc('id')
+                ->first();
+
+            if (!$campaign) {
+                $site = PublishSite::where('status', 'connected')->first();
+                $campaign = PublishCampaign::create([
+                    'name' => 'Untitled Campaign',
+                    'campaign_id' => PublishCampaign::generateCampaignId(),
+                    'publish_account_id' => $site ? ($site->publish_account_id ?: null) : null,
+                    'publish_site_id' => $site ? $site->id : null,
+                    'status' => 'draft',
+                    'articles_per_interval' => 1,
+                    'interval_unit' => 'daily',
+                    'created_by' => auth()->id(),
+                ]);
+            }
+
             return redirect()->route('campaigns.create', ['id' => $campaign->id]);
         }
 
