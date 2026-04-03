@@ -325,6 +325,11 @@ function campaignCreate() {
                 this.loadPreset();
             }
 
+            // Populate override fields from already-selected presets
+            if (this.form.campaign_preset_id) this.loadPreset();
+            if (this.form.publish_template_id) this.loadAiTemplate();
+            if (this.form.preset_id) this.loadWpPreset();
+
             // If site is selected, restore cached connection or auto-test
             if (this.form.publish_site_id) {
                 const savedConn = localStorage.getItem('campaignSiteConnection');
