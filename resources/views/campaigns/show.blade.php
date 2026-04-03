@@ -1,122 +1,135 @@
-{{-- Campaign detail --}}
 @extends('layouts.app')
-@section('title', $campaign->name)
-@section('header', $campaign->name)
+@section('title', $campaign->name . ' — Campaign')
+@section('header', 'Campaign: ' . $campaign->name)
 
 @section('content')
-<div class="space-y-6" x-data="campaignActions()">
+<div class="max-w-5xl mx-auto space-y-4" x-data="campaignShow()">
 
     {{-- Header --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
-                <p class="text-xs font-mono text-gray-400 mb-1">{{ $campaign->campaign_id }}</p>
-                <h2 class="text-xl font-semibold text-gray-800 break-words">{{ $campaign->name }}</h2>
-                <p class="text-sm text-gray-500 mt-1">Account: <a href="{{ route('publish.accounts.show', $campaign->account->id) }}" class="text-blue-600 hover:text-blue-800">{{ $campaign->account->name }}</a></p>
-                <p class="text-sm text-gray-500">Site: <a href="{{ route('publish.sites.show', $campaign->site->id) }}" class="text-blue-600 hover:text-blue-800">{{ $campaign->site->name }}</a></p>
-                @if($campaign->template)
-                    <p class="text-sm text-gray-500">Template: <a href="{{ route('publish.templates.show', $campaign->template->id) }}" class="text-blue-600 hover:text-blue-800">{{ $campaign->template->name }}</a></p>
-                @endif
-                @if($campaign->description)
-                    <p class="text-sm text-gray-500 mt-2 break-words">{{ $campaign->description }}</p>
-                @endif
+                <div class="flex items-center gap-2 mb-1">
+                    <p class="text-xs font-mono text-gray-400">{{ $campaign->campaign_id }}</p>
+                    @if($campaign->status === 'active')
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">Active</span>
+                    @elseif($campaign->status === 'paused')
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700">Paused</span>
+                    @else
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500">{{ ucfirst($campaign->status) }}</span>
+                    @endif
+                    @if($campaign->auto_publish)
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700">Auto-Publish</span>
+                    @endif
+                </div>
+                <h2 class="text-xl font-semibold text-gray-800">{{ $campaign->name }}</h2>
             </div>
-            <div class="flex items-center gap-3">
-                @if($campaign->status === 'active')
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>
-                    <button @click="pause()" :disabled="acting" class="bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-yellow-600 disabled:opacity-60 inline-flex items-center gap-2">
-                        <svg x-show="acting" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                        <span x-text="acting ? 'Pausing...' : 'Pause'"></span>
-                    </button>
-                @elseif($campaign->status === 'paused' || $campaign->status === 'draft')
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium {{ $campaign->status === 'paused' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600' }}">{{ ucfirst($campaign->status) }}</span>
-                    <button @click="activate()" :disabled="acting" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-60 inline-flex items-center gap-2">
-                        <svg x-show="acting" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                        <span x-text="acting ? 'Activating...' : 'Activate'"></span>
-                    </button>
-                @else
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{{ ucfirst($campaign->status) }}</span>
-                @endif
-                <a href="{{ route('campaigns.edit', $campaign->id) }}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Edit</a>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('campaigns.create', ['id' => $campaign->id]) }}" class="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 px-3 py-1.5 rounded-lg">Edit</a>
+                <button @click="runNow('draft')" :disabled="running" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1">
+                    <svg x-show="running" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Run as Draft
+                </button>
+                <button @click="runNow('publish')" :disabled="running" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 disabled:opacity-50 inline-flex items-center gap-1">
+                    Instant Publish
+                </button>
             </div>
         </div>
-        <div x-show="actionResult" x-cloak class="mt-3 rounded-lg px-4 py-2 text-sm" :class="actionSuccess ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'">
-            <span x-text="actionResult"></span>
-        </div>
+        <div x-show="runResult" x-cloak class="mt-3 p-3 rounded-lg text-sm border" :class="runSuccess ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'" x-text="runResult"></div>
     </div>
 
-    {{-- Config --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-3">Configuration</h3>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div><p class="text-xs text-gray-400 uppercase">Schedule</p><p class="text-gray-700 mt-1">{{ $campaign->articles_per_interval }}/{{ $campaign->interval_unit }}</p></div>
-            <div><p class="text-xs text-gray-400 uppercase">Delivery</p><p class="text-gray-700 mt-1">{{ ucwords(str_replace('-', ' ', $campaign->delivery_mode)) }}</p></div>
-            <div><p class="text-xs text-gray-400 uppercase">Topic</p><p class="text-gray-700 mt-1 break-words">{{ $campaign->topic ?? '—' }}</p></div>
-            <div><p class="text-xs text-gray-400 uppercase">Article Type</p><p class="text-gray-700 mt-1">{{ $campaign->article_type ? ucwords(str_replace('-', ' ', $campaign->article_type)) : 'Template default' }}</p></div>
-            <div><p class="text-xs text-gray-400 uppercase">AI Engine</p><p class="text-gray-700 mt-1">{{ $campaign->ai_engine ? ucfirst($campaign->ai_engine) : 'Template default' }}</p></div>
-            <div><p class="text-xs text-gray-400 uppercase">Max Links</p><p class="text-gray-700 mt-1">{{ $campaign->max_links_per_article ?? '—' }}</p></div>
-            <div><p class="text-xs text-gray-400 uppercase">Last Run</p><p class="text-gray-700 mt-1">{{ $campaign->last_run_at ? $campaign->last_run_at->diffForHumans() : 'Never' }}</p></div>
-            <div><p class="text-xs text-gray-400 uppercase">Next Run</p><p class="text-gray-700 mt-1">{{ $campaign->next_run_at ? $campaign->next_run_at->diffForHumans() : '—' }}</p></div>
-        </div>
+    {{-- Details (row layout) --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-2">
+        <h3 class="font-semibold text-gray-800 mb-3">Details</h3>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">User</span><p class="text-sm text-gray-800">{{ $campaign->user->name ?? '—' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Site</span><p class="text-sm text-gray-800">{{ $campaign->site->name ?? '—' }} @if($campaign->site)<span class="text-xs text-gray-400">({{ $campaign->site->url }})</span>@endif</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Campaign Preset</span><p class="text-sm text-gray-800">{{ $campaign->campaignPreset->name ?? '—' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">AI Template</span><p class="text-sm text-gray-800">{{ $campaign->template->name ?? '—' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">WP Preset</span><p class="text-sm text-gray-800">{{ $campaign->wpPreset->name ?? '—' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Author</span><p class="text-sm text-gray-800">{{ $campaign->author ?? '—' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Post Status</span><p class="text-sm text-gray-800">{{ ucfirst($campaign->post_status ?? 'draft') }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Schedule</span><p class="text-sm text-gray-800">{{ $campaign->articles_per_interval }} post(s) / {{ $campaign->interval_unit }}{{ $campaign->run_at_time ? ' at ' . $campaign->run_at_time : '' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Timezone</span><p class="text-sm text-gray-800">{{ $campaign->timezone ?? 'America/New_York' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Last Run</span><p class="text-sm text-gray-800">{{ $campaign->last_run_at ? $campaign->last_run_at->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A T') . ' (' . $campaign->last_run_at->utc()->format('H:i') . ' UTC)' : 'Never' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Next Run</span><p class="text-sm text-gray-800">{{ $campaign->next_run_at ? $campaign->next_run_at->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A T') . ' (' . $campaign->next_run_at->utc()->format('H:i') . ' UTC)' : '—' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Auto-Publish</span><p class="text-sm text-gray-800">{{ $campaign->auto_publish ? 'Yes — fully automated' : 'No — manual review' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Created</span><p class="text-sm text-gray-800">{{ $campaign->created_at ? $campaign->created_at->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A T') : '—' }} by {{ $campaign->creator->name ?? '—' }}</p></div>
     </div>
 
-    {{-- Articles --}}
+    {{-- Campaign History (articles) --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 class="font-semibold text-gray-800">Articles ({{ $campaign->articles->count() }})</h3>
-            <a href="{{ route('publish.articles.index', ['campaign_id' => $campaign->id]) }}" class="text-sm text-blue-600 hover:text-blue-800">View All</a>
+        <div class="p-4 border-b border-gray-200">
+            <h3 class="font-semibold text-gray-800">Campaign History ({{ $campaign->articles->count() }} articles)</h3>
         </div>
-        @if($campaign->articles->isEmpty())
-            <div class="p-5 text-center text-gray-500 text-sm">No articles spawned yet.</div>
-        @else
-            <table class="w-full text-sm text-left">
-                <thead class="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Title</th>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Words</th>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Status</th>
-                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Created</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                    @foreach($campaign->articles as $article)
-                    <tr class="hover:bg-gray-50 {{ $article->status === 'completed' ? 'opacity-50' : '' }}">
-                        <td class="px-5 py-2"><a href="{{ route('publish.articles.show', $article->id) }}" class="text-blue-600 hover:text-blue-800 break-words">{{ $article->title ?? '(untitled)' }}</a></td>
-                        <td class="px-5 py-2 text-gray-500 text-xs">{{ $article->word_count ? number_format($article->word_count) : '—' }}</td>
-                        <td class="px-5 py-2">
-                            @if($article->status === 'published')<span class="text-xs text-green-600 font-medium">Published</span>
-                            @elseif($article->status === 'review')<span class="text-xs text-yellow-600 font-medium">Review</span>
-                            @elseif($article->status === 'completed')<span class="text-xs text-gray-400">Completed</span>
-                            @else <span class="text-xs text-gray-400">{{ ucfirst($article->status) }}</span>@endif
-                        </td>
-                        <td class="px-5 py-2 text-gray-500 text-xs">{{ $article->created_at->diffForHumans() }}</td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
+        @forelse($campaign->articles as $article)
+        <div class="p-4 border-b border-gray-100 hover:bg-gray-50 flex items-start justify-between gap-4">
+            <div class="flex-1 min-w-0">
+                <a href="{{ route('publish.articles.show', $article->id) }}" class="text-sm font-medium text-gray-800 hover:text-blue-600 break-words">{{ $article->title ?: 'Untitled' }}</a>
+                <p class="text-xs text-gray-400 mt-0.5">
+                    {{ $article->article_id }}
+                    @if($article->wp_post_url) &middot; <a href="{{ $article->wp_post_url }}" target="_blank" class="text-blue-600 hover:underline inline-flex items-center gap-0.5">WP Post <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a> @endif
+                    &middot; {{ $article->word_count ? number_format($article->word_count) . ' words' : '' }}
+                    &middot; {{ $article->created_at ? $article->created_at->diffForHumans() : '' }}
+                </p>
+            </div>
+            @if($article->status === 'completed' || $article->status === 'published')
+                <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">{{ ucfirst($article->status) }}</span>
+            @else
+                <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500">{{ ucfirst($article->status) }}</span>
+            @endif
+        </div>
+        @empty
+        <div class="p-8 text-center text-gray-400 text-sm">No articles created by this campaign yet.</div>
+        @endforelse
+    </div>
+
+    {{-- Run Logs --}}
+    @if(isset($runLogs) && $runLogs->count() > 0)
+    <div class="bg-gray-900 rounded-xl border border-gray-700 p-5">
+        <h3 class="text-sm font-semibold text-white uppercase tracking-wide mb-3">Cron Run Logs ({{ $runLogs->count() }})</h3>
+        <div class="space-y-1 max-h-64 overflow-y-auto">
+            @foreach($runLogs as $log)
+            <div class="flex items-start gap-2 text-xs font-mono py-1 {{ !$loop->first ? 'border-t border-gray-800' : '' }}">
+                <span class="text-gray-500 flex-shrink-0">{{ $log->created_at }}</span>
+                <span class="text-gray-300 break-words">{{ $log->action }}: {{ $log->description }}</span>
+            </div>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
+    {{-- Links --}}
+    <div class="flex gap-4 text-xs text-gray-400">
+        <a href="{{ route('campaigns.index') }}" class="hover:text-blue-600">&larr; All Campaigns</a>
+        <a href="{{ route('campaigns.create', ['id' => $campaign->id]) }}" class="hover:text-blue-600">Edit Campaign</a>
+        @if(Route::has('publish.schedule.index'))
+            <a href="{{ route('publish.schedule.index') }}" class="hover:text-blue-600">Cron Schedule</a>
         @endif
     </div>
 </div>
-@endsection
 
 @push('scripts')
 <script>
-function campaignActions() {
+function campaignShow() {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+    const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
     return {
-        acting: false, actionResult: '', actionSuccess: false,
-        async activate() { await this.doAction('{{ route("campaigns.activate", $campaign->id) }}'); },
-        async pause() { await this.doAction('{{ route("campaigns.pause", $campaign->id) }}'); },
-        async doAction(url) {
-            this.acting = true; this.actionResult = '';
+        running: false, runResult: '', runSuccess: false,
+
+        async runNow(mode) {
+            if (!confirm('Run campaign now as ' + mode + '?')) return;
+            this.running = true; this.runResult = '';
             try {
-                const res = await fetch(url, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' } });
-                const data = await res.json();
-                this.actionSuccess = data.success; this.actionResult = data.message;
-                if (data.success) setTimeout(() => location.reload(), 800);
-            } catch (e) { this.actionSuccess = false; this.actionResult = 'Error: ' + e.message; }
-            this.acting = false;
-        }
+                const r = await fetch('{{ route("campaigns.run-now", $campaign->id) }}', { method: 'POST', headers, body: JSON.stringify({ mode }) });
+                const d = await r.json();
+                this.runSuccess = d.success;
+                this.runResult = d.message;
+                if (d.success) setTimeout(() => location.reload(), 2000);
+            } catch(e) { this.runSuccess = false; this.runResult = 'Error: ' + e.message; }
+            this.running = false;
+        },
     };
 }
 </script>
 @endpush
+@endsection

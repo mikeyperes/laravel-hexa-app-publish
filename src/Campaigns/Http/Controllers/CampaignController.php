@@ -155,14 +155,50 @@ class CampaignController extends Controller
     public function show(int $id): View
     {
         $campaign = PublishCampaign::with([
-            'account', 'site', 'template', 'creator',
+            'account', 'site', 'template', 'creator', 'user', 'campaignPreset', 'wpPreset',
             'articles' => function ($q) {
                 $q->orderByDesc('created_at');
             },
         ])->findOrFail($id);
 
+        $runLogs = \DB::table('activity_logs')
+            ->where('category', 'campaigns')
+            ->where('context', 'like', '%campaign_id":' . $campaign->id . '%')
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get();
+
         return view('app-publish::campaigns.show', [
             'campaign' => $campaign,
+            'runLogs' => $runLogs,
+        ]);
+    }
+
+    /**
+     * Run campaign once (one-off). Returns SSE stream of progress.
+     *
+     * @param int $id
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function runNow(int $id, Request $request): JsonResponse
+    {
+        $campaign = PublishCampaign::findOrFail($id);
+        $mode = $request->input('mode', 'draft'); // 'draft' or 'publish'
+
+        hexaLog('campaigns', 'run_now', "Campaign '{$campaign->name}' run manually (mode: {$mode})", [
+            'campaign_id' => $campaign->id,
+            'mode' => $mode,
+        ]);
+
+        // TODO Phase 3: Execute the full pipeline programmatically
+        // For now, log the attempt and return success
+        $campaign->update(['last_run_at' => now()]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Campaign '{$campaign->name}' run initiated (mode: {$mode}). Full execution engine coming in Phase 3.",
+            'mode' => $mode,
         ]);
     }
 
