@@ -33,6 +33,7 @@ class PublishCampaign extends Model
         'interval_unit',
         'timezone',
         'run_at_time',
+        'drip_interval_minutes',
         'article_sources',
         'photo_sources',
         'link_list',

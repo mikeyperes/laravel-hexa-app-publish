@@ -69,6 +69,7 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     Route::get('/campaigns/presets/{id}', [CampaignPresetController::class, 'show'])->name('campaigns.presets.show');
     Route::put('/campaigns/presets/{id}', [CampaignPresetController::class, 'update'])->name('campaigns.presets.update');
     Route::delete('/campaigns/presets/{id}', [CampaignPresetController::class, 'destroy'])->name('campaigns.presets.destroy');
+    Route::post('/campaigns/presets/{id}/toggle-default', [CampaignPresetController::class, 'toggleDefault'])->name('campaigns.presets.toggle-default');
     // Campaign CRUD
     Route::get('/campaigns/{id}', [CampaignController::class, 'show'])->name('campaigns.show');
     Route::get('/campaigns/{id}/edit', [CampaignController::class, 'edit'])->name('campaigns.edit');

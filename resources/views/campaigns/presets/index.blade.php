@@ -142,6 +142,10 @@
                 @endif
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
+                @if($preset->is_default)
+                    <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">Default</span>
+                @endif
+                <button @click="toggleDefault({{ $preset->id }})" class="text-xs {{ $preset->is_default ? 'text-yellow-600 hover:text-yellow-800' : 'text-green-600 hover:text-green-800' }}">{{ $preset->is_default ? 'Unset Default' : 'Set Default' }}</button>
                 <button @click="editPreset({{ json_encode($preset) }})" class="text-xs text-blue-600 hover:text-blue-800">Edit</button>
                 <button @click="deletePreset({{ $preset->id }}, '{{ addslashes($preset->name) }}')" class="text-xs text-red-400 hover:text-red-600">Delete</button>
             </div>
@@ -223,6 +227,14 @@ function campaignPresets() {
             if (!confirm('Delete preset "' + name + '"?')) return;
             try {
                 const r = await fetch('/campaigns/presets/' + id, { method: 'DELETE', headers });
+                const d = await r.json();
+                if (d.success) location.reload();
+            } catch(e) { alert('Error: ' + e.message); }
+        },
+
+        async toggleDefault(id) {
+            try {
+                const r = await fetch('/campaigns/presets/' + id + '/toggle-default', { method: 'POST', headers });
                 const d = await r.json();
                 if (d.success) location.reload();
             } catch(e) { alert('Error: ' + e.message); }

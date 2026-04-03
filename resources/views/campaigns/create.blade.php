@@ -38,7 +38,10 @@
 
     {{-- AI Template --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-3">AI Template</h3>
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-gray-800">AI Template</h3>
+            <a href="{{ route('publish.templates.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage Templates</a>
+        </div>
         <select x-model="form.publish_template_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
             <option value="">-- Default --</option>
             @foreach($aiTemplates as $t)
@@ -49,7 +52,10 @@
 
     {{-- WordPress Preset --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-3">WordPress Preset</h3>
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-gray-800">WordPress Preset</h3>
+            <a href="{{ route('publish.presets.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage Presets</a>
+        </div>
         <select x-model="form.preset_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
             <option value="">-- Default --</option>
             @foreach($wpPresets as $p)
@@ -61,12 +67,40 @@
     {{-- WordPress Site --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 class="font-semibold text-gray-800 mb-3">WordPress Site</h3>
-        <select x-model="form.publish_site_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+        <select x-model="form.publish_site_id" @change="testSiteConnection()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
             <option value="">-- Select site --</option>
             @foreach($sites as $s)
                 <option value="{{ $s->id }}">{{ $s->name }} ({{ $s->url }})</option>
             @endforeach
         </select>
+        {{-- Connection status --}}
+        <div x-show="form.publish_site_id" x-cloak class="mt-3">
+            <div class="flex items-center gap-2 rounded-lg px-3 py-2" :class="siteStatus === true ? 'bg-green-50' : (siteStatus === false ? 'bg-red-50' : 'bg-gray-50')">
+                <template x-if="siteStatus === null && siteTesting"><svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
+                <template x-if="siteStatus === true"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                <template x-if="siteStatus === false"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                <span class="text-sm" :class="siteStatus === true ? 'text-green-800' : (siteStatus === false ? 'text-red-800' : 'text-gray-600')" x-text="siteMessage"></span>
+            </div>
+            {{-- Connection log --}}
+            <div x-show="siteLog.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
+                <template x-for="(entry, idx) in siteLog" :key="idx">
+                    <div class="flex items-start gap-2 py-0.5 text-xs font-mono">
+                        <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
+                        <span :class="{'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info'}" x-text="entry.message" class="break-words"></span>
+                    </div>
+                </template>
+            </div>
+            {{-- Authors loaded from connection --}}
+            <div x-show="siteAuthors.length > 0" x-cloak class="mt-2">
+                <label class="block text-xs text-gray-500 mb-1">Author (from WordPress)</label>
+                <select x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+                    <option value="">-- Default author --</option>
+                    <template x-for="a in siteAuthors" :key="a.user_login">
+                        <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
+                    </template>
+                </select>
+            </div>
+        </div>
     </div>
 
     {{-- Scheduling --}}
@@ -75,7 +109,7 @@
 
         <div class="flex flex-wrap gap-4">
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Posts per interval</label>
+                <label class="block text-xs text-gray-500 mb-1">Posts per batch</label>
                 <input type="number" x-model="form.articles_per_interval" min="1" max="50" class="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div>
@@ -88,9 +122,21 @@
                 </select>
             </div>
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Run at time</label>
+                <label class="block text-xs text-gray-500 mb-1">First post at</label>
                 <input type="time" x-model="form.run_at_time" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Drip interval (minutes between posts)</label>
+                <input type="number" x-model="form.drip_interval_minutes" min="1" max="1440" class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+        </div>
+
+        {{-- Preview schedule --}}
+        <div x-show="form.articles_per_interval > 1" x-cloak class="bg-gray-50 rounded-lg p-3 text-xs text-gray-600">
+            <p class="font-medium text-gray-700 mb-1">Post Schedule Preview:</p>
+            <template x-for="i in Math.min(parseInt(form.articles_per_interval) || 1, 10)" :key="i">
+                <p x-text="'Post ' + i + ': ' + calculatePostTime(i - 1)"></p>
+            </template>
         </div>
 
         <div>
@@ -107,11 +153,6 @@
     {{-- Publishing --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
         <h3 class="font-semibold text-gray-800">Publishing</h3>
-
-        <div>
-            <label class="block text-xs text-gray-500 mb-1">Author</label>
-            <input type="text" x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md" placeholder="WordPress author username">
-        </div>
 
         <div>
             <label class="block text-xs text-gray-500 mb-2">Post Status</label>
@@ -138,10 +179,10 @@
         </div>
     </div>
 
-    {{-- Notes --}}
+    {{-- AI Instructions --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <label class="block text-xs text-gray-500 mb-1">Notes</label>
-        <textarea x-model="form.notes" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Internal notes..."></textarea>
+        <label class="block text-xs text-gray-500 mb-1">AI Instructions</label>
+        <textarea x-model="form.notes" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Custom instructions fed to AI when this campaign generates articles. e.g. Write in first person, focus on women in business, include expert quotes..."></textarea>
     </div>
 
     {{-- Actions --}}
@@ -194,6 +235,7 @@ function campaignCreate() {
                 'interval_unit' => $editCampaign->interval_unit ?? 'daily',
                 'timezone' => $editCampaign->timezone ?? 'America/New_York',
                 'run_at_time' => $editCampaign->run_at_time ?? '09:00',
+                'drip_interval_minutes' => $editCampaign->drip_interval_minutes ?? 60,
                 'notes' => $editCampaign->notes ?? '',
             ];
         @endphp
@@ -204,7 +246,7 @@ function campaignCreate() {
             user_id: null, campaign_preset_id: '', publish_template_id: '', preset_id: '', publish_site_id: '',
             name: '', description: '', topic: '', keywords: [], auto_publish: false,
             author: '', post_status: 'draft', articles_per_interval: 1, interval_unit: 'daily',
-            timezone: 'America/New_York', run_at_time: '09:00', notes: ''
+            timezone: 'America/New_York', run_at_time: '09:00', drip_interval_minutes: 60, notes: ''
         };
     @endif
 
@@ -215,12 +257,76 @@ function campaignCreate() {
         presetInfo: '',
         form: initialForm,
 
+        // Site connection
+        siteTesting: false,
+        siteStatus: null,
+        siteMessage: '',
+        siteLog: [],
+        siteAuthors: [],
+
         init() {
             @if(!isset($editCampaign) || !$editCampaign)
             this.$watch('form', () => {
                 localStorage.setItem('campaignCreateState', JSON.stringify(this.form));
             }, { deep: true });
             @endif
+
+            // Auto-select defaults
+            const defaultPreset = presets.find(p => p.is_default);
+            if (defaultPreset && !this.form.campaign_preset_id) {
+                this.form.campaign_preset_id = String(defaultPreset.id);
+                this.loadPreset();
+            }
+
+            // Test site if already selected
+            if (this.form.publish_site_id) {
+                this.testSiteConnection();
+            }
+        },
+
+        calculatePostTime(index) {
+            if (!this.form.run_at_time) return 'TBD';
+            const [h, m] = this.form.run_at_time.split(':').map(Number);
+            const totalMinutes = h * 60 + m + (index * (parseInt(this.form.drip_interval_minutes) || 60));
+            const hours = Math.floor(totalMinutes / 60) % 24;
+            const mins = totalMinutes % 60;
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const h12 = hours % 12 || 12;
+            return h12 + ':' + String(mins).padStart(2, '0') + ' ' + ampm + ' ' + (this.form.timezone || 'ET');
+        },
+
+        async testSiteConnection() {
+            if (!this.form.publish_site_id) return;
+            this.siteTesting = true;
+            this.siteStatus = null;
+            this.siteMessage = 'Connecting...';
+            this.siteLog = [];
+            this.siteAuthors = [];
+
+            const time = () => new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            this.siteLog.push({ type: 'info', message: 'Testing WordPress connection...', time: time() });
+
+            try {
+                const r = await fetch('/publish/sites/' + this.form.publish_site_id + '/test-write', {
+                    method: 'POST', headers
+                });
+                const d = await r.json();
+                this.siteStatus = d.success;
+                this.siteMessage = d.message || (d.success ? 'Connected' : 'Connection failed');
+                this.siteLog.push({ type: d.success ? 'success' : 'error', message: this.siteMessage, time: time() });
+                if (d.authors) {
+                    this.siteAuthors = d.authors;
+                    this.siteLog.push({ type: 'info', message: d.authors.length + ' authors loaded', time: time() });
+                }
+                if (d.default_author && !this.form.author) {
+                    this.form.author = d.default_author;
+                }
+            } catch (e) {
+                this.siteStatus = false;
+                this.siteMessage = 'Network error';
+                this.siteLog.push({ type: 'error', message: e.message, time: time() });
+            }
+            this.siteTesting = false;
         },
 
         loadPreset() {

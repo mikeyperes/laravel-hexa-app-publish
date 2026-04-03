@@ -23,6 +23,7 @@ class CampaignPreset extends Model
         'auto_select_sources',
         'ai_instructions',
         'is_active',
+        'is_default',
         'created_by',
     ];
 
@@ -31,6 +32,7 @@ class CampaignPreset extends Model
         'trending_categories' => 'array',
         'auto_select_sources' => 'boolean',
         'is_active' => 'boolean',
+        'is_default' => 'boolean',
     ];
 
     /**

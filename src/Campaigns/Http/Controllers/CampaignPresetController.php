@@ -133,4 +133,21 @@ class CampaignPresetController extends Controller
 
         return response()->json(['success' => true, 'message' => "Preset '{$name}' deleted."]);
     }
+
+    /**
+     * Toggle default status.
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function toggleDefault(int $id): JsonResponse
+    {
+        $preset = CampaignPreset::findOrFail($id);
+        if (!$preset->is_default) {
+            CampaignPreset::where('is_default', true)->update(['is_default' => false]);
+        }
+        $preset->update(['is_default' => !$preset->is_default]);
+
+        return response()->json(['success' => true, 'message' => $preset->is_default ? "'{$preset->name}' set as default." : "Default cleared."]);
+    }
 }

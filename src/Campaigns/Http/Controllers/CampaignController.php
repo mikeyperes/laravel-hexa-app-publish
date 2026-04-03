@@ -120,6 +120,7 @@ class CampaignController extends Controller
             'interval_unit' => 'required|in:hourly,daily,weekly,monthly',
             'timezone' => 'nullable|string|max:50',
             'run_at_time' => 'nullable|string|max:10',
+            'drip_interval_minutes' => 'nullable|integer|min:1|max:1440',
             'notes' => 'nullable|string',
         ]);
 
