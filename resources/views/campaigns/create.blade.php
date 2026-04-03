@@ -17,7 +17,8 @@
         <div class="max-w-md"
              @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-user') form.user_id = $event.detail.item.id"
              @hexa-search-cleared.window="if ($event.detail.component_id === 'campaign-user') form.user_id = null">
-            <x-hexa-smart-search url="{{ route('api.search.users') }}" name="user_id" placeholder="Search users..." display-field="name" subtitle-field="email" value-field="id" id="campaign-user" show-id />
+            <x-hexa-smart-search url="{{ route('api.search.users') }}" name="user_id" placeholder="Search users..." display-field="name" subtitle-field="email" value-field="id" id="campaign-user" show-id
+                :selected="isset($editCampaign) && $editCampaign->user ? json_encode(['id' => $editCampaign->user->id, 'name' => $editCampaign->user->name, 'email' => $editCampaign->user->email]) : 'null'" />
         </div>
     </div>
 
@@ -97,15 +98,24 @@
                     </div>
                 </template>
             </div>
-            {{-- Authors loaded from connection --}}
-            <div x-show="siteAuthors.length > 0" x-cloak class="mt-2">
-                <label class="block text-xs text-gray-500 mb-1">Author (from WordPress)</label>
-                <select x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-                    <option value="">-- Default author --</option>
-                    <template x-for="a in siteAuthors" :key="a.user_login">
-                        <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
-                    </template>
-                </select>
+            {{-- Author --}}
+            <div class="mt-2">
+                <label class="block text-xs text-gray-500 mb-1">Author</label>
+                <div x-show="siteAuthors.length > 0">
+                    <select x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+                        <option value="">-- Default author --</option>
+                        <template x-for="a in siteAuthors" :key="a.user_login">
+                            <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
+                        </template>
+                    </select>
+                </div>
+                <div x-show="siteAuthors.length === 0 && form.author">
+                    <input type="text" x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md" readonly>
+                    <p class="text-xs text-gray-400 mt-1">Connect to site to load full author list</p>
+                </div>
+                <div x-show="siteAuthors.length === 0 && !form.author">
+                    <p class="text-xs text-gray-400">Connect to WordPress site to load authors</p>
+                </div>
             </div>
         </div>
     </div>

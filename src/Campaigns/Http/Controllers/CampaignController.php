@@ -106,7 +106,7 @@ class CampaignController extends Controller
         $campaignPresets = \hexa_app_publish\Campaigns\Models\CampaignPreset::orderBy('name')->get();
         $aiTemplates = PublishTemplate::orderBy('name')->get();
         $wpPresets = PublishPreset::orderBy('name')->get();
-        $editCampaign = PublishCampaign::find($request->input('id'));
+        $editCampaign = PublishCampaign::with('user')->find($request->input('id'));
         $timezones = \DateTimeZone::listIdentifiers(\DateTimeZone::ALL);
 
         return view('app-publish::campaigns.create', [
