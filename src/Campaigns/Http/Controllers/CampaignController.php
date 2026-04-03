@@ -184,21 +184,19 @@ class CampaignController extends Controller
     public function runNow(int $id, Request $request): JsonResponse
     {
         $campaign = PublishCampaign::findOrFail($id);
-        $mode = $request->input('mode', 'draft'); // 'draft' or 'publish'
+        $mode = $request->input('mode', 'draft');
 
-        hexaLog('campaigns', 'run_now', "Campaign '{$campaign->name}' run manually (mode: {$mode})", [
-            'campaign_id' => $campaign->id,
-            'mode' => $mode,
-        ]);
-
-        // TODO Phase 3: Execute the full pipeline programmatically
-        // For now, log the attempt and return success
-        $campaign->update(['last_run_at' => now()]);
+        $runService = app(\hexa_app_publish\Campaigns\Services\CampaignRunService::class);
+        $result = $runService->run($campaign, $mode);
 
         return response()->json([
-            'success' => true,
-            'message' => "Campaign '{$campaign->name}' run initiated (mode: {$mode}). Full execution engine coming in Phase 3.",
-            'mode' => $mode,
+            'success' => $result['success'],
+            'message' => $result['success']
+                ? "Campaign ran successfully. Article: " . ($result['article']->article_id ?? '—')
+                : "Campaign run failed.",
+            'log' => $result['log'],
+            'article_id' => $result['article']->id ?? null,
+            'article_url' => $result['article'] ? route('publish.articles.show', $result['article']->id) : null,
         ]);
     }
 

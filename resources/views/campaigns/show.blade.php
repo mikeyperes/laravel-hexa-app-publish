@@ -36,6 +36,13 @@
             </div>
         </div>
         <div x-show="runResult" x-cloak class="mt-3 p-3 rounded-lg text-sm border" :class="runSuccess ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'" x-text="runResult"></div>
+        <div x-show="runLog.length > 0" x-cloak class="mt-3 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-48 overflow-y-auto">
+            <template x-for="(entry, idx) in runLog" :key="idx">
+                <p class="text-xs font-mono py-0.5" :class="{'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-yellow-400': entry.type === 'warning', 'text-blue-400': entry.type === 'info', 'text-gray-400': entry.type === 'step'}">
+                    <span class="text-gray-500" x-text="entry.time"></span> <span x-text="entry.message"></span>
+                </p>
+            </template>
+        </div>
     </div>
 
     {{-- Details (row layout) --}}
@@ -116,15 +123,20 @@ function campaignShow() {
     return {
         running: false, runResult: '', runSuccess: false,
 
+        runLog: [],
+
         async runNow(mode) {
             if (!confirm('Run campaign now as ' + mode + '?')) return;
-            this.running = true; this.runResult = '';
+            this.running = true; this.runResult = ''; this.runLog = [];
             try {
                 const r = await fetch('{{ route("campaigns.run-now", $campaign->id) }}', { method: 'POST', headers, body: JSON.stringify({ mode }) });
                 const d = await r.json();
                 this.runSuccess = d.success;
                 this.runResult = d.message;
-                if (d.success) setTimeout(() => location.reload(), 2000);
+                this.runLog = d.log || [];
+                if (d.success && d.article_url) {
+                    this.runResult += ' — View: ' + d.article_url;
+                }
             } catch(e) { this.runSuccess = false; this.runResult = 'Error: ' + e.message; }
             this.running = false;
         },
