@@ -81,10 +81,12 @@
         {{-- Connection status --}}
         <div x-show="form.publish_site_id" x-cloak class="mt-3">
             <div class="flex items-center gap-2 rounded-lg px-3 py-2" :class="siteStatus === true ? 'bg-green-50' : (siteStatus === false ? 'bg-red-50' : 'bg-gray-50')">
-                <template x-if="siteStatus === null && siteTesting"><svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
-                <template x-if="siteStatus === true"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
-                <template x-if="siteStatus === false"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
-                <span class="text-sm" :class="siteStatus === true ? 'text-green-800' : (siteStatus === false ? 'text-red-800' : 'text-gray-600')" x-text="siteMessage"></span>
+                <template x-if="siteTesting"><svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
+                <template x-if="!siteTesting && siteStatus === true"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                <template x-if="!siteTesting && siteStatus === false"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                <template x-if="!siteTesting && siteStatus === null"><svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                <span class="text-sm" :class="siteStatus === true ? 'text-green-800' : (siteStatus === false ? 'text-red-800' : 'text-gray-600')" x-text="siteMessage || 'Site selected — click Test to verify connection'"></span>
+                <button x-show="!siteTesting && siteStatus !== true" @click="testSiteConnection()" class="text-xs text-blue-600 hover:text-blue-800 ml-2">Test</button>
             </div>
             {{-- Connection log --}}
             <div x-show="siteLog.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
@@ -256,14 +258,16 @@ function campaignCreate() {
         siteLog: [],
         siteAuthors: [],
 
-        init() {
-            @if(!isset($editCampaign) || !$editCampaign)
-            this.$watch('form', () => {
-                localStorage.setItem('campaignCreateState', JSON.stringify(this.form));
-            }, { deep: true });
-            @endif
+        _saveTimer: null,
 
-            // Auto-select defaults
+        init() {
+            // Auto-save to DB on any form change (debounced 2s)
+            this.$watch('form', () => {
+                clearTimeout(this._saveTimer);
+                this._saveTimer = setTimeout(() => this.autoSave(), 2000);
+            }, { deep: true });
+
+            // Auto-select default presets if not already set
             const defaultPreset = presets.find(p => p.is_default);
             if (defaultPreset && !this.form.campaign_preset_id) {
                 this.form.campaign_preset_id = String(defaultPreset.id);
@@ -282,6 +286,16 @@ function campaignCreate() {
                     }
                 } catch(e) {}
             }
+        },
+
+        async autoSave() {
+            if (!this.editId) return;
+            try {
+                await fetch('/campaigns/' + this.editId, {
+                    method: 'PUT', headers,
+                    body: JSON.stringify(this.form)
+                });
+            } catch(e) { /* silent auto-save */ }
         },
 
         calculatePostTime(index) {

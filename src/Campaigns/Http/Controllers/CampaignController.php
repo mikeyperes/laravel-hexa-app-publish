@@ -280,26 +280,36 @@ class CampaignController extends Controller
         $campaign = PublishCampaign::findOrFail($id);
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'user_id' => 'nullable|integer',
+            'publish_site_id' => 'nullable|integer',
+            'publish_template_id' => 'nullable|integer',
+            'campaign_preset_id' => 'nullable|integer',
+            'preset_id' => 'nullable|integer',
+            'name' => 'nullable|string|max:255',
             'description' => 'nullable|string',
             'topic' => 'nullable|string|max:1000',
             'keywords' => 'nullable|array',
-            'article_type' => 'nullable|string|max:50',
-            'ai_engine' => 'nullable|in:anthropic,chatgpt',
-            'delivery_mode' => 'required|in:draft-local,draft-wordpress,auto-publish,review,notify',
-            'articles_per_interval' => 'required|integer|min:1|max:50',
-            'interval_unit' => 'required|in:hourly,daily,weekly,monthly',
-            'article_sources' => 'nullable|array',
-            'photo_sources' => 'nullable|array',
-            'link_list' => 'nullable|array',
-            'sitemap_urls' => 'nullable|array',
-            'max_links_per_article' => 'nullable|integer|min:0',
+            'auto_publish' => 'nullable|boolean',
+            'author' => 'nullable|string|max:255',
+            'post_status' => 'nullable|in:publish,draft,pending',
+            'delivery_mode' => 'nullable|in:draft-local,draft-wordpress,auto-publish,review,notify',
+            'articles_per_interval' => 'nullable|integer|min:1|max:50',
+            'interval_unit' => 'nullable|in:hourly,daily,weekly,monthly',
+            'timezone' => 'nullable|string|max:50',
+            'run_at_time' => 'nullable|string|max:10',
+            'drip_interval_minutes' => 'nullable|integer|min:1|max:1440',
             'notes' => 'nullable|string',
         ]);
 
-        $campaign->update($validated);
+        // Resolve account from site
+        if (!empty($validated['publish_site_id'])) {
+            $site = PublishSite::find($validated['publish_site_id']);
+            $validated['publish_account_id'] = $site ? ($site->publish_account_id ?: null) : null;
+        }
 
-        hexaLog('publish', 'campaign_updated', "Campaign updated: {$campaign->name} ({$campaign->campaign_id})");
+        $campaign->update(array_filter($validated, fn($v) => $v !== null));
+
+        hexaLog('campaigns', 'campaign_updated', "Campaign updated: {$campaign->name}");
 
         return response()->json([
             'success' => true,
