@@ -128,13 +128,11 @@ class CampaignController extends Controller
         $validated['status'] = 'draft';
         $validated['created_by'] = auth()->id();
         $validated['auto_publish'] = $validated['auto_publish'] ?? false;
-        $validated['publish_account_id'] = $validated['publish_account_id'] ?? 0;
+        $validated['drip_interval_minutes'] = $validated['drip_interval_minutes'] ?? 60;
 
-        // Get publish_account_id from site
+        // Get publish_account_id from site (nullable FK — never set to 0)
         $site = PublishSite::find($validated['publish_site_id']);
-        if ($site) {
-            $validated['publish_account_id'] = $site->publish_account_id ?? 0;
-        }
+        $validated['publish_account_id'] = $site ? ($site->publish_account_id ?: null) : null;
 
         $campaign = PublishCampaign::create($validated);
 

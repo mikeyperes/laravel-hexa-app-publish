@@ -56,16 +56,27 @@
                             <a href="{{ route('campaigns.show', $c->id) }}" class="text-blue-600 hover:text-blue-800 font-medium break-words">{{ $c->name }}</a>
                             <p class="text-xs text-gray-400 font-mono">{{ $c->campaign_id }}</p>
                         </td>
-                        <td class="px-5 py-3 text-gray-600 break-words">{{ $c->account->name }}</td>
+                        <td class="px-5 py-3 text-gray-600 break-words">{{ $c->account->name ?? '—' }}</td>
                         <td class="px-5 py-3 text-gray-600 break-words">{{ $c->site->name ?? '—' }}</td>
                         <td class="px-5 py-3 text-gray-500 text-xs">{{ $c->articles_per_interval }}/{{ $c->interval_unit }}</td>
                         <td class="px-5 py-3 text-gray-500 text-xs">{{ $c->delivery_mode }}</td>
                         <td class="px-5 py-3 text-gray-600">{{ $c->articles->count() }}</td>
                         <td class="px-5 py-3">
-                            @if($c->status === 'active')<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Active</span>
-                            @elseif($c->status === 'paused')<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">Paused</span>
-                            @elseif($c->status === 'draft')<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">Draft</span>
-                            @else <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">{{ ucfirst($c->status) }}</span>@endif
+                            <div class="flex items-center gap-2" x-data="{ enabled: {{ $c->status === 'active' ? 'true' : 'false' }}, toggling: false }">
+                                <button @click="
+                                    toggling = true;
+                                    fetch('/campaigns/{{ $c->id }}/' + (enabled ? 'pause' : 'activate'), { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content, 'Accept': 'application/json' } })
+                                        .then(r => r.json()).then(d => { if (d.success) { enabled = !enabled; } toggling = false; })
+                                        .catch(() => toggling = false);
+                                " :disabled="toggling" type="button"
+                                    class="relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50"
+                                    :class="enabled ? 'bg-green-500' : 'bg-gray-300'"
+                                    role="switch" :aria-checked="enabled">
+                                    <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                                        :class="enabled ? 'translate-x-5' : 'translate-x-0'"></span>
+                                </button>
+                                <span class="text-xs" :class="enabled ? 'text-green-700' : 'text-gray-400'" x-text="enabled ? 'Active' : 'Paused'"></span>
+                            </div>
                         </td>
                         <td class="px-5 py-3 text-xs text-gray-500">{{ $c->next_run_at ? $c->next_run_at->diffForHumans() : '—' }}</td>
                     </tr>
