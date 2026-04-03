@@ -65,7 +65,9 @@ class AppPublishServiceProvider extends ServiceProvider
             // Content (16)
             $registry->registerSidebarLink('publish.accounts.index', 'Users', 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4', 'Content', 'app-publish', 16);
             $registry->registerSidebarLink('publish.sites.index', 'Sites', 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9', 'Content', 'app-publish', 17);
-            $registry->registerSidebarLink('publish.campaigns.index', 'Campaigns', 'M13 10V3L4 14h7v7l9-11h-7z', 'Content', 'app-publish', 18);
+            $registry->registerSidebarLink('campaigns.index', 'Campaigns', 'M13 10V3L4 14h7v7l9-11h-7z', 'Content', 'app-publish', 18);
+            $registry->registerSidebarLink('campaigns.create', 'Create Campaign', 'M12 4v16m8-8H4', 'Content', 'app-publish', 18);
+            $registry->registerSidebarLink('campaigns.presets.index', 'Campaign Presets', 'M4 6h16M4 10h16M4 14h16M4 18h16', 'Content', 'app-publish', 18);
             $registry->registerSidebarLink('publish.articles.index', 'Articles', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', 'Content', 'app-publish', 19);
             $registry->registerSidebarLink('publish.links.index', 'Links & Sitemaps', 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1', 'Content', 'app-publish', 19);
             $registry->registerSidebarLink('publish.ai-activity.index', 'AI Activity', 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', 'Content', 'app-publish', 19);
