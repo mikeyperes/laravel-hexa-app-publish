@@ -277,18 +277,16 @@ function campaignCreate() {
 
         _saveTimer: null,
 
-        _initialized: false,
+        _skipCount: 0,
 
         init() {
-            // Delay watch to avoid auto-saving on initial hydration
-            setTimeout(() => {
-                this._initialized = true;
-                this.$watch('form', () => {
-                    if (!this._initialized) return;
-                    clearTimeout(this._saveTimer);
-                    this._saveTimer = setTimeout(() => this.autoSave(), 2000);
-                }, { deep: true });
-            }, 3000);
+            // Auto-save on any form change — skip first 2 triggers (initial hydration)
+            this.$watch('form', () => {
+                this._skipCount++;
+                if (this._skipCount <= 2) return;
+                clearTimeout(this._saveTimer);
+                this._saveTimer = setTimeout(() => this.autoSave(), 500);
+            }, { deep: true });
 
             // Auto-select default presets if not already set
             const defaultPreset = presets.find(p => p.is_default);
