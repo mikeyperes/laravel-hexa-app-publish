@@ -8,6 +8,7 @@ use hexa_app_publish\Models\PublishAccount;
 use hexa_app_publish\Models\PublishCampaign;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Models\PublishTemplate;
+use hexa_app_publish\Models\PublishPreset;
 use hexa_app_publish\Services\PublishService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -76,22 +77,20 @@ class CampaignController extends Controller
      */
     public function create(Request $request): View
     {
-        $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
-        $templates = PublishTemplate::orderBy('name')->get();
+        $campaignPresets = \hexa_app_publish\Campaigns\Models\CampaignPreset::orderBy('name')->get();
+        $aiTemplates = PublishTemplate::orderBy('name')->get();
+        $wpPresets = PublishPreset::orderBy('name')->get();
+        $editCampaign = $request->filled('id') ? PublishCampaign::find($request->input('id')) : null;
+        $timezones = \DateTimeZone::listIdentifiers(\DateTimeZone::ALL);
 
         return view('app-publish::campaigns.create', [
-            'accounts' => $accounts,
             'sites' => $sites,
-            'templates' => $templates,
-            'deliveryModes' => config('hws-publish.campaign_modes', []),
-            'intervalUnits' => config('hws-publish.campaign_intervals', []),
-            'articleTypes' => config('hws-publish.article_types', []),
-            'aiEngines' => config('hws-publish.ai_engines', []),
-            'articleSources' => config('hws-publish.article_sources', []),
-            'photoSources' => config('hws-publish.photo_sources', []),
-            'preselected_account_id' => $request->input('account_id'),
-            'preselected_site_id' => $request->input('site_id'),
+            'campaignPresets' => $campaignPresets,
+            'aiTemplates' => $aiTemplates,
+            'wpPresets' => $wpPresets,
+            'editCampaign' => $editCampaign,
+            'timezones' => $timezones,
         ]);
     }
 
@@ -104,39 +103,46 @@ class CampaignController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'publish_account_id' => 'required|exists:publish_accounts,id',
+            'user_id' => 'nullable|integer|exists:users,id',
             'publish_site_id' => 'required|exists:publish_sites,id',
             'publish_template_id' => 'nullable|exists:publish_templates,id',
+            'campaign_preset_id' => 'nullable|integer',
+            'preset_id' => 'nullable|integer',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'topic' => 'nullable|string|max:1000',
             'keywords' => 'nullable|array',
-            'article_type' => 'nullable|string|max:50',
-            'ai_engine' => 'nullable|in:anthropic,chatgpt',
-            'delivery_mode' => 'required|in:draft-local,draft-wordpress,auto-publish,review,notify',
+            'auto_publish' => 'nullable|boolean',
+            'author' => 'nullable|string|max:255',
+            'post_status' => 'nullable|in:publish,draft,pending',
+            'delivery_mode' => 'nullable|in:draft-local,draft-wordpress,auto-publish,review,notify',
             'articles_per_interval' => 'required|integer|min:1|max:50',
             'interval_unit' => 'required|in:hourly,daily,weekly,monthly',
-            'article_sources' => 'nullable|array',
-            'photo_sources' => 'nullable|array',
-            'link_list' => 'nullable|array',
-            'sitemap_urls' => 'nullable|array',
-            'max_links_per_article' => 'nullable|integer|min:0',
+            'timezone' => 'nullable|string|max:50',
+            'run_at_time' => 'nullable|string|max:10',
             'notes' => 'nullable|string',
         ]);
 
         $validated['campaign_id'] = PublishCampaign::generateCampaignId();
         $validated['status'] = 'draft';
         $validated['created_by'] = auth()->id();
+        $validated['auto_publish'] = $validated['auto_publish'] ?? false;
+        $validated['publish_account_id'] = $validated['publish_account_id'] ?? 0;
+
+        // Get publish_account_id from site
+        $site = PublishSite::find($validated['publish_site_id']);
+        if ($site) {
+            $validated['publish_account_id'] = $site->publish_account_id ?? 0;
+        }
 
         $campaign = PublishCampaign::create($validated);
 
-        hexaLog('publish', 'campaign_created', "Campaign created: {$campaign->name} ({$campaign->campaign_id})");
+        hexaLog('campaigns', 'campaign_created', "Campaign created: {$campaign->name} ({$campaign->campaign_id})");
 
         return response()->json([
             'success' => true,
-            'message' => "Campaign '{$campaign->name}' created successfully.",
+            'message' => "Campaign '{$campaign->name}' created.",
             'campaign' => $campaign,
-            'redirect' => route('publish.campaigns.show', $campaign->id),
         ]);
     }
 

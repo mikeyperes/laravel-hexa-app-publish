@@ -12,9 +12,12 @@ class PublishCampaign extends Model
     protected $table = 'publish_campaigns';
 
     protected $fillable = [
+        'user_id',
         'publish_account_id',
         'publish_site_id',
         'publish_template_id',
+        'campaign_preset_id',
+        'preset_id',
         'name',
         'campaign_id',
         'description',
@@ -23,8 +26,13 @@ class PublishCampaign extends Model
         'article_type',
         'ai_engine',
         'delivery_mode',
+        'auto_publish',
+        'author',
+        'post_status',
         'articles_per_interval',
         'interval_unit',
+        'timezone',
+        'run_at_time',
         'article_sources',
         'photo_sources',
         'link_list',
@@ -43,6 +51,7 @@ class PublishCampaign extends Model
         'photo_sources' => 'array',
         'link_list' => 'array',
         'sitemap_urls' => 'array',
+        'auto_publish' => 'boolean',
         'last_run_at' => 'datetime',
         'next_run_at' => 'datetime',
     ];
@@ -63,6 +72,30 @@ class PublishCampaign extends Model
         $next = $latest ? ((int) substr($latest, -3)) + 1 : 1;
 
         return $prefix . str_pad($next, 3, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * @return BelongsTo
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * @return BelongsTo
+     */
+    public function campaignPreset(): BelongsTo
+    {
+        return $this->belongsTo(\hexa_app_publish\Campaigns\Models\CampaignPreset::class);
+    }
+
+    /**
+     * @return BelongsTo
+     */
+    public function wpPreset(): BelongsTo
+    {
+        return $this->belongsTo(PublishPreset::class, 'preset_id');
     }
 
     /**

@@ -1,189 +1,265 @@
-{{-- Create Campaign --}}
 @extends('layouts.app')
-@section('title', 'Create Campaign')
-@section('header', 'Create Campaign')
+@section('title', isset($editCampaign) ? 'Edit Campaign — ' . $editCampaign->name : 'Create Campaign')
+@section('header', isset($editCampaign) ? 'Edit Campaign' : 'Create Campaign')
 
 @section('content')
-<div class="max-w-3xl" x-data="campaignForm()">
+<div class="max-w-3xl mx-auto space-y-6" x-data="campaignCreate()">
 
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-5">
+    {{-- Campaign Name --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <label class="block text-xs text-gray-500 mb-1">Campaign Name</label>
+        <input type="text" x-model="form.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Daily Tech News for HerForward">
+    </div>
 
-        {{-- Identity --}}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {{-- User --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 class="font-semibold text-gray-800 mb-3">Select User</h3>
+        <div class="max-w-md"
+             @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-user') form.user_id = $event.detail.item.id"
+             @hexa-search-cleared.window="if ($event.detail.component_id === 'campaign-user') form.user_id = null">
+            <x-hexa-smart-search url="{{ route('api.search.users') }}" name="user_id" placeholder="Search users..." display-field="name" subtitle-field="email" value-field="id" id="campaign-user" show-id />
+        </div>
+    </div>
+
+    {{-- Campaign Preset --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-gray-800">Campaign Preset</h3>
+            <a href="{{ route('campaigns.presets.index') }}" class="text-xs text-blue-600 hover:text-blue-800">Manage Presets</a>
+        </div>
+        <select x-model="form.campaign_preset_id" @change="loadPreset()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+            <option value="">-- No preset --</option>
+            @foreach($campaignPresets as $cp)
+                <option value="{{ $cp->id }}">{{ $cp->name }} ({{ ucfirst($cp->source_method) }}{{ $cp->genre ? ' — ' . ucfirst($cp->genre) : '' }})</option>
+            @endforeach
+        </select>
+        <div x-show="presetInfo" x-cloak class="mt-2 text-xs text-gray-500 bg-gray-50 rounded-lg p-3 break-words" x-text="presetInfo"></div>
+    </div>
+
+    {{-- AI Template --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 class="font-semibold text-gray-800 mb-3">AI Template</h3>
+        <select x-model="form.publish_template_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+            <option value="">-- Default --</option>
+            @foreach($aiTemplates as $t)
+                <option value="{{ $t->id }}">{{ $t->name }}</option>
+            @endforeach
+        </select>
+    </div>
+
+    {{-- WordPress Preset --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 class="font-semibold text-gray-800 mb-3">WordPress Preset</h3>
+        <select x-model="form.preset_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+            <option value="">-- Default --</option>
+            @foreach($wpPresets as $p)
+                <option value="{{ $p->id }}">{{ $p->name }}</option>
+            @endforeach
+        </select>
+    </div>
+
+    {{-- WordPress Site --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 class="font-semibold text-gray-800 mb-3">WordPress Site</h3>
+        <select x-model="form.publish_site_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+            <option value="">-- Select site --</option>
+            @foreach($sites as $s)
+                <option value="{{ $s->id }}">{{ $s->name }} ({{ $s->url }})</option>
+            @endforeach
+        </select>
+    </div>
+
+    {{-- Scheduling --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+        <h3 class="font-semibold text-gray-800">Scheduling</h3>
+
+        <div class="flex flex-wrap gap-4">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Account <span class="text-red-500">*</span></label>
-                <select x-model="form.publish_account_id" @change="filterSitesAndTemplates()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select account...</option>
-                    @foreach($accounts as $a)
-                        <option value="{{ $a->id }}">{{ $a->name }}</option>
-                    @endforeach
+                <label class="block text-xs text-gray-500 mb-1">Posts per interval</label>
+                <input type="number" x-model="form.articles_per_interval" min="1" max="50" class="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Frequency</label>
+                <select x-model="form.interval_unit" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="hourly">Hourly</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
                 </select>
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Site <span class="text-red-500">*</span></label>
-                <select x-model="form.publish_site_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select site...</option>
-                    <template x-for="s in filteredSites" :key="s.id">
-                        <option :value="s.id" x-text="s.name"></option>
-                    </template>
-                </select>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Campaign Name <span class="text-red-500">*</span></label>
-                <input type="text" x-model="form.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. AI News Daily">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Template</label>
-                <select x-model="form.publish_template_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">— No Template —</option>
-                    <template x-for="t in filteredTemplates" :key="t.id">
-                        <option :value="t.id" x-text="t.name"></option>
-                    </template>
-                </select>
-            </div>
-        </div>
-
-        {{-- Schedule --}}
-        <div class="border-t border-gray-200 pt-4">
-            <p class="text-sm font-medium text-gray-700 mb-3">Schedule</p>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Articles Per Interval</label>
-                    <input type="number" x-model="form.articles_per_interval" min="1" max="50" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Interval</label>
-                    <select x-model="form.interval_unit" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        @foreach($intervalUnits as $unit)
-                            <option value="{{ $unit }}">{{ ucfirst($unit) }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Delivery Mode</label>
-                    <select x-model="form.delivery_mode" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        @foreach($deliveryModes as $mode)
-                            <option value="{{ $mode }}">{{ ucwords(str_replace('-', ' ', $mode)) }}</option>
-                        @endforeach
-                    </select>
-                </div>
-            </div>
-        </div>
-
-        {{-- Content rules --}}
-        <div class="border-t border-gray-200 pt-4">
-            <p class="text-sm font-medium text-gray-700 mb-3">Content Rules</p>
-
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Topic / Keywords</label>
-                <input type="text" x-model="form.topic" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. artificial intelligence, machine learning">
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Article Type Override</label>
-                    <select x-model="form.article_type" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">— Use Template Default —</option>
-                        @foreach($articleTypes as $type)
-                            <option value="{{ $type }}">{{ ucwords(str_replace('-', ' ', $type)) }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">AI Engine Override</label>
-                    <select x-model="form.ai_engine" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">— Use Template Default —</option>
-                        @foreach($aiEngines as $engine)
-                            <option value="{{ $engine }}">{{ ucfirst($engine) }}</option>
-                        @endforeach
-                    </select>
-                </div>
-            </div>
-
-            <div class="mt-3">
-                <label class="block text-xs text-gray-500 mb-1">Max Links Per Article</label>
-                <input type="number" x-model="form.max_links_per_article" min="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="5">
-            </div>
-        </div>
-
-        {{-- Sources --}}
-        <div class="border-t border-gray-200 pt-4">
-            <p class="text-sm font-medium text-gray-700 mb-3">Article Sources</p>
-            <div class="flex flex-wrap gap-3">
-                @foreach($articleSources as $src)
-                <label class="inline-flex items-center gap-2 text-sm text-gray-600">
-                    <input type="checkbox" :checked="form.article_sources.includes('{{ $src }}')" @change="toggleArray(form.article_sources, '{{ $src }}')" class="rounded border-gray-300 text-blue-600">
-                    {{ ucwords(str_replace('-', ' ', $src)) }}
-                </label>
-                @endforeach
+                <label class="block text-xs text-gray-500 mb-1">Run at time</label>
+                <input type="time" x-model="form.run_at_time" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
         </div>
 
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea x-model="form.description" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
-        </div>
-
-        <div class="flex items-center gap-3">
-            <button @click="save()" :disabled="saving" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
-                <svg x-show="saving" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                <span x-text="saving ? 'Creating...' : 'Create Campaign'"></span>
-            </button>
-            <a href="{{ route('campaigns.index') }}" class="text-sm text-gray-500 hover:text-gray-700">Cancel</a>
-        </div>
-
-        <div x-show="resultMessage" x-cloak class="rounded-lg px-4 py-3 text-sm" :class="resultSuccess ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'">
-            <span x-text="resultMessage"></span>
+            <label class="block text-xs text-gray-500 mb-1">Timezone</label>
+            <select x-model="form.timezone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+                @foreach($timezones as $tz)
+                    <option value="{{ $tz }}" {{ $tz === 'America/New_York' ? 'selected' : '' }}>{{ $tz }}</option>
+                @endforeach
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Current UTC: <span x-text="new Date().toISOString().substring(11, 16)"></span> UTC</p>
         </div>
     </div>
+
+    {{-- Publishing --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+        <h3 class="font-semibold text-gray-800">Publishing</h3>
+
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Author</label>
+            <input type="text" x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md" placeholder="WordPress author username">
+        </div>
+
+        <div>
+            <label class="block text-xs text-gray-500 mb-2">Post Status</label>
+            <div class="space-y-2">
+                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="form.post_status" value="publish" class="text-blue-600"><span class="text-sm">Publish immediately</span></label>
+                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="form.post_status" value="draft" class="text-blue-600"><span class="text-sm">Spawn as draft (pending approval)</span></label>
+                <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="form.post_status" value="pending" class="text-blue-600"><span class="text-sm">Pending review</span></label>
+            </div>
+        </div>
+
+        {{-- Auto-publish toggle --}}
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm font-medium text-gray-700">Automatically Publish</p>
+                <p class="text-xs text-gray-400">System handles everything: topics, articles, photos, spinning, publishing. No manual steps.</p>
+            </div>
+            <button @click="form.auto_publish = !form.auto_publish" type="button"
+                class="relative inline-flex h-7 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                :class="form.auto_publish ? 'bg-green-500' : 'bg-gray-300'"
+                role="switch" :aria-checked="form.auto_publish">
+                <span class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                    :class="form.auto_publish ? 'translate-x-7' : 'translate-x-0'"></span>
+            </button>
+        </div>
+    </div>
+
+    {{-- Notes --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <label class="block text-xs text-gray-500 mb-1">Notes</label>
+        <textarea x-model="form.notes" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Internal notes..."></textarea>
+    </div>
+
+    {{-- Actions --}}
+    <div class="flex gap-3">
+        <button @click="saveCampaign()" :disabled="saving" class="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+            <svg x-show="saving" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <span x-text="saving ? 'Saving...' : (editId ? 'Update Campaign' : 'Create Campaign')"></span>
+        </button>
+        <button x-show="editId" @click="runNow()" :disabled="runningNow" class="bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 inline-flex items-center gap-2">
+            <svg x-show="runningNow" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            Run Now
+        </button>
+        <a href="{{ route('campaigns.index') }}" class="text-gray-500 hover:text-gray-700 px-4 py-2.5 text-sm">Cancel</a>
+    </div>
+
+    <div x-show="saveResult" x-cloak class="p-3 rounded-lg text-sm border" :class="saveSuccess ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'" x-text="saveResult"></div>
+
+    {{-- Links --}}
+    <div class="flex gap-4 text-xs text-gray-400">
+        <a href="{{ route('campaigns.presets.index') }}" class="hover:text-blue-600">Campaign Presets</a>
+        @if(Route::has('publish.schedule.index'))
+            <a href="{{ route('publish.schedule.index') }}" class="hover:text-blue-600">Cron Schedule</a>
+        @endif
+    </div>
 </div>
-@endsection
 
 @push('scripts')
 <script>
-function campaignForm() {
-    const allSites = @json($sites->map(fn($s) => ['id' => $s->id, 'name' => $s->name, 'account_id' => $s->publish_account_id]));
-    const allTemplates = @json($templates->map(fn($t) => ['id' => $t->id, 'name' => $t->name, 'account_id' => $t->publish_account_id]));
+function campaignCreate() {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+    const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
+    const presets = @json($campaignPresets);
+
+    @if(isset($editCampaign) && $editCampaign)
+        @php
+            $editData = [
+                'user_id' => $editCampaign->user_id,
+                'campaign_preset_id' => $editCampaign->campaign_preset_id ?? '',
+                'publish_template_id' => $editCampaign->publish_template_id ?? '',
+                'preset_id' => $editCampaign->preset_id ?? '',
+                'publish_site_id' => $editCampaign->publish_site_id ?? '',
+                'name' => $editCampaign->name ?? '',
+                'description' => $editCampaign->description ?? '',
+                'topic' => $editCampaign->topic ?? '',
+                'keywords' => $editCampaign->keywords ?? [],
+                'auto_publish' => $editCampaign->auto_publish ?? false,
+                'author' => $editCampaign->author ?? '',
+                'post_status' => $editCampaign->post_status ?? 'draft',
+                'articles_per_interval' => $editCampaign->articles_per_interval ?? 1,
+                'interval_unit' => $editCampaign->interval_unit ?? 'daily',
+                'timezone' => $editCampaign->timezone ?? 'America/New_York',
+                'run_at_time' => $editCampaign->run_at_time ?? '09:00',
+                'notes' => $editCampaign->notes ?? '',
+            ];
+        @endphp
+        const initialForm = {!! json_encode($editData) !!};
+    @else
+        const saved = localStorage.getItem('campaignCreateState');
+        const initialForm = saved ? JSON.parse(saved) : {
+            user_id: null, campaign_preset_id: '', publish_template_id: '', preset_id: '', publish_site_id: '',
+            name: '', description: '', topic: '', keywords: [], auto_publish: false,
+            author: '', post_status: 'draft', articles_per_interval: 1, interval_unit: 'daily',
+            timezone: 'America/New_York', run_at_time: '09:00', notes: ''
+        };
+    @endif
+
     return {
-        form: {
-            publish_account_id: '{{ $preselected_account_id ?? '' }}',
-            publish_site_id: '{{ $preselected_site_id ?? '' }}',
-            publish_template_id: '',
-            name: '', description: '', topic: '',
-            article_type: '', ai_engine: '',
-            delivery_mode: 'review',
-            articles_per_interval: 1, interval_unit: 'daily',
-            article_sources: [], max_links_per_article: '',
+        editId: {{ isset($editCampaign) && $editCampaign ? $editCampaign->id : 'null' }},
+        saving: false, saveResult: '', saveSuccess: false,
+        runningNow: false,
+        presetInfo: '',
+        form: initialForm,
+
+        init() {
+            @if(!isset($editCampaign) || !$editCampaign)
+            this.$watch('form', () => {
+                localStorage.setItem('campaignCreateState', JSON.stringify(this.form));
+            }, { deep: true });
+            @endif
         },
-        allSites, allTemplates,
-        filteredSites: [], filteredTemplates: [],
-        saving: false, resultMessage: '', resultSuccess: false,
-        init() { this.filterSitesAndTemplates(); },
-        filterSitesAndTemplates() {
-            const aid = this.form.publish_account_id;
-            this.filteredSites = aid ? this.allSites.filter(s => s.account_id == aid) : this.allSites;
-            this.filteredTemplates = aid ? this.allTemplates.filter(t => t.account_id == aid) : this.allTemplates;
+
+        loadPreset() {
+            const p = presets.find(x => x.id == this.form.campaign_preset_id);
+            if (p) {
+                this.presetInfo = 'Method: ' + p.source_method + (p.genre ? ' | Genre: ' + p.genre : '') + (p.local_preference ? ' | Local: ' + p.local_preference : '') + (p.keywords?.length ? ' | Keywords: ' + p.keywords.join(', ') : '');
+                if (p.keywords) this.form.keywords = p.keywords;
+                if (p.ai_instructions) this.form.topic = p.ai_instructions;
+            } else {
+                this.presetInfo = '';
+            }
         },
-        toggleArray(arr, val) { const i = arr.indexOf(val); if (i === -1) arr.push(val); else arr.splice(i, 1); },
-        async save() {
-            this.saving = true; this.resultMessage = '';
+
+        async saveCampaign() {
+            this.saving = true; this.saveResult = '';
+            const url = this.editId ? '/campaigns/' + this.editId : '{{ route("campaigns.store") }}';
+            const method = this.editId ? 'PUT' : 'POST';
             try {
-                const res = await fetch('{{ route("campaigns.store") }}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' },
-                    body: JSON.stringify(this.form)
-                });
-                const data = await res.json();
-                this.resultSuccess = data.success;
-                this.resultMessage = data.message || (data.success ? 'Created.' : 'Failed.');
-                if (data.redirect) setTimeout(() => window.location.href = data.redirect, 600);
-            } catch (e) { this.resultSuccess = false; this.resultMessage = 'Error: ' + e.message; }
+                const r = await fetch(url, { method, headers, body: JSON.stringify(this.form) });
+                const d = await r.json();
+                this.saveSuccess = d.success;
+                this.saveResult = d.message || (d.success ? 'Saved.' : 'Error.');
+                if (d.success && d.campaign?.id) {
+                    this.editId = d.campaign.id;
+                    history.replaceState(null, '', '{{ route("campaigns.create") }}?id=' + d.campaign.id);
+                    localStorage.removeItem('campaignCreateState');
+                }
+            } catch(e) { this.saveSuccess = false; this.saveResult = 'Error: ' + e.message; }
             this.saving = false;
-        }
+        },
+
+        async runNow() {
+            if (!this.editId) return;
+            this.runningNow = true;
+            alert('Run Now — coming in Phase 3 (campaign execution engine)');
+            this.runningNow = false;
+        },
     };
 }
 </script>
 @endpush
+@endsection
