@@ -70,6 +70,9 @@
             <div class="max-w-md"
                  @hexa-search-selected.window="if ($event.detail.component_id === 'pipeline-user') selectUser($event.detail.item)"
                  @hexa-search-cleared.window="if ($event.detail.component_id === 'pipeline-user') clearUser()">
+                @php
+                    $pipelineSelectedUser = isset($draftUser) && $draftUser ? ['id' => $draftUser->id, 'name' => $draftUser->name, 'email' => $draftUser->email] : null;
+                @endphp
                 <x-hexa-smart-search
                     url="{{ route('api.search.users') }}"
                     name="user_id"
@@ -80,6 +83,7 @@
                     value-field="id"
                     id="pipeline-user"
                     show-id
+                    :selected="$pipelineSelectedUser"
                 />
             </div>
         </div>

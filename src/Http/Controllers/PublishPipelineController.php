@@ -115,10 +115,13 @@ class PublishPipelineController extends Controller
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
         $newsCategories = \DB::table('lists')->where('list_key', 'news_categories')->where('is_active', true)->orderBy('sort_order')->pluck('list_value');
 
+        $draftUser = $draft->created_by ? \hexa_core\Models\User::find($draft->created_by) : null;
+
         return view('app-publish::article.pipeline.index', [
             'sites'          => $sites,
             'draftId'        => $draft->id,
             'newsCategories' => $newsCategories,
+            'draftUser'      => $draftUser,
         ]);
     }
 
