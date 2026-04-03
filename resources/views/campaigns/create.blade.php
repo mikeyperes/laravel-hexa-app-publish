@@ -25,51 +25,75 @@
         </div>
     </div>
 
-    {{-- Templates & Presets --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
-        <h3 class="font-semibold text-gray-800">Templates & Presets</h3>
-
-        {{-- Campaign Preset --}}
-        <div>
-            <div class="flex items-center justify-between mb-1">
-                <label class="text-xs text-gray-500">Campaign Preset</label>
+    {{-- ═══ Campaign Preset ═══ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-3">
+        <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-gray-800">Campaign Preset</h3>
+            <div class="flex items-center gap-3">
+                <button x-show="form.campaign_preset_id" @click="restoreCampaignPreset()" class="text-xs text-gray-400 hover:text-blue-600">Restore Defaults</button>
                 <a href="{{ route('campaigns.presets.index') }}" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
             </div>
-            <select x-model="form.campaign_preset_id" @change="loadPreset()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-                <option value="">-- No preset --</option>
-                @foreach($campaignPresets as $cp)
-                    <option value="{{ $cp->id }}">{{ $cp->name }} ({{ ucfirst($cp->source_method) }}{{ $cp->genre ? ' — ' . ucfirst($cp->genre) : '' }})</option>
-                @endforeach
-            </select>
-            <div x-show="presetInfo" x-cloak class="mt-1 text-xs text-gray-500 break-words" x-text="presetInfo"></div>
         </div>
+        <select x-model="form.campaign_preset_id" @change="loadPreset()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+            <option value="">-- No preset --</option>
+            @foreach($campaignPresets as $cp)
+                <option value="{{ $cp->id }}">{{ $cp->name }} ({{ ucfirst($cp->source_method) }}{{ $cp->genre ? ' — ' . ucfirst($cp->genre) : '' }})</option>
+            @endforeach
+        </select>
+        <div x-show="form.campaign_preset_id" x-cloak class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+            <div><label class="block text-xs text-gray-400 mb-1">Source Method</label><select x-model="form.source_method" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"><option value="trending">Trending</option><option value="genre">Genre</option><option value="local">Local</option></select></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Genre</label><input type="text" x-model="form.genre" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="e.g. technology"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Local Preference</label><input type="text" x-model="form.local_preference" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="City or state"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Keywords (comma sep)</label><input type="text" x-model="form.keywords_text" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="AI, tech, business"></div>
+            <div class="md:col-span-2"><label class="block text-xs text-gray-400 mb-1">Auto-publish</label>
+                <div class="flex items-center gap-2"><button @click="form.auto_publish = !form.auto_publish" type="button" class="relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200" :class="form.auto_publish ? 'bg-green-500' : 'bg-gray-300'" role="switch"><span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200" :class="form.auto_publish ? 'translate-x-5' : 'translate-x-0'"></span></button><span class="text-xs text-gray-500" x-text="form.auto_publish ? 'System handles everything' : 'Manual review'"></span></div>
+            </div>
+        </div>
+    </div>
 
-        {{-- AI Template --}}
-        <div>
-            <div class="flex items-center justify-between mb-1">
-                <label class="text-xs text-gray-500 inline-flex items-center gap-1">AI Template <svg x-show="loadingPresets" x-cloak class="w-3 h-3 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></label>
+    {{-- ═══ AI Template ═══ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-3">
+        <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-gray-800 inline-flex items-center gap-2">AI Template <svg x-show="loadingPresets" x-cloak class="w-3 h-3 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></h3>
+            <div class="flex items-center gap-3">
+                <button x-show="form.publish_template_id" @click="restoreAiTemplate()" class="text-xs text-gray-400 hover:text-blue-600">Restore Defaults</button>
                 <a href="{{ route('publish.templates.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
             </div>
-            <select x-model="form.publish_template_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-                <option value="">-- Default --</option>
-                @foreach($aiTemplates as $t)
-                    <option value="{{ $t->id }}">{{ $t->name }}</option>
-                @endforeach
-            </select>
         </div>
+        <select x-model="form.publish_template_id" @change="loadAiTemplate()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+            <option value="">-- Default --</option>
+            @foreach($aiTemplates as $t)
+                <option value="{{ $t->id }}">{{ $t->name }}</option>
+            @endforeach
+        </select>
+        <div x-show="form.publish_template_id" x-cloak class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+            <div><label class="block text-xs text-gray-400 mb-1">AI Engine</label><input type="text" x-model="form.ai_engine" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="claude-sonnet-4-6"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Tone</label><input type="text" x-model="form.override_tone" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Professional, Conversational"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Article Format</label><input type="text" x-model="form.override_article_format" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Editorial, Listicle"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Word Count Range</label><div class="flex gap-2"><input type="number" x-model="form.override_word_min" class="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Min"><span class="text-gray-400">—</span><input type="number" x-model="form.override_word_max" class="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Max"></div></div>
+        </div>
+    </div>
 
-        {{-- WordPress Preset --}}
-        <div>
-            <div class="flex items-center justify-between mb-1">
-                <label class="text-xs text-gray-500 inline-flex items-center gap-1">WordPress Preset <svg x-show="loadingPresets" x-cloak class="w-3 h-3 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></label>
+    {{-- ═══ WordPress Preset ═══ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-3">
+        <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-gray-800 inline-flex items-center gap-2">WordPress Preset <svg x-show="loadingPresets" x-cloak class="w-3 h-3 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></h3>
+            <div class="flex items-center gap-3">
+                <button x-show="form.preset_id" @click="restoreWpPreset()" class="text-xs text-gray-400 hover:text-blue-600">Restore Defaults</button>
                 <a href="{{ route('publish.presets.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
             </div>
-            <select x-model="form.preset_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-                <option value="">-- Default --</option>
-                @foreach($wpPresets as $p)
-                    <option value="{{ $p->id }}">{{ $p->name }}</option>
-                @endforeach
-            </select>
+        </div>
+        <select x-model="form.preset_id" @change="loadWpPreset()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+            <option value="">-- Default --</option>
+            @foreach($wpPresets as $p)
+                <option value="{{ $p->id }}">{{ $p->name }}</option>
+            @endforeach
+        </select>
+        <div x-show="form.preset_id" x-cloak class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+            <div><label class="block text-xs text-gray-400 mb-1">Publish Action</label><select x-model="form.delivery_mode" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"><option value="auto-publish">Publish Immediately</option><option value="draft-local">Save as Local Draft</option><option value="draft-wordpress">Save as WordPress Draft</option><option value="review">Schedule for Later</option></select></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Follow Links</label><select x-model="form.override_follow_links" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"><option value="">Default</option><option value="follow">Follow</option><option value="nofollow">Nofollow</option></select></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Photo Count</label><input type="number" x-model="form.override_photo_count" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" min="0" max="10" placeholder="2-4"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Featured Image</label><select x-model="form.override_featured_image" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"><option value="">Default</option><option value="auto">Auto from AI</option><option value="none">None</option></select></div>
         </div>
     </div>
 
@@ -173,23 +197,6 @@
         </div>
     </div>
 
-    {{-- Publishing --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
-        <h3 class="font-semibold text-gray-800">Publishing</h3>
-
-        <div>
-            <label class="block text-xs text-gray-500 mb-2">Publish Action</label>
-            <select x-model="form.delivery_mode" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-                <option value="auto-publish">Publish Immediately</option>
-                <option value="draft-local">Save as Local Draft</option>
-                <option value="draft-wordpress">Save as WordPress Draft</option>
-                <option value="review">Schedule for Later</option>
-            </select>
-        </div>
-
-        {{-- Auto-publish is controlled by Campaign Preset --}}
-    </div>
-
     {{-- AI Instructions --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <label class="block text-xs text-gray-500 mb-1">AI Instructions</label>
@@ -226,6 +233,8 @@ function campaignCreate() {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
     const presets = @json($campaignPresets);
+    const aiTemplates = @json($aiTemplates);
+    const wpPresets = @json($wpPresets);
 
     @if(isset($editCampaign) && $editCampaign)
         @php
@@ -257,7 +266,11 @@ function campaignCreate() {
         const initialForm = saved ? JSON.parse(saved) : {
             user_id: null, campaign_preset_id: '', publish_template_id: '', preset_id: '', publish_site_id: '',
             name: '', description: '', topic: '', keywords: [], auto_publish: false,
-            author: '', post_status: 'draft', delivery_mode: 'draft-local', articles_per_interval: 1, interval_unit: 'daily',
+            author: '', post_status: 'draft', delivery_mode: 'draft-local',
+            source_method: 'trending', genre: '', local_preference: '', keywords_text: '', auto_publish: false,
+            ai_engine: '', override_tone: '', override_article_format: '', override_word_min: '', override_word_max: '',
+            override_follow_links: '', override_photo_count: '', override_featured_image: '',
+            articles_per_interval: 1, interval_unit: 'daily',
             timezone: 'America/New_York', run_at_time: '09:00', drip_interval_minutes: 60, notes: ''
         };
     @endif
@@ -419,12 +432,47 @@ function campaignCreate() {
         loadPreset() {
             const p = presets.find(x => x.id == this.form.campaign_preset_id);
             if (p) {
-                this.presetInfo = 'Method: ' + p.source_method + (p.genre ? ' | Genre: ' + p.genre : '') + (p.local_preference ? ' | Local: ' + p.local_preference : '') + (p.keywords?.length ? ' | Keywords: ' + p.keywords.join(', ') : '');
-                if (p.keywords) this.form.keywords = p.keywords;
-                if (p.ai_instructions) this.form.topic = p.ai_instructions;
-            } else {
-                this.presetInfo = '';
+                this.form.source_method = p.source_method || 'trending';
+                this.form.genre = p.genre || '';
+                this.form.local_preference = p.local_preference || '';
+                this.form.keywords_text = (p.keywords || []).join(', ');
+                this.form.keywords = p.keywords || [];
+                this.form.auto_publish = p.auto_select_sources || false;
+                if (p.ai_instructions) this.form.notes = p.ai_instructions;
             }
+        },
+
+        restoreCampaignPreset() {
+            this.loadPreset();
+        },
+
+        loadAiTemplate() {
+            const t = aiTemplates.find(x => x.id == this.form.publish_template_id);
+            if (t) {
+                this.form.ai_engine = t.ai_engine || '';
+                this.form.override_tone = Array.isArray(t.tone) ? t.tone.join(', ') : (t.tone || '');
+                this.form.override_article_format = t.article_format || '';
+                this.form.override_word_min = t.word_count_min || '';
+                this.form.override_word_max = t.word_count_max || '';
+            }
+        },
+
+        restoreAiTemplate() {
+            this.loadAiTemplate();
+        },
+
+        loadWpPreset() {
+            const p = wpPresets.find(x => x.id == this.form.preset_id);
+            if (p) {
+                this.form.delivery_mode = p.default_publish_action || 'draft-local';
+                this.form.override_follow_links = p.follow_links || '';
+                this.form.override_photo_count = p.photo_count || '';
+                this.form.override_featured_image = p.featured_image || '';
+            }
+        },
+
+        restoreWpPreset() {
+            this.loadWpPreset();
         },
 
         async saveCampaign() {
