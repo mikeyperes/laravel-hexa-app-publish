@@ -45,6 +45,8 @@
             <div><label class="block text-xs text-gray-400 mb-1">Genre</label><input type="text" x-model="form.genre" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="e.g. technology"></div>
             <div><label class="block text-xs text-gray-400 mb-1">Local Preference</label><input type="text" x-model="form.local_preference" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="City or state"></div>
             <div><label class="block text-xs text-gray-400 mb-1">Keywords (comma sep)</label><input type="text" x-model="form.keywords_text" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="AI, tech, business"></div>
+            <div class="md:col-span-2"><label class="block text-xs text-gray-400 mb-1">Trending Categories (comma sep)</label><input type="text" x-model="form.trending_categories_text" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="technology, business, education"></div>
+            <div class="md:col-span-2"><label class="block text-xs text-gray-400 mb-1">AI Instructions</label><textarea x-model="form.cp_ai_instructions" rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Custom AI instructions for this campaign..."></textarea></div>
             <div class="md:col-span-2"><label class="block text-xs text-gray-400 mb-1">Auto-publish</label>
                 <div class="flex items-center gap-2"><button @click="form.auto_publish = !form.auto_publish" type="button" class="relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200" :class="form.auto_publish ? 'bg-green-500' : 'bg-gray-300'" role="switch"><span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200" :class="form.auto_publish ? 'translate-x-5' : 'translate-x-0'"></span></button><span class="text-xs text-gray-500" x-text="form.auto_publish ? 'System handles everything' : 'Manual review'"></span></div>
             </div>
@@ -68,9 +70,16 @@
         </select>
         <div x-show="form.publish_template_id" x-cloak class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
             <div><label class="block text-xs text-gray-400 mb-1">AI Engine</label><input type="text" x-model="form.ai_engine" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="claude-sonnet-4-6"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Article Type</label><input type="text" x-model="form.override_article_type" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="editorial, listicle, press-release"></div>
             <div><label class="block text-xs text-gray-400 mb-1">Tone</label><input type="text" x-model="form.override_tone" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Professional, Conversational"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Article Format</label><input type="text" x-model="form.override_article_format" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Editorial, Listicle"></div>
             <div><label class="block text-xs text-gray-400 mb-1">Word Count Range</label><div class="flex gap-2"><input type="number" x-model="form.override_word_min" class="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Min"><span class="text-gray-400">—</span><input type="number" x-model="form.override_word_max" class="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Max"></div></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Photos per Article</label><input type="number" x-model="form.override_photos_per_article" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" min="0" max="20" placeholder="3"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Photo Sources (comma sep)</label><input type="text" x-model="form.override_photo_sources_text" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="unsplash, pexels, pixabay"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Max Links</label><input type="number" x-model="form.override_max_links" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" min="0" max="50" placeholder="5"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Description</label><input type="text" x-model="form.override_ai_description" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Template description"></div>
+            <div class="md:col-span-2"><label class="block text-xs text-gray-400 mb-1">AI Prompt</label><textarea x-model="form.override_ai_prompt" rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Custom AI prompt override..."></textarea></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Structure</label><input type="text" x-model="form.override_structure" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="intro, body, conclusion"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Rules</label><input type="text" x-model="form.override_rules" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Custom rules"></div>
         </div>
     </div>
 
@@ -92,8 +101,13 @@
         <div x-show="form.preset_id" x-cloak class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
             <div><label class="block text-xs text-gray-400 mb-1">Publish Action</label><select x-model="form.delivery_mode" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"><option value="auto-publish">Publish Immediately</option><option value="draft-local">Save as Local Draft</option><option value="draft-wordpress">Save as WordPress Draft</option><option value="review">Schedule for Later</option></select></div>
             <div><label class="block text-xs text-gray-400 mb-1">Follow Links</label><select x-model="form.override_follow_links" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"><option value="">Default</option><option value="follow">Follow</option><option value="nofollow">Nofollow</option></select></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Photo Count</label><input type="number" x-model="form.override_photo_count" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" min="0" max="10" placeholder="2-4"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Featured Image</label><select x-model="form.override_featured_image" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"><option value="">Default</option><option value="auto">Auto from AI</option><option value="none">None</option></select></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Article Format</label><input type="text" x-model="form.override_wp_article_format" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Editorial"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Tone</label><input type="text" x-model="form.override_wp_tone" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Authoritative"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Image Preference</label><input type="text" x-model="form.override_image_preference" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Abstract/Conceptual"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Image Layout</label><input type="text" x-model="form.override_image_layout" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="5 Photos Randomly Placed"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Category Count</label><input type="number" x-model="form.override_category_count" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" min="0" max="30" placeholder="3"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Tag Count</label><input type="number" x-model="form.override_tag_count" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" min="0" max="30" placeholder="5"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Default Site</label><select x-model="form.override_default_site_id" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"><option value="">From campaign</option>@foreach($sites as $s)<option value="{{ $s->id }}">{{ $s->name }}</option>@endforeach</select></div>
         </div>
     </div>
 
@@ -267,9 +281,10 @@ function campaignCreate() {
             user_id: null, campaign_preset_id: '', publish_template_id: '', preset_id: '', publish_site_id: '',
             name: '', description: '', topic: '', keywords: [], auto_publish: false,
             author: '', post_status: 'draft', delivery_mode: 'draft-local',
-            source_method: 'trending', genre: '', local_preference: '', keywords_text: '', auto_publish: false,
-            ai_engine: '', override_tone: '', override_article_format: '', override_word_min: '', override_word_max: '',
-            override_follow_links: '', override_photo_count: '', override_featured_image: '',
+            source_method: 'trending', genre: '', local_preference: '', keywords_text: '', trending_categories_text: '', cp_ai_instructions: '', auto_publish: false,
+            ai_engine: '', override_article_type: '', override_tone: '', override_word_min: '', override_word_max: '',
+            override_photos_per_article: '', override_photo_sources_text: '', override_max_links: '', override_ai_description: '', override_ai_prompt: '', override_structure: '', override_rules: '',
+            override_follow_links: '', override_wp_article_format: '', override_wp_tone: '', override_image_preference: '', override_image_layout: '', override_category_count: '', override_tag_count: '', override_default_site_id: '',
             articles_per_interval: 1, interval_unit: 'daily',
             timezone: 'America/New_York', run_at_time: '09:00', drip_interval_minutes: 60, notes: ''
         };
@@ -437,43 +452,48 @@ function campaignCreate() {
                 this.form.local_preference = p.local_preference || '';
                 this.form.keywords_text = (p.keywords || []).join(', ');
                 this.form.keywords = p.keywords || [];
+                this.form.trending_categories_text = (p.trending_categories || []).join(', ');
                 this.form.auto_publish = p.auto_select_sources || false;
+                this.form.cp_ai_instructions = p.ai_instructions || '';
                 if (p.ai_instructions) this.form.notes = p.ai_instructions;
             }
         },
-
-        restoreCampaignPreset() {
-            this.loadPreset();
-        },
+        restoreCampaignPreset() { this.loadPreset(); },
 
         loadAiTemplate() {
             const t = aiTemplates.find(x => x.id == this.form.publish_template_id);
             if (t) {
                 this.form.ai_engine = t.ai_engine || '';
+                this.form.override_article_type = t.article_type || '';
                 this.form.override_tone = Array.isArray(t.tone) ? t.tone.join(', ') : (t.tone || '');
-                this.form.override_article_format = t.article_format || '';
                 this.form.override_word_min = t.word_count_min || '';
                 this.form.override_word_max = t.word_count_max || '';
+                this.form.override_photos_per_article = t.photos_per_article || '';
+                this.form.override_photo_sources_text = (t.photo_sources || []).join(', ');
+                this.form.override_max_links = t.max_links || '';
+                this.form.override_ai_description = t.description || '';
+                this.form.override_ai_prompt = t.ai_prompt || '';
+                this.form.override_structure = t.structure || '';
+                this.form.override_rules = t.rules || '';
             }
         },
-
-        restoreAiTemplate() {
-            this.loadAiTemplate();
-        },
+        restoreAiTemplate() { this.loadAiTemplate(); },
 
         loadWpPreset() {
             const p = wpPresets.find(x => x.id == this.form.preset_id);
             if (p) {
                 this.form.delivery_mode = p.default_publish_action || 'draft-local';
                 this.form.override_follow_links = p.follow_links || '';
-                this.form.override_photo_count = p.photo_count || '';
-                this.form.override_featured_image = p.featured_image || '';
+                this.form.override_wp_article_format = p.article_format || '';
+                this.form.override_wp_tone = p.tone || '';
+                this.form.override_image_preference = p.image_preference || '';
+                this.form.override_image_layout = p.image_layout || '';
+                this.form.override_category_count = p.default_category_count || '';
+                this.form.override_tag_count = p.default_tag_count || '';
+                this.form.override_default_site_id = p.default_site_id || '';
             }
         },
-
-        restoreWpPreset() {
-            this.loadWpPreset();
-        },
+        restoreWpPreset() { this.loadWpPreset(); },
 
         async saveCampaign() {
             this.saving = true; this.saveResult = '';
