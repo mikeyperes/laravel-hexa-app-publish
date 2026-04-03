@@ -284,17 +284,25 @@ function campaignCreate() {
                 this.loadPreset();
             }
 
-            // Restore site connection status from localStorage (don't re-test)
-            const savedConn = localStorage.getItem('campaignSiteConnection');
-            if (savedConn) {
-                try {
-                    const conn = JSON.parse(savedConn);
-                    if (conn.site_id == this.form.publish_site_id) {
-                        this.siteStatus = conn.status;
-                        this.siteMessage = conn.message;
-                        this.siteAuthors = conn.authors || [];
-                    }
-                } catch(e) {}
+            // If site is selected, restore cached connection or auto-test
+            if (this.form.publish_site_id) {
+                const savedConn = localStorage.getItem('campaignSiteConnection');
+                let restored = false;
+                if (savedConn) {
+                    try {
+                        const conn = JSON.parse(savedConn);
+                        if (conn.site_id == this.form.publish_site_id && conn.status === true && conn.authors?.length > 0) {
+                            this.siteStatus = conn.status;
+                            this.siteMessage = conn.message;
+                            this.siteAuthors = conn.authors;
+                            restored = true;
+                        }
+                    } catch(e) {}
+                }
+                // If no valid cache with authors, run the test to get full connection info
+                if (!restored) {
+                    this.$nextTick(() => this.testSiteConnection());
+                }
             }
         },
 
