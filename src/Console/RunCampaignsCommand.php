@@ -58,10 +58,12 @@ class RunCampaignsCommand extends Command
                     default => 'draft',
                 };
 
-                // Drip delay between articles (skip first)
+                // Drip: set scheduled_for on articles after the first
+                // No sleep() — articles are created with staggered timestamps
+                $scheduledFor = null;
                 if ($i > 0 && $dripMinutes > 0) {
-                    $this->line("    Waiting {$dripMinutes}min before next article...");
-                    sleep($dripMinutes * 60);
+                    $scheduledFor = now()->addMinutes($i * $dripMinutes);
+                    $this->line("    Article {$i} scheduled for: {$scheduledFor->format('H:i')}");
                 }
 
                 $result = $runService->run($campaign, $publishMode);

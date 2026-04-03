@@ -77,11 +77,11 @@ class CampaignRunService
         foreach ($sourceUrls as $url) {
             try {
                 $result = $this->extractor->extract($url);
-                if ($result['success'] && !empty($result['data']['text'])) {
+                if ($result['success'] && !empty($result['data']['content_text'])) {
                     $sourceTexts[] = [
                         'url' => $url,
                         'title' => $result['data']['title'] ?? '',
-                        'text' => $result['data']['text'],
+                        'text' => $result['data']['content_text'],
                     ];
                     $log[] = $this->entry('success', 'Extracted: ' . Str::limit($result['data']['title'] ?? $url, 60));
                 } else {
@@ -103,7 +103,7 @@ class CampaignRunService
             'title' => 'Untitled',
             'status' => 'spinning',
             'publish_site_id' => $site->id,
-            'publish_account_id' => $site->publish_account_id ?? 0,
+            'publish_account_id' => $site->publish_account_id ?: null,
             'publish_campaign_id' => $campaign->id,
             'publish_template_id' => $campaign->publish_template_id,
             'preset_id' => $campaign->preset_id,
@@ -161,15 +161,17 @@ class CampaignRunService
 
                 if ($postResult['success']) {
                     $wpPostId = $postResult['data']['post_id'] ?? null;
-                    $wpPostUrl = $postResult['data']['post_url'] ?? '';
+                    // wpCliCreatePost returns only post_id, build URL from site
+                    $wpPostUrl = $wpPostId ? rtrim($site->url, '/') . '/?p=' . $wpPostId : '';
+                    $isActualPublish = ($postStatus === 'publish');
                     $article->update([
                         'wp_post_id' => $wpPostId,
                         'wp_post_url' => $wpPostUrl,
                         'wp_status' => $postStatus,
-                        'status' => 'completed',
-                        'published_at' => now(),
+                        'status' => $isActualPublish ? 'completed' : 'drafting',
+                        'published_at' => $isActualPublish ? now() : null,
                     ]);
-                    $log[] = $this->entry('success', "Published: WP #{$wpPostId} — {$wpPostUrl}");
+                    $log[] = $this->entry('success', ($isActualPublish ? 'Published' : 'WP Draft') . ": #{$wpPostId} — {$wpPostUrl}");
                 } else {
                     $log[] = $this->entry('error', 'WP publish failed: ' . ($postResult['message'] ?? ''));
                     $article->update(['status' => 'failed']);
@@ -268,7 +270,7 @@ class CampaignRunService
             return ['success' => false, 'message' => $result['message'] ?? 'AI call failed'];
         }
 
-        $content = $result['data']['text'] ?? '';
+        $content = $result['data']['content'] ?? '';
         $usage = $result['data']['usage'] ?? [];
 
         // Parse metadata

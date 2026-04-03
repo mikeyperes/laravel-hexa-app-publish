@@ -276,8 +276,7 @@ function campaignCreate() {
         @endphp
         const initialForm = {!! json_encode($editData) !!};
     @else
-        const saved = localStorage.getItem('campaignCreateState');
-        const initialForm = saved ? JSON.parse(saved) : {
+        const initialForm = {
             user_id: null, campaign_preset_id: '', publish_template_id: '', preset_id: '', publish_site_id: '',
             name: '', description: '', topic: '', keywords: [], auto_publish: false,
             author: '', post_status: 'draft', delivery_mode: 'draft-local',
@@ -515,7 +514,7 @@ function campaignCreate() {
                 if (d.success && d.campaign?.id) {
                     this.editId = d.campaign.id;
                     history.replaceState(null, '', '{{ route("campaigns.create") }}?id=' + d.campaign.id);
-                    localStorage.removeItem('campaignCreateState');
+                    // Campaign is DB-backed, no localStorage needed
                 }
             } catch(e) { this.saveSuccess = false; this.saveResult = 'Error: ' + e.message; }
             this.saving = false;

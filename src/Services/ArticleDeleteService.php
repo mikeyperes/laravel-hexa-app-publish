@@ -51,7 +51,7 @@ class ArticleDeleteService
                 } else {
                     $server = $resolved['server'];
                     $account = $resolved['account'];
-                    $installId = $site->wptoolkit_instance_id;
+                    $installId = $site->wordpress_install_id;
 
                     // Delete WP media first (referenced by the post)
                     $wpImages = $article->wp_images ?? [];

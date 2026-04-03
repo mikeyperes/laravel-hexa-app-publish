@@ -1271,8 +1271,8 @@
                     </div>
                 </div>
 
-                {{-- Activity Log --}}
-                <div x-show="prepareLog.length > 0" x-cloak class="mt-4 bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto" x-ref="prepareLogContainer">
+                {{-- Activity Log (during prepare, hidden after publish result shows) --}}
+                <div x-show="prepareLog.length > 0 && !publishResult" x-cloak class="mt-4 bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto" x-ref="prepareLogContainer">
                     <p class="text-xs text-gray-500 mb-2 font-semibold uppercase">Activity Log</p>
                     <template x-for="(entry, idx) in prepareLog" :key="idx">
                         <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
