@@ -15,7 +15,7 @@
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 class="font-semibold text-gray-800 mb-3">Select User</h3>
         <div class="max-w-md"
-             @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-user') form.user_id = $event.detail.item.id"
+             @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-user') { form.user_id = $event.detail.item.id; loadUserPresets($event.detail.item.id); }"
              @hexa-search-cleared.window="if ($event.detail.component_id === 'campaign-user') form.user_id = null">
             @php
                 $selectedUser = (isset($editCampaign) && $editCampaign->user) ? json_encode(['id' => $editCampaign->user->id, 'name' => $editCampaign->user->name, 'email' => $editCampaign->user->email]) : null;
@@ -101,23 +101,26 @@
                     </div>
                 </template>
             </div>
-            {{-- Author --}}
-            <div class="mt-2">
-                <label class="block text-xs text-gray-500 mb-1">Author</label>
-                <div x-show="siteAuthors.length > 0">
-                    <select x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-                        <option value="">-- Default author --</option>
-                        <template x-for="a in siteAuthors" :key="a.user_login">
-                            <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
-                        </template>
-                    </select>
-                </div>
-                <div x-show="siteAuthors.length === 0 && form.author">
-                    <input type="text" x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md" readonly>
-                    <p class="text-xs text-gray-400 mt-1">Connect to site to load full author list</p>
-                </div>
-                <div x-show="siteAuthors.length === 0 && !form.author">
-                    <p class="text-xs text-gray-400">Connect to WordPress site to load authors</p>
+        </div>
+
+        {{-- Author (always visible when site selected) --}}
+        <div x-show="form.publish_site_id" class="mt-4">
+            <label class="block text-xs text-gray-500 mb-1">Author</label>
+            <div x-show="siteAuthors.length > 0">
+                <select x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+                    <option value="">-- Default author --</option>
+                    <template x-for="a in siteAuthors" :key="a.user_login">
+                        <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
+                    </template>
+                </select>
+            </div>
+            <div x-show="siteAuthors.length === 0">
+                <div class="flex items-center gap-2">
+                    <input type="text" x-model="form.author" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md" placeholder="WordPress author username">
+                    <span x-show="siteTesting" class="text-xs text-blue-500 flex items-center gap-1">
+                        <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Loading authors...
+                    </span>
                 </div>
             </div>
         </div>
@@ -317,6 +320,29 @@ function campaignCreate() {
                     body: JSON.stringify(this.form)
                 });
             } catch(e) { /* silent auto-save */ }
+        },
+
+        async loadUserPresets(userId) {
+            if (!userId) return;
+            try {
+                // Load WP presets for this user and auto-select default
+                const presetsResp = await fetch('{{ route("publish.presets.index") }}?user_id=' + userId + '&format=json', { headers: { 'Accept': 'application/json' } });
+                const presetsData = await presetsResp.json();
+                const userPresets = presetsData.data || presetsData || [];
+                const defaultWp = userPresets.find(p => p.is_default);
+                if (defaultWp && !this.form.preset_id) {
+                    this.form.preset_id = String(defaultWp.id);
+                }
+
+                // Load AI templates for this user and auto-select default
+                const templatesResp = await fetch('{{ route("publish.templates.index") }}?account_id=' + userId + '&format=json', { headers: { 'Accept': 'application/json' } });
+                const templatesData = await templatesResp.json();
+                const userTemplates = templatesData.data || templatesData || [];
+                const defaultAi = userTemplates.find(t => t.is_default);
+                if (defaultAi && !this.form.publish_template_id) {
+                    this.form.publish_template_id = String(defaultAi.id);
+                }
+            } catch(e) { /* silent */ }
         },
 
         calculatePostTime(index) {
