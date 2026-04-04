@@ -144,7 +144,16 @@ class CampaignExecutionService
             $log[] = $this->entry('step', 'Publishing to WordPress...');
             try {
                 $postStatus = $mode === 'wp-draft' ? 'draft' : ($campaign->post_status ?? 'draft');
-                $postResult = $this->delivery->createPost($site, $article->title ?? 'Untitled', $article->body ?? '', $postStatus);
+                $deliveryOptions = [];
+
+                // Drip scheduling: use WordPress 'future' status with scheduled date
+                if ($scheduledFor && $postStatus === 'publish') {
+                    $postStatus = 'future';
+                    $deliveryOptions['date'] = $scheduledFor->format('Y-m-d\TH:i:s');
+                    $log[] = $this->entry('info', "Scheduled for: {$scheduledFor->format('Y-m-d H:i')}");
+                }
+
+                $postResult = $this->delivery->createPost($site, $article->title ?? 'Untitled', $article->body ?? '', $postStatus, $deliveryOptions);
 
                 if ($postResult['success']) {
                     $this->persistence->updateDeliveryResult($article, $postResult, $postStatus);
