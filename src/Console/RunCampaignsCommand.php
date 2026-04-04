@@ -4,7 +4,7 @@ namespace hexa_app_publish\Console;
 
 use Illuminate\Console\Command;
 use hexa_app_publish\Models\PublishCampaign;
-use hexa_app_publish\Campaigns\Services\CampaignRunService;
+use hexa_app_publish\Publishing\Campaigns\Services\CampaignExecutionService;
 
 /**
  * RunCampaignsCommand — processes all due campaigns via cron.
@@ -39,7 +39,7 @@ class RunCampaignsCommand extends Command
 
         $this->info("Processing {$dueCampaigns->count()} campaign(s)...");
 
-        $runService = app(CampaignRunService::class);
+        $runService = app(CampaignExecutionService::class);
 
         foreach ($dueCampaigns as $campaign) {
             $this->line("  Campaign: {$campaign->name} ({$campaign->campaign_id})");
