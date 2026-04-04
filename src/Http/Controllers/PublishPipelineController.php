@@ -14,7 +14,7 @@ use hexa_app_publish\Models\PublishTemplate;
 use hexa_app_publish\Models\PublishSite;
 use hexa_package_anthropic\Services\AnthropicService;
 use Illuminate\Support\Str;
-use hexa_package_article_extractor\Services\ArticleExtractorService;
+use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
 use hexa_package_wordpress\Services\WordPressService;
@@ -32,7 +32,7 @@ use Illuminate\View\View;
  */
 class PublishPipelineController extends Controller
 {
-    protected ArticleExtractorService $extractor;
+    protected SourceExtractionService $sourceExtraction;
     protected AnthropicService $anthropic;
     protected WordPressService $wp;
     protected WpToolkitService $wptoolkit;
@@ -42,18 +42,18 @@ class PublishPipelineController extends Controller
     const WP_MODE_SSH  = 'wptoolkit';
 
     /**
-     * @param ArticleExtractorService $extractor
+     * @param SourceExtractionService $sourceExtraction
      * @param AnthropicService        $anthropic
      * @param WordPressService        $wp
      * @param WpToolkitService        $wptoolkit
      */
     public function __construct(
-        ArticleExtractorService $extractor,
+        SourceExtractionService $sourceExtraction,
         AnthropicService $anthropic,
         WordPressService $wp,
         WpToolkitService $wptoolkit
     ) {
-        $this->extractor = $extractor;
+        $this->sourceExtraction = $sourceExtraction;
         $this->anthropic = $anthropic;
         $this->wp = $wp;
         $this->wptoolkit = $wptoolkit;
@@ -169,57 +169,19 @@ class PublishPipelineController extends Controller
             'auto_fallback' => 'nullable|boolean',
         ]);
 
-        $urls = $validated['urls'];
-        $userAgent = $validated['user_agent'] ?? 'chrome';
-        $method = $validated['method'] ?? 'auto';
-        $retries = $validated['retries'] ?? 1;
-        $timeout = $validated['timeout'] ?? 20;
-        $minWords = $validated['min_words'] ?? 50;
-        $autoFallback = $validated['auto_fallback'] ?? true;
-        $results = [];
-        $passCount = 0;
-
-        foreach ($urls as $url) {
-            $extraction = $this->extractor->extract($url, $method, null, [
-                'user_agent' => $userAgent,
-                'retries'    => $retries,
-                'timeout'    => $timeout,
-                'min_words'  => $minWords,
-            ]);
-
-            // Auto-fallback: if failed and enabled, retry with googlebot UA
-            if (!$extraction['success'] && $autoFallback && $userAgent !== 'googlebot') {
-                $extraction = $this->extractor->extract($url, $method, null, [
-                    'user_agent' => 'googlebot',
-                    'retries'    => $retries,
-                    'timeout'    => $timeout,
-                    'min_words'  => $minWords,
-                ]);
-                if ($extraction['success']) {
-                    $extraction['message'] = 'Extracted via fallback (Googlebot). ' . $extraction['message'];
-                }
-            }
-
-            $results[] = [
-                'url'            => $url,
-                'success'        => $extraction['success'],
-                'message'        => $extraction['message'],
-                'title'          => $extraction['data']['title'] ?? '',
-                'word_count'     => $extraction['data']['word_count'] ?? 0,
-                'text'           => $extraction['data']['content_text'] ?? '',
-                'formatted_html' => $extraction['data']['content_formatted'] ?? '',
-                'fetch_info'     => $extraction['fetch_info'] ?? null,
-            ];
-
-            if ($extraction['success']) {
-                $passCount++;
-            }
-        }
+        $extraction = $this->sourceExtraction->extractMultiple($validated['urls'], [
+            'method'        => $validated['method'] ?? 'auto',
+            'user_agent'    => $validated['user_agent'] ?? 'chrome',
+            'retries'       => $validated['retries'] ?? 1,
+            'timeout'       => $validated['timeout'] ?? 20,
+            'min_words'     => $validated['min_words'] ?? 50,
+            'auto_fallback' => $validated['auto_fallback'] ?? true,
+        ]);
 
         return response()->json([
             'success' => true,
-            'message' => "{$passCount} of " . count($urls) . " sources verified.",
-            'results' => $results,
+            'message' => "{$extraction['pass_count']} of {$extraction['total']} sources verified.",
+            'results' => $extraction['results'],
         ]);
     }
 

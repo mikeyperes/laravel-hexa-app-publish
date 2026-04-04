@@ -7,8 +7,8 @@ use hexa_app_publish\Models\PublishCampaign;
 use hexa_app_publish\Models\PublishSite;
 use hexa_core\Models\Setting;
 use hexa_package_anthropic\Services\AnthropicService;
-use hexa_package_article_extractor\Services\ArticleExtractorService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
+use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_package_wptoolkit\Services\WpToolkitService;
 use hexa_package_wordpress\Services\WordPressService;
 use hexa_package_whm\Models\HostingAccount;
@@ -24,26 +24,26 @@ use Illuminate\Support\Facades\Log;
  */
 class CampaignRunService
 {
-    protected ArticleExtractorService $extractor;
     protected AnthropicService $anthropic;
     protected WpToolkitService $wptoolkit;
     protected WordPressService $wp;
     protected SourceDiscoveryService $sourceDiscovery;
+    protected SourceExtractionService $sourceExtraction;
 
     /**
-     * @param ArticleExtractorService $extractor
      * @param AnthropicService $anthropic
      * @param WpToolkitService $wptoolkit
      * @param WordPressService $wp
      * @param SourceDiscoveryService $sourceDiscovery
+     * @param SourceExtractionService $sourceExtraction
      */
-    public function __construct(ArticleExtractorService $extractor, AnthropicService $anthropic, WpToolkitService $wptoolkit, WordPressService $wp, SourceDiscoveryService $sourceDiscovery)
+    public function __construct(AnthropicService $anthropic, WpToolkitService $wptoolkit, WordPressService $wp, SourceDiscoveryService $sourceDiscovery, SourceExtractionService $sourceExtraction)
     {
-        $this->extractor = $extractor;
         $this->anthropic = $anthropic;
         $this->wptoolkit = $wptoolkit;
         $this->wp = $wp;
         $this->sourceDiscovery = $sourceDiscovery;
+        $this->sourceExtraction = $sourceExtraction;
     }
 
     /**
@@ -80,25 +80,15 @@ class CampaignRunService
         }
         $log[] = $this->entry('success', 'Found ' . count($sourceUrls) . ' source URL(s)');
 
-        // 3. Extract content from sources
+        // 3. Extract content from sources via shared SourceExtractionService
         $log[] = $this->entry('step', 'Extracting article content...');
-        $sourceTexts = [];
-        foreach ($sourceUrls as $url) {
-            try {
-                $result = $this->extractor->extract($url);
-                if ($result['success'] && !empty($result['data']['content_text'])) {
-                    $sourceTexts[] = [
-                        'url' => $url,
-                        'title' => $result['data']['title'] ?? '',
-                        'text' => $result['data']['content_text'],
-                    ];
-                    $log[] = $this->entry('success', 'Extracted: ' . Str::limit($result['data']['title'] ?? $url, 60));
-                } else {
-                    $log[] = $this->entry('warning', 'Failed to extract: ' . Str::limit($url, 60));
-                }
-            } catch (\Exception $e) {
-                $log[] = $this->entry('warning', 'Extract error: ' . $e->getMessage());
-            }
+        $sourceTexts = $this->sourceExtraction->extractTexts($sourceUrls);
+        foreach ($sourceTexts as $src) {
+            $log[] = $this->entry('success', 'Extracted: ' . Str::limit($src['title'] ?: $src['url'], 60));
+        }
+        $failedCount = count($sourceUrls) - count($sourceTexts);
+        if ($failedCount > 0) {
+            $log[] = $this->entry('warning', "{$failedCount} source(s) failed extraction.");
         }
 
         if (empty($sourceTexts)) {
