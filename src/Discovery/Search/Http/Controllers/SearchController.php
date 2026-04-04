@@ -31,7 +31,7 @@ class SearchController extends Controller
             'pixabay'  => !empty(\hexa_core\Models\Setting::getValue('pixabay_api_key', '')),
         ];
 
-        return view('app-publish::search.images', [
+        return view('app-publish::discovery.search.images', [
             'sources' => $sources,
         ]);
     }
@@ -122,7 +122,7 @@ class SearchController extends Controller
     public function articles()
     {
         $sourceDiscovery = app(SourceDiscoveryService::class);
-        return view('app-publish::search.articles', [
+        return view('app-publish::discovery.search.articles', [
             'sources' => $sourceDiscovery->availableProviders(),
         ]);
     }

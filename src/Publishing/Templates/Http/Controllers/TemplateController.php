@@ -52,7 +52,7 @@ class TemplateController extends Controller
 
         $accounts = PublishAccount::orderBy('name')->get();
 
-        return view('app-publish::templates.index', [
+        return view('app-publish::publishing.templates.index', [
             'templates' => $templates,
             'accounts' => $accounts,
             'articleTypes' => config('hws-publish.article_types', []),
@@ -69,7 +69,7 @@ class TemplateController extends Controller
     {
         $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
 
-        return view('app-publish::templates.create', [
+        return view('app-publish::publishing.templates.create', [
             'accounts' => $accounts,
             'articleTypes' => config('hws-publish.article_types', []),
             'aiEngines' => config('hws-publish.ai_engines', []),
@@ -133,7 +133,7 @@ class TemplateController extends Controller
     {
         $template = PublishTemplate::with(['account', 'campaigns.site'])->findOrFail($id);
 
-        return view('app-publish::templates.show', [
+        return view('app-publish::publishing.templates.show', [
             'template' => $template,
         ]);
     }
@@ -149,7 +149,7 @@ class TemplateController extends Controller
         $template = PublishTemplate::with('account')->findOrFail($id);
         $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
 
-        return view('app-publish::templates.edit', [
+        return view('app-publish::publishing.templates.edit', [
             'template' => $template,
             'accounts' => $accounts,
             'articleTypes' => config('hws-publish.article_types', []),

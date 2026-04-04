@@ -30,7 +30,7 @@ class CampaignPresetController extends Controller
 
         $editPreset = $request->filled('id') ? CampaignPreset::find($request->input('id')) : null;
 
-        return view('app-publish::campaigns.presets.index', [
+        return view('app-publish::publishing.campaigns.presets.index', [
             'presets' => $presets,
             'newsCategories' => $newsCategories,
             'editPreset' => $editPreset,

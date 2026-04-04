@@ -119,7 +119,7 @@ class PipelineController extends Controller
 
         $draftUser = $draft->created_by ? \hexa_core\Models\User::find($draft->created_by) : null;
 
-        return view('app-publish::article.pipeline.index', [
+        return view('app-publish::publishing.pipeline.index', [
             'sites'          => $sites,
             'draftId'        => $draft->id,
             'newsCategories' => $newsCategories,

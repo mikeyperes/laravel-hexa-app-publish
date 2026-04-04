@@ -79,7 +79,7 @@ class AiActivityController extends Controller
         $users = User::orderBy('name')->get(['id', 'name', 'email']);
         $agents = AiActivityLog::distinct()->pluck('agent')->sort()->values();
 
-        return view('app-publish::ai-activity.index', [
+        return view('app-publish::quality.detection.index', [
             'logs'        => $logs,
             'summary'     => $summary,
             'costSummary' => $costSummary,

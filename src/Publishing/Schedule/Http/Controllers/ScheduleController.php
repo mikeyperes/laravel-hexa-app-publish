@@ -23,7 +23,7 @@ class ScheduleController extends Controller
     {
         $sites = PublishSite::orderBy('name')->get();
 
-        return view('app-publish::schedule.index', [
+        return view('app-publish::publishing.schedule.index', [
             'sites' => $sites,
         ]);
     }

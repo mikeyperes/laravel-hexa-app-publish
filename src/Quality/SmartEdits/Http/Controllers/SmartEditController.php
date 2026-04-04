@@ -25,7 +25,7 @@ class SmartEditController extends Controller
             return response()->json($templates);
         }
 
-        return view('app-publish::smart-edits.index', [
+        return view('app-publish::quality.smart-edits.index', [
             'templates' => $templates,
         ]);
     }

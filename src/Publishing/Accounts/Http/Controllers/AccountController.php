@@ -47,7 +47,7 @@ class AccountController extends Controller
             return $user;
         });
 
-        return view('app-publish::accounts.index', [
+        return view('app-publish::publishing.accounts.index', [
             'users' => $users,
         ]);
     }
@@ -117,7 +117,7 @@ class AccountController extends Controller
             return ['id' => $s->id, 'name' => $s->name, 'url' => $s->url];
         })->values();
 
-        return view('app-publish::accounts.show', [
+        return view('app-publish::publishing.accounts.show', [
             'user' => $user,
             'attachedAccounts' => $attachedAccounts,
             'availableAccounts' => $availableAccounts,

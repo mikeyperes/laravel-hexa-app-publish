@@ -65,7 +65,7 @@ class SiteController extends Controller
         $sites = $query->orderByDesc('created_at')->get();
         $accounts = PublishAccount::orderBy('name')->get();
 
-        return view('app-publish::sites.index', [
+        return view('app-publish::publishing.sites.index', [
             'sites' => $sites,
             'accounts' => $accounts,
         ]);
@@ -81,7 +81,7 @@ class SiteController extends Controller
     {
         $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
 
-        return view('app-publish::sites.create', [
+        return view('app-publish::publishing.sites.create', [
             'accounts' => $accounts,
             'preselected_account_id' => $request->input('account_id'),
         ]);
@@ -131,7 +131,7 @@ class SiteController extends Controller
     {
         $site = PublishSite::with(['account', 'campaigns', 'articles'])->findOrFail($id);
 
-        return view('app-publish::sites.show', [
+        return view('app-publish::publishing.sites.show', [
             'site' => $site,
         ]);
     }
@@ -147,7 +147,7 @@ class SiteController extends Controller
         $site = PublishSite::with('account')->findOrFail($id);
         $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
 
-        return view('app-publish::sites.edit', [
+        return view('app-publish::publishing.sites.edit', [
             'site' => $site,
             'accounts' => $accounts,
         ]);

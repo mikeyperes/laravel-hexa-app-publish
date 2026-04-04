@@ -29,7 +29,7 @@ class BookmarkController extends Controller
 
         $bookmarks = $query->orderByDesc('created_at')->paginate(25);
 
-        return view('app-publish::article.bookmarks.index', [
+        return view('app-publish::publishing.articles.bookmarks.index', [
             'bookmarks' => $bookmarks,
         ]);
     }

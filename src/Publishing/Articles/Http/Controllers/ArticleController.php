@@ -79,7 +79,7 @@ class ArticleController extends Controller
         $articles = $query->orderByDesc('created_at')->paginate(25);
         $accounts = PublishAccount::orderBy('name')->get();
 
-        return view('app-publish::articles.index', [
+        return view('app-publish::publishing.articles.index', [
             'articles' => $articles,
             'accounts' => $accounts,
             'statuses' => config('hws-publish.article_statuses', []),
@@ -100,7 +100,7 @@ class ArticleController extends Controller
             ->limit(100)
             ->get(['id', 'title', 'status', 'updated_at']);
 
-        return view('app-publish::articles.editor', [
+        return view('app-publish::publishing.articles.editor', [
             'article' => $article,
             'drafts' => $drafts,
         ]);
@@ -116,7 +116,7 @@ class ArticleController extends Controller
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
         $templates = PublishTemplate::orderBy('name')->get();
 
-        return view('app-publish::articles.create', [
+        return view('app-publish::publishing.articles.create', [
             'accounts' => $accounts,
             'sites' => $sites,
             'templates' => $templates,
@@ -177,7 +177,7 @@ class ArticleController extends Controller
             'account', 'site', 'campaign', 'template', 'creator', 'usedSources',
         ])->findOrFail($id);
 
-        return view('app-publish::articles.show', [
+        return view('app-publish::publishing.articles.show', [
             'article' => $article,
         ]);
     }
@@ -194,7 +194,7 @@ class ArticleController extends Controller
             'account', 'site', 'campaign', 'template', 'usedSources',
         ])->findOrFail($id);
 
-        return view('app-publish::articles.edit', [
+        return view('app-publish::publishing.articles.edit', [
             'article' => $article,
             'articleTypes' => config('hws-publish.article_types', []),
             'aiEngines' => config('hws-publish.ai_engines', []),

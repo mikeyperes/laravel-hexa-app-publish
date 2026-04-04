@@ -39,7 +39,7 @@ class DashboardController extends Controller
             ->limit(10)
             ->get();
 
-        return view('app-publish::dashboard.index', [
+        return view('app-publish::publishing.dashboard.index', [
             'stats' => $stats,
             'recentArticles' => $recentArticles,
             'activeCampaigns' => $activeCampaigns,

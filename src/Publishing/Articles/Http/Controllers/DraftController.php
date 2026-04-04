@@ -47,7 +47,7 @@ class DraftController extends Controller
             return response()->json(['success' => true, 'data' => $articles]);
         }
 
-        return view('app-publish::article.drafts.index', [
+        return view('app-publish::publishing.articles.drafts.index', [
             'drafts' => $articles,
         ]);
     }
@@ -100,7 +100,7 @@ class DraftController extends Controller
             return response()->json(['success' => true, 'article' => $draft]);
         }
 
-        return view('app-publish::article.drafts.index', [
+        return view('app-publish::publishing.articles.drafts.index', [
             'drafts'    => PublishArticle::orderByDesc('updated_at')->paginate(100),
             'editDraft' => $draft,
         ]);

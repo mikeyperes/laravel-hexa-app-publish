@@ -63,7 +63,7 @@ class CampaignController extends Controller
         $campaigns = $query->orderByDesc('created_at')->get();
         $accounts = PublishAccount::orderBy('name')->get();
 
-        return view('app-publish::campaigns.index', [
+        return view('app-publish::publishing.campaigns.index', [
             'campaigns' => $campaigns,
             'accounts' => $accounts,
         ]);
@@ -109,7 +109,7 @@ class CampaignController extends Controller
         $editCampaign = PublishCampaign::with('user')->find($request->input('id'));
         $timezones = \DateTimeZone::listIdentifiers(\DateTimeZone::ALL);
 
-        return view('app-publish::campaigns.create', [
+        return view('app-publish::publishing.campaigns.create', [
             'sites' => $sites,
             'campaignPresets' => $campaignPresets,
             'aiTemplates' => $aiTemplates,
@@ -192,7 +192,7 @@ class CampaignController extends Controller
             ->limit(50)
             ->get();
 
-        return view('app-publish::campaigns.show', [
+        return view('app-publish::publishing.campaigns.show', [
             'campaign' => $campaign,
             'runLogs' => $runLogs,
         ]);
@@ -254,7 +254,7 @@ class CampaignController extends Controller
         $sites = PublishSite::where('publish_account_id', $campaign->publish_account_id)->orderBy('name')->get();
         $templates = PublishTemplate::where('publish_account_id', $campaign->publish_account_id)->orderBy('name')->get();
 
-        return view('app-publish::campaigns.edit', [
+        return view('app-publish::publishing.campaigns.edit', [
             'campaign' => $campaign,
             'accounts' => $accounts,
             'sites' => $sites,

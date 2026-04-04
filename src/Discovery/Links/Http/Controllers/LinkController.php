@@ -45,7 +45,7 @@ class LinkController extends Controller
         $links = $linksQuery->orderByDesc('priority')->orderBy('name')->get();
         $sitemaps = $sitemapsQuery->orderBy('name')->get();
 
-        return view('app-publish::links.index', [
+        return view('app-publish::discovery.links.index', [
             'links' => $links,
             'sitemaps' => $sitemaps,
             'accounts' => $accounts,
