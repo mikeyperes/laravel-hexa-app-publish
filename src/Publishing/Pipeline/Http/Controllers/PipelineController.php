@@ -83,15 +83,51 @@ class PipelineController extends Controller
         }
 
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
+        $draftSite = $draft->publish_site_id ? PublishSite::find($draft->publish_site_id) : null;
+        if ($draftSite && !$sites->contains('id', $draftSite->id)) {
+            $sites->push($draftSite);
+            $sites = $sites->sortBy('name')->values();
+        }
         $newsCategories = \DB::table('lists')->where('list_key', 'news_categories')->where('is_active', true)->orderBy('sort_order')->pluck('list_value');
 
-        $draftUser = $draft->created_by ? \hexa_core\Models\User::find($draft->created_by) : null;
+        $draftUserId = $draft->user_id ?: $draft->created_by;
+        $draftUser = $draftUserId ? \hexa_core\Models\User::find($draftUserId) : null;
+        $draftState = [
+            'selectedUser' => $draftUser ? [
+                'id' => $draftUser->id,
+                'name' => $draftUser->name,
+                'email' => $draftUser->email,
+            ] : null,
+            'selectedPresetId' => $draft->preset_id ? (string) $draft->preset_id : '',
+            'selectedTemplateId' => $draft->publish_template_id ? (string) $draft->publish_template_id : '',
+            'selectedSiteId' => $draftSite?->id ? (string) $draftSite->id : '',
+            'selectedSite' => $draftSite ? [
+                'id' => $draftSite->id,
+                'name' => $draftSite->name,
+                'url' => $draftSite->url,
+            ] : null,
+            'publishAuthor' => $draft->author ?: ($draftSite?->default_author ?? ''),
+            'siteConnStatus' => $draftSite
+                ? match ($draftSite->status) {
+                    'connected' => true,
+                    'error' => false,
+                    default => null,
+                }
+                : null,
+            'articleTitle' => $draft->title ?: '',
+            'body' => $draft->body,
+            'wordCount' => $draft->word_count ?: 0,
+            'photoSuggestions' => $draft->photo_suggestions ?? [],
+            'featuredImageSearch' => $draft->featured_image_search ?: '',
+            'aiModel' => $draft->ai_engine_used ?: '',
+        ];
 
         return view('app-publish::publishing.pipeline.index', [
             'sites'          => $sites,
             'draftId'        => $draft->id,
             'newsCategories' => $newsCategories,
             'draftUser'      => $draftUser,
+            'draftState'     => $draftState,
         ]);
     }
 
@@ -383,10 +419,14 @@ class PipelineController extends Controller
             'preset_id'   => 'nullable|integer',
             'prompt_id'   => 'nullable|integer',
             'ai_model'    => 'nullable|string|max:100',
+            'author'      => 'nullable|string|max:255',
             'sources'     => 'nullable|array',
             'tags'        => 'nullable|array',
             'categories'  => 'nullable|array',
             'notes'       => 'nullable|string',
+            'template_id' => 'nullable|integer',
+            'photo_suggestions' => 'nullable|array',
+            'featured_image_search' => 'nullable|string|max:500',
         ]);
 
         $data = [
@@ -394,11 +434,17 @@ class PipelineController extends Controller
             'body'             => $validated['body'] ?? null,
             'excerpt'          => $validated['excerpt'] ?? null,
             'status'           => 'drafting',
+            'user_id'          => $validated['user_id'] ?? auth()->id(),
             'created_by'       => $validated['user_id'] ?? auth()->id(),
             'publish_site_id'  => $validated['site_id'] ?? null,
+            'publish_template_id' => $validated['template_id'] ?? null,
+            'preset_id'        => $validated['preset_id'] ?? null,
             'ai_engine_used'   => $validated['ai_model'] ?? null,
+            'author'           => $validated['author'] ?? null,
             'source_articles'  => $validated['sources'] ?? null,
             'word_count'       => isset($validated['body']) ? str_word_count(strip_tags($validated['body'])) : 0,
+            'photo_suggestions' => $validated['photo_suggestions'] ?? null,
+            'featured_image_search' => $validated['featured_image_search'] ?? null,
             'notes'            => $validated['notes'] ?? null,
         ];
 

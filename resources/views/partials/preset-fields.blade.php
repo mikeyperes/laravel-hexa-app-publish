@@ -66,6 +66,18 @@
                         rows="4" class="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm bg-white font-mono"></textarea>
                 </template>
 
+                {{-- Follow links — select --}}
+                <template x-if="field === 'follow_links'">
+                    <select :value="getPresetValue('{{ $p }}', field)"
+                        @change="{{ $p }}_overrides[field] = $event.target.value; {{ $p }}_dirty[field] = true"
+                        class="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm bg-white">
+                        <option value="follow">Follow</option>
+                        <option value="nofollow">Nofollow</option>
+                        <option value="sponsored">Sponsored</option>
+                        <option value="ugc">UGC</option>
+                    </select>
+                </template>
+
                 {{-- Number fields --}}
                 <template x-if="['word_count_min','word_count_max','max_links','photos_per_article','default_category_count','default_tag_count'].includes(field)">
                     <input type="number" :value="getPresetValue('{{ $p }}', field)"
@@ -94,7 +106,7 @@
                 </template>
 
                 {{-- Default: text input (for anything not matched above) --}}
-                <template x-if="typeof {{ $p }}_defaults[field] === 'string' && !Array.isArray({{ $p }}_defaults[field]) && typeof {{ $p }}_defaults[field] !== 'boolean' && !['ai_engine','article_type','default_publish_action','ai_prompt','word_count_min','word_count_max','max_links','photos_per_article','default_category_count','default_tag_count'].includes(field)">
+                <template x-if="typeof {{ $p }}_defaults[field] === 'string' && !Array.isArray({{ $p }}_defaults[field]) && typeof {{ $p }}_defaults[field] !== 'boolean' && !['ai_engine','article_type','default_publish_action','ai_prompt','follow_links','word_count_min','word_count_max','max_links','photos_per_article','default_category_count','default_tag_count'].includes(field)">
                     <input type="text" :value="getPresetValue('{{ $p }}', field)"
                         @input="{{ $p }}_overrides[field] = $event.target.value; {{ $p }}_dirty[field] = true"
                         class="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm bg-white">

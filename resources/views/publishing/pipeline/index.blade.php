@@ -879,7 +879,7 @@
                         </div>
                     </div>
                     {{-- Featured image search results --}}
-                    <div x-show="featuredResults.length > 0" x-cloak class="mt-3 grid grid-cols-4 gap-2">
+                    <div x-show="featuredResults.length > 1" x-cloak class="mt-3 grid grid-cols-4 gap-2">
                         <template x-for="(photo, idx) in featuredResults" :key="idx">
                             <div @click="featuredPhoto = photo" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-colors"
                                  :class="featuredPhoto && featuredPhoto.url_thumb === photo.url_thumb ? 'border-purple-500' : 'border-gray-200 hover:border-purple-300'">
@@ -1554,6 +1554,7 @@ function publishPipeline() {
         ...presetFieldsMixin('preset'),
         ...presetFieldsMethods,
         savingDraft: false,
+        _draftSaveTimer: null,
 
         // Notification
         notification: { show: false, type: 'success', message: '' },
@@ -1566,22 +1567,32 @@ function publishPipeline() {
             return document.querySelector('meta[name="csrf-token"]')?.content || '';
         },
 
+        get pipelineStateKey() {
+            return 'publishPipelineState:' + String(this.draftId || 'new');
+        },
+
         // ── State Persistence ────────────────────────────
         _stateVersion: 3,
 
         init() {
-            const saved = localStorage.getItem('publishPipelineState');
             const draftState = this.draftState || {};
+            const saved = localStorage.getItem(this.pipelineStateKey);
+            const legacySaved = !saved && !draftState.body ? localStorage.getItem('publishPipelineState') : null;
+            const savedState = saved || legacySaved;
             let state = null;
             let shouldPersistRestoredDraftState = false;
 
             this._restoring = true;
 
-            if (saved) {
+            if (savedState) {
                 try {
-                    state = JSON.parse(saved);
-                    if (!state._v || state._v < this._stateVersion) {
-                        localStorage.removeItem('publishPipelineState');
+                    state = JSON.parse(savedState);
+                    if (
+                        !state._v ||
+                        state._v < this._stateVersion ||
+                        (state.draftId && String(state.draftId) !== String(this.draftId))
+                    ) {
+                        localStorage.removeItem(this.pipelineStateKey);
                         state = null;
                     }
                 } catch (e) {
@@ -1615,7 +1626,13 @@ function publishPipeline() {
                 if (state.articleTitle) this.articleTitle = state.articleTitle;
                 if (state.publishAction) this.publishAction = state.publishAction;
                 if (state.publishAuthor) this.publishAuthor = state.publishAuthor;
-                if (state.spunContent) { this.spunContent = state.spunContent; this.spunWordCount = state.spunWordCount || 0; this.setSpinEditor(state.spunContent); this.extractArticleLinks(state.spunContent); }
+                if (state.spunContent || state.editorContent) {
+                    const restoredEditorHtml = state.editorContent || state.spunContent;
+                    this.spunContent = restoredEditorHtml;
+                    this.spunWordCount = state.spunWordCount || this.countWordsFromHtml(restoredEditorHtml);
+                    this.setSpinEditor(restoredEditorHtml);
+                    this.extractArticleLinks(restoredEditorHtml);
+                }
                 if (state.suggestedTitles) this.suggestedTitles = state.suggestedTitles;
                 if (state.suggestedCategories) this.suggestedCategories = state.suggestedCategories;
                 if (state.suggestedTags) this.suggestedTags = state.suggestedTags;
@@ -1626,6 +1643,10 @@ function publishPipeline() {
                 if (state.tokenUsage) this.tokenUsage = state.tokenUsage;
                 if (state.photoSuggestions) this.photoSuggestions = state.photoSuggestions;
                 if (state.featuredImageSearch) this.featuredImageSearch = state.featuredImageSearch;
+                if (state.featuredPhoto) {
+                    this.featuredPhoto = state.featuredPhoto;
+                    this.featuredResults = [state.featuredPhoto];
+                }
                 // Find Articles state
                 if (state.sourceTab) this.sourceTab = state.sourceTab;
                 if (state.newsMode) this.newsMode = state.newsMode;
@@ -1655,6 +1676,34 @@ function publishPipeline() {
                 }
             }
             if (draftState.publishAuthor) this.publishAuthor = draftState.publishAuthor;
+            if (!this.articleTitle && draftState.articleTitle) this.articleTitle = draftState.articleTitle;
+            if (!this.aiModel && draftState.aiModel) this.aiModel = draftState.aiModel;
+            if (!this.spunContent && draftState.body) {
+                this.spunContent = draftState.body;
+                this.editorContent = draftState.body;
+                this.spunWordCount = draftState.wordCount || this.countWordsFromHtml(draftState.body);
+                this.extractArticleLinks(draftState.body);
+                this.$nextTick(() => this.setSpinEditor(draftState.body));
+            }
+            if ((!Array.isArray(this.photoSuggestions) || this.photoSuggestions.length === 0) && Array.isArray(draftState.photoSuggestions)) {
+                this.photoSuggestions = draftState.photoSuggestions;
+            }
+            if (!this.featuredImageSearch && draftState.featuredImageSearch) {
+                this.featuredImageSearch = draftState.featuredImageSearch;
+            }
+            if ((this.spunContent || draftState.body) && !state?.currentStep) {
+                this.currentStep = 6;
+                this.openSteps = [6];
+                this.completedSteps = Array.from(new Set([...(this.completedSteps || []), 1, 2, 3, 4, 5]));
+            }
+
+            const finishRestore = () => {
+                this._restoring = false;
+                if (shouldPersistRestoredDraftState) this.autoSaveDraft();
+                if (this.featuredImageSearch && !this.featuredPhoto) {
+                    this.searchFeaturedImage();
+                }
+            };
 
             if (this.selectedUser) {
                 const restoredPresetId = draftState.selectedPresetId || state?.selectedPresetId || '';
@@ -1673,12 +1722,10 @@ function publishPipeline() {
                         this.selectedTemplate = this.templates.find(t => t.id == restoredTemplateId) || restoredTemplate;
                         if (this.selectedTemplate) this.loadPresetFields('template', this.selectedTemplate);
                     }
-                    this._restoring = false;
-                    if (shouldPersistRestoredDraftState) this.autoSaveDraft();
+                    finishRestore();
                 });
             } else {
-                this._restoring = false;
-                if (shouldPersistRestoredDraftState) this.autoSaveDraft();
+                finishRestore();
             }
 
             this.$watch('currentStep', () => this.savePipelineState());
@@ -1691,10 +1738,12 @@ function publishPipeline() {
             this.$watch('sources', () => this.savePipelineState());
             this.$watch('checkResults', () => this.savePipelineState());
             this.$watch('aiModel', () => this.savePipelineState());
-            this.$watch('articleTitle', () => this.savePipelineState());
+            this.$watch('articleTitle', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
             this.$watch('spunContent', () => this.savePipelineState());
-            this.$watch('editorContent', () => this.savePipelineState());
-            this.$watch('photoSuggestions', () => this.savePipelineState());
+            this.$watch('editorContent', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
+            this.$watch('photoSuggestions', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
+            this.$watch('featuredImageSearch', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
+            this.$watch('featuredPhoto', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
             this.$watch('siteConn.status', () => this.savePipelineState());
             this.$watch('siteConn.authors', () => this.savePipelineState());
             this.$watch('newsResults', () => this.savePipelineState());
@@ -1705,6 +1754,7 @@ function publishPipeline() {
         savePipelineState() {
             const state = {
                 _v: this._stateVersion,
+                draftId: this.draftId,
                 selectedUser: this.selectedUser,
                 currentStep: this.currentStep,
                 openSteps: this.openSteps,
@@ -1727,6 +1777,7 @@ function publishPipeline() {
                 aiModel: this.aiModel,
                 articleTitle: this.articleTitle,
                 publishAction: this.publishAction,
+                publishAuthor: this.publishAuthor,
                 spunContent: this.spunContent,
                 spunWordCount: this.spunWordCount,
                 suggestedTitles: this.suggestedTitles,
@@ -1739,6 +1790,7 @@ function publishPipeline() {
                 tokenUsage: this.tokenUsage,
                 photoSuggestions: this.photoSuggestions,
                 featuredImageSearch: this.featuredImageSearch,
+                featuredPhoto: this.featuredPhoto,
                 // Find Articles state
                 sourceTab: this.sourceTab,
                 newsMode: this.newsMode,
@@ -1748,10 +1800,12 @@ function publishPipeline() {
                 newsResults: this.newsResults,
                 newsHasSearched: this.newsHasSearched,
             };
-            localStorage.setItem('publishPipelineState', JSON.stringify(state));
+            localStorage.setItem(this.pipelineStateKey, JSON.stringify(state));
+            localStorage.removeItem('publishPipelineState');
         },
 
         clearPipeline() {
+            localStorage.removeItem(this.pipelineStateKey);
             localStorage.removeItem('publishPipelineState');
             this.currentStep = 1;
             this.openSteps = [1];
@@ -1774,6 +1828,9 @@ function publishPipeline() {
             this.editorContent = '';
             this.publishAction = 'draft_local';
             this.publishResult = null;
+            this.photoSuggestions = [];
+            this.featuredImageSearch = '';
+            this.featuredPhoto = null;
         },
 
         // ── Navigation ────────────────────────────────────
@@ -2228,6 +2285,7 @@ function publishPipeline() {
 
                 if (data.success) {
                     this.spunContent = data.html;
+                    this.editorContent = data.html;
                     this.spunWordCount = data.word_count;
                     this.tokenUsage = data.usage;
                     this.setSpinEditor(data.html);
@@ -2262,6 +2320,8 @@ function publishPipeline() {
                     if (data.photo_suggestions) {
                         this.photoSuggestions = data.photo_suggestions.map(ps => ({...ps, autoPhoto: null, confirmed: false, removed: false, searchResults: []}));
                     }
+
+                    this.queueAutoSaveDraft(300);
 
                     // Auto-run AI detection after spin
                     this.$nextTick(() => this.runAiDetection());
@@ -2328,6 +2388,7 @@ function publishPipeline() {
                 const data = await resp.json();
                 if (data.success) {
                     this.spunContent = data.html;
+                    this.editorContent = data.html;
                     this.spunWordCount = data.word_count;
                     this.tokenUsage = data.usage;
                     this.setSpinEditor(data.html);
@@ -2336,6 +2397,7 @@ function publishPipeline() {
                     this.showChangeInput = false;
                     this.appliedSmartEdits = [];
                     this.showNotification('success', 'Changes applied.');
+                    this.queueAutoSaveDraft(300);
 
                     // Re-run AI detection after changes
                     this.$nextTick(() => this.runAiDetection());
@@ -2494,8 +2556,11 @@ function publishPipeline() {
                                     if (self.photoSuggestions.length > 0 && !self.photoSuggestions[0].autoPhoto) {
                                         self.autoFetchPhotos();
                                     }
+                                    self.syncEditorStateFromEditor();
                                 });
-                                ed.on('change keyup', function() { self.extractArticleLinks(ed.getContent()); });
+                                ed.on('change keyup input SetContent Undo Redo', function() {
+                                    self.syncEditorStateFromEditor();
+                                });
 
                                 // Handle clicks on photo placeholders and action buttons
                                 ed.on('click', function(e) {
@@ -2640,6 +2705,8 @@ function publishPipeline() {
                     editor.execCommand('mceInsertContent', false, figureHtml);
                 }
             }
+            this.syncEditorStateFromEditor();
+            this.queueAutoSaveDraft(300);
             this.insertingPhoto = null;
             this.photoCaption = '';
             this.showPhotoPanel = false;
@@ -2673,6 +2740,8 @@ function publishPipeline() {
                 }
             }
             this.autoFetchingPhotos = false;
+            this.syncEditorStateFromEditor();
+            this.queueAutoSaveDraft(300);
         },
 
         updatePlaceholderError(idx, message) {
@@ -2686,6 +2755,7 @@ function publishPipeline() {
                 + '<span class="photo-change" style="cursor:pointer;display:inline-block;background:#2563eb;color:white;padding:2px 8px;border-radius:4px;font-size:11px;margin-top:6px;">Search Manually</span>'
                 + '</div>';
             editor.dom.setOuterHTML(placeholder, newHtml);
+            this.syncEditorStateFromEditor();
         },
 
         updatePlaceholderInEditor(idx, retries) {
@@ -2714,6 +2784,7 @@ function publishPipeline() {
                 + '<span class="photo-remove" style="cursor:pointer;display:inline-block;background:#dc2626;color:white;padding:2px 8px;border-radius:4px;font-size:11px;">Remove</span>'
                 + '</div>';
             editor.dom.setOuterHTML(placeholder, newHtml);
+            this.syncEditorStateFromEditor();
         },
 
         _escHtml(str) {
@@ -2722,6 +2793,36 @@ function publishPipeline() {
 
         _slugify(str) {
             return String(str || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 80);
+        },
+
+        countWordsFromHtml(html) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html || '';
+            const text = (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+            return text ? text.split(' ').length : 0;
+        },
+
+        syncEditorStateFromEditor() {
+            const editor = tinymce.get('spin-preview-editor');
+            if (!editor) return;
+            const content = editor.getContent() || '';
+            this.spunContent = content;
+            this.editorContent = content;
+            this.spunWordCount = this.countWordsFromHtml(content);
+            this.extractArticleLinks(content);
+        },
+
+        queueAutoSaveDraft(delay) {
+            if (this._restoring) return;
+            if (this._draftSaveTimer) clearTimeout(this._draftSaveTimer);
+            this._draftSaveTimer = setTimeout(() => {
+                this._draftSaveTimer = null;
+                if (this.savingDraft) {
+                    this.queueAutoSaveDraft(300);
+                    return;
+                }
+                this.autoSaveDraft();
+            }, delay || 800);
         },
 
         viewPhotoInfo(idx) {
@@ -2752,6 +2853,8 @@ function publishPipeline() {
             const figureHtml = '<figure class="wp-block-image"><img src="' + imgUrl + '" alt="' + altText + '" style="max-width:100%;height:auto">' + (caption ? '<figcaption>' + this._escHtml(caption) + '</figcaption>' : '') + '</figure>';
             editor.dom.setOuterHTML(placeholder, figureHtml);
             this.photoSuggestions[idx].confirmed = true;
+            this.syncEditorStateFromEditor();
+            this.queueAutoSaveDraft(300);
             this.viewingPhotoIdx = null;
         },
 
@@ -2770,6 +2873,8 @@ function publishPipeline() {
                 if (placeholder) editor.dom.remove(placeholder);
             }
             this.photoSuggestions[idx].removed = true;
+            this.syncEditorStateFromEditor();
+            this.queueAutoSaveDraft(300);
         },
 
         async searchPhotosForSuggestion(idx) {
@@ -2792,6 +2897,7 @@ function publishPipeline() {
             this.photoSuggestions[idx].autoPhoto = photo;
             this.photoSuggestions[idx].confirmed = false;
             this.updatePlaceholderInEditor(idx);
+            this.queueAutoSaveDraft(300);
         },
 
         async loadSmartEdits() {
@@ -2830,6 +2936,7 @@ function publishPipeline() {
                 this.showNotification('error', 'No WordPress site selected');
                 return;
             }
+            this.syncEditorStateFromEditor();
             this.preparing = true;
             this.prepareLog = [];
             this.prepareComplete = false;
@@ -2903,6 +3010,7 @@ function publishPipeline() {
 
         // ── Step 10: Publish ──────────────────────────────
         async publishArticle() {
+            this.syncEditorStateFromEditor();
             this.publishing = true;
             this.publishResult = null;
             this.publishError = '';
@@ -2975,7 +3083,13 @@ function publishPipeline() {
 
         // ── Draft ─────────────────────────────────────────
         async saveDraftNow(silent = false) {
+            if (this.savingDraft) return;
+            if (this._draftSaveTimer) {
+                clearTimeout(this._draftSaveTimer);
+                this._draftSaveTimer = null;
+            }
             this.savingDraft = true;
+            this.syncEditorStateFromEditor();
             try {
                 const resp = await fetch('{{ route('publish.pipeline.save-draft') }}', {
                     method: 'POST',
@@ -2993,6 +3107,8 @@ function publishPipeline() {
                         sources: this.sources.map(s => ({ url: s.url, title: s.title })),
                         tags: this.suggestedTags,
                         categories: this.suggestedCategories,
+                        photo_suggestions: this.photoSuggestions || null,
+                        featured_image_search: this.featuredImageSearch || null,
                     })
                 });
                 const data = await resp.json();
@@ -3009,7 +3125,7 @@ function publishPipeline() {
         },
 
         autoSaveDraft() {
-            // Fire and forget
+            if (this.savingDraft) return;
             this.saveDraftNow(true);
         },
 
