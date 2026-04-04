@@ -17,6 +17,8 @@ use Illuminate\Support\Str;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
 use hexa_app_publish\Publishing\Articles\Services\MetadataGenerationService;
+use hexa_app_publish\Publishing\Articles\Services\ArticlePersistenceService;
+use hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
 use hexa_package_wordpress\Services\WordPressService;
@@ -501,54 +503,22 @@ class PipelineController extends Controller
 
         $site = PublishSite::findOrFail($validated['site_id']);
 
-        $mode = $site->connection_type === self::WP_MODE_SSH ? self::WP_MODE_SSH : self::WP_MODE_REST;
-
-        if ($mode === self::WP_MODE_REST && (!$site->wp_username || !$site->wp_application_password)) {
-            return response()->json(['success' => false, 'message' => "Site '{$site->name}' has no WordPress credentials."]);
-        }
-
-        if ($mode === self::WP_MODE_SSH) {
-            $resolved = $this->resolveWpToolkitServer($site);
-            $server = $resolved['server'];
-            $installId = $site->wordpress_install_id;
-            if (!$server || !$installId) {
-                return response()->json(['success' => false, 'message' => "Site '{$site->name}' is missing WP Toolkit configuration."]);
-            }
-
-            $result = $this->wptoolkit->wpCliCreatePost(
-                $server,
-                $installId,
-                $validated['title'],
-                $validated['html'],
-                $validated['status'],
-                $validated['category_ids'] ?? [],
-                $validated['tag_ids'] ?? [],
-                ($validated['status'] === 'future' && !empty($validated['date'])) ? $validated['date'] : null
-            );
-        } else {
-            $postData = [
-                'title'   => $validated['title'],
-                'content' => $validated['html'],
-                'status'  => $validated['status'],
-            ];
-            if (!empty($validated['category_ids'])) $postData['categories'] = $validated['category_ids'];
-            if (!empty($validated['tag_ids'])) $postData['tags'] = $validated['tag_ids'];
-            if ($validated['status'] === 'future' && !empty($validated['date'])) $postData['date'] = $validated['date'];
-
-            $result = $this->wp->createPost($site->url, $site->wp_username, $site->wp_application_password, $postData);
-        }
+        // Deliver to WordPress via shared service
+        $delivery = app(WordPressDeliveryService::class);
+        $result = $delivery->createPost($site, $validated['title'], $validated['html'], $validated['status'], [
+            'category_ids' => $validated['category_ids'] ?? [],
+            'tag_ids'      => $validated['tag_ids'] ?? [],
+            'date'         => ($validated['status'] === 'future' && !empty($validated['date'])) ? $validated['date'] : null,
+        ]);
 
         if (!$result['success']) {
             hexaLog('publish', 'pipeline_publish_failed', "Pipeline publish failed to {$site->name}: {$result['message']}");
             return response()->json($result);
         }
 
-        // SSH wpCliCreatePost returns only post_id (no post_url) — build it from site URL
-        $wpPostId = $result['data']['post_id'] ?? null;
-        $wpPostUrl = $result['data']['post_url'] ?? ($wpPostId ? rtrim($site->url, '/') . '/?p=' . $wpPostId : null);
-
-        // Save or update the article record with comprehensive data
-        $articleData = [
+        // Persist article via shared service
+        $persistence = app(ArticlePersistenceService::class);
+        $article = $persistence->createOrUpdate([
             'pipeline_session_id' => $validated['pipeline_session_id'] ?? null,
             'user_id'             => $validated['user_id'] ?? auth()->id(),
             'publish_site_id'     => $site->id,
@@ -568,8 +538,8 @@ class PipelineController extends Controller
             'user_ip'             => request()->ip(),
             'author'              => $validated['author'] ?? $site->default_author ?? null,
             'status'              => 'completed',
-            'wp_post_id'          => $wpPostId,
-            'wp_post_url'         => $wpPostUrl,
+            'wp_post_id'          => $result['post_id'],
+            'wp_post_url'         => $result['post_url'],
             'wp_status'           => $validated['status'],
             'published_at'        => now(),
             'source_articles'     => $validated['sources'] ?? null,
@@ -578,28 +548,15 @@ class PipelineController extends Controller
             'wp_images'           => $validated['wp_images'] ?? null,
             'links_injected'      => null,
             'created_by'          => auth()->id(),
-        ];
+        ], $validated['draft_id'] ?? null);
 
-        if (!empty($validated['draft_id'])) {
-            $article = PublishArticle::find($validated['draft_id']);
-            if ($article) {
-                $article->update($articleData);
-            } else {
-                $articleData['article_id'] = PublishArticle::generateArticleId();
-                $article = PublishArticle::create($articleData);
-            }
-        } else {
-            $articleData['article_id'] = PublishArticle::generateArticleId();
-            $article = PublishArticle::create($articleData);
-        }
-
-        hexaLog('publish', 'pipeline_published', "Pipeline published to {$site->name}: {$validated['title']} (WP ID: {$wpPostId}, Article: {$article->article_id})");
+        hexaLog('publish', 'pipeline_published', "Pipeline published to {$site->name}: {$validated['title']} (WP ID: {$result['post_id']}, Article: {$article->article_id})");
 
         return response()->json([
             'success'    => true,
-            'message'    => "Article published to {$site->name}. WP Post ID: {$wpPostId}.",
-            'post_id'    => $wpPostId,
-            'post_url'   => $wpPostUrl,
+            'message'    => "Article published to {$site->name}. WP Post ID: {$result['post_id']}.",
+            'post_id'    => $result['post_id'],
+            'post_url'   => $result['post_url'],
             'article_id' => $article->id,
             'article_url' => route('publish.articles.show', $article->id),
         ]);
