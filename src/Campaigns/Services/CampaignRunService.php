@@ -2,10 +2,10 @@
 
 namespace hexa_app_publish\Campaigns\Services;
 
-use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishCampaign;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
+use hexa_app_publish\Publishing\Articles\Services\ArticlePersistenceService;
 use hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
@@ -24,19 +24,22 @@ class CampaignRunService
     protected SourceDiscoveryService $sourceDiscovery;
     protected SourceExtractionService $sourceExtraction;
     protected ArticleGenerationService $articleGeneration;
+    protected ArticlePersistenceService $persistence;
 
     /**
      * @param WordPressDeliveryService $delivery
      * @param SourceDiscoveryService $sourceDiscovery
      * @param SourceExtractionService $sourceExtraction
      * @param ArticleGenerationService $articleGeneration
+     * @param ArticlePersistenceService $persistence
      */
-    public function __construct(WordPressDeliveryService $delivery, SourceDiscoveryService $sourceDiscovery, SourceExtractionService $sourceExtraction, ArticleGenerationService $articleGeneration)
+    public function __construct(WordPressDeliveryService $delivery, SourceDiscoveryService $sourceDiscovery, SourceExtractionService $sourceExtraction, ArticleGenerationService $articleGeneration, ArticlePersistenceService $persistence)
     {
         $this->delivery = $delivery;
         $this->sourceDiscovery = $sourceDiscovery;
         $this->sourceExtraction = $sourceExtraction;
         $this->articleGeneration = $articleGeneration;
+        $this->persistence = $persistence;
     }
 
     /**
@@ -86,8 +89,7 @@ class CampaignRunService
         }
 
         // 4. Create article record
-        $article = PublishArticle::create([
-            'article_id' => PublishArticle::generateArticleId(),
+        $article = $this->persistence->create([
             'title' => 'Untitled',
             'status' => 'spinning',
             'publish_site_id' => $site->id,
@@ -126,12 +128,12 @@ class CampaignRunService
                 $log[] = $this->entry('success', "Spun: {$spinResult['word_count']} words, cost: \${$spinResult['cost']}");
             } else {
                 $log[] = $this->entry('error', 'Spin failed: ' . ($spinResult['message'] ?? 'unknown'));
-                $article->update(['status' => 'failed']);
+                $this->persistence->markFailed($article);
                 return ['success' => false, 'log' => $log, 'article' => $article];
             }
         } catch (\Exception $e) {
             $log[] = $this->entry('error', 'Spin error: ' . $e->getMessage());
-            $article->update(['status' => 'failed']);
+            $this->persistence->markFailed($article);
             return ['success' => false, 'log' => $log, 'article' => $article];
         }
 
@@ -145,24 +147,18 @@ class CampaignRunService
                 $postResult = $this->delivery->createPost($site, $article->title ?? 'Untitled', $article->body ?? '', $postStatus);
 
                 if ($postResult['success']) {
-                    $isActualPublish = ($postStatus === 'publish');
-                    $article->update([
-                        'wp_post_id'  => $postResult['post_id'],
-                        'wp_post_url' => $postResult['post_url'],
-                        'wp_status'   => $postStatus,
-                        'status'      => $isActualPublish ? 'completed' : 'drafting',
-                        'published_at' => $isActualPublish ? now() : null,
-                    ]);
-                    $log[] = $this->entry('success', ($isActualPublish ? 'Published' : 'WP Draft') . " via {$postResult['mode']}: #{$postResult['post_id']} — {$postResult['post_url']}");
+                    $this->persistence->updateDeliveryResult($article, $postResult, $postStatus);
+                    $label = ($postStatus === 'publish') ? 'Published' : 'WP Draft';
+                    $log[] = $this->entry('success', "{$label} via {$postResult['mode']}: #{$postResult['post_id']} — {$postResult['post_url']}");
                 } else {
                     $log[] = $this->entry('error', 'WP publish failed: ' . $postResult['message']);
-                    $article->update(['status' => 'failed']);
+                    $this->persistence->markFailed($article);
                 }
             } catch (\Exception $e) {
                 $log[] = $this->entry('error', 'Publish error: ' . $e->getMessage());
             }
         } else {
-            $article->update(['status' => 'drafting', 'delivery_mode' => 'draft-local']);
+            $this->persistence->markLocalDraft($article);
             $log[] = $this->entry('success', 'Saved as local draft.');
         }
 
