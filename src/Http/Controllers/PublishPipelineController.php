@@ -16,6 +16,7 @@ use hexa_package_anthropic\Services\AnthropicService;
 use Illuminate\Support\Str;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
+use hexa_app_publish\Publishing\Articles\Services\MetadataGenerationService;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
 use hexa_package_wordpress\Services\WordPressService;
@@ -245,53 +246,9 @@ class PublishPipelineController extends Controller
             'article_html' => 'required|string',
         ]);
 
-        $articleText = strip_tags($validated['article_html']);
-        $prompt = "Based on this article, generate exactly:\n\n1. 10 unique title options (compelling, SEO-friendly)\n2. 15 category suggestions (broad topics)\n3. 15 tag suggestions (specific keywords)\n\nArticle:\n" . mb_substr($articleText, 0, 3000) . "\n\nRespond ONLY in this exact JSON format, no other text:\n{\"titles\":[\"title1\",...],\"categories\":[\"cat1\",...],\"tags\":[\"tag1\",...]}";
+        $result = app(MetadataGenerationService::class)->generate($validated['article_html']);
 
-        $result = $this->anthropic->chat(
-            'You are a content metadata expert. Output ONLY valid JSON. No markdown, no explanation.',
-            $prompt,
-            'claude-haiku-4-5-20251001',
-            1024
-        );
-
-        if (!$result['success']) {
-            return response()->json(['success' => false, 'message' => $result['message']]);
-        }
-
-        $content = $result['data']['content'] ?? '';
-        // Extract JSON from response
-        $content = preg_replace('/^```json\s*/i', '', $content);
-        $content = preg_replace('/\s*```$/', '', $content);
-
-        $parsed = json_decode(trim($content), true);
-
-        if (!$parsed || !isset($parsed['titles'])) {
-            return response()->json(['success' => false, 'message' => 'Failed to parse AI response.', 'raw' => $content]);
-        }
-
-        // Log the API call
-        $usage = $result['data']['usage'] ?? [];
-        $apiKey = \hexa_core\Models\Setting::getValue('anthropic_api_key', '');
-        AiActivityLog::logCall([
-            'provider' => 'anthropic',
-            'model' => 'claude-haiku-4-5-20251001',
-            'agent' => 'pipeline-metadata',
-            'prompt_tokens' => $usage['input_tokens'] ?? 0,
-            'completion_tokens' => $usage['output_tokens'] ?? 0,
-            'system_prompt' => 'Content metadata expert',
-            'response_content' => $content,
-            'success' => true,
-            'api_key_masked' => $apiKey ? '...' . substr($apiKey, -4) : null,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'titles' => array_slice($parsed['titles'] ?? [], 0, 10),
-            'categories' => array_slice($parsed['categories'] ?? [], 0, 15),
-            'tags' => array_slice($parsed['tags'] ?? [], 0, 15),
-            'urls' => array_slice($parsed['urls'] ?? [], 0, 10),
-        ]);
+        return response()->json($result);
     }
 
     /**
