@@ -2,30 +2,11 @@
 
 namespace hexa_app_publish\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use hexa_app_publish\Quality\SmartEdits\Models\AiSmartEditTemplate as BaseAiSmartEditTemplate;
 
 /**
- * @property int $id
- * @property string $name
- * @property string $prompt
- * @property string $category
- * @property int $sort_order
- * @property bool $is_active
+ * @deprecated Use hexa_app_publish\Quality\SmartEdits\Models\AiSmartEditTemplate directly.
  */
-class AiSmartEditTemplate extends Model
+class AiSmartEditTemplate extends BaseAiSmartEditTemplate
 {
-    protected $table = 'ai_smart_edit_templates';
-
-    protected $fillable = [
-        'name',
-        'prompt',
-        'category',
-        'sort_order',
-        'is_active',
-    ];
-
-    protected $casts = [
-        'is_active' => 'boolean',
-        'sort_order' => 'integer',
-    ];
 }
