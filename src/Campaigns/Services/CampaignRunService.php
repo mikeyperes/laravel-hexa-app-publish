@@ -6,7 +6,7 @@ use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishCampaign;
 use hexa_app_publish\Models\PublishSite;
 use hexa_core\Models\Setting;
-use hexa_package_anthropic\Services\AnthropicService;
+use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_package_wptoolkit\Services\WpToolkitService;
@@ -24,26 +24,26 @@ use Illuminate\Support\Facades\Log;
  */
 class CampaignRunService
 {
-    protected AnthropicService $anthropic;
     protected WpToolkitService $wptoolkit;
     protected WordPressService $wp;
     protected SourceDiscoveryService $sourceDiscovery;
     protected SourceExtractionService $sourceExtraction;
+    protected ArticleGenerationService $articleGeneration;
 
     /**
-     * @param AnthropicService $anthropic
      * @param WpToolkitService $wptoolkit
      * @param WordPressService $wp
      * @param SourceDiscoveryService $sourceDiscovery
      * @param SourceExtractionService $sourceExtraction
+     * @param ArticleGenerationService $articleGeneration
      */
-    public function __construct(AnthropicService $anthropic, WpToolkitService $wptoolkit, WordPressService $wp, SourceDiscoveryService $sourceDiscovery, SourceExtractionService $sourceExtraction)
+    public function __construct(WpToolkitService $wptoolkit, WordPressService $wp, SourceDiscoveryService $sourceDiscovery, SourceExtractionService $sourceExtraction, ArticleGenerationService $articleGeneration)
     {
-        $this->anthropic = $anthropic;
         $this->wptoolkit = $wptoolkit;
         $this->wp = $wp;
         $this->sourceDiscovery = $sourceDiscovery;
         $this->sourceExtraction = $sourceExtraction;
+        $this->articleGeneration = $articleGeneration;
     }
 
     /**
@@ -247,59 +247,30 @@ class CampaignRunService
      */
     private function spinArticle(PublishCampaign $campaign, array $sourceTexts): array
     {
-        $prompt = "You are a professional content writer. Rewrite the provided source articles into a single new unique article.\n\n";
-        $prompt .= "CRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Start with <h2> for section headings.\n\n";
-        $prompt .= "METADATA: At the very end, output: <!-- METADATA: {\"titles\":[...5 titles],\"categories\":[...10 categories],\"tags\":[...10 tags],\"description\":\"SEO meta description\"} -->\n\n";
-
-        // Add campaign preset instructions
         $preset = $campaign->campaignPreset;
-        if ($preset && $preset->ai_instructions) {
-            $prompt .= "ADDITIONAL INSTRUCTIONS: " . $preset->ai_instructions . "\n\n";
-        }
-
-        $prompt .= "SOURCE ARTICLES:\n\n";
-        foreach ($sourceTexts as $i => $src) {
-            $prompt .= "--- Source " . ($i + 1) . " ---\n";
-            $prompt .= "Title: " . ($src['title'] ?? '') . "\n";
-            $prompt .= Str::limit($src['text'], 3000) . "\n\n";
-        }
-
         $model = $campaign->ai_engine ?? 'claude-sonnet-4-6';
-        $result = $this->anthropic->chat('You are a professional content writer.', $prompt, $model);
+
+        $result = $this->articleGeneration->generate($sourceTexts, [
+            'model'          => $model,
+            'template_id'    => $campaign->publish_template_id,
+            'custom_prompt'  => $preset && $preset->ai_instructions ? $preset->ai_instructions : null,
+            'agent'          => 'campaign-spin',
+        ]);
 
         if (!$result['success']) {
             return ['success' => false, 'message' => $result['message'] ?? 'AI call failed'];
         }
 
-        $content = $result['data']['content'] ?? '';
-        $usage = $result['data']['usage'] ?? [];
-
-        // Parse metadata
-        $metadata = ['titles' => [], 'categories' => [], 'tags' => [], 'description' => ''];
-        if (preg_match('/<!--\s*METADATA:\s*(\{.+?\})\s*-->/s', $content, $metaMatch)) {
-            $parsed = json_decode(trim($metaMatch[1]), true);
-            if ($parsed) $metadata = array_merge($metadata, $parsed);
-            $content = preg_replace('/<!--\s*METADATA:\s*\{.+?\}\s*-->/s', '', $content);
-        }
-
-        $content = trim($content);
-        $wordCount = str_word_count(strip_tags($content));
-
-        // Calculate cost
-        $inputTokens = $usage['input_tokens'] ?? 0;
-        $outputTokens = $usage['output_tokens'] ?? 0;
-        $cost = ($inputTokens * 0.003 + $outputTokens * 0.015) / 1000;
-
         return [
-            'success' => true,
-            'html' => $content,
-            'word_count' => $wordCount,
-            'title' => $metadata['titles'][0] ?? 'Untitled',
-            'categories' => $metadata['categories'] ?? [],
-            'tags' => $metadata['tags'] ?? [],
-            'description' => $metadata['description'] ?? '',
-            'usage' => $usage,
-            'cost' => round($cost, 4),
+            'success'     => true,
+            'html'        => $result['html'],
+            'word_count'  => $result['word_count'],
+            'title'       => $result['metadata']['titles'][0] ?? 'Untitled',
+            'categories'  => $result['metadata']['categories'] ?? [],
+            'tags'        => $result['metadata']['tags'] ?? [],
+            'description' => $result['metadata']['description'] ?? '',
+            'usage'       => $result['usage'],
+            'cost'        => $result['cost'],
         ];
     }
 

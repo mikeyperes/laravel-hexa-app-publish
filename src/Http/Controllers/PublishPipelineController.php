@@ -15,6 +15,7 @@ use hexa_app_publish\Models\PublishSite;
 use hexa_package_anthropic\Services\AnthropicService;
 use Illuminate\Support\Str;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
+use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
 use hexa_package_wordpress\Services\WordPressService;
@@ -208,236 +209,27 @@ class PublishPipelineController extends Controller
             'master_setting_ids.*' => 'integer|exists:publish_master_settings,id',
         ]);
 
-        // Load master spin prompt (or use default)
-        $masterPrompt = PublishMasterSetting::where('type', 'master_spin_prompt')
-            ->where('is_active', true)
-            ->value('content');
-
-        if (empty($masterPrompt)) {
-            $masterPrompt = "You are a professional content writer. Rewrite the provided source articles into a single new unique article.\n\n{custom_instructions}\n\n{wordpress_guidelines}\n\n{spinning_guidelines}\n\n{preset_config}\n\n{template_config}\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links. Do NOT output markdown.\n\nSUPPORTING LINKS: Include 3-5 relevant external links within the article using <a href=\"URL\" target=\"_blank\"> tags. These should link to real, credible news articles, official sources, government sites, or research that support the claims being made. Do NOT link to the source articles provided — find independent supporting references.\n\nPHOTO PLACEMENT: Insert HTML comments for photos: <!-- PHOTO: descriptive search term | alt text description -->. Place {photo_count} photo markers at natural breaking points. Search terms must be specific and visual — match commonly available stock photo subjects, avoid niche historical or overly specific terms. Alt text under 125 characters.\n\nFEATURED IMAGE: Also output one line: <!-- FEATURED: descriptive search term for the article featured image -->\n\nMETADATA: At the very end of your response, output a JSON block:\n<!-- METADATA: {\"titles\":[\"title1\",\"title2\",...10 titles],\"categories\":[\"cat1\",\"cat2\",...15 categories],\"tags\":[\"tag1\",\"tag2\",...15 tags],\"description\":\"A 1-2 sentence SEO meta description summarizing the article\"} -->\n\nThe titles should be compelling and SEO-friendly. Categories are broad topics. Tags are specific keywords. Description is a concise meta description for SEO (under 160 characters).\n\n{source_articles}";
-        }
-
-        // Load settings for shortcode replacement
-        $masterSettings = PublishMasterSetting::where('is_active', true)->orderBy('sort_order')->get();
-
-        // Build shortcode values
-        $wpGuidelines = $masterSettings->where('type', 'wordpress_guidelines')->pluck('content')->implode("\n\n");
-        $spinGuidelines = $masterSettings->where('type', 'spinning_guidelines')->pluck('content')->implode("\n\n");
-
-        $presetConfig = '';
-        if (!empty($validated['preset_id'])) {
-            $preset = PublishPreset::find($validated['preset_id']);
-            if ($preset) {
-                $parts = [];
-                if ($preset->tone) $parts[] = "Tone: {$preset->tone}";
-                if ($preset->article_format) $parts[] = "Format: {$preset->article_format}";
-                if ($preset->follow_links) $parts[] = "Links: {$preset->follow_links}";
-                if ($preset->image_preference) $parts[] = "Images: {$preset->image_preference}";
-                $presetConfig = implode("\n", $parts);
-            }
-        }
-
-        $templateConfig = '';
-        $photoCount = '2-4';
-        if (!empty($validated['template_id'])) {
-            $template = PublishTemplate::find($validated['template_id']);
-            if ($template) {
-                $parts = [];
-                if ($template->ai_prompt) $parts[] = $template->ai_prompt;
-                if ($template->tone) $parts[] = "Tone: " . (is_array($template->tone) ? implode(', ', $template->tone) : $template->tone);
-                if ($template->article_type) $parts[] = "Article type: {$template->article_type}";
-                if ($template->word_count_min || $template->word_count_max) $parts[] = "Target words: {$template->word_count_min}-{$template->word_count_max}";
-                $templateConfig = implode("\n", $parts);
-                if ($template->photos_per_article) $photoCount = (string) $template->photos_per_article;
-            }
-        }
-
-        // Build source articles text
-        $sourceTextsStr = '';
-        if (!empty($validated['change_request'])) {
-            $sourceTextsStr = "Below is an existing article. Apply the following changes:\n\nChanges requested: {$validated['change_request']}\n\n=== Current Article ===\n{$validated['source_texts'][0]}";
-        } else {
-            $sourceTextsStr = "Below are the source articles to spin into a new unique article:\n";
-            foreach ($validated['source_texts'] as $i => $text) {
-                $num = $i + 1;
-                $sourceTextsStr .= "\n=== Source {$num} ===\n{$text}";
-            }
-        }
-
-        // Replace all shortcodes
-        $systemPrompt = str_replace([
-            '{custom_instructions}',
-            '{wordpress_guidelines}',
-            '{spinning_guidelines}',
-            '{preset_config}',
-            '{template_config}',
-            '{photo_count}',
-            '{source_articles}',
-            '{featured_image_preference}',
-        ], [
-            !empty($validated['custom_prompt']) ? "=== PRIORITY INSTRUCTIONS ===\n{$validated['custom_prompt']}" : '',
-            $wpGuidelines ? "=== WordPress Guidelines ===\n{$wpGuidelines}" : '',
-            $spinGuidelines ? "=== Spinning Guidelines ===\n{$spinGuidelines}" : '',
-            $presetConfig ? "=== Preset Config ===\n{$presetConfig}" : '',
-            $templateConfig ? "=== Template Config ===\n{$templateConfig}" : '',
-            $photoCount,
-            $sourceTextsStr,
-            $preset->image_preference ?? '',
-        ], $masterPrompt);
-
-        // Clean up empty sections (double newlines from empty shortcodes)
-        $systemPrompt = preg_replace("/\n{3,}/", "\n\n", trim($systemPrompt));
-
-        $userMessage = 'Generate the article now.';
-        $model = $validated['model'];
-
-        $result = $this->anthropic->chat($systemPrompt, $userMessage, $model, 8192);
+        $result = app(ArticleGenerationService::class)->generate(
+            $validated['source_texts'],
+            [
+                'model'          => $validated['model'],
+                'template_id'    => $validated['template_id'] ?? null,
+                'preset_id'      => $validated['preset_id'] ?? null,
+                'custom_prompt'  => $validated['custom_prompt'] ?? null,
+                'change_request' => $validated['change_request'] ?? null,
+                'agent'          => !empty($validated['change_request']) ? 'pipeline-revise' : 'pipeline-spin',
+            ]
+        );
 
         if (!$result['success']) {
-            return response()->json([
-                'success' => false,
-                'message' => $result['message'],
-            ]);
+            return response()->json(['success' => false, 'message' => $result['message']]);
         }
 
-        $content = $result['data']['content'] ?? '';
-
-        // Strip ```html code blocks if AI wrapped output
-        $content = preg_replace('/^```html\s*/i', '', $content);
-        $content = preg_replace('/\s*```$/', '', $content);
-
-        // Strip full HTML document wrapper — extract body content only
-        if (preg_match('/<body[^>]*>(.*)<\/body>/is', $content, $bodyMatch)) {
-            $content = trim($bodyMatch[1]);
-        }
-        // Also strip <html>, <head>, <title>, <!DOCTYPE> if no <body> tag
-        $content = preg_replace('/<!DOCTYPE[^>]*>/i', '', $content);
-        $content = preg_replace('/<\/?html[^>]*>/i', '', $content);
-        $content = preg_replace('/<head>.*?<\/head>/is', '', $content);
-        $content = trim($content);
-
-        // Strip H1 from body — title is handled separately
-        $content = preg_replace('/<h1[^>]*>.*?<\/h1>/is', '', $content, 1);
-        $content = trim($content);
-
-        // Markdown → HTML fallback: detect and convert if AI returned markdown
-        if (preg_match('/^#{1,6}\s|^\*\*|^\- |\n#{1,6}\s/m', $content)) {
-            // Headings: ## Title → <h2>Title</h2>
-            $content = preg_replace('/^######\s+(.+)$/m', '<h6>$1</h6>', $content);
-            $content = preg_replace('/^#####\s+(.+)$/m', '<h5>$1</h5>', $content);
-            $content = preg_replace('/^####\s+(.+)$/m', '<h4>$1</h4>', $content);
-            $content = preg_replace('/^###\s+(.+)$/m', '<h3>$1</h3>', $content);
-            $content = preg_replace('/^##\s+(.+)$/m', '<h2>$1</h2>', $content);
-            $content = preg_replace('/^#\s+(.+)$/m', '<h1>$1</h1>', $content);
-            // Bold: **text** → <strong>text</strong>
-            $content = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $content);
-            // Italic: *text* → <em>text</em>
-            $content = preg_replace('/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/', '<em>$1</em>', $content);
-            // Unordered lists: - item → <li>item</li>
-            $content = preg_replace('/^[\-\*]\s+(.+)$/m', '<li>$1</li>', $content);
-            $content = preg_replace('/(<li>.*<\/li>\n?)+/', '<ul>$0</ul>', $content);
-            // Links: [text](url) → <a href="url">text</a>
-            $content = preg_replace('/\[([^\]]+)\]\(([^\)]+)\)/', '<a href="$2">$1</a>', $content);
-            // Paragraphs: wrap remaining plain text blocks in <p> tags
-            $lines = explode("\n\n", $content);
-            $content = implode("\n", array_map(function ($block) {
-                $block = trim($block);
-                if (empty($block)) return '';
-                if (preg_match('/^<(h[1-6]|ul|ol|li|blockquote|div|p|table)/', $block)) return $block;
-                return '<p>' . str_replace("\n", '<br>', $block) . '</p>';
-            }, $lines));
-        }
-
-        // Extract photo placement suggestions from HTML comments
-        // Supports: <!-- PHOTO: search | alt | caption | filename --> or legacy <!-- PHOTO: search | alt -->
-        $photoSuggestions = [];
-        if (preg_match_all('/<!--\s*PHOTO:\s*(.+?)\s*-->/', $content, $photoMatches, PREG_SET_ORDER)) {
-            foreach ($photoMatches as $i => $match) {
-                $parts = array_map('trim', explode('|', $match[1]));
-                $searchTerm = $parts[0] ?? '';
-                $altText = $parts[1] ?? $searchTerm;
-                $caption = $parts[2] ?? '';
-                $seoFilename = $parts[3] ?? Str::slug($searchTerm);
-                $photoSuggestions[] = [
-                    'search_term' => $searchTerm,
-                    'alt_text' => $altText,
-                    'caption' => $caption,
-                    'suggestedFilename' => $seoFilename,
-                    'position' => $i,
-                ];
-                $placeholder = '<div class="photo-placeholder" contenteditable="false" data-idx="' . $i . '" data-search="' . htmlspecialchars($searchTerm) . '" data-caption="' . htmlspecialchars($altText) . '" style="border:2px dashed #a78bfa;background:#f5f3ff;border-radius:8px;padding:12px 16px;margin:16px 0;cursor:pointer;text-align:center;color:#7c3aed;font-size:14px;">'
-                    . '<span style="font-size:13px;">Loading photo...</span>'
-                    . '</div>';
-                $content = preg_replace('/<!--\s*PHOTO:\s*' . preg_quote($match[1], '/') . '\s*-->/', $placeholder, $content, 1);
-            }
-        }
-
-        // Extract FEATURED image suggestion
-        $featuredImage = null;
-        if (preg_match('/<!--\s*FEATURED:\s*(.+?)\s*-->/', $content, $featuredMatch)) {
-            $featuredImage = trim($featuredMatch[1]);
-            $content = preg_replace('/<!--\s*FEATURED:\s*.+?\s*-->/', '', $content);
-        }
-
-        // Extract METADATA (titles, categories, tags)
-        $metadata = ['titles' => [], 'categories' => [], 'tags' => []];
-        if (preg_match('/<!--\s*METADATA:\s*(\{.+?\})\s*-->/s', $content, $metaMatch)) {
-            $parsed = json_decode(trim($metaMatch[1]), true);
-            if ($parsed) $metadata = array_merge($metadata, $parsed);
-            $content = preg_replace('/<!--\s*METADATA:\s*\{.+?\}\s*-->/s', '', $content);
-        }
-
-        $content = trim($content);
-        $plainText = strip_tags($content);
-        $wordCount = str_word_count($plainText);
-
-        // Log AI activity
-        $usage = $result['data']['usage'] ?? [];
-        $apiKey = \hexa_core\Models\Setting::getValue('anthropic_api_key', '');
-        AiActivityLog::logCall([
-            'provider'         => 'anthropic',
-            'model'            => $validated['model'],
-            'agent'            => !empty($validated['change_request']) ? 'pipeline-revise' : 'pipeline-spin',
-            'prompt_tokens'    => $usage['input_tokens'] ?? 0,
-            'completion_tokens' => $usage['output_tokens'] ?? 0,
-            'system_prompt'    => mb_substr($systemPrompt, 0, 5000),
-            'user_message'     => mb_substr($userMessage, 0, 5000),
-            'response_content' => mb_substr($content, 0, 10000),
-            'success'          => true,
-            'api_key_masked'   => $apiKey ? '...' . substr($apiKey, -4) : null,
-        ]);
-
-        // Calculate cost for response
-        $pricing = [
-            'claude-opus-4-6' => ['input' => 15.0, 'output' => 75.0],
-            'claude-opus-4-20250514' => ['input' => 15.0, 'output' => 75.0],
-            'claude-sonnet-4-6' => ['input' => 3.0, 'output' => 15.0],
-            'claude-sonnet-4-20250514' => ['input' => 3.0, 'output' => 15.0],
-            'claude-haiku-4-5-20251001' => ['input' => 0.80, 'output' => 4.0],
-        ];
-        $rates = $pricing[$model] ?? ['input' => 0, 'output' => 0];
-        $inputTokens = $usage['input_tokens'] ?? 0;
-        $outputTokens = $usage['output_tokens'] ?? 0;
-        $cost = ($inputTokens * $rates['input'] / 1_000_000) + ($outputTokens * $rates['output'] / 1_000_000);
-
-        return response()->json([
-            'success'    => true,
-            'message'    => "Article generated: {$wordCount} words.",
-            'html'       => $content,
-            'text'       => $plainText,
-            'word_count' => $wordCount,
-            'usage'      => $usage,
-            'model'      => $result['data']['model'] ?? $model,
-            'cost'       => round($cost, 6),
-            'provider'   => 'anthropic',
-            'user_name'  => auth()->user()?->name ?? 'System',
-            'ip'         => request()->ip(),
+        return response()->json(array_merge($result, [
+            'user_name'     => auth()->user()?->name ?? 'System',
+            'ip'            => request()->ip(),
             'timestamp_utc' => now()->utc()->format('Y-m-d H:i:s'),
-            'photo_suggestions' => $photoSuggestions,
-            'featured_image' => $featuredImage,
-            'metadata' => $metadata,
-            'resolved_prompt' => $systemPrompt,
-        ]);
+        ]));
     }
 
     /**
