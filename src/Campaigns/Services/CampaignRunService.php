@@ -5,14 +5,10 @@ namespace hexa_app_publish\Campaigns\Services;
 use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishCampaign;
 use hexa_app_publish\Models\PublishSite;
-use hexa_core\Models\Setting;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
+use hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
-use hexa_package_wptoolkit\Services\WpToolkitService;
-use hexa_package_wordpress\Services\WordPressService;
-use hexa_package_whm\Models\HostingAccount;
-use hexa_package_whm\Models\WhmServer;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 
@@ -24,23 +20,20 @@ use Illuminate\Support\Facades\Log;
  */
 class CampaignRunService
 {
-    protected WpToolkitService $wptoolkit;
-    protected WordPressService $wp;
+    protected WordPressDeliveryService $delivery;
     protected SourceDiscoveryService $sourceDiscovery;
     protected SourceExtractionService $sourceExtraction;
     protected ArticleGenerationService $articleGeneration;
 
     /**
-     * @param WpToolkitService $wptoolkit
-     * @param WordPressService $wp
+     * @param WordPressDeliveryService $delivery
      * @param SourceDiscoveryService $sourceDiscovery
      * @param SourceExtractionService $sourceExtraction
      * @param ArticleGenerationService $articleGeneration
      */
-    public function __construct(WpToolkitService $wptoolkit, WordPressService $wp, SourceDiscoveryService $sourceDiscovery, SourceExtractionService $sourceExtraction, ArticleGenerationService $articleGeneration)
+    public function __construct(WordPressDeliveryService $delivery, SourceDiscoveryService $sourceDiscovery, SourceExtractionService $sourceExtraction, ArticleGenerationService $articleGeneration)
     {
-        $this->wptoolkit = $wptoolkit;
-        $this->wp = $wp;
+        $this->delivery = $delivery;
         $this->sourceDiscovery = $sourceDiscovery;
         $this->sourceExtraction = $sourceExtraction;
         $this->articleGeneration = $articleGeneration;
@@ -66,10 +59,6 @@ class CampaignRunService
             return ['success' => false, 'log' => $log, 'article' => null];
         }
         $log[] = $this->entry('step', "Site: {$site->name} ({$site->url})");
-
-        $account = HostingAccount::find($site->hosting_account_id);
-        $server = $account ? WhmServer::find($account->whm_server_id) : null;
-        $installId = $site->wordpress_install_id;
 
         // 2. Find source articles (from campaign preset keywords/genre)
         $log[] = $this->entry('step', 'Finding source articles...');
@@ -146,56 +135,32 @@ class CampaignRunService
             return ['success' => false, 'log' => $log, 'article' => $article];
         }
 
-        // 6. Publish or save as draft (SSH via WP Toolkit, REST via WordPressService)
+        // 6. Publish or save as draft via shared WordPressDeliveryService
         $isWpAction = in_array($mode, ['publish', 'wp-draft']);
-        $connectionType = $site->connection_type ?? 'wptoolkit';
-        $canSsh = ($connectionType === 'wptoolkit') && $server && $installId;
-        $canRest = ($connectionType !== 'wptoolkit') && $site->wp_username && $site->wp_application_password;
 
-        if ($isWpAction && ($canSsh || $canRest)) {
-            $log[] = $this->entry('step', 'Publishing to WordPress via ' . ($canSsh ? 'SSH' : 'REST') . '...');
+        if ($isWpAction) {
+            $log[] = $this->entry('step', 'Publishing to WordPress...');
             try {
                 $postStatus = $mode === 'wp-draft' ? 'draft' : ($campaign->post_status ?? 'draft');
-
-                if ($canSsh) {
-                    $postResult = $this->wptoolkit->wpCliCreatePost(
-                        $server,
-                        $installId,
-                        $article->title ?? 'Untitled',
-                        $article->body ?? '',
-                        $postStatus
-                    );
-                } else {
-                    $postResult = $this->wp->createPost($site->url, $site->wp_username, $site->wp_application_password, [
-                        'title'   => $article->title ?? 'Untitled',
-                        'content' => $article->body ?? '',
-                        'status'  => $postStatus,
-                    ]);
-                }
+                $postResult = $this->delivery->createPost($site, $article->title ?? 'Untitled', $article->body ?? '', $postStatus);
 
                 if ($postResult['success']) {
-                    $wpPostId = $postResult['data']['post_id'] ?? null;
-                    // SSH returns only post_id; REST returns post_url — build fallback from site URL
-                    $wpPostUrl = $postResult['data']['post_url'] ?? ($wpPostId ? rtrim($site->url, '/') . '/?p=' . $wpPostId : '');
                     $isActualPublish = ($postStatus === 'publish');
                     $article->update([
-                        'wp_post_id' => $wpPostId,
-                        'wp_post_url' => $wpPostUrl,
-                        'wp_status' => $postStatus,
-                        'status' => $isActualPublish ? 'completed' : 'drafting',
+                        'wp_post_id'  => $postResult['post_id'],
+                        'wp_post_url' => $postResult['post_url'],
+                        'wp_status'   => $postStatus,
+                        'status'      => $isActualPublish ? 'completed' : 'drafting',
                         'published_at' => $isActualPublish ? now() : null,
                     ]);
-                    $log[] = $this->entry('success', ($isActualPublish ? 'Published' : 'WP Draft') . ": #{$wpPostId} — {$wpPostUrl}");
+                    $log[] = $this->entry('success', ($isActualPublish ? 'Published' : 'WP Draft') . " via {$postResult['mode']}: #{$postResult['post_id']} — {$postResult['post_url']}");
                 } else {
-                    $log[] = $this->entry('error', 'WP publish failed: ' . ($postResult['message'] ?? ''));
+                    $log[] = $this->entry('error', 'WP publish failed: ' . $postResult['message']);
                     $article->update(['status' => 'failed']);
                 }
             } catch (\Exception $e) {
                 $log[] = $this->entry('error', 'Publish error: ' . $e->getMessage());
             }
-        } else if ($isWpAction && !$canSsh && !$canRest) {
-            $log[] = $this->entry('warning', 'Site has no valid SSH or REST credentials — saving as local draft.');
-            $article->update(['status' => 'drafting', 'delivery_mode' => 'draft-local']);
         } else {
             $article->update(['status' => 'drafting', 'delivery_mode' => 'draft-local']);
             $log[] = $this->entry('success', 'Saved as local draft.');
