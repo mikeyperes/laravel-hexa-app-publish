@@ -869,10 +869,24 @@
                             <p class="text-xs text-purple-600 mb-1">AI suggested search:</p>
                             <div class="flex gap-2 mb-2">
                                 <input type="text" x-model="featuredImageSearch" class="flex-1 border border-purple-300 rounded-lg px-3 py-1.5 text-sm">
-                                <button @click="searchFeaturedImage()" class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-purple-700">Search</button>
+                                <button @click="searchFeaturedImage()" :disabled="featuredSearching" class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1">
+                                    <svg x-show="featuredSearching" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                    Search
+                                </button>
+                                <button x-show="featuredPhoto" x-cloak @click="featuredPhoto = null" class="text-xs text-red-500 hover:text-red-700 px-2">Remove</button>
                             </div>
                             <p x-show="featuredPhoto" x-cloak class="text-xs text-gray-500" x-text="(featuredPhoto?.width || '?') + 'x' + (featuredPhoto?.height || '?') + ' — ' + (featuredPhoto?.source || '?')"></p>
                         </div>
+                    </div>
+                    {{-- Featured image search results --}}
+                    <div x-show="featuredResults.length > 0" x-cloak class="mt-3 grid grid-cols-4 gap-2">
+                        <template x-for="(photo, idx) in featuredResults" :key="idx">
+                            <div @click="featuredPhoto = photo" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-colors"
+                                 :class="featuredPhoto && featuredPhoto.url_thumb === photo.url_thumb ? 'border-purple-500' : 'border-gray-200 hover:border-purple-300'">
+                                <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-20 object-cover" loading="lazy">
+                                <p class="text-[10px] text-gray-400 px-1 py-0.5 truncate" x-text="photo.source"></p>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
@@ -1519,6 +1533,8 @@ function publishPipeline() {
         uploadedImages: {},
         featuredImageSearch: '',
         featuredPhoto: null,
+        featuredResults: [],
+        featuredSearching: false,
         resolvedPrompt: '',
         articleDescription: '',
         spinLog: [],
@@ -2234,12 +2250,10 @@ function publishPipeline() {
                         this.selectedTags = Array.from({length: Math.min(10, this.suggestedTags.length)}, (_, i) => i);
                     }
 
-                    // Featured image
+                    // Featured image — auto-fetch with results
                     if (data.featured_image) {
                         this.featuredImageSearch = data.featured_image;
-                        // Auto-fetch featured image
-                        fetch('{{ route("publish.search.images.post") }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken }, body: JSON.stringify({ query: data.featured_image, per_page: 1 }) })
-                            .then(r => r.json()).then(d => { if (d.data?.photos?.[0]) this.featuredPhoto = d.data.photos[0]; }).catch(() => {});
+                        this.searchFeaturedImage();
                     }
 
                     // Resolved prompt for preview
@@ -2588,15 +2602,20 @@ function publishPipeline() {
 
         async searchFeaturedImage() {
             if (!this.featuredImageSearch.trim()) return;
+            this.featuredSearching = true;
+            this.featuredResults = [];
             try {
                 const resp = await fetch('{{ route("publish.search.images.post") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ query: this.featuredImageSearch, per_page: 1 })
+                    body: JSON.stringify({ query: this.featuredImageSearch, per_page: 8 })
                 });
                 const data = await resp.json();
-                if (data.data?.photos?.[0]) this.featuredPhoto = data.data.photos[0];
+                const photos = data.data?.photos || [];
+                this.featuredResults = photos;
+                if (photos.length > 0 && !this.featuredPhoto) this.featuredPhoto = photos[0];
             } catch (e) {}
+            this.featuredSearching = false;
         },
 
         insertPhotoIntoEditor() {
@@ -2630,7 +2649,10 @@ function publishPipeline() {
         async autoFetchPhotos() {
             if (this.photoSuggestions.length === 0) return;
             this.autoFetchingPhotos = true;
-            const promises = this.photoSuggestions.map(async (ps, idx) => {
+            // Sequential (not parallel) to avoid blocking single-threaded server
+            for (let idx = 0; idx < this.photoSuggestions.length; idx++) {
+                const ps = this.photoSuggestions[idx];
+                if (ps.autoPhoto) continue; // Already loaded
                 try {
                     const resp = await fetch('{{ route("publish.search.images.post") }}', {
                         method: 'POST',
@@ -2643,11 +2665,27 @@ function publishPipeline() {
                         this.photoSuggestions[idx].autoPhoto = photos[0];
                         this.photoSuggestions[idx].searchResults = photos;
                         this.updatePlaceholderInEditor(idx);
+                    } else {
+                        this.updatePlaceholderError(idx, 'No photos found');
                     }
-                } catch (e) { /* silently fail */ }
-            });
-            await Promise.all(promises);
+                } catch (e) {
+                    this.updatePlaceholderError(idx, 'Search failed');
+                }
+            }
             this.autoFetchingPhotos = false;
+        },
+
+        updatePlaceholderError(idx, message) {
+            const editor = tinymce.get('spin-preview-editor');
+            if (!editor || !editor.getBody()) return;
+            const placeholder = editor.getBody().querySelector('.photo-placeholder[data-idx="' + idx + '"]');
+            if (!placeholder) return;
+            const ps = this.photoSuggestions[idx];
+            const newHtml = '<div class="photo-placeholder" contenteditable="false" data-idx="' + idx + '" style="border:2px dashed #ef4444;background:#fef2f2;border-radius:8px;padding:12px 16px;margin:16px 0;text-align:center;color:#dc2626;font-size:13px;">'
+                + '<span>' + message + ' for: ' + this._escHtml(ps?.search_term || '') + '</span><br>'
+                + '<span class="photo-change" style="cursor:pointer;display:inline-block;background:#2563eb;color:white;padding:2px 8px;border-radius:4px;font-size:11px;margin-top:6px;">Search Manually</span>'
+                + '</div>';
+            editor.dom.setOuterHTML(placeholder, newHtml);
         },
 
         updatePlaceholderInEditor(idx, retries) {
