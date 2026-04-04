@@ -114,7 +114,7 @@
     {{-- WordPress Site --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 class="font-semibold text-gray-800 mb-3">WordPress Site</h3>
-        <select x-model="form.publish_site_id" @change="testSiteConnection()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+        <select x-model="form.publish_site_id" @change="doTestSite()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
             <option value="">-- Select site --</option>
             @foreach($sites as $s)
                 <option value="{{ $s->id }}">{{ $s->name }} ({{ $s->url }})</option>
@@ -122,17 +122,17 @@
         </select>
         {{-- Connection status --}}
         <div x-show="form.publish_site_id" x-cloak class="mt-3">
-            <div class="flex items-center gap-2 rounded-lg px-3 py-2" :class="siteStatus === true ? 'bg-green-50' : (siteStatus === false ? 'bg-red-50' : 'bg-gray-50')">
-                <template x-if="siteTesting"><svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
-                <template x-if="!siteTesting && siteStatus === true"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
-                <template x-if="!siteTesting && siteStatus === false"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
-                <template x-if="!siteTesting && siteStatus === null"><svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
-                <span class="text-sm" :class="siteStatus === true ? 'text-green-800' : (siteStatus === false ? 'text-red-800' : 'text-gray-600')" x-text="siteMessage || 'Site selected — click Test to verify connection'"></span>
-                <button x-show="!siteTesting" @click="testSiteConnection()" class="text-xs text-blue-600 hover:text-blue-800 ml-2" x-text="siteStatus === true ? 'Retest' : 'Test'"></button>
+            <div class="flex items-center gap-2 rounded-lg px-3 py-2" :class="siteConn.status === true ? 'bg-green-50' : (siteConn.status === false ? 'bg-red-50' : 'bg-gray-50')">
+                <template x-if="siteConn.testing"><svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
+                <template x-if="!siteConn.testing && siteConn.status === true"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                <template x-if="!siteConn.testing && siteConn.status === false"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                <template x-if="!siteConn.testing && siteConn.status === null"><svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                <span class="text-sm" :class="siteConn.status === true ? 'text-green-800' : (siteConn.status === false ? 'text-red-800' : 'text-gray-600')" x-text="siteConn.message || 'Site selected — click Test to verify connection'"></span>
+                <button x-show="!siteConn.testing" @click="doTestSite()" class="text-xs text-blue-600 hover:text-blue-800 ml-2" x-text="siteConn.status === true ? 'Retest' : 'Test'"></button>
             </div>
             {{-- Connection log --}}
-            <div x-show="siteLog.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
-                <template x-for="(entry, idx) in siteLog" :key="idx">
+            <div x-show="siteConn.log.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
+                <template x-for="(entry, idx) in siteConn.log" :key="idx">
                     <div class="flex items-start gap-2 py-0.5 text-xs font-mono">
                         <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
                         <span :class="{'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info'}" x-text="entry.message" class="break-words"></span>
@@ -144,18 +144,18 @@
         {{-- Author (always visible when site selected) --}}
         <div x-show="form.publish_site_id" class="mt-4">
             <label class="block text-xs text-gray-500 mb-1">Author</label>
-            <div x-show="siteAuthors.length > 0">
+            <div x-show="siteConn.authors.length > 0">
                 <select x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
                     <option value="">-- Default author --</option>
-                    <template x-for="a in siteAuthors" :key="a.user_login">
+                    <template x-for="a in siteConn.authors" :key="a.user_login">
                         <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
                     </template>
                 </select>
             </div>
-            <div x-show="siteAuthors.length === 0">
+            <div x-show="siteConn.authors.length === 0">
                 <div class="flex items-center gap-2">
                     <input type="text" x-model="form.author" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md" placeholder="WordPress author username">
-                    <span x-show="siteTesting" class="text-xs text-blue-500 flex items-center gap-1">
+                    <span x-show="siteConn.testing" class="text-xs text-blue-500 flex items-center gap-1">
                         <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         Loading authors...
                     </span>
@@ -242,6 +242,7 @@
 </div>
 
 @push('scripts')
+@include('app-publish::partials.site-connection-mixin')
 <script>
 function campaignCreate() {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
@@ -290,18 +291,14 @@ function campaignCreate() {
     @endif
 
     return {
+        ...siteConnectionMixin(),
+
         editId: {{ isset($editCampaign) && $editCampaign ? $editCampaign->id : 'null' }},
         saving: false, saveResult: '', saveSuccess: false,
         runningNow: false,
         presetInfo: '',
         form: initialForm,
 
-        // Site connection
-        siteTesting: false,
-        siteStatus: null,
-        siteMessage: '',
-        siteLog: [],
-        siteAuthors: [],
         loadingPresets: false,
 
         _saveTimer: null,
@@ -329,30 +326,18 @@ function campaignCreate() {
             if (this.form.publish_template_id) this.loadAiTemplate();
             if (this.form.preset_id) this.loadWpPreset();
 
-            // If site is selected, restore cached connection or auto-test
+            // If site is selected, restore cached connection or show prompt
             if (this.form.publish_site_id) {
-                const savedConn = localStorage.getItem('campaignSiteConnection_' + this.editId);
-                let restored = false;
-                if (savedConn) {
-                    try {
-                        const conn = JSON.parse(savedConn);
-                        if (conn.site_id == this.form.publish_site_id && conn.status === true && conn.authors?.length > 0) {
-                            this.siteStatus = conn.status;
-                            this.siteMessage = conn.message;
-                            this.siteAuthors = conn.authors;
-                            // Re-sync author dropdown — timeout for DOM to render options
-                            const savedAuthor = this.form.author;
-                            if (savedAuthor) {
-                                setTimeout(() => { this.form.author = ''; setTimeout(() => { this.form.author = savedAuthor; }, 50); }, 200);
-                            }
-                            restored = true;
-                        }
-                    } catch(e) {}
-                }
-                // If no valid cache, show prompt — do NOT auto-test (blocks single-threaded server)
-                if (!restored) {
-                    this.siteStatus = null;
-                    this.siteMessage = 'Click "Test Connection" to verify site access.';
+                const cacheKey = 'campaignSiteConnection_' + this.editId;
+                const restored = this.restoreSiteConnection(this.form.publish_site_id, cacheKey);
+                if (restored) {
+                    // Re-sync author dropdown
+                    const savedAuthor = this.form.author;
+                    if (savedAuthor) {
+                        setTimeout(() => { this.form.author = ''; setTimeout(() => { this.form.author = savedAuthor; }, 50); }, 200);
+                    }
+                } else {
+                    this.siteConn.message = 'Click "Test Connection" to verify site access.';
                 }
             }
         },
@@ -406,50 +391,19 @@ function campaignCreate() {
             return h12 + ':' + String(mins).padStart(2, '0') + ' ' + ampm + ' ' + (this.form.timezone || 'ET');
         },
 
-        async testSiteConnection() {
-            if (!this.form.publish_site_id) return;
-            this.siteTesting = true;
-            this.siteStatus = null;
-            this.siteMessage = 'Connecting...';
-            this.siteLog = [];
-            this.siteAuthors = [];
-
-            const time = () => new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            this.siteLog.push({ type: 'info', message: 'Testing WordPress connection...', time: time() });
-
-            try {
-                const r = await fetch('/publish/sites/' + this.form.publish_site_id + '/test-write', {
-                    method: 'POST', headers
-                });
-                const d = await r.json();
-                this.siteStatus = d.success;
-                this.siteMessage = d.message || (d.success ? 'Connected' : 'Connection failed');
-                this.siteLog.push({ type: d.success ? 'success' : 'error', message: this.siteMessage, time: time() });
-                if (d.authors) {
-                    this.siteAuthors = d.authors;
-                    this.siteLog.push({ type: 'info', message: d.authors.length + ' authors loaded', time: time() });
-                    // Re-sync author — timeout for DOM to render options
-                    const savedAuthor = this.form.author;
-                    if (savedAuthor) {
-                        setTimeout(() => { this.form.author = ''; setTimeout(() => { this.form.author = savedAuthor; }, 50); }, 200);
+        async doTestSite() {
+            await this.testSiteConnection(this.form.publish_site_id, csrf, {
+                cacheKey: 'campaignSiteConnection_' + this.editId,
+                onAuthorsLoaded(authors) {
+                    const saved = this.form.author;
+                    if (saved) {
+                        setTimeout(() => { this.form.author = ''; setTimeout(() => { this.form.author = saved; }, 50); }, 200);
                     }
-                }
-                if (d.default_author && !this.form.author) {
-                    this.form.author = d.default_author;
-                }
-            } catch (e) {
-                this.siteStatus = false;
-                this.siteMessage = 'Network error';
-                this.siteLog.push({ type: 'error', message: e.message, time: time() });
-            }
-            this.siteTesting = false;
-            // Cache connection result
-            localStorage.setItem('campaignSiteConnection_' + this.editId, JSON.stringify({
-                site_id: this.form.publish_site_id,
-                status: this.siteStatus,
-                message: this.siteMessage,
-                authors: this.siteAuthors,
-            }));
+                },
+                onSuccess(d) {
+                    if (d.default_author && !this.form.author) this.form.author = d.default_author;
+                },
+            });
         },
 
         loadPreset() {
