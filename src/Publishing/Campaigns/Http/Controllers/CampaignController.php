@@ -103,7 +103,7 @@ class CampaignController extends Controller
         }
 
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
-        $campaignPresets = \hexa_app_publish\Campaigns\Models\CampaignPreset::orderBy('name')->get();
+        $campaignPresets = \hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset::orderBy('name')->get();
         $aiTemplates = PublishTemplate::orderBy('name')->get();
         $wpPresets = PublishPreset::orderBy('name')->get();
         $editCampaign = PublishCampaign::with('user')->find($request->input('id'));
@@ -210,7 +210,7 @@ class CampaignController extends Controller
         $campaign = PublishCampaign::findOrFail($id);
         $mode = $request->input('mode', 'draft');
 
-        $runService = app(\hexa_app_publish\Campaigns\Services\CampaignRunService::class);
+        $runService = app(\hexa_app_publish\Publishing\Campaigns\Services\CampaignExecutionService::class);
         $result = $runService->run($campaign, $mode);
 
         return response()->json([

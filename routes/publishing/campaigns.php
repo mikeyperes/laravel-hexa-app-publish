@@ -1,7 +1,7 @@
 <?php
 
-use hexa_app_publish\Campaigns\Http\Controllers\CampaignController;
-use hexa_app_publish\Campaigns\Http\Controllers\CampaignPresetController;
+use hexa_app_publish\Publishing\Campaigns\Http\Controllers\CampaignController;
+use hexa_app_publish\Publishing\Campaigns\Http\Controllers\CampaignPresetController;
 
 Route::get('/campaigns', [CampaignController::class, 'index'])->name('campaigns.index');
 Route::get('/campaigns/create', [CampaignController::class, 'create'])->name('campaigns.create');

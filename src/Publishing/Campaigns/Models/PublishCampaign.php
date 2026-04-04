@@ -104,7 +104,7 @@ class PublishCampaign extends Model
      */
     public function campaignPreset(): BelongsTo
     {
-        return $this->belongsTo(\hexa_app_publish\Campaigns\Models\CampaignPreset::class);
+        return $this->belongsTo(\hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset::class);
     }
 
     /**

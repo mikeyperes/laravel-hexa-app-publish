@@ -18,7 +18,7 @@ use hexa_package_anthropic\Services\AnthropicService;
 use hexa_package_chatgpt\Services\ChatGptService;
 use hexa_package_sapling\Services\SaplingService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
-use hexa_app_publish\Services\LinkInsertionService;
+use hexa_app_publish\Discovery\Links\Services\LinkInsertionService;
 use hexa_package_telegram\Services\TelegramService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
