@@ -1606,10 +1606,12 @@ function publishPipeline() {
                             if (savedPresetId) {
                                 this.selectedPresetId = String(savedPresetId);
                                 this.selectedPreset = this.presets.find(p => p.id == savedPresetId) || savedPreset;
+                                if (this.selectedPreset) this.loadPresetFields('preset', this.selectedPreset);
                             }
                             if (savedTemplateId) {
                                 this.selectedTemplateId = String(savedTemplateId);
                                 this.selectedTemplate = this.templates.find(t => t.id == savedTemplateId) || savedTemplate;
+                                if (this.selectedTemplate) this.loadPresetFields('template', this.selectedTemplate);
                             }
                             this._restoring = false;
                         });

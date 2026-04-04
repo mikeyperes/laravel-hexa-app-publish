@@ -34,12 +34,21 @@
             return;
         }
 
-        // Auto-detect fields: exclude id, timestamps, names, status, foreign keys
+        // Auto-detect fields: exclude meta, FKs, relationships, timestamps
         const excludeKeys = ['id', 'created_at', 'updated_at', 'deleted_at', 'name', 'status', 'is_default',
-            'publish_account_id', 'user_id', 'created_by', 'description'];
+            'publish_account_id', 'user_id', 'created_by', 'description',
+            'default_site_id', 'default_template_id', 'default_preset_id',
+            'account', 'user', 'creator', 'site', 'campaigns', 'articles', 'template', 'preset'];
 
         const defaults = {};
-        const keys = fields || Object.keys(data).filter(k => !excludeKeys.includes(k) && data[k] !== null && data[k] !== undefined && data[k] !== '');
+        const keys = fields || Object.keys(data).filter(k => {
+            if (excludeKeys.includes(k)) return false;
+            if (k.endsWith('_id')) return false;
+            const val = data[k];
+            if (val === null || val === undefined || val === '') return false;
+            if (typeof val === 'object' && !Array.isArray(val)) return false; // Skip relationship objects
+            return true;
+        });
 
         keys.forEach(k => {
             defaults[k] = data[k];
