@@ -39,3 +39,7 @@ Route::get('/article/bookmarks', [BookmarkController::class, 'index'])->name('pu
 Route::post('/article/bookmarks', [BookmarkController::class, 'store'])->name('publish.bookmarks.store');
 Route::put('/article/bookmarks/{id}', [BookmarkController::class, 'update'])->name('publish.bookmarks.update');
 Route::delete('/article/bookmarks/{id}', [BookmarkController::class, 'destroy'])->name('publish.bookmarks.destroy');
+
+// Failed sources
+Route::post('/article/failed-sources', [BookmarkController::class, 'storeFailed'])->name('publish.failed-sources.store');
+Route::delete('/article/failed-sources/{id}', [BookmarkController::class, 'destroyFailed'])->name('publish.failed-sources.destroy');

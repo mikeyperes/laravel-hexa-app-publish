@@ -4,6 +4,7 @@ namespace hexa_app_publish\Publishing\Articles\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
 use hexa_app_publish\Models\PublishBookmark;
+use hexa_app_publish\Publishing\Articles\Models\PublishFailedSource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -29,8 +30,11 @@ class BookmarkController extends Controller
 
         $bookmarks = $query->orderByDesc('created_at')->paginate(25);
 
+        $failedSources = PublishFailedSource::orderByDesc('created_at')->paginate(25, ['*'], 'failed_page');
+
         return view('app-publish::publishing.articles.bookmarks.index', [
             'bookmarks' => $bookmarks,
+            'failedSources' => $failedSources,
         ]);
     }
 
@@ -112,6 +116,48 @@ class BookmarkController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Bookmark deleted successfully.',
+        ]);
+    }
+
+    /**
+     * Store a failed source URL.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function storeFailed(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'url'           => 'required|url|max:2000',
+            'title'         => 'nullable|string|max:500',
+            'error_message' => 'nullable|string|max:2000',
+            'source_api'    => 'nullable|string|max:50',
+        ]);
+
+        $validated['user_id'] = auth()->id();
+
+        $failed = PublishFailedSource::create($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Failed source saved.',
+            'id'      => $failed->id,
+        ]);
+    }
+
+    /**
+     * Delete a failed source.
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function destroyFailed(int $id): JsonResponse
+    {
+        PublishFailedSource::findOrFail($id)->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Failed source removed.',
         ]);
     }
 }

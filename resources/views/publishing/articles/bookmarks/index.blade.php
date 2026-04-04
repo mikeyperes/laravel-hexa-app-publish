@@ -140,6 +140,46 @@
         <div class="mt-4">{{ $bookmarks->links() }}</div>
     @endif
 
+    {{-- ═══ Failed Sources ═══ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 mt-6">
+        <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 class="font-semibold text-gray-800 inline-flex items-center gap-2">
+                Failed Sources
+                <span class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{{ $failedSources->total() }}</span>
+            </h3>
+        </div>
+        @if($failedSources->isEmpty())
+            <div class="p-5 text-center text-gray-400 text-sm">No failed sources recorded.</div>
+        @else
+            <table class="w-full text-sm text-left">
+                <thead class="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Title / URL</th>
+                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Error</th>
+                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Date</th>
+                        <th class="px-5 py-2 text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    @foreach($failedSources as $failed)
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-5 py-2">
+                            @if($failed->title)<p class="font-medium text-gray-800 break-words">{{ $failed->title }}</p>@endif
+                            <a href="{{ $failed->url }}" target="_blank" class="text-xs text-blue-500 hover:underline break-all">{{ \Illuminate\Support\Str::limit($failed->url, 60) }} <svg class="inline w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                        </td>
+                        <td class="px-5 py-2 text-xs text-red-500 break-words">{{ \Illuminate\Support\Str::limit($failed->error_message, 80) }}</td>
+                        <td class="px-5 py-2 text-xs text-gray-400">{{ $failed->created_at->format('M j, Y H:i') }}</td>
+                        <td class="px-5 py-2">
+                            <button @click="deleteFailed({{ $failed->id }})" class="text-xs text-red-400 hover:text-red-600">Remove</button>
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+            <div class="px-5 py-3">{{ $failedSources->appends(request()->except('failed_page'))->links() }}</div>
+        @endif
+    </div>
+
     {{-- Edit modal --}}
     <div x-show="editingId" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
         <div class="bg-white rounded-xl shadow-xl border border-gray-200 p-6 w-full max-w-lg mx-4">
@@ -221,6 +261,10 @@ function bookmarksManager() {
         async deleteBookmark(id) {
             if (!confirm('Delete this bookmark?')) return;
             try { await fetch('/article/bookmarks/' + id, { method: 'DELETE', headers }); location.reload(); } catch(e) { alert('Error: ' + e.message); }
+        },
+        async deleteFailed(id) {
+            if (!confirm('Remove this failed source?')) return;
+            try { await fetch('/article/failed-sources/' + id, { method: 'DELETE', headers }); location.reload(); } catch(e) { alert('Error: ' + e.message); }
         }
     };
 }

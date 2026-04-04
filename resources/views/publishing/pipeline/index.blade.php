@@ -208,10 +208,10 @@
             <div x-show="sourceTab === 'search'">
                 {{-- Search mode pills --}}
                 <div class="flex flex-wrap gap-2 mb-3">
-                    <button @click="newsMode = 'keyword'" class="px-3 py-1 rounded-full text-xs font-medium transition-colors" :class="newsMode === 'keyword' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Keyword</button>
-                    <button @click="newsMode = 'local'" class="px-3 py-1 rounded-full text-xs font-medium transition-colors" :class="newsMode === 'local' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Local News</button>
-                    <button @click="newsMode = 'trending'; searchNews()" class="px-3 py-1 rounded-full text-xs font-medium transition-colors" :class="newsMode === 'trending' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Trending</button>
-                    <button @click="newsMode = 'genre'" class="px-3 py-1 rounded-full text-xs font-medium transition-colors" :class="newsMode === 'genre' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Genre</button>
+                    <button @click="setNewsMode('keyword')" class="px-3 py-1 rounded-full text-xs font-medium transition-colors" :class="newsMode === 'keyword' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Keyword</button>
+                    <button @click="setNewsMode('local')" class="px-3 py-1 rounded-full text-xs font-medium transition-colors" :class="newsMode === 'local' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Local News</button>
+                    <button @click="setNewsMode('trending')" class="px-3 py-1 rounded-full text-xs font-medium transition-colors" :class="newsMode === 'trending' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Trending</button>
+                    <button @click="setNewsMode('genre')" class="px-3 py-1 rounded-full text-xs font-medium transition-colors" :class="newsMode === 'genre' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Genre</button>
                 </div>
 
                 {{-- Keyword search --}}
@@ -245,11 +245,12 @@
                 {{-- Trending --}}
                 <div x-show="newsMode === 'trending'" class="space-y-2">
                     <div class="flex flex-wrap gap-2">
-                        <button @click="newsCategory = ''; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="!newsCategory ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">All</button>
+                        <button @click="selectTrendingCategory('')" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsTrendingSelected && !newsCategory ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">All</button>
                         @foreach($newsCategories as $cat)
-                        <button @click="newsCategory = '{{ $cat }}'; searchNews()" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsCategory === '{{ $cat }}' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">{{ ucfirst($cat) }}</button>
+                        <button @click="selectTrendingCategory('{{ $cat }}')" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsTrendingSelected && newsCategory === '{{ $cat }}' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">{{ ucfirst($cat) }}</button>
                         @endforeach
                     </div>
+                    <p x-show="!newsTrendingSelected && !newsSearching" x-cloak class="text-xs text-gray-500">Choose a trending category to load articles.</p>
                 </div>
 
                 {{-- Genre --}}
@@ -298,7 +299,7 @@
                         </template>
                     </div>
                 </div>
-                <div x-show="newsResults.length === 0 && !newsSearching && newsSearch" x-cloak class="mt-3 text-sm text-gray-400">No articles found.</div>
+                <div x-show="newsResults.length === 0 && !newsSearching && newsHasSearched" x-cloak class="mt-3 text-sm text-gray-400">No articles found.</div>
             </div>
 
             {{-- Bookmarks tab --}}
@@ -451,14 +452,15 @@
                                     <span class="text-lg font-bold text-green-700" x-text="result.word_count + ' words'"></span>
                                     <span class="text-xs text-gray-400" x-text="result.message"></span>
                                 </div>
-                                <p x-show="!result.success" class="text-sm text-red-600 font-medium mt-1">Extraction failed — <button @click.stop="retrySingleSource(idx)" class="underline hover:text-red-800">retry</button></p>
+                                <p x-show="!result.success" class="text-sm text-red-600 font-medium mt-1" x-text="'Extraction failed — ' + (result.message || 'unknown error')"></p>
                             </div>
                             <div class="flex items-center gap-2 flex-shrink-0">
                                 <button x-show="result.success" @click.stop="approveSource(idx)" class="px-4 py-2 rounded-lg font-semibold text-sm transition-colors" :class="approvedSources.includes(idx) ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300'">
                                     <svg class="w-5 h-5 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
                                     <span x-text="approvedSources.includes(idx) ? 'Approved' : 'Approve'"></span>
                                 </button>
-                                <button x-show="!result.success" @click.stop="retrySingleSource(idx)" class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-blue-50 rounded">Retry</button>
+                                <button x-show="!result.success" @click.stop="saveFailedSource(idx)" class="text-xs text-orange-600 hover:text-orange-800 px-2 py-1 bg-orange-50 rounded">Find Another</button>
+                                <button x-show="!result.success" @click.stop="removeSource(idx)" class="text-xs text-red-600 hover:text-red-800 px-2 py-1 bg-red-50 rounded">Remove</button>
                                 <svg x-show="result.success" class="w-5 h-5 text-gray-400 transition-transform" :class="expandedSources.includes(idx) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                             </div>
                         </div>
@@ -1424,8 +1426,10 @@ function publishPipeline() {
         newsSearch: '',
         newsSearching: false,
         newsResults: [],
+        newsHasSearched: false,
         newsMode: 'keyword',
         newsCategory: '',
+        newsTrendingSelected: false,
         newsCountry: 'us',
         bookmarks: [],
         bookmarksLoading: false,
@@ -1859,12 +1863,43 @@ function publishPipeline() {
             this.sources.splice(idx, 1);
         },
 
+        setNewsMode(mode) {
+            this.newsMode = mode;
+            this.newsResults = [];
+            this.newsHasSearched = false;
+            this.newsSearching = false;
+
+            if (mode === 'trending') {
+                this.newsSearch = '';
+                this.newsCategory = '';
+                this.newsTrendingSelected = false;
+                return;
+            }
+
+            this.newsTrendingSelected = false;
+            if (mode !== 'genre') {
+                this.newsCategory = '';
+            }
+        },
+
+        selectTrendingCategory(category = '') {
+            this.newsMode = 'trending';
+            this.newsSearch = '';
+            this.newsCategory = category;
+            this.newsTrendingSelected = true;
+            this.newsResults = [];
+            this.newsHasSearched = false;
+            this.searchNews();
+        },
+
         async searchNews() {
             if (this.newsMode === 'keyword' && !this.newsSearch.trim()) return;
             if (this.newsMode === 'local' && !this.newsSearch.trim()) return;
             if (this.newsMode === 'genre' && !this.newsCategory && !this.newsSearch.trim()) return;
+            if (this.newsMode === 'trending' && !this.newsTrendingSelected) return;
             this.newsSearching = true;
             this.newsResults = [];
+            this.newsHasSearched = false;
             try {
                 const resp = await fetch('{{ route('publish.search.articles.post') }}', {
                     method: 'POST',
@@ -1878,11 +1913,14 @@ function publishPipeline() {
                 });
                 const data = await resp.json();
                 this.newsResults = (data.data && data.data.articles) ? data.data.articles : [];
-                if (this.newsResults.length === 0 && data.message) {
-                    this.notify(data.message, false);
-                }
-            } catch (e) { this.newsResults = []; this.notify('Search failed: ' + e.message, false); }
-            this.newsSearching = false;
+                this.newsHasSearched = true;
+            } catch (e) {
+                this.newsResults = [];
+                this.newsHasSearched = true;
+                this.showNotification('error', 'Search failed: ' + e.message);
+            } finally {
+                this.newsSearching = false;
+            }
         },
 
         async loadBookmarks() {
@@ -1911,6 +1949,33 @@ function publishPipeline() {
         discardSource(idx) {
             if (!this.discardedSources.includes(idx)) this.discardedSources.push(idx);
             this.approvedSources = this.approvedSources.filter(i => i !== idx);
+        },
+        removeSource(idx) {
+            this.sources.splice(idx, 1);
+            this.checkResults.splice(idx, 1);
+            this.approvedSources = this.approvedSources.filter(i => i !== idx).map(i => i > idx ? i - 1 : i);
+            this.discardedSources = this.discardedSources.filter(i => i !== idx).map(i => i > idx ? i - 1 : i);
+            this.expandedSources = this.expandedSources.filter(i => i !== idx).map(i => i > idx ? i - 1 : i);
+            this.savePipelineState();
+        },
+        async saveFailedSource(idx) {
+            const result = this.checkResults[idx];
+            const source = this.sources[idx];
+            if (!source) return;
+            try {
+                await fetch('{{ route("publish.failed-sources.store") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({
+                        url: source.url,
+                        title: source.title || result?.title || '',
+                        error_message: result?.message || 'Extraction failed',
+                        source_api: result?.source_api || '',
+                    })
+                });
+            } catch(e) {}
+            this.removeSource(idx);
+            this.showNotification('success', 'Saved to failed list and removed.');
         },
 
         _logCheck(type, message) {
