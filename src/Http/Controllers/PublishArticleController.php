@@ -13,8 +13,7 @@ use hexa_package_wordpress\Services\WordPressService;
 use hexa_package_pexels\Services\PexelsService;
 use hexa_package_unsplash\Services\UnsplashService;
 use hexa_package_pixabay\Services\PixabayService;
-use hexa_package_gnews\Services\GNewsService;
-use hexa_package_newsdata\Services\NewsDataService;
+use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_package_anthropic\Services\AnthropicService;
 use hexa_package_chatgpt\Services\ChatGptService;
 use hexa_package_sapling\Services\SaplingService;
@@ -643,64 +642,17 @@ class PublishArticleController extends Controller
             'per_page' => 'nullable|integer|min:1|max:50',
         ]);
 
-        $query = $validated['query'];
-        $perPage = $validated['per_page'] ?? 10;
-        $sources = $validated['sources'] ?? ['google-news-rss', 'gnews', 'newsdata'];
-        $allArticles = [];
-        $errors = [];
-
-        // Google News RSS — free, no API key
-        if (in_array('google-news-rss', $sources)) {
-            try {
-                $rssUrl = 'https://news.google.com/rss/search?q=' . urlencode($query) . '&hl=en-US&gl=US&ceid=US:en';
-                $xml = @simplexml_load_string(file_get_contents($rssUrl));
-                if ($xml && isset($xml->channel->item)) {
-                    $count = 0;
-                    foreach ($xml->channel->item as $item) {
-                        if ($count >= $perPage) break;
-                        $allArticles[] = [
-                            'source_api' => 'google-news-rss',
-                            'title' => (string) $item->title,
-                            'description' => strip_tags((string) $item->description),
-                            'content' => '',
-                            'url' => (string) $item->link,
-                            'image' => null,
-                            'published_at' => (string) $item->pubDate,
-                            'source_name' => (string) ($item->source ?? 'Google News'),
-                            'source_url' => '',
-                        ];
-                        $count++;
-                    }
-                }
-            } catch (\Exception $e) {
-                $errors[] = 'Google News RSS: ' . $e->getMessage();
-            }
-        }
-
-        if (in_array('gnews', $sources)) {
-            $result = app(GNewsService::class)->searchArticles($query, $perPage);
-            if ($result['success']) {
-                $allArticles = array_merge($allArticles, $result['data']['articles'] ?? []);
-            } else {
-                $errors[] = 'GNews: ' . $result['message'];
-            }
-        }
-
-        if (in_array('newsdata', $sources)) {
-            $result = app(NewsDataService::class)->searchArticles($query, $perPage);
-            if ($result['success']) {
-                $allArticles = array_merge($allArticles, $result['data']['articles'] ?? []);
-            } else {
-                $errors[] = 'NewsData: ' . $result['message'];
-            }
-        }
+        $result = app(SourceDiscoveryService::class)->searchArticles($validated['query'], [
+            'sources'  => $validated['sources'] ?? ['google-news-rss', 'gnews', 'newsdata'],
+            'per_page' => $validated['per_page'] ?? 10,
+        ]);
 
         return response()->json([
             'success' => true,
-            'results' => $allArticles,
-            'total' => count($allArticles),
-            'errors' => $errors,
-            'message' => count($allArticles) . ' articles found across ' . count($sources) . ' source(s).',
+            'results' => $result['data']['articles'] ?? [],
+            'total'   => count($result['data']['articles'] ?? []),
+            'errors'  => $result['data']['errors'] ?? [],
+            'message' => $result['message'],
         ]);
     }
 

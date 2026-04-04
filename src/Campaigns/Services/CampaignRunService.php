@@ -8,6 +8,7 @@ use hexa_app_publish\Models\PublishSite;
 use hexa_core\Models\Setting;
 use hexa_package_anthropic\Services\AnthropicService;
 use hexa_package_article_extractor\Services\ArticleExtractorService;
+use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_package_wptoolkit\Services\WpToolkitService;
 use hexa_package_wordpress\Services\WordPressService;
 use hexa_package_whm\Models\HostingAccount;
@@ -27,19 +28,22 @@ class CampaignRunService
     protected AnthropicService $anthropic;
     protected WpToolkitService $wptoolkit;
     protected WordPressService $wp;
+    protected SourceDiscoveryService $sourceDiscovery;
 
     /**
      * @param ArticleExtractorService $extractor
      * @param AnthropicService $anthropic
      * @param WpToolkitService $wptoolkit
      * @param WordPressService $wp
+     * @param SourceDiscoveryService $sourceDiscovery
      */
-    public function __construct(ArticleExtractorService $extractor, AnthropicService $anthropic, WpToolkitService $wptoolkit, WordPressService $wp)
+    public function __construct(ArticleExtractorService $extractor, AnthropicService $anthropic, WpToolkitService $wptoolkit, WordPressService $wp, SourceDiscoveryService $sourceDiscovery)
     {
         $this->extractor = $extractor;
         $this->anthropic = $anthropic;
         $this->wptoolkit = $wptoolkit;
         $this->wp = $wp;
+        $this->sourceDiscovery = $sourceDiscovery;
     }
 
     /**
@@ -236,30 +240,12 @@ class CampaignRunService
         $keywords = $campaign->keywords ?? ($preset ? $preset->keywords : []);
         $genre = $preset->genre ?? null;
         $method = $preset->source_method ?? 'trending';
-
-        // Try news search via available package
-        $urls = [];
         $searchQuery = implode(' ', $keywords ?: ['latest news']);
 
-        if (!class_exists(\hexa_package_currents_news\Services\CurrentsNewsService::class)) {
-            Log::warning('[CampaignRun] CurrentsNewsService not available — install the currents-news package and configure API key.');
-        } else {
-            try {
-                $newsService = app(\hexa_package_currents_news\Services\CurrentsNewsService::class);
-                $results = $newsService->searchArticles($searchQuery, 'en', null, $genre);
-                if ($results['success'] && !empty($results['data'])) {
-                    foreach (array_slice($results['data'], 0, 3) as $article) {
-                        if (!empty($article['url'])) {
-                            $urls[] = $article['url'];
-                        }
-                    }
-                }
-            } catch (\Exception $e) {
-                Log::warning('[CampaignRun] News search failed: ' . $e->getMessage());
-            }
-        }
-
-        return $urls;
+        return $this->sourceDiscovery->discoverUrls($searchQuery, [
+            'mode'   => $method,
+            'genre'  => $genre,
+        ], 3);
     }
 
     /**

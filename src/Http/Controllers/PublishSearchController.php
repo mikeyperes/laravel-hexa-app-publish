@@ -3,17 +3,18 @@
 namespace hexa_app_publish\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
+use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_package_pexels\Services\PexelsService;
 use hexa_package_unsplash\Services\UnsplashService;
 use hexa_package_pixabay\Services\PixabayService;
-use hexa_package_gnews\Services\GNewsService;
-use hexa_package_newsdata\Services\NewsDataService;
-use hexa_package_currents_news\Services\CurrentsNewsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
  * PublishSearchController — unified search across multiple APIs.
+ *
+ * Image search remains here (Pexels/Unsplash/Pixabay).
+ * Article search delegates to SourceDiscoveryService.
  */
 class PublishSearchController extends Controller
 {
@@ -120,14 +121,9 @@ class PublishSearchController extends Controller
      */
     public function articles()
     {
-        $sources = [
-            'gnews'         => !empty(\hexa_core\Models\Setting::getValue('gnews_api_key', '')),
-            'newsdata'      => !empty(\hexa_core\Models\Setting::getValue('newsdata_api_key', '')),
-            'currents_news' => !empty(\hexa_core\Models\Setting::getValue('currents_news_api_key', '')),
-        ];
-
+        $sourceDiscovery = app(SourceDiscoveryService::class);
         return view('app-publish::search.articles', [
-            'sources' => $sources,
+            'sources' => $sourceDiscovery->availableProviders(),
         ]);
     }
 
@@ -148,88 +144,17 @@ class PublishSearchController extends Controller
             'sources'  => 'array',
         ]);
 
-        $query   = $request->input('query', '');
-        $category = $request->input('category');
-        $country = $request->input('country', 'us');
-        $mode    = $request->input('mode', 'keyword');
-        $perPage = (int) $request->input('per_page', 10);
-        $selectedSources = $request->input('sources', ['gnews', 'newsdata', 'currents_news']);
+        $result = app(SourceDiscoveryService::class)->searchArticles(
+            $request->input('query', ''),
+            [
+                'sources'  => $request->input('sources', ['gnews', 'newsdata', 'currents_news']),
+                'per_page' => (int) $request->input('per_page', 10),
+                'mode'     => $request->input('mode', 'keyword'),
+                'category' => $request->input('category'),
+                'country'  => $request->input('country', 'us'),
+            ]
+        );
 
-        // For trending mode, use top-headlines style query
-        if ($mode === 'trending' && empty($query)) {
-            $query = $category ?: 'breaking news';
-        }
-        // For local mode, prepend location to query
-        if ($mode === 'local' && $query) {
-            // query already contains the city/state name
-        }
-        // For genre mode, append category to query
-        if ($mode === 'genre' && $category) {
-            $query = $query ? "{$query} {$category}" : $category;
-        }
-
-        $allArticles = [];
-        $errors = [];
-        $totals = [];
-
-        // GNews
-        if (in_array('gnews', $selectedSources)) {
-            try {
-                $result = app(GNewsService::class)->searchArticles($query, min($perPage, 10));
-                if ($result['success'] && !empty($result['data']['articles'])) {
-                    $allArticles = array_merge($allArticles, $result['data']['articles']);
-                    $totals['gnews'] = $result['data']['total'] ?? 0;
-                } elseif (!$result['success']) {
-                    $errors[] = 'GNews: ' . ($result['message'] ?? 'Failed');
-                }
-            } catch (\Exception $e) {
-                $errors[] = 'GNews: ' . $e->getMessage();
-            }
-        }
-
-        // NewsData
-        if (in_array('newsdata', $selectedSources)) {
-            try {
-                $result = app(NewsDataService::class)->searchArticles($query, $perPage);
-                if ($result['success'] && !empty($result['data']['articles'])) {
-                    $allArticles = array_merge($allArticles, $result['data']['articles']);
-                    $totals['newsdata'] = $result['data']['total'] ?? 0;
-                } elseif (!$result['success']) {
-                    $errors[] = 'NewsData: ' . ($result['message'] ?? 'Failed');
-                }
-            } catch (\Exception $e) {
-                $errors[] = 'NewsData: ' . $e->getMessage();
-            }
-        }
-
-        // Currents News
-        if (in_array('currents_news', $selectedSources)) {
-            try {
-                $result = app(CurrentsNewsService::class)->searchArticles($query);
-                if ($result['success'] && !empty($result['data']['articles'])) {
-                    $allArticles = array_merge($allArticles, $result['data']['articles']);
-                    $totals['currents_news'] = $result['data']['total'] ?? 0;
-                } elseif (!$result['success']) {
-                    $errors[] = 'Currents News: ' . ($result['message'] ?? 'Failed');
-                }
-            } catch (\Exception $e) {
-                $errors[] = 'Currents News: ' . $e->getMessage();
-            }
-        }
-
-        // Sort by published date descending
-        usort($allArticles, function ($a, $b) {
-            return strtotime($b['published_at'] ?? '0') - strtotime($a['published_at'] ?? '0');
-        });
-
-        return response()->json([
-            'success' => count($allArticles) > 0,
-            'message' => count($allArticles) . ' articles found across ' . count($totals) . ' source(s).',
-            'data'    => [
-                'articles' => $allArticles,
-                'totals'   => $totals,
-                'errors'   => $errors,
-            ],
-        ]);
+        return response()->json($result);
     }
 }
