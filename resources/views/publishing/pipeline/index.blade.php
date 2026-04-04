@@ -579,6 +579,22 @@
                 <textarea x-model="customPrompt" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Write in first person, focus on the financial impact, include expert quotes..."></textarea>
             </div>
 
+            {{-- View Full Prompt --}}
+            <div class="mb-4" x-data="{ showPrompt: false }">
+                <button @click="showPrompt = !showPrompt" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
+                    <svg class="w-3 h-3 transition-transform" :class="showPrompt ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    View Full Prompt
+                </button>
+                <div x-show="showPrompt" x-cloak class="mt-2 bg-gray-900 text-gray-300 rounded-xl p-4 text-xs font-mono overflow-y-auto break-words whitespace-pre-wrap" style="max-height:500px;">
+                    <template x-if="resolvedPrompt">
+                        <pre class="text-green-300 whitespace-pre-wrap break-words" x-text="resolvedPrompt"></pre>
+                    </template>
+                    <template x-if="!resolvedPrompt">
+                        <p class="text-gray-500">Prompt will appear here after spinning. This shows the EXACT text sent to AI.</p>
+                    </template>
+                </div>
+            </div>
+
             {{-- ═══ AI Detection Scan ═══ --}}
             <div class="mb-4 bg-gray-900 rounded-xl border border-gray-700 p-5">
                 <div class="flex items-center justify-between mb-3">
@@ -710,21 +726,6 @@
                 </div>
             </div>
 
-            {{-- Prompt preview (expandable) --}}
-            <div class="mb-4" x-data="{ showPrompt: false }">
-                <button @click="showPrompt = !showPrompt" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
-                    <svg class="w-3 h-3 transition-transform" :class="showPrompt ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    View Full Prompt
-                </button>
-                <div x-show="showPrompt" x-cloak class="mt-2 bg-gray-900 text-gray-300 rounded-xl p-4 text-xs font-mono overflow-y-auto break-words whitespace-pre-wrap" style="max-height:500px;">
-                    <template x-if="resolvedPrompt">
-                        <pre class="text-green-300 whitespace-pre-wrap break-words" x-text="resolvedPrompt"></pre>
-                    </template>
-                    <template x-if="!resolvedPrompt">
-                        <p class="text-gray-500">Prompt will appear here after spinning. This shows the EXACT text sent to AI.</p>
-                    </template>
-                </div>
-            </div>
 
             {{-- Spin error --}}
             <div x-show="spinError" x-cloak class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
