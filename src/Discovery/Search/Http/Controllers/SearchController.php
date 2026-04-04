@@ -147,7 +147,7 @@ class SearchController extends Controller
         $result = app(SourceDiscoveryService::class)->searchArticles(
             $request->input('query', ''),
             [
-                'sources'  => $request->input('sources', ['gnews', 'newsdata', 'currents_news']),
+                'sources'  => $request->input('sources', ['google-news-rss', 'gnews', 'newsdata', 'currents_news']),
                 'per_page' => (int) $request->input('per_page', 10),
                 'mode'     => $request->input('mode', 'keyword'),
                 'category' => $request->input('category'),

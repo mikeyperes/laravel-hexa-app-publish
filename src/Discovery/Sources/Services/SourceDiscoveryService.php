@@ -51,7 +51,11 @@ class SourceDiscoveryService
         $totals = [];
         $urls = [];
 
-        foreach ($sources as $source) {
+        // Filter to only configured providers (skip unconfigured to avoid timeout)
+        $available = $this->availableProviders();
+        $activeSources = array_filter($sources, fn($s) => $available[$s] ?? false);
+
+        foreach ($activeSources as $source) {
             $result = $this->searchProvider($source, $query, $perPage, $language, $genre);
             if ($result['success'] && !empty($result['articles'])) {
                 $allArticles = array_merge($allArticles, $result['articles']);
