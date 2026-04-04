@@ -9,7 +9,6 @@ use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Models\PublishTemplate;
 use hexa_app_publish\Services\PublishService;
-use hexa_package_wordpress\Services\WordPressService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Discovery\Media\Services\MediaSearchService;
@@ -27,18 +26,15 @@ class ArticleController extends Controller
 {
     protected GenericService $generic;
     protected PublishService $publishService;
-    protected WordPressService $wp;
 
     /**
      * @param GenericService $generic
      * @param PublishService $publishService
-     * @param WordPressService $wp
      */
-    public function __construct(GenericService $generic, PublishService $publishService, WordPressService $wp)
+    public function __construct(GenericService $generic, PublishService $publishService)
     {
         $this->generic = $generic;
         $this->publishService = $publishService;
-        $this->wp = $wp;
     }
 
     /**
@@ -247,62 +243,28 @@ class ArticleController extends Controller
     {
         $article = PublishArticle::with('site')->findOrFail($id);
         $site = $article->site;
+        $wpStatus = ($article->delivery_mode === 'draft-wordpress') ? 'draft' : 'publish';
 
-        if ($site->connection_type === 'wp_rest_api') {
-            if (!$site->wp_username || !$site->wp_application_password) {
-                return response()->json([
-                    'success' => false,
-                    'message' => "Site '{$site->name}' has no WordPress credentials configured.",
-                ]);
-            }
+        $delivery = app(\hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService::class);
+        $result = $delivery->createPost($site, $article->title, $article->body ?? '', $wpStatus);
 
-            $wpStatus = ($article->delivery_mode === 'draft-wordpress') ? 'draft' : 'publish';
-
-            $result = $this->wp->createPost($site->url, $site->wp_username, $site->wp_application_password, [
-                'title' => $article->title,
-                'content' => $article->body,
-                'excerpt' => $article->excerpt ?? '',
-                'status' => $wpStatus,
-            ]);
-
-            if (!$result['success']) {
-                $article->update(['status' => 'failed']);
-                hexaLog('publish', 'article_publish_failed', "Article publish failed: {$article->title} ({$article->article_id}) — {$result['message']}");
-
-                return response()->json($result);
-            }
-
-            $article->update([
-                'status' => 'completed',
-                'published_at' => now(),
-                'wp_post_id' => $result['data']['post_id'],
-                'wp_post_url' => $result['data']['post_url'],
-                'wp_status' => $result['data']['post_status'],
-            ]);
-
-            hexaLog('publish', 'article_published', "Article published: {$article->title} ({$article->article_id}) → {$site->url} (WP ID: {$result['data']['post_id']})");
-
-            // Telegram notification
-            try {
-                app(TelegramService::class)->notifyPublished(
-                    $article->title,
-                    $site->name,
-                    $result['data']['post_url'] ?? null
-                );
-            } catch (\Exception $e) {
-                // Don't fail the publish if Telegram fails
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => "Article published to {$site->name} as {$wpStatus}. WP Post ID: {$result['data']['post_id']}.",
-            ]);
+        if (!$result['success']) {
+            $article->update(['status' => 'failed']);
+            hexaLog('publish', 'article_publish_failed', "Article publish failed: {$article->title} ({$article->article_id}) — {$result['message']}");
+            return response()->json($result);
         }
 
-        // WP Toolkit publishing — TODO
+        $persistence = app(\hexa_app_publish\Publishing\Articles\Services\ArticlePersistenceService::class);
+        $persistence->updateDeliveryResult($article, $result, $wpStatus);
+        hexaLog('publish', 'article_published', "Article published: {$article->title} ({$article->article_id}) → {$site->url} (WP ID: {$result['post_id']})");
+
+        try {
+            app(TelegramService::class)->notifyPublished($article->title, $site->name, $result['post_url'] ?? null);
+        } catch (\Exception $e) {}
+
         return response()->json([
-            'success' => false,
-            'message' => 'WP Toolkit publishing not yet implemented.',
+            'success' => true,
+            'message' => "Article published to {$site->name} as {$wpStatus}. WP Post ID: {$result['post_id']}.",
         ]);
     }
 
