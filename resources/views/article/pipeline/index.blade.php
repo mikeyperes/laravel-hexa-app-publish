@@ -101,8 +101,8 @@
                     <template x-if="!completedSteps.includes(2)"><span>2</span></template>
                 </span>
                 <span class="font-semibold text-gray-800">Website & Template</span>
-                <span x-show="selectedSite && siteConnectionStatus === true" x-cloak class="text-sm text-green-600" x-text="selectedSite?.name"></span>
-                <span x-show="selectedSite && siteConnectionStatus === null && loadingAuthors" x-cloak class="text-sm text-blue-500 inline-flex items-center gap-1">
+                <span x-show="selectedSite && siteConn.status === true" x-cloak class="text-sm text-green-600" x-text="selectedSite?.name"></span>
+                <span x-show="selectedSite && siteConn.status === null && siteConn.testing" x-cloak class="text-sm text-blue-500 inline-flex items-center gap-1">
                     <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     Connecting...
                 </span>
@@ -151,14 +151,14 @@
 
             {{-- Connection status --}}
             <div x-show="selectedSite" x-cloak>
-                <div class="flex items-center gap-2 rounded-lg px-3 py-2" :class="siteConnectionStatus === true ? 'bg-green-50' : (siteConnectionStatus === false ? 'bg-red-50' : 'bg-gray-50')">
-                    <template x-if="siteConnectionStatus === null"><svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
-                    <template x-if="siteConnectionStatus === true"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
-                    <template x-if="siteConnectionStatus === false"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
-                    <span class="text-sm" :class="siteConnectionStatus === true ? 'text-green-800' : (siteConnectionStatus === false ? 'text-red-800' : 'text-gray-600')" x-text="selectedSite ? selectedSite.name + ' — ' + selectedSite.url : ''"></span>
+                <div class="flex items-center gap-2 rounded-lg px-3 py-2" :class="siteConn.status === true ? 'bg-green-50' : (siteConn.status === false ? 'bg-red-50' : 'bg-gray-50')">
+                    <template x-if="siteConn.status === null"><svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
+                    <template x-if="siteConn.status === true"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                    <template x-if="siteConn.status === false"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                    <span class="text-sm" :class="siteConn.status === true ? 'text-green-800' : (siteConn.status === false ? 'text-red-800' : 'text-gray-600')" x-text="selectedSite ? selectedSite.name + ' — ' + selectedSite.url : ''"></span>
                 </div>
-                <div x-show="siteConnectionLog.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
-                    <template x-for="(entry, idx) in siteConnectionLog" :key="idx">
+                <div x-show="siteConn.log.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
+                    <template x-for="(entry, idx) in siteConn.log" :key="idx">
                         <div class="flex items-start gap-2 py-0.5 text-xs font-mono">
                             <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
                             <span :class="{ 'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info' }" x-text="entry.message" class="break-words"></span>
@@ -1066,12 +1066,12 @@
                         <div class="flex items-center gap-2">
                             <select x-model="publishAuthor" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
                                 <option value="">— Default author —</option>
-                                <template x-for="a in siteAuthors" :key="a.user_login">
+                                <template x-for="a in siteConn.authors" :key="a.user_login">
                                     <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
                                 </template>
                             </select>
-                            <svg x-show="loadingAuthors" x-cloak class="w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                            <span x-show="!loadingAuthors && siteAuthors.length > 0" x-cloak class="text-xs text-gray-400" x-text="siteAuthors.length + ' authors'"></span>
+                            <svg x-show="siteConn.testing" x-cloak class="w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <span x-show="!siteConn.testing && siteConn.authors.length > 0" x-cloak class="text-xs text-gray-400" x-text="siteConn.authors.length + ' authors'"></span>
                         </div>
                     </div>
                 </div>
@@ -1392,6 +1392,7 @@
     </div>
 </div>
 
+@include('app-publish::partials.site-connection-mixin')
 <script>
 function publishPipeline() {
     return {
@@ -1522,10 +1523,7 @@ function publishPipeline() {
         selectedFlaggedSentences: [],
         selectedFlaggedTexts: {},
 
-        siteAuthors: [],
-        loadingAuthors: false,
-        siteConnectionLog: [],
-        siteConnectionStatus: null,
+        ...siteConnectionMixin(),
         savingDraft: false,
 
         // Notification
@@ -1561,9 +1559,9 @@ function publishPipeline() {
                         this.selectedSiteId = String(state.selectedSiteId);
                         this.selectedSite = state.selectedSite || null;
                         // Restore site + connection state without re-testing
-                        this.siteConnectionStatus = state.siteConnectionStatus ?? null;
-                        if (state.siteConnectionLog) this.siteConnectionLog = state.siteConnectionLog;
-                        if (state.siteAuthors) this.siteAuthors = state.siteAuthors;
+                        this.siteConn.status = state.siteConnStatus ?? null;
+                        if (state.siteConnLog) this.siteConn.log = state.siteConnLog;
+                        if (state.siteConnAuthors) this.siteConn.authors = state.siteConnAuthors;
                         this.$nextTick(() => {
                             this.selectedSiteId = String(state.selectedSiteId);
                             this.selectedSite = this.sites.find(s => s.id == state.selectedSiteId) || state.selectedSite || null;
@@ -1639,9 +1637,9 @@ function publishPipeline() {
                 selectedTemplate: this.selectedTemplate,
                 selectedSiteId: this.selectedSiteId,
                 selectedSite: this.selectedSite,
-                siteConnectionStatus: this.siteConnectionStatus,
-                siteConnectionLog: this.siteConnectionLog,
-                siteAuthors: this.siteAuthors,
+                siteConnStatus: this.siteConn.status,
+                siteConnLog: this.siteConn.log,
+                siteConnAuthors: this.siteConn.authors,
                 sources: this.sources,
                 checkResults: this.checkResults,
                 approvedSources: this.approvedSources,
@@ -1819,44 +1817,24 @@ function publishPipeline() {
             if (this.selectedSiteId) {
                 this.selectedSite = this.sites.find(s => s.id == this.selectedSiteId) || null;
                 if (this.selectedSite) {
-                    // Single call: test connection + fetch authors
-                    this.siteAuthors = [];
-                    this.siteConnectionLog = [];
-                    this.siteConnectionStatus = null;
-                    this.loadingAuthors = true;
-                    this._logSiteConnection('info', 'Checking WordPress connection to ' + this.selectedSite.name + '...');
-                    fetch('/publish/sites/' + this.selectedSiteId + '/test-write', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken }
-                    }).then(r => r.json()).then(d => {
-                        this.siteConnectionStatus = d.success;
-                        this._logSiteConnection(d.success ? 'success' : 'error', d.message || (d.success ? 'WordPress connection established' : 'WordPress connection failed'));
-                        // Authors come back in the same response
-                        if (d.authors) {
-                            this.siteAuthors = d.authors;
-                            this._logSiteConnection('info', d.authors.length + ' WordPress authors loaded');
-                        }
-                        if (d.default_author) this.publishAuthor = d.default_author;
-                        if (d.success) { this.completeStep(2); if (!this._restoring) this.openStep(3); }
-                        this.loadingAuthors = false;
-                    }).catch(e => {
-                        this.siteConnectionStatus = false;
-                        this._logSiteConnection('error', 'Connection test failed: ' + (e.message || 'Network error'));
-                        this.loadingAuthors = false;
+                    this.testSiteConnection(this.selectedSiteId, this.csrfToken, {
+                        onAuthorsLoaded: (authors) => {
+                            // Authors loaded
+                        },
+                        onSuccess: (d) => {
+                            if (d.default_author) this.publishAuthor = d.default_author;
+                            this.completeStep(2);
+                            if (!this._restoring) this.openStep(3);
+                        },
                     });
                 }
             } else {
                 this.selectedSite = null;
                 this.publishAuthor = '';
-                this.siteAuthors = [];
-                this.siteConnectionLog = [];
-                this.siteConnectionStatus = null;
+                this.siteConn.authors = [];
+                this.siteConn.log = [];
+                this.siteConn.status = null;
             }
-        },
-
-        _logSiteConnection(type, message) {
-            const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            this.siteConnectionLog.push({ type, message, time });
         },
 
         // ── Step 3: Sources ───────────────────────────────
