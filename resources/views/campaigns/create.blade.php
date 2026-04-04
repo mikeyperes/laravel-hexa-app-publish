@@ -349,9 +349,10 @@ function campaignCreate() {
                         }
                     } catch(e) {}
                 }
-                // If no valid cache with authors, run the test to get full connection info
+                // If no valid cache, show prompt — do NOT auto-test (blocks single-threaded server)
                 if (!restored) {
-                    this.$nextTick(() => this.testSiteConnection());
+                    this.siteStatus = null;
+                    this.siteMessage = 'Click "Test Connection" to verify site access.';
                 }
             }
         },

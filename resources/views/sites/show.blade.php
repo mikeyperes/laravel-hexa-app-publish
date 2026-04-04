@@ -61,7 +61,7 @@
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
         <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
             <h3 class="font-semibold text-gray-800">Campaigns</h3>
-            <a href="{{ route('publish.campaigns.create', ['account_id' => $site->publish_account_id, 'site_id' => $site->id]) }}" class="text-sm text-blue-600 hover:text-blue-800">+ New Campaign</a>
+            <a href="{{ route('campaigns.create', ['account_id' => $site->publish_account_id, 'site_id' => $site->id]) }}" class="text-sm text-blue-600 hover:text-blue-800">+ New Campaign</a>
         </div>
         @if($site->campaigns->isEmpty())
             <div class="p-5 text-center text-gray-500 text-sm">No campaigns on this site yet.</div>
@@ -78,7 +78,7 @@
                 <tbody class="divide-y divide-gray-100">
                     @foreach($site->campaigns as $c)
                     <tr class="hover:bg-gray-50">
-                        <td class="px-5 py-2"><a href="{{ route('publish.campaigns.show', $c->id) }}" class="text-blue-600 hover:text-blue-800 break-words">{{ $c->name }}</a></td>
+                        <td class="px-5 py-2"><a href="{{ route('campaigns.show', $c->id) }}" class="text-blue-600 hover:text-blue-800 break-words">{{ $c->name }}</a></td>
                         <td class="px-5 py-2 text-gray-500 text-xs">{{ $c->articles_per_interval }}/{{ $c->interval_unit }}</td>
                         <td class="px-5 py-2 text-gray-500 text-xs">{{ $c->delivery_mode }}</td>
                         <td class="px-5 py-2">

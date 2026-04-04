@@ -74,7 +74,7 @@
             <div class="divide-y divide-gray-100">
                 @foreach($campaigns as $campaign)
                 <div class="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
-                    <a href="{{ route('publish.campaigns.show', $campaign->id) }}" class="text-blue-600 hover:text-blue-800 text-sm break-words">{{ $campaign->name }}</a>
+                    <a href="{{ route('campaigns.show', $campaign->id) }}" class="text-blue-600 hover:text-blue-800 text-sm break-words">{{ $campaign->name }}</a>
                     <span class="text-xs text-gray-400">{{ $campaign->status ?? 'draft' }}</span>
                 </div>
                 @endforeach

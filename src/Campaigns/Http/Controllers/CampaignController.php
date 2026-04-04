@@ -396,7 +396,7 @@ class CampaignController extends Controller
         return response()->json([
             'success' => true,
             'message' => "Campaign duplicated successfully.",
-            'redirect' => route('publish.campaigns.show', $duplicate->id),
+            'redirect' => route('campaigns.show', $duplicate->id),
         ]);
     }
 }

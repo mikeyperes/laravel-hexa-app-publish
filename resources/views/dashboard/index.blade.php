@@ -40,7 +40,7 @@
                     @foreach($activeCampaigns as $c)
                     <div class="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
                         <div>
-                            <a href="{{ route('publish.campaigns.show', $c->id) }}" class="text-sm text-blue-600 hover:text-blue-800 break-words">{{ $c->name }}</a>
+                            <a href="{{ route('campaigns.show', $c->id) }}" class="text-sm text-blue-600 hover:text-blue-800 break-words">{{ $c->name }}</a>
                             <p class="text-xs text-gray-400">{{ $c->site->name ?? '—' }} &middot; {{ $c->articles_per_interval }}/{{ $c->interval_unit }}</p>
                         </div>
                         <div class="text-right">

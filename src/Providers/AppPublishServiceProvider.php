@@ -101,7 +101,7 @@ class AppPublishServiceProvider extends ServiceProvider
             'hws.role_permissions.manager' => array_merge($existing, [
                 'publish.accounts.*',
                 'publish.sites.*',
-                'publish.campaigns.*',
+                'campaigns.*',
                 'publish.articles.*',
                 'publish.templates.*',
             ]),

@@ -498,7 +498,7 @@
             <tbody class="divide-y divide-gray-100">
                 @foreach($campaigns as $campaign)
                 <tr class="hover:bg-gray-50">
-                    <td class="px-5 py-2"><a href="{{ route('publish.campaigns.show', $campaign->id) }}" class="text-blue-600 hover:text-blue-800 break-words">{{ $campaign->name }}</a></td>
+                    <td class="px-5 py-2"><a href="{{ route('campaigns.show', $campaign->id) }}" class="text-blue-600 hover:text-blue-800 break-words">{{ $campaign->name }}</a></td>
                     <td class="px-5 py-2 text-gray-500 break-words">{{ $campaign->site->name ?? '—' }}</td>
                     <td class="px-5 py-2">
                         <span class="text-xs {{ $campaign->status === 'active' ? 'text-green-600' : 'text-gray-400' }}">{{ ucfirst($campaign->status ?? 'draft') }}</span>
