@@ -63,6 +63,10 @@
         <div class="flex items-start gap-3 py-1.5"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Created</span><p class="text-sm text-gray-800">{{ $campaign->created_at ? $campaign->created_at->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A T') : '—' }} by {{ $campaign->creator->name ?? '—' }}</p></div>
     </div>
 
+    {{-- Preset Settings (expandable) --}}
+    @include('app-publish::partials.preset-fields', ['prefix' => 'template', 'label' => 'AI Template Settings'])
+    @include('app-publish::partials.preset-fields', ['prefix' => 'preset', 'label' => 'WordPress Preset Settings'])
+
     {{-- Campaign History (articles) --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
         <div class="p-4 border-b border-gray-200">
@@ -116,14 +120,27 @@
 </div>
 
 @push('scripts')
+@include('app-publish::partials.preset-fields-mixin')
 <script>
 function campaignShow() {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
-    return {
-        running: false, runResult: '', runSuccess: false,
 
+    const templateData = @json($campaign->template);
+    const presetData = @json($campaign->wpPreset);
+
+    return {
+        ...presetFieldsMixin('template'),
+        ...presetFieldsMixin('preset'),
+        ...presetFieldsMethods,
+
+        running: false, runResult: '', runSuccess: false,
         runLog: [],
+
+        init() {
+            if (templateData) this.loadPresetFields('template', templateData);
+            if (presetData) this.loadPresetFields('preset', presetData);
+        },
 
         async runNow(mode) {
             if (!confirm('Run campaign now as ' + mode + '?')) return;

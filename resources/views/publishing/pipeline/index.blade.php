@@ -136,6 +136,7 @@
                         </template>
                     </select>
                 </div>
+                @include('app-publish::partials.preset-fields', ['prefix' => 'preset', 'label' => 'WordPress Preset Settings'])
             </div>
 
             {{-- Website selection --}}
@@ -546,6 +547,7 @@
                         </template>
                     </select>
                 </div>
+                @include('app-publish::partials.preset-fields', ['prefix' => 'template', 'label' => 'AI Template Settings'])
             </div>
             <div class="flex flex-wrap items-end gap-3 mb-4">
                 <div>
@@ -1395,6 +1397,7 @@
 </div>
 
 @include('app-publish::partials.site-connection-mixin')
+@include('app-publish::partials.preset-fields-mixin')
 <script>
 function publishPipeline() {
     return {
@@ -1528,6 +1531,9 @@ function publishPipeline() {
         selectedFlaggedTexts: {},
 
         ...siteConnectionMixin(),
+        ...presetFieldsMixin('template'),
+        ...presetFieldsMixin('preset'),
+        ...presetFieldsMethods,
         savingDraft: false,
 
         // Notification
@@ -1810,9 +1816,11 @@ function publishPipeline() {
                         };
                         this.publishAction = actionMap[this.selectedPreset.default_publish_action] || 'draft_local';
                     }
+                    this.loadPresetFields('preset', this.selectedPreset);
                 }
             } else {
                 this.selectedPreset = null;
+                this.loadPresetFields('preset', null);
             }
         },
 
@@ -2078,12 +2086,13 @@ function publishPipeline() {
         selectTemplate() {
             if (this.selectedTemplateId) {
                 this.selectedTemplate = this.templates.find(t => t.id == this.selectedTemplateId) || null;
-                // Auto-fill AI model from template
-                if (this.selectedTemplate && this.selectedTemplate.ai_engine) {
-                    this.aiModel = this.selectedTemplate.ai_engine;
+                if (this.selectedTemplate) {
+                    if (this.selectedTemplate.ai_engine) this.aiModel = this.selectedTemplate.ai_engine;
+                    this.loadPresetFields('template', this.selectedTemplate);
                 }
             } else {
                 this.selectedTemplate = null;
+                this.loadPresetFields('template', null);
             }
         },
 
