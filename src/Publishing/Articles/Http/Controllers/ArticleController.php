@@ -10,15 +10,14 @@ use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Models\PublishTemplate;
 use hexa_app_publish\Services\PublishService;
 use hexa_package_wordpress\Services\WordPressService;
-use hexa_package_pexels\Services\PexelsService;
-use hexa_package_unsplash\Services\UnsplashService;
-use hexa_package_pixabay\Services\PixabayService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
+use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
+use hexa_app_publish\Discovery\Media\Services\MediaSearchService;
+use hexa_app_publish\Discovery\Links\Services\LinkInsertionService;
+use hexa_app_publish\Quality\Detection\Services\SeoAnalysisService;
 use hexa_package_anthropic\Services\AnthropicService;
 use hexa_package_chatgpt\Services\ChatGptService;
 use hexa_package_sapling\Services\SaplingService;
-use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
-use hexa_app_publish\Discovery\Links\Services\LinkInsertionService;
 use hexa_package_telegram\Services\TelegramService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -345,21 +344,14 @@ class ArticleController extends Controller
     public function seoCheck(int $id): JsonResponse
     {
         $article = PublishArticle::findOrFail($id);
-
         $html = $article->body ?? '';
-        $text = strip_tags($html);
 
-        if (strlen($text) < 50) {
+        if (strlen(strip_tags($html)) < 50) {
             return response()->json(['success' => false, 'message' => 'Article content too short for SEO analysis.']);
         }
 
-        $seoData = $this->analyzeSeo($html, $text, $article->title ?? '');
-
-        $article->update([
-            'seo_score' => $seoData['score'],
-            'seo_data' => $seoData,
-        ]);
-
+        $seoData = app(SeoAnalysisService::class)->analyze($html, $article->title ?? '');
+        $article->update(['seo_score' => $seoData['score'], 'seo_data' => $seoData]);
         hexaLog('publish', 'article_seo_check', "SEO check: {$article->article_id} — score: {$seoData['score']}");
 
         return response()->json([
@@ -368,131 +360,6 @@ class ArticleController extends Controller
             'score' => $seoData['score'],
             'data' => $seoData,
         ]);
-    }
-
-    /**
-     * Analyze SEO metrics for article content.
-     *
-     * @param string $html Raw HTML content.
-     * @param string $text Plain text content.
-     * @param string $title Article title.
-     * @return array
-     */
-    private function analyzeSeo(string $html, string $text, string $title): array
-    {
-        $wordCount = str_word_count($text);
-        $sentenceCount = max(1, preg_match_all('/[.!?]+/', $text));
-        $avgWordsPerSentence = $wordCount / $sentenceCount;
-
-        // Flesch-Kincaid readability
-        $syllableCount = $this->countSyllables($text);
-        $fleschScore = 206.835 - (1.015 * $avgWordsPerSentence) - (84.6 * ($syllableCount / max(1, $wordCount)));
-        $fleschScore = max(0, min(100, $fleschScore));
-
-        // Heading structure
-        preg_match_all('/<h([1-6])[^>]*>/i', $html, $headingMatches);
-        $headingCount = count($headingMatches[0]);
-        $hasH1 = in_array('1', $headingMatches[1] ?? []);
-        $hasH2 = in_array('2', $headingMatches[1] ?? []);
-
-        // Links
-        preg_match_all('/<a\s/i', $html, $linkMatches);
-        $linkCount = count($linkMatches[0]);
-
-        // Images
-        preg_match_all('/<img\s/i', $html, $imgMatches);
-        $imageCount = count($imgMatches[0]);
-
-        // Images with alt text
-        preg_match_all('/<img[^>]+alt\s*=\s*"[^"]+"/i', $html, $imgAltMatches);
-        $imagesWithAlt = count($imgAltMatches[0]);
-
-        // Paragraph count
-        preg_match_all('/<p[\s>]/i', $html, $pMatches);
-        $paragraphCount = count($pMatches[0]);
-
-        // Title length
-        $titleLength = strlen($title);
-        $titleScore = ($titleLength >= 30 && $titleLength <= 70) ? 10 : ($titleLength > 0 ? 5 : 0);
-
-        // Scoring
-        $score = 0;
-
-        // Word count (0-15)
-        if ($wordCount >= 800) $score += 15;
-        elseif ($wordCount >= 500) $score += 10;
-        elseif ($wordCount >= 300) $score += 5;
-
-        // Readability (0-20)
-        if ($fleschScore >= 60) $score += 20;
-        elseif ($fleschScore >= 40) $score += 15;
-        elseif ($fleschScore >= 20) $score += 10;
-        else $score += 5;
-
-        // Headings (0-15)
-        if ($hasH2 && $headingCount >= 3) $score += 15;
-        elseif ($headingCount >= 2) $score += 10;
-        elseif ($headingCount >= 1) $score += 5;
-
-        // Links (0-10)
-        if ($linkCount >= 3) $score += 10;
-        elseif ($linkCount >= 1) $score += 5;
-
-        // Images (0-10)
-        if ($imageCount >= 2) $score += 10;
-        elseif ($imageCount >= 1) $score += 7;
-
-        // Images with alt (0-10)
-        if ($imageCount > 0 && $imagesWithAlt === $imageCount) $score += 10;
-        elseif ($imagesWithAlt > 0) $score += 5;
-
-        // Title (0-10)
-        $score += $titleScore;
-
-        // Paragraph structure (0-10)
-        if ($paragraphCount >= 5) $score += 10;
-        elseif ($paragraphCount >= 3) $score += 7;
-        elseif ($paragraphCount >= 1) $score += 3;
-
-        return [
-            'score' => min(100, $score),
-            'word_count' => $wordCount,
-            'sentence_count' => $sentenceCount,
-            'avg_words_per_sentence' => round($avgWordsPerSentence, 1),
-            'flesch_readability' => round($fleschScore, 1),
-            'heading_count' => $headingCount,
-            'has_h2' => $hasH2,
-            'link_count' => $linkCount,
-            'image_count' => $imageCount,
-            'images_with_alt' => $imagesWithAlt,
-            'paragraph_count' => $paragraphCount,
-            'title_length' => $titleLength,
-        ];
-    }
-
-    /**
-     * Estimate syllable count in text.
-     *
-     * @param string $text
-     * @return int
-     */
-    private function countSyllables(string $text): int
-    {
-        $words = preg_split('/\s+/', strtolower($text));
-        $total = 0;
-
-        foreach ($words as $word) {
-            $word = preg_replace('/[^a-z]/', '', $word);
-            if (strlen($word) <= 3) {
-                $total += 1;
-                continue;
-            }
-            $word = preg_replace('/(?:[^laeiouy]es|ed|[^laeiouy]e)$/', '', $word);
-            preg_match_all('/[aeiouy]{1,2}/', $word, $matches);
-            $total += max(1, count($matches[0]));
-        }
-
-        return $total;
     }
 
     /**
@@ -586,45 +453,18 @@ class ArticleController extends Controller
             'per_page' => 'nullable|integer|min:1|max:50',
         ]);
 
-        $query = $validated['query'];
-        $perPage = $validated['per_page'] ?? 15;
-        $sources = $validated['sources'] ?? ['pexels', 'unsplash', 'pixabay'];
-        $allPhotos = [];
-        $errors = [];
-
-        if (in_array('pexels', $sources)) {
-            $result = app(PexelsService::class)->searchPhotos($query, $perPage);
-            if ($result['success']) {
-                $allPhotos = array_merge($allPhotos, $result['data']['photos'] ?? []);
-            } else {
-                $errors[] = 'Pexels: ' . $result['message'];
-            }
-        }
-
-        if (in_array('unsplash', $sources)) {
-            $result = app(UnsplashService::class)->searchPhotos($query, $perPage);
-            if ($result['success']) {
-                $allPhotos = array_merge($allPhotos, $result['data']['photos'] ?? []);
-            } else {
-                $errors[] = 'Unsplash: ' . $result['message'];
-            }
-        }
-
-        if (in_array('pixabay', $sources)) {
-            $result = app(PixabayService::class)->searchPhotos($query, $perPage);
-            if ($result['success']) {
-                $allPhotos = array_merge($allPhotos, $result['data']['photos'] ?? []);
-            } else {
-                $errors[] = 'Pixabay: ' . $result['message'];
-            }
-        }
+        $result = app(MediaSearchService::class)->searchPhotos(
+            $validated['query'],
+            $validated['sources'] ?? ['pexels', 'unsplash', 'pixabay'],
+            $validated['per_page'] ?? 15
+        );
 
         return response()->json([
             'success' => true,
-            'results' => $allPhotos,
-            'total' => count($allPhotos),
-            'errors' => $errors,
-            'message' => count($allPhotos) . ' photos found across ' . count($sources) . ' source(s).',
+            'results' => $result['photos'],
+            'total'   => count($result['photos']),
+            'errors'  => $result['errors'],
+            'message' => $result['message'],
         ]);
     }
 
