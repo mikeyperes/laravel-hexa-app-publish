@@ -153,9 +153,10 @@
             {{-- Connection status --}}
             <div x-show="selectedSite" x-cloak>
                 <div class="flex items-center gap-2 rounded-lg px-3 py-2" :class="siteConn.status === true ? 'bg-green-50' : (siteConn.status === false ? 'bg-red-50' : 'bg-gray-50')">
-                    <template x-if="siteConn.status === null"><svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
-                    <template x-if="siteConn.status === true"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
-                    <template x-if="siteConn.status === false"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                    <template x-if="siteConn.testing"><svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
+                    <template x-if="!siteConn.testing && siteConn.status === true"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                    <template x-if="!siteConn.testing && siteConn.status === false"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
+                    <template x-if="!siteConn.testing && siteConn.status === null"><svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
                     <span class="text-sm" :class="siteConn.status === true ? 'text-green-800' : (siteConn.status === false ? 'text-red-800' : 'text-gray-600')" x-text="selectedSite ? selectedSite.name + ' — ' + selectedSite.url : ''"></span>
                 </div>
                 <div x-show="siteConn.log.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
@@ -1068,7 +1069,7 @@
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">Publish As</label>
                         <div class="flex items-center gap-2">
-                            <select x-model="publishAuthor" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <select x-model="publishAuthor" @change="autoSaveDraft()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
                                 <option value="">— Default author —</option>
                                 <template x-for="a in siteConn.authors" :key="a.user_login">
                                     <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
@@ -1419,6 +1420,7 @@ function publishPipeline() {
 
         // Step 3 — Website
         sites: @json($sites ?? []),
+        draftState: @json($draftState ?? []),
         selectedSiteId: '',
         selectedSite: null,
 
@@ -1552,73 +1554,114 @@ function publishPipeline() {
 
         init() {
             const saved = localStorage.getItem('publishPipelineState');
+            const draftState = this.draftState || {};
+            let state = null;
+            let shouldPersistRestoredDraftState = false;
+
+            this._restoring = true;
+
             if (saved) {
-                this._restoring = true;
                 try {
-                    const state = JSON.parse(saved);
-                    // Clear stale state from older versions
+                    state = JSON.parse(saved);
                     if (!state._v || state._v < this._stateVersion) {
                         localStorage.removeItem('publishPipelineState');
-                        return;
+                        state = null;
                     }
-                    if (state.selectedUser) this.selectedUser = state.selectedUser;
-                    if (state.currentStep) this.currentStep = state.currentStep;
-                    if (state.openSteps) this.openSteps = state.openSteps;
-                    if (state.completedSteps) this.completedSteps = state.completedSteps;
-                    if (state.selectedSiteId) {
+                } catch (e) {
+                    state = null;
+                }
+            }
+
+            if (state) {
+                if (state.selectedUser) this.selectedUser = state.selectedUser;
+                if (state.currentStep) this.currentStep = state.currentStep;
+                if (state.openSteps) this.openSteps = state.openSteps;
+                if (state.completedSteps) this.completedSteps = state.completedSteps;
+                if (state.selectedSiteId) {
+                    this.selectedSiteId = String(state.selectedSiteId);
+                    this.selectedSite = state.selectedSite || null;
+                    this.siteConn.status = state.siteConnStatus ?? null;
+                    this.siteConn.message = state.siteConnMessage || '';
+                    if (state.siteConnLog) this.siteConn.log = state.siteConnLog;
+                    if (state.siteConnAuthors) this.siteConn.authors = state.siteConnAuthors;
+                    this.$nextTick(() => {
                         this.selectedSiteId = String(state.selectedSiteId);
-                        this.selectedSite = state.selectedSite || null;
-                        // Restore site + connection state without re-testing
-                        this.siteConn.status = state.siteConnStatus ?? null;
-                        if (state.siteConnLog) this.siteConn.log = state.siteConnLog;
-                        if (state.siteConnAuthors) this.siteConn.authors = state.siteConnAuthors;
-                        this.$nextTick(() => {
-                            this.selectedSiteId = String(state.selectedSiteId);
-                            this.selectedSite = this.sites.find(s => s.id == state.selectedSiteId) || state.selectedSite || null;
-                        });
+                        this.selectedSite = this.sites.find(s => s.id == state.selectedSiteId) || state.selectedSite || null;
+                    });
+                }
+                if (state.sources) this.sources = state.sources;
+                if (state.checkResults) { this.checkResults = state.checkResults; this.checkPassCount = state.checkResults.filter(r => r.success).length; }
+                if (state.approvedSources) this.approvedSources = state.approvedSources;
+                if (state.discardedSources) this.discardedSources = state.discardedSources;
+                if (state.expandedSources) this.expandedSources = state.expandedSources;
+                if (state.aiModel) this.aiModel = state.aiModel;
+                if (state.articleTitle) this.articleTitle = state.articleTitle;
+                if (state.publishAction) this.publishAction = state.publishAction;
+                if (state.publishAuthor) this.publishAuthor = state.publishAuthor;
+                if (state.spunContent) { this.spunContent = state.spunContent; this.spunWordCount = state.spunWordCount || 0; this.setSpinEditor(state.spunContent); this.extractArticleLinks(state.spunContent); }
+                if (state.suggestedTitles) this.suggestedTitles = state.suggestedTitles;
+                if (state.suggestedCategories) this.suggestedCategories = state.suggestedCategories;
+                if (state.suggestedTags) this.suggestedTags = state.suggestedTags;
+                if (state.selectedCategories) this.selectedCategories = state.selectedCategories;
+                if (state.selectedTags) this.selectedTags = state.selectedTags;
+                if (state.selectedTitleIdx !== undefined) { this.selectedTitleIdx = state.selectedTitleIdx; if (this.suggestedTitles[this.selectedTitleIdx]) this.articleTitle = this.suggestedTitles[this.selectedTitleIdx]; }
+                if (state.editorContent) this.editorContent = state.editorContent;
+                if (state.tokenUsage) this.tokenUsage = state.tokenUsage;
+                if (state.photoSuggestions) this.photoSuggestions = state.photoSuggestions;
+                if (state.featuredImageSearch) this.featuredImageSearch = state.featuredImageSearch;
+                // Find Articles state
+                if (state.sourceTab) this.sourceTab = state.sourceTab;
+                if (state.newsMode) this.newsMode = state.newsMode;
+                if (state.newsCategory) this.newsCategory = state.newsCategory;
+                if (state.newsTrendingSelected) this.newsTrendingSelected = state.newsTrendingSelected;
+                if (state.newsSearch) this.newsSearch = state.newsSearch;
+                if (state.newsResults) this.newsResults = state.newsResults;
+                if (state.newsHasSearched) this.newsHasSearched = state.newsHasSearched;
+
+                shouldPersistRestoredDraftState = !draftState.selectedSiteId && (
+                    !!state.selectedSiteId ||
+                    !!state.selectedUser ||
+                    !!state.selectedPresetId ||
+                    !!state.selectedTemplateId ||
+                    !!state.publishAuthor
+                );
+            }
+
+            // Database-backed draft state is authoritative for site/user/template/preset restore.
+            if (draftState.selectedUser) this.selectedUser = draftState.selectedUser;
+            if (draftState.selectedSiteId) {
+                this.selectedSiteId = String(draftState.selectedSiteId);
+                this.selectedSite = this.sites.find(s => s.id == draftState.selectedSiteId) || draftState.selectedSite || null;
+                this.siteConn.status = draftState.siteConnStatus ?? this.siteConn.status;
+                if (draftState.siteConnStatus === true) {
+                    this.siteConn.message = 'Loaded from saved draft.';
+                }
+            }
+            if (draftState.publishAuthor) this.publishAuthor = draftState.publishAuthor;
+
+            if (this.selectedUser) {
+                const restoredPresetId = draftState.selectedPresetId || state?.selectedPresetId || '';
+                const restoredPreset = state?.selectedPreset || null;
+                const restoredTemplateId = draftState.selectedTemplateId || state?.selectedTemplateId || '';
+                const restoredTemplate = state?.selectedTemplate || null;
+
+                Promise.all([this.loadUserPresets(), this.loadUserTemplates()]).then(() => {
+                    if (restoredPresetId) {
+                        this.selectedPresetId = String(restoredPresetId);
+                        this.selectedPreset = this.presets.find(p => p.id == restoredPresetId) || restoredPreset;
+                        if (this.selectedPreset) this.loadPresetFields('preset', this.selectedPreset);
                     }
-                    if (state.sources) this.sources = state.sources;
-                    if (state.checkResults) { this.checkResults = state.checkResults; this.checkPassCount = state.checkResults.filter(r => r.success).length; }
-                    if (state.approvedSources) this.approvedSources = state.approvedSources;
-                    if (state.discardedSources) this.discardedSources = state.discardedSources;
-                    if (state.expandedSources) this.expandedSources = state.expandedSources;
-                    if (state.aiModel) this.aiModel = state.aiModel;
-                    if (state.articleTitle) this.articleTitle = state.articleTitle;
-                    if (state.publishAction) this.publishAction = state.publishAction;
-                    if (state.spunContent) { this.spunContent = state.spunContent; this.spunWordCount = state.spunWordCount || 0; this.setSpinEditor(state.spunContent); this.extractArticleLinks(state.spunContent); }
-                    if (state.suggestedTitles) this.suggestedTitles = state.suggestedTitles;
-                    if (state.suggestedCategories) this.suggestedCategories = state.suggestedCategories;
-                    if (state.suggestedTags) this.suggestedTags = state.suggestedTags;
-                    if (state.selectedCategories) this.selectedCategories = state.selectedCategories;
-                    if (state.selectedTags) this.selectedTags = state.selectedTags;
-                    if (state.selectedTitleIdx !== undefined) { this.selectedTitleIdx = state.selectedTitleIdx; if (this.suggestedTitles[this.selectedTitleIdx]) this.articleTitle = this.suggestedTitles[this.selectedTitleIdx]; }
-                    if (state.editorContent) this.editorContent = state.editorContent;
-                    if (state.tokenUsage) this.tokenUsage = state.tokenUsage;
-                    if (state.photoSuggestions) this.photoSuggestions = state.photoSuggestions;
-                    if (state.featuredImageSearch) this.featuredImageSearch = state.featuredImageSearch;
-                    // Reload presets/templates THEN re-select saved values
-                    if (this.selectedUser) {
-                        const savedPresetId = state.selectedPresetId;
-                        const savedPreset = state.selectedPreset;
-                        const savedTemplateId = state.selectedTemplateId;
-                        const savedTemplate = state.selectedTemplate;
-                        Promise.all([this.loadUserPresets(), this.loadUserTemplates()]).then(() => {
-                            if (savedPresetId) {
-                                this.selectedPresetId = String(savedPresetId);
-                                this.selectedPreset = this.presets.find(p => p.id == savedPresetId) || savedPreset;
-                                if (this.selectedPreset) this.loadPresetFields('preset', this.selectedPreset);
-                            }
-                            if (savedTemplateId) {
-                                this.selectedTemplateId = String(savedTemplateId);
-                                this.selectedTemplate = this.templates.find(t => t.id == savedTemplateId) || savedTemplate;
-                                if (this.selectedTemplate) this.loadPresetFields('template', this.selectedTemplate);
-                            }
-                            this._restoring = false;
-                        });
-                    } else {
-                        this._restoring = false;
+                    if (restoredTemplateId) {
+                        this.selectedTemplateId = String(restoredTemplateId);
+                        this.selectedTemplate = this.templates.find(t => t.id == restoredTemplateId) || restoredTemplate;
+                        if (this.selectedTemplate) this.loadPresetFields('template', this.selectedTemplate);
                     }
-                } catch (e) { this._restoring = false; }
+                    this._restoring = false;
+                    if (shouldPersistRestoredDraftState) this.autoSaveDraft();
+                });
+            } else {
+                this._restoring = false;
+                if (shouldPersistRestoredDraftState) this.autoSaveDraft();
             }
 
             this.$watch('currentStep', () => this.savePipelineState());
@@ -1627,6 +1670,7 @@ function publishPipeline() {
             this.$watch('selectedPresetId', () => this.savePipelineState());
             this.$watch('selectedTemplateId', () => this.savePipelineState());
             this.$watch('selectedSiteId', () => this.savePipelineState());
+            this.$watch('publishAuthor', () => this.savePipelineState());
             this.$watch('sources', () => this.savePipelineState());
             this.$watch('checkResults', () => this.savePipelineState());
             this.$watch('aiModel', () => this.savePipelineState());
@@ -1634,6 +1678,11 @@ function publishPipeline() {
             this.$watch('spunContent', () => this.savePipelineState());
             this.$watch('editorContent', () => this.savePipelineState());
             this.$watch('photoSuggestions', () => this.savePipelineState());
+            this.$watch('siteConn.status', () => this.savePipelineState());
+            this.$watch('siteConn.authors', () => this.savePipelineState());
+            this.$watch('newsResults', () => this.savePipelineState());
+            this.$watch('newsMode', () => this.savePipelineState());
+            this.$watch('newsCategory', () => this.savePipelineState());
         },
 
         savePipelineState() {
@@ -1650,6 +1699,7 @@ function publishPipeline() {
                 selectedSiteId: this.selectedSiteId,
                 selectedSite: this.selectedSite,
                 siteConnStatus: this.siteConn.status,
+                siteConnMessage: this.siteConn.message,
                 siteConnLog: this.siteConn.log,
                 siteConnAuthors: this.siteConn.authors,
                 sources: this.sources,
@@ -1672,6 +1722,14 @@ function publishPipeline() {
                 tokenUsage: this.tokenUsage,
                 photoSuggestions: this.photoSuggestions,
                 featuredImageSearch: this.featuredImageSearch,
+                // Find Articles state
+                sourceTab: this.sourceTab,
+                newsMode: this.newsMode,
+                newsCategory: this.newsCategory,
+                newsTrendingSelected: this.newsTrendingSelected,
+                newsSearch: this.newsSearch,
+                newsResults: this.newsResults,
+                newsHasSearched: this.newsHasSearched,
             };
             localStorage.setItem('publishPipelineState', JSON.stringify(state));
         },
@@ -1757,6 +1815,8 @@ function publishPipeline() {
                 this.selectedTemplateId = String(defaultTemplate.id);
                 this.selectTemplate();
             }
+
+            if (!this._restoring) this.autoSaveDraft();
         },
 
         clearUser() {
@@ -1804,7 +1864,7 @@ function publishPipeline() {
                 this.selectedPreset = this.presets.find(p => p.id == this.selectedPresetId) || null;
                 // Auto-fill from preset
                 if (this.selectedPreset) {
-                    if (this.selectedPreset.default_site_id) {
+                    if (this.selectedPreset.default_site_id && (!this._restoring || !this.selectedSiteId)) {
                         this.selectedSiteId = String(this.selectedPreset.default_site_id);
                         this.selectSite();
                     }
@@ -1824,6 +1884,8 @@ function publishPipeline() {
                 this.selectedPreset = null;
                 this.loadPresetFields('preset', null);
             }
+
+            if (!this._restoring) this.autoSaveDraft();
         },
 
         // ── Step 3: Website ───────────────────────────────
@@ -1831,6 +1893,9 @@ function publishPipeline() {
             if (this.selectedSiteId) {
                 this.selectedSite = this.sites.find(s => s.id == this.selectedSiteId) || null;
                 if (this.selectedSite) {
+                    if (!this._restoring) this.autoSaveDraft();
+                    if (this._restoring) return;
+
                     this.testSiteConnection(this.selectedSiteId, this.csrfToken, {
                         onAuthorsLoaded: (authors) => {
                             // Authors loaded
@@ -1838,6 +1903,7 @@ function publishPipeline() {
                         onSuccess: (d) => {
                             if (d.default_author) this.publishAuthor = d.default_author;
                             this.completeStep(2);
+                            this.autoSaveDraft();
                             if (!this._restoring) this.openStep(3);
                         },
                     });
@@ -1848,6 +1914,7 @@ function publishPipeline() {
                 this.siteConn.authors = [];
                 this.siteConn.log = [];
                 this.siteConn.status = null;
+                this.siteConn.message = '';
             }
         },
 
@@ -2096,6 +2163,8 @@ function publishPipeline() {
                 this.selectedTemplate = null;
                 this.loadPresetFields('template', null);
             }
+
+            if (!this._restoring) this.autoSaveDraft();
         },
 
         // ── Step 7: Spin ──────────────────────────────────
@@ -2866,7 +2935,7 @@ function publishPipeline() {
         },
 
         // ── Draft ─────────────────────────────────────────
-        async saveDraftNow() {
+        async saveDraftNow(silent = false) {
             this.savingDraft = true;
             try {
                 const resp = await fetch('{{ route('publish.pipeline.save-draft') }}', {
@@ -2881,6 +2950,7 @@ function publishPipeline() {
                         preset_id: this.selectedPresetId || null,
                         template_id: this.selectedTemplateId || null,
                         ai_model: this.aiModel,
+                        author: this.publishAuthor || null,
                         sources: this.sources.map(s => ({ url: s.url, title: s.title })),
                         tags: this.suggestedTags,
                         categories: this.suggestedCategories,
@@ -2889,19 +2959,19 @@ function publishPipeline() {
                 const data = await resp.json();
                 if (data.success) {
                     this.draftId = data.draft_id;
-                    this.showNotification('success', data.message);
+                    if (!silent) this.showNotification('success', data.message);
                 } else {
-                    this.showNotification('error', data.message);
+                    if (!silent) this.showNotification('error', data.message);
                 }
             } catch (e) {
-                this.showNotification('error', 'Failed to save draft');
+                if (!silent) this.showNotification('error', 'Failed to save draft');
             }
             this.savingDraft = false;
         },
 
         autoSaveDraft() {
             // Fire and forget
-            this.saveDraftNow();
+            this.saveDraftNow(true);
         },
 
         // ── Notifications ─────────────────────────────────
