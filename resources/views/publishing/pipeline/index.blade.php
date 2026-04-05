@@ -1802,10 +1802,8 @@ function publishPipeline() {
                         if (d.authors) this.siteConn.authors = d.authors;
                     }).catch(() => {});
                 }
-                // Auto-load prompt preview if template/preset is selected
-                if (this.selectedTemplateId || this.selectedPresetId) {
-                    this.refreshPromptPreview();
-                }
+                // Always load prompt preview — default prompt exists even without template/preset
+                this.refreshPromptPreview();
                 if (this.featuredImageSearch && !this.featuredPhoto) {
                     this.searchFeaturedImage();
                 }
