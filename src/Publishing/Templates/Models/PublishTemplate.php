@@ -17,6 +17,7 @@ use hexa_app_publish\Models\PublishSitemap;
 use hexa_app_publish\Models\AiActivityLog;
 use hexa_app_publish\Models\AiDetectionLog;
 use hexa_app_publish\Models\AiSmartEditTemplate;
+use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -54,37 +55,11 @@ class PublishTemplate extends Model
     ];
 
     /**
-     * Return field schema for preset field rendering.
-     * Each field declares its type and options — the UI renders accordingly.
-     *
-     * @return array
+     * Return field schema for pipeline-style preset rendering.
      */
-    public static function getFieldSchema(): array
+    public static function getFieldSchema(string $context = 'pipeline'): array
     {
-        $models = collect(config('anthropic.models', []))->pluck('name', 'id')->toArray();
-        return [
-            'ai_engine'          => ['type' => 'select', 'options' => $models],
-            'article_type'       => ['type' => 'select', 'options' => array_combine(
-                config('app-publish.article_types', ['editorial','opinion','news-report']),
-                array_map(fn($t) => ucwords(str_replace('-', ' ', $t)), config('app-publish.article_types', ['editorial','opinion','news-report']))
-            )],
-            'ai_prompt'          => ['type' => 'textarea'],
-            'tone'               => ['type' => 'checkbox', 'options' => [
-                'Professional' => 'Professional', 'Conversational' => 'Conversational',
-                'Authoritative' => 'Authoritative', 'Casual' => 'Casual',
-                'Investigative' => 'Investigative', 'Persuasive' => 'Persuasive',
-            ]],
-            'word_count_min'     => ['type' => 'number'],
-            'word_count_max'     => ['type' => 'number'],
-            'photos_per_article' => ['type' => 'number'],
-            'photo_sources'      => ['type' => 'checkbox', 'options' => array_combine(
-                config('app-publish.photo_sources', ['unsplash','pexels','pixabay']),
-                array_map('ucfirst', config('app-publish.photo_sources', ['unsplash','pexels','pixabay']))
-            )],
-            'max_links'          => ['type' => 'number'],
-            'structure'          => ['type' => 'array'],
-            'rules'              => ['type' => 'array'],
-        ];
+        return ArticlePresetForm::schema($context);
     }
 
     /**

@@ -2,11 +2,13 @@
 
 namespace hexa_app_publish\Providers;
 
-use Illuminate\Support\ServiceProvider;
-use hexa_app_publish\Services\PublishService;
 use hexa_app_publish\Console\RunCampaignsCommand;
+use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
+use hexa_app_publish\Services\PublishService;
+use hexa_core\Forms\Services\FormRegistryService;
 use hexa_core\ListRegistry\Services\ListService;
 use hexa_core\Services\PackageRegistryService;
+use Illuminate\Support\ServiceProvider;
 
 class AppPublishServiceProvider extends ServiceProvider
 {
@@ -36,6 +38,8 @@ class AppPublishServiceProvider extends ServiceProvider
         $this->registerPermissions();
 
         $this->registerListCategories();
+
+        $this->registerForms();
 
         if ($this->app->runningInConsole()) {
             $this->commands([RunCampaignsCommand::class]);
@@ -122,6 +126,18 @@ class AppPublishServiceProvider extends ServiceProvider
                 'publish.articles.index',
             ]),
         ]);
+    }
+
+    private function registerForms(): void
+    {
+        if (!class_exists(FormRegistryService::class)) {
+            return;
+        }
+
+        app(FormRegistryService::class)->register(
+            ArticlePresetForm::FORM_KEY,
+            fn (array $context = []) => ArticlePresetForm::make($context)
+        );
     }
 
     /**

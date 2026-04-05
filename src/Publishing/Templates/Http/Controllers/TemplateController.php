@@ -3,9 +3,13 @@
 namespace hexa_app_publish\Publishing\Templates\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
+use hexa_core\Forms\Services\FormHydrationService;
+use hexa_core\Forms\Services\FormRegistryService;
+use hexa_core\Forms\Services\FormValidationService;
 use hexa_core\Services\GenericService;
 use hexa_app_publish\Models\PublishAccount;
 use hexa_app_publish\Models\PublishTemplate;
+use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
 use hexa_app_publish\Services\PublishService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,15 +19,25 @@ class TemplateController extends Controller
 {
     protected GenericService $generic;
     protected PublishService $publishService;
+    protected FormRegistryService $formRegistry;
+    protected FormValidationService $formValidation;
+    protected FormHydrationService $formHydration;
 
     /**
-     * @param GenericService $generic
-     * @param PublishService $publishService
      */
-    public function __construct(GenericService $generic, PublishService $publishService)
+    public function __construct(
+        GenericService $generic,
+        PublishService $publishService,
+        FormRegistryService $formRegistry,
+        FormValidationService $formValidation,
+        FormHydrationService $formHydration
+    )
     {
         $this->generic = $generic;
         $this->publishService = $publishService;
+        $this->formRegistry = $formRegistry;
+        $this->formValidation = $formValidation;
+        $this->formHydration = $formHydration;
     }
 
     /**
@@ -67,14 +81,13 @@ class TemplateController extends Controller
      */
     public function create(Request $request): View
     {
-        $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
+        $form = $this->resolveArticlePresetForm('create');
 
         return view('app-publish::publishing.templates.create', [
-            'accounts' => $accounts,
-            'articleTypes' => config('hws-publish.article_types', []),
-            'aiEngines' => config('hws-publish.ai_engines', []),
-            'photoSources' => config('hws-publish.photo_sources', []),
-            'preselected_account_id' => $request->input('account_id'),
+            'form' => $form,
+            'formValues' => ArticlePresetForm::values(null, [
+                'publish_account_id' => $request->input('account_id'),
+            ]),
         ]);
     }
 
@@ -86,32 +99,17 @@ class TemplateController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'publish_account_id' => 'required|exists:publish_accounts,id',
-            'name' => 'required|string|max:255',
-            'status' => 'nullable|in:draft,active',
-            'is_default' => 'nullable|boolean',
-            'article_type' => 'nullable|string|max:50',
-            'description' => 'nullable|string',
-            'ai_prompt' => 'nullable|string',
-            'ai_engine' => 'nullable|string|max:100',
-            'tone' => 'nullable|array',
-            'word_count_min' => 'nullable|integer|min:100',
-            'word_count_max' => 'nullable|integer|min:100',
-            'photos_per_article' => 'nullable|integer|min:0|max:20',
-            'photo_sources' => 'nullable|array',
-            'max_links' => 'nullable|integer|min:0',
-            'structure' => 'nullable|array',
-            'rules' => 'nullable|array',
-        ]);
+        $form = $this->resolveArticlePresetForm('create');
+        $payload = $this->normalizedFormPayload($request, $form);
+        $validated = $this->formValidation->validate($payload, $form, ['mode' => 'create', 'context' => 'create']);
+        $data = $this->formHydration->dehydrate($form, $validated);
+        $data['status'] = $this->validatedStatus($request, 'draft');
 
-        $validated['status'] = $validated['status'] ?? 'draft';
-
-        if (!empty($validated['is_default'])) {
-            PublishTemplate::where('publish_account_id', $validated['publish_account_id'])->update(['is_default' => false]);
+        if (!empty($data['is_default'])) {
+            PublishTemplate::where('publish_account_id', $data['publish_account_id'])->update(['is_default' => false]);
         }
 
-        $template = PublishTemplate::create($validated);
+        $template = PublishTemplate::create($data);
 
         hexaLog('publish', 'template_created', "Template created: {$template->name}");
 
@@ -147,14 +145,12 @@ class TemplateController extends Controller
     public function edit(int $id): View
     {
         $template = PublishTemplate::with('account')->findOrFail($id);
-        $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
+        $form = $this->resolveArticlePresetForm('edit', $template);
 
         return view('app-publish::publishing.templates.edit', [
             'template' => $template,
-            'accounts' => $accounts,
-            'articleTypes' => config('hws-publish.article_types', []),
-            'aiEngines' => config('hws-publish.ai_engines', []),
-            'photoSources' => config('hws-publish.photo_sources', []),
+            'form' => $form,
+            'formValues' => ArticlePresetForm::values($template),
         ]);
     }
 
@@ -168,30 +164,24 @@ class TemplateController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $template = PublishTemplate::findOrFail($id);
-
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'status' => 'nullable|in:draft,active',
-            'is_default' => 'nullable|boolean',
-            'article_type' => 'nullable|string|max:50',
-            'description' => 'nullable|string',
-            'ai_prompt' => 'nullable|string',
-            'ai_engine' => 'nullable|string|max:100',
-            'tone' => 'nullable|array',
-            'word_count_min' => 'nullable|integer|min:100',
-            'word_count_max' => 'nullable|integer|min:100',
-            'photos_per_article' => 'nullable|integer|min:0|max:20',
-            'photo_sources' => 'nullable|array',
-            'max_links' => 'nullable|integer|min:0',
-            'structure' => 'nullable|array',
-            'rules' => 'nullable|array',
+        $form = $this->resolveArticlePresetForm('edit', $template);
+        $payload = $this->normalizedFormPayload($request, $form);
+        $validated = $this->formValidation->validate($payload, $form, [
+            'mode' => 'edit',
+            'context' => 'edit',
+            'record' => $template,
         ]);
+        $data = $this->formHydration->dehydrate($form, $validated);
+        $data['status'] = $this->validatedStatus($request, $template->status ?? 'draft');
 
-        if (!empty($validated['is_default'])) {
-            PublishTemplate::where('publish_account_id', $template->publish_account_id)->where('id', '!=', $template->id)->update(['is_default' => false]);
+        if (!empty($data['is_default'])) {
+            $accountId = $data['publish_account_id'] ?? $template->publish_account_id;
+            PublishTemplate::where('publish_account_id', $accountId)
+                ->where('id', '!=', $template->id)
+                ->update(['is_default' => false]);
         }
 
-        $template->update($validated);
+        $template->update($data);
 
         hexaLog('publish', 'template_updated', "Template updated: {$template->name}");
 
@@ -220,5 +210,40 @@ class TemplateController extends Controller
             'success' => true,
             'message' => "Template '{$name}' deleted successfully.",
         ]);
+    }
+
+    protected function resolveArticlePresetForm(string $mode, ?PublishTemplate $template = null)
+    {
+        return $this->formRegistry->resolve(ArticlePresetForm::FORM_KEY, [
+            'mode' => $mode,
+            'context' => $mode,
+            'record' => $template,
+        ]);
+    }
+
+    protected function normalizedFormPayload(Request $request, $form): array
+    {
+        $payload = $request->all();
+
+        foreach ($form->getFields() as $field) {
+            if (($field->isMultiple() || in_array($field->type(), ['checkbox_group', 'multiselect', 'array'], true))
+                && !$request->has($field->name())
+            ) {
+                $payload[$field->name()] = [];
+            }
+
+            if (in_array($field->type(), ['boolean', 'toggle'], true) && !$request->has($field->name())) {
+                $payload[$field->name()] = false;
+            }
+        }
+
+        return $payload;
+    }
+
+    protected function validatedStatus(Request $request, string $default = 'draft'): string
+    {
+        $status = $request->input('status', $default);
+
+        return in_array($status, ['draft', 'active'], true) ? $status : $default;
     }
 }
