@@ -1726,7 +1726,7 @@ function publishPipeline() {
                 if (state.editorContent) this.editorContent = state.editorContent;
                 if (state.tokenUsage) this.tokenUsage = state.tokenUsage;
                 if (state.photoSuggestions) {
-                    this.photoSuggestions = state.photoSuggestions.map(ps => ({ ...ps, refreshingMeta: false, searching: false }));
+                    this.photoSuggestions = state.photoSuggestions.map((ps, idx) => ({ ...ps, refreshingMeta: false, searching: false, suggestedFilename: this.buildFilename(ps.search_term, idx + 1) }));
                 }
                 if (state.featuredImageSearch) this.featuredImageSearch = state.featuredImageSearch;
                 if (state.featuredPhoto) {
@@ -1777,7 +1777,7 @@ function publishPipeline() {
                 this.$nextTick(() => this.setSpinEditor(draftState.body));
             }
             if ((!Array.isArray(this.photoSuggestions) || this.photoSuggestions.length === 0) && Array.isArray(draftState.photoSuggestions)) {
-                this.photoSuggestions = draftState.photoSuggestions.map(ps => ({ ...ps, refreshingMeta: false, searching: false }));
+                this.photoSuggestions = draftState.photoSuggestions.map((ps, idx) => ({ ...ps, refreshingMeta: false, searching: false, suggestedFilename: this.buildFilename(ps.search_term, idx + 1) }));
             }
             if (!this.featuredImageSearch && draftState.featuredImageSearch) {
                 this.featuredImageSearch = draftState.featuredImageSearch;
