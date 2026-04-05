@@ -1733,6 +1733,7 @@ function publishPipeline() {
                 if (state.featuredCaption) this.featuredCaption = state.featuredCaption;
                 if (state.featuredFilename) this.featuredFilename = state.featuredFilename;
                 if (state.resolvedPrompt) this.resolvedPrompt = state.resolvedPrompt;
+                if (state.articleDescription) this.articleDescription = state.articleDescription;
                 // Find Articles state
                 if (state.sourceTab) this.sourceTab = state.sourceTab;
                 if (state.newsMode) this.newsMode = state.newsMode;
@@ -1800,6 +1801,10 @@ function publishPipeline() {
                         headers: { 'Accept': 'application/json' }
                     }).then(r => r.json()).then(d => {
                         if (d.authors) this.siteConn.authors = d.authors;
+                        if (d.default_author && !this.publishAuthor) {
+                            this.publishAuthor = d.default_author;
+                            this.publishAuthorSource = 'profile';
+                        }
                     }).catch(() => {});
                 }
                 // Always load prompt preview — default prompt exists even without template/preset
@@ -1906,6 +1911,7 @@ function publishPipeline() {
                 featuredCaption: this.featuredCaption,
                 featuredFilename: this.featuredFilename,
                 resolvedPrompt: this.resolvedPrompt,
+                articleDescription: this.articleDescription,
                 // Find Articles state
                 sourceTab: this.sourceTab,
                 newsMode: this.newsMode,

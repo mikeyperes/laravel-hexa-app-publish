@@ -196,8 +196,11 @@
                             <div class="mt-2 flex items-center gap-2 flex-wrap">
                                 <svg class="w-3.5 h-3.5 text-purple-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
                                 <label class="text-xs text-gray-500 flex-shrink-0">Default Author</label>
-                                {{-- Show stored author name if not yet loaded --}}
+                                {{-- Show stored author name with WP profile link --}}
                                 <span x-show="!authorsLoaded && selectedAuthor" x-cloak class="text-xs text-purple-600 font-medium" x-text="selectedAuthor"></span>
+                                <a x-show="selectedAuthor" x-cloak :href="site.url.replace(/\/$/, '') + '/author/' + selectedAuthor + '/'" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 inline-flex items-center gap-0.5">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                </a>
                                 {{-- Load Authors button --}}
                                 <button x-show="!authorsLoaded && !loadingAuthors" x-cloak @click="
                                     loadingAuthors = true;
@@ -239,21 +242,7 @@
                 <span x-text="scanning ? scanStatusText : 'Scan WP Toolkit'"></span>
             </button>
 
-            {{-- Scan activity log (dark themed) --}}
-            <div x-show="scanLog.length > 0" x-cloak class="bg-gray-900 rounded-lg border border-gray-700 p-4 mb-4 font-mono text-xs space-y-1 max-h-64 overflow-y-auto">
-                <template x-for="(entry, idx) in scanLog" :key="idx">
-                    <div class="flex items-start gap-2" :class="{
-                        'text-green-400': entry.type === 'success',
-                        'text-red-400': entry.type === 'error',
-                        'text-gray-400': entry.type === 'info'
-                    }">
-                        <span x-show="entry.type === 'success'" class="flex-shrink-0">&#10003;</span>
-                        <span x-show="entry.type === 'error'" class="flex-shrink-0">&#10007;</span>
-                        <span x-show="entry.type === 'info'" class="flex-shrink-0">&#8226;</span>
-                        <span x-text="entry.message" class="break-words"></span>
-                    </div>
-                </template>
-            </div>
+            {{-- Scan log merged into Activity Log below --}}
 
             {{-- Scan result banner --}}
             <div x-show="scanBanner" x-cloak class="mb-4 px-4 py-2 rounded-lg text-sm inline-flex items-center gap-2"
@@ -751,7 +740,7 @@ function userProfile() {
             this.scanLog = [];
             this.wpInstalls = [];
 
-            this.scanLog.push({ type: 'info', message: 'Starting WordPress scan for ' + accounts.length + ' account(s)...' });
+            this.logSite('info', 'Starting WordPress scan for ' + accounts.length + ' account(s)...');
 
             let totalFound = 0;
             let allInstalls = [];
@@ -759,7 +748,7 @@ function userProfile() {
             for (let i = 0; i < accounts.length; i++) {
                 const acct = accounts[i];
                 this.scanStatusText = 'Scanning account ' + (i + 1) + ' of ' + accounts.length + '...';
-                this.scanLog.push({ type: 'info', message: 'Scanning ' + acct.username + ' (' + acct.domain + ')...' });
+                this.logSite('info', 'Scanning ' + acct.username + ' (' + acct.domain + ')...');
 
                 try {
                     const res = await fetch('{{ route("publish.accounts.scan-wp-single", $user->id) }}', {
@@ -773,19 +762,19 @@ function userProfile() {
                         const count = (data.installs || []).length;
                         totalFound += count;
                         allInstalls = allInstalls.concat(data.installs || []);
-                        this.scanLog.push({ type: 'success', message: acct.username + ': ' + count + ' install(s) found' });
+                        this.logSite('success', acct.username + ': ' + count + ' install(s) found');
                     } else {
-                        this.scanLog.push({ type: 'error', message: acct.username + ': ' + (data.message || 'Unknown error') });
+                        this.logSite('error', acct.username + ': ' + (data.message || 'Unknown error'));
                     }
                 } catch (e) {
-                    this.scanLog.push({ type: 'error', message: acct.username + ': ' + e.message });
+                    this.logSite('error', acct.username + ': ' + e.message);
                 }
             }
 
             this.wpInstalls = allInstalls;
             this.scanSuccess = true;
             this.scanBanner = 'Scan complete. ' + totalFound + ' WordPress install(s) found across ' + accounts.length + ' account(s).';
-            this.scanLog.push({ type: 'info', message: 'Scan complete. Total installs found: ' + totalFound });
+            this.logSite('info', 'Scan complete. Total installs found: ' + totalFound);
             this.scanning = false;
         },
     };
