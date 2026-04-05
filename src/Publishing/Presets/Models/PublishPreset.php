@@ -71,22 +71,15 @@ class PublishPreset extends Model
     ];
 
     /**
-     * Return field schema for preset field rendering.
+     * Return field schema for pipeline-style preset rendering.
+     * Delegates to WordPressPresetForm — single source of truth.
      *
+     * @param string $context
      * @return array
      */
-    public static function getFieldSchema(): array
+    public static function getFieldSchema(string $context = 'pipeline'): array
     {
-        return [
-            'follow_links'          => ['type' => 'select', 'options' => ['follow' => 'Follow', 'nofollow' => 'Nofollow', 'sponsored' => 'Sponsored', 'ugc' => 'UGC']],
-            'article_format'        => ['type' => 'select', 'options' => ['standard' => 'Standard', 'listicle' => 'Listicle', 'how-to' => 'How-To', 'opinion' => 'Opinion', 'review' => 'Review']],
-            'tone'                  => ['type' => 'text'],
-            'image_preference'      => ['type' => 'text'],
-            'default_publish_action' => ['type' => 'select', 'options' => ['auto-publish' => 'Auto Publish', 'draft-local' => 'Draft Local', 'draft-wordpress' => 'Draft WordPress', 'review' => 'Review', 'notify' => 'Notify']],
-            'default_category_count' => ['type' => 'number'],
-            'default_tag_count'     => ['type' => 'number'],
-            'image_layout'          => ['type' => 'select', 'options' => ['inline' => 'Inline', 'float-left' => 'Float Left', 'float-right' => 'Float Right', 'full-width' => 'Full Width']],
-        ];
+        return \hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm::schema($context);
     }
 
     /**

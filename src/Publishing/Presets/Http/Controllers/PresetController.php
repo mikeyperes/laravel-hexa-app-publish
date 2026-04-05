@@ -3,8 +3,12 @@
 namespace hexa_app_publish\Publishing\Presets\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
+use hexa_core\Forms\Services\FormRegistryService;
+use hexa_core\Forms\Services\FormHydrationService;
+use hexa_core\Forms\Services\FormValidationService;
 use hexa_core\ListRegistry\Models\ListItem;
 use hexa_app_publish\Models\PublishPreset;
+use hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -14,6 +18,12 @@ use Illuminate\View\View;
  */
 class PresetController extends Controller
 {
+    public function __construct(
+        private FormRegistryService $formRegistry,
+        private FormHydrationService $formHydration,
+        private FormValidationService $formValidation
+    ) {}
+
     /**
      * List presets, optionally filtered by user. Load list values for dropdowns.
      *
@@ -112,6 +122,24 @@ class PresetController extends Controller
     }
 
     /**
+     * Edit form for a preset — uses the form definition system.
+     *
+     * @param int $id
+     * @return View
+     */
+    public function edit(int $id): View
+    {
+        $preset = PublishPreset::with('user')->findOrFail($id);
+        $form = $this->resolveForm('edit', $preset);
+
+        return view('app-publish::publishing.presets.edit', [
+            'preset' => $preset,
+            'form' => $form,
+            'formValues' => WordPressPresetForm::values($preset),
+        ]);
+    }
+
+    /**
      * Update a preset.
      *
      * @param Request $request
@@ -193,6 +221,22 @@ class PresetController extends Controller
         return response()->json([
             'success' => true,
             'message' => "Preset '{$name}' deleted successfully.",
+        ]);
+    }
+
+    /**
+     * Resolve the WordPress preset form definition.
+     *
+     * @param string $mode
+     * @param PublishPreset|null $preset
+     * @return \hexa_core\Forms\Definitions\FormDefinition
+     */
+    protected function resolveForm(string $mode, ?PublishPreset $preset = null)
+    {
+        return $this->formRegistry->resolve(WordPressPresetForm::FORM_KEY, [
+            'mode' => $mode,
+            'context' => $mode,
+            'record' => $preset,
         ]);
     }
 }

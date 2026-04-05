@@ -4,6 +4,7 @@ namespace hexa_app_publish\Providers;
 
 use hexa_app_publish\Console\RunCampaignsCommand;
 use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
+use hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm;
 use hexa_app_publish\Services\PublishService;
 use hexa_core\Forms\Services\FormRegistryService;
 use hexa_core\ListRegistry\Services\ListService;
@@ -137,6 +138,11 @@ class AppPublishServiceProvider extends ServiceProvider
         app(FormRegistryService::class)->register(
             ArticlePresetForm::FORM_KEY,
             fn (array $context = []) => ArticlePresetForm::make($context)
+        );
+
+        app(FormRegistryService::class)->register(
+            WordPressPresetForm::FORM_KEY,
+            fn (array $context = []) => WordPressPresetForm::make($context)
         );
     }
 

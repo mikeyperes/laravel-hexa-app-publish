@@ -7,92 +7,8 @@
 <div class="space-y-4" x-data="presetsManager()">
 
     @if($editingPreset)
-    {{-- Edit preset form (full page, not modal) --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-gray-800">Edit Preset</h3>
-            <a href="{{ route('publish.presets.index', request()->only('user_id')) }}" class="text-sm text-gray-500 hover:text-gray-700">Back to list</a>
-        </div>
-
-        {{-- Account section --}}
-        <div class="mb-4 pb-4 border-b border-gray-200">
-            <label class="block text-xs text-gray-500 mb-1">Account <span class="text-red-500">*</span></label>
-            <select x-model="editData.user_id" class="w-full md:w-1/3 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <option value="">Select user...</option>
-                @foreach(\hexa_core\Models\User::orderBy('name')->get() as $u)
-                    <option value="{{ $u->id }}">{{ $u->name }}</option>
-                @endforeach
-            </select>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Preset Name</label>
-                <input type="text" x-model="editData.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-            </div>
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Follow / Nofollow</label>
-                <div class="flex items-center gap-4 mt-1">
-                    <label class="flex items-center gap-1 text-sm"><input type="radio" x-model="editData.follow_links" value="follow"> Follow</label>
-                    <label class="flex items-center gap-1 text-sm"><input type="radio" x-model="editData.follow_links" value="nofollow"> Nofollow</label>
-                </div>
-            </div>
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Image Preference</label>
-                <select x-model="editData.image_preference" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select preference...</option>
-                    @foreach($imagePreferences as $pref)
-                        <option value="{{ $pref }}">{{ $pref }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Default Publish Action</label>
-                <select x-model="editData.default_publish_action" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select action...</option>
-                    @foreach($publishActions as $key => $label)
-                        <option value="{{ $key }}">{{ $label }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Category Count</label>
-                <input type="number" x-model="editData.default_category_count" min="0" max="20" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-            </div>
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Tag Count</label>
-                <input type="number" x-model="editData.default_tag_count" min="0" max="50" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-            </div>
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Image Layout</label>
-                <select x-model="editData.image_layout" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">Select layout...</option>
-                    @foreach($imageLayouts as $layout)
-                        <option value="{{ $layout }}">{{ $layout }}</option>
-                    @endforeach
-                </select>
-            </div>
-        </div>
-        <label class="inline-flex items-center gap-2 mt-4 cursor-pointer">
-            <input type="checkbox" x-model="editData.is_default" class="rounded border-gray-300 text-green-600">
-            <span class="text-sm text-gray-600">Set as default preset</span>
-        </label>
-        <div class="mt-3 flex items-center gap-2">
-            <button @click="updatePreset('active')" :disabled="updating" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
-                <svg x-show="updating && saveType === 'active'" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                <span x-text="updating && saveType === 'active' ? 'Saving...' : 'Save Changes'"></span>
-            </button>
-            <button @click="updatePreset('draft')" :disabled="updating" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-60 inline-flex items-center gap-2">
-                <svg x-show="updating && saveType === 'draft'" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                <span x-text="updating && saveType === 'draft' ? 'Saving Draft...' : 'Save as Draft'"></span>
-            </button>
-            <a href="{{ route('publish.presets.index', request()->only('user_id')) }}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Cancel</a>
-        </div>
-        <div x-show="editResult" x-cloak class="mt-2 rounded-lg px-3 py-2 text-sm" :class="editSuccess ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'">
-            <span x-text="editResult"></span>
-        </div>
-    </div>
-
+    {{-- Redirect to dedicated edit page --}}
+    <script>window.location.href = '{{ route("publish.presets.edit", $editingPreset->id) }}';</script>
     @else
     {{-- Header row --}}
     <div class="flex flex-wrap items-center gap-3">
@@ -223,7 +139,7 @@
                 <div class="flex items-start justify-between mb-2">
                     <h4 class="font-medium text-gray-800 break-words">{{ $preset->name }}</h4>
                     <div class="flex items-center gap-2 flex-shrink-0 ml-2">
-                        <a href="{{ route('publish.presets.index', array_merge(request()->only('user_id'), ['edit' => $preset->id])) }}" class="text-gray-400 hover:text-blue-600">
+                        <a href="{{ route('publish.presets.edit', $preset->id) }}" class="text-gray-400 hover:text-blue-600">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                         </a>
                         <button @click="deletePreset({{ $preset->id }}, '{{ addslashes($preset->name) }}')" class="text-gray-400 hover:text-red-600">
