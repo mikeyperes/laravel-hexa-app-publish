@@ -1489,6 +1489,8 @@ function publishPipeline() {
         smartEditTemplates: [],
         appliedSmartEdits: [],
         suggestedTitles: [],
+        suggestedCategories: [],
+        suggestedTags: [],
         selectedTitleIdx: 0,
         selectedCategories: [],
         selectedTags: [],
