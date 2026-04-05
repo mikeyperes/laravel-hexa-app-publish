@@ -109,6 +109,38 @@
         </div>
     </div>
 
+    {{-- ═══ WordPress Photo Filename Pattern ═══ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" x-data="{ pattern: '{{ \hexa_core\Models\Setting::getValue('wp_photo_filename_pattern', 'hexa_{draft_id}_{seo_name}') }}', saving: false, saved: false }">
+        <h3 class="font-semibold text-gray-800 mb-1">WordPress Photo Filename Pattern</h3>
+        <p class="text-sm text-gray-500 mb-3">How photos are named when uploaded to WordPress. The extension (.jpg, .png) is auto-appended.</p>
+
+        {{-- Available shortcodes --}}
+        <div class="bg-gray-50 rounded-lg p-3 mb-3">
+            <p class="text-xs font-semibold text-gray-600 mb-1.5">Available Shortcodes</p>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-1 text-xs">
+                <div><code class="bg-gray-200 px-1 rounded">{draft_id}</code> — Draft/article ID</div>
+                <div><code class="bg-gray-200 px-1 rounded">{seo_name}</code> — AI-generated SEO slug</div>
+                <div><code class="bg-gray-200 px-1 rounded">{index}</code> — Photo position (1, 2, 3...)</div>
+                <div><code class="bg-gray-200 px-1 rounded">{article_slug}</code> — Article title slugified</div>
+                <div><code class="bg-gray-200 px-1 rounded">{date}</code> — Current date (YYYYMMDD)</div>
+                <div><code class="bg-gray-200 px-1 rounded">{post_id}</code> — WordPress post ID (after publish)</div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <input type="text" x-model="pattern" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" placeholder="hexa_{draft_id}_{seo_name}">
+            <button @click="
+                saving = true; saved = false;
+                fetch('{{ route('publish.settings.master.save-setting') }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content }, body: JSON.stringify({ setting_key: 'wp_photo_filename_pattern', setting_value: pattern }) })
+                .then(r => r.json()).then(d => { saving = false; saved = d.success; setTimeout(() => saved = false, 3000); }).catch(() => saving = false);
+            " :disabled="saving" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+                <svg x-show="saving" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                <span x-text="saving ? 'Saving...' : (saved ? 'Saved!' : 'Save')"></span>
+            </button>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">Preview: <span class="font-mono text-gray-600" x-text="pattern.replace('{draft_id}', '33').replace('{seo_name}', 'college-sports-reform').replace('{index}', '1').replace('{article_slug}', 'trump-signs-executive-order').replace('{date}', '20260404').replace('{post_id}', '1234') + '.jpg'"></span></p>
+    </div>
+
     {{-- ═══ Master Spin Prompt ═══ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" x-data="{ savingPrompt: false, promptSaved: false }">
         <div class="px-5 py-4 border-b border-gray-200">

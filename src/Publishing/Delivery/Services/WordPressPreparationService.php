@@ -116,6 +116,7 @@ class WordPressPreparationService
         $imageUrls = array_unique($imgMatches[1] ?? []);
         $imageMap = [];
         $wpImages = [];
+        $imgIndex = 0;
 
         if (empty($imageUrls)) {
             $send('step', "No images to upload");
@@ -148,7 +149,13 @@ class WordPressPreparationService
 
             $slugBase = $seoName ?: Str::limit(Str::slug($altText ?: $articleTitle, '-'), 60, '');
             $ext = pathinfo(parse_url($imgUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
-            $properFilename = 'hexa_' . $draftId . '_' . $slugBase . '.' . $ext;
+            $filenamePattern = \hexa_core\Models\Setting::getValue('wp_photo_filename_pattern', 'hexa_{draft_id}_{seo_name}');
+            $properFilename = str_replace(
+                ['{draft_id}', '{seo_name}', '{index}', '{article_slug}', '{date}', '{post_id}'],
+                [$draftId, $slugBase, $imgIndex + 1, Str::limit(Str::slug($articleTitle, '-'), 40, ''), date('Ymd'), ''],
+                $filenamePattern
+            ) . '.' . $ext;
+            $imgIndex++;
 
             $send('step', "Uploading: {$properFilename}...");
 
