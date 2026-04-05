@@ -1420,7 +1420,7 @@
                 </div>
                 <div x-show="photoResults.length > 0" class="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <template x-for="(photo, pidx) in photoResults" :key="pidx">
-                        <div class="cursor-pointer rounded-lg overflow-hidden border-2 hover:border-purple-400 transition-colors" :class="insertingPhoto === photo ? 'border-purple-500 ring-2 ring-purple-200' : 'border-gray-200'" @click="insertingPhoto = photo; photoCaption = photo.alt || articleTitle; overlayPhotoAlt = ''; overlayPhotoCaption = ''; overlayPhotoFilename = '';">
+                        <div class="cursor-pointer rounded-lg overflow-hidden border-2 hover:border-purple-400 transition-colors" :class="insertingPhoto === photo ? 'border-purple-500 ring-2 ring-purple-200' : 'border-gray-200'" @click="insertingPhoto = photo; photoCaption = photo.alt || articleTitle; overlayPhotoAlt = 'Click Get Metadata to generate'; overlayPhotoCaption = 'Click Get Metadata to generate'; overlayPhotoFilename = 'auto'; overlayMetaGenerated = false;">
                             <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-48 object-cover">
                             <p class="text-[10px] text-gray-400 px-2 py-1 truncate" x-text="(photo.source || '') + ' — ' + (photo.width || '') + 'x' + (photo.height || '')"></p>
                         </div>
@@ -1442,7 +1442,7 @@
                             <svg class="w-3 h-3" :class="overlayMetaLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                             <span x-text="overlayMetaLoading ? 'Generating...' : 'Get Metadata'"></span>
                         </button>
-                        <button @click="photoCaption = overlayPhotoAlt || photoCaption; insertPhotoIntoEditor(); showPhotoOverlay = false" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 inline-flex items-center gap-1">
+                        <button @click="photoCaption = overlayPhotoAlt || photoCaption; insertPhotoIntoEditor(); showPhotoOverlay = false" :disabled="!overlayMetaGenerated" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                             Insert at Cursor
                         </button>
@@ -1570,6 +1570,7 @@ function publishPipeline() {
         overlayPhotoCaption: '',
         overlayPhotoFilename: '',
         overlayMetaLoading: false,
+        overlayMetaGenerated: false,
         _photoSuggestionIdx: null,
         expandedSuggestions: [],
         autoFetchingPhotos: false,
@@ -2455,6 +2456,7 @@ function publishPipeline() {
                     this.overlayPhotoAlt = data.alt;
                     this.overlayPhotoCaption = data.caption;
                     this.overlayPhotoFilename = data.filename;
+                    this.overlayMetaGenerated = true;
                     console.log('[Overlay Meta] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + data.filename + '"');
                     this.showNotification('success', 'Photo metadata generated');
                 } else {
