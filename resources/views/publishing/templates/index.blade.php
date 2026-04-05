@@ -43,6 +43,9 @@
                 </div>
                 <p class="text-xs text-gray-400 mb-1">{{ $template->account->name }}</p>
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ ($template->status ?? 'draft') === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800' }}">{{ ucfirst($template->status ?? 'draft') }}</span>
+                @if($template->is_default)
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">Default</span>
+                @endif
                 @if($template->article_type)
                     <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">{{ ucwords(str_replace('-', ' ', $template->article_type)) }}</span>
                 @endif
