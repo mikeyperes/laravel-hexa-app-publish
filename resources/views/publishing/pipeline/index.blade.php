@@ -860,7 +860,7 @@
                     <h5 class="text-sm font-semibold text-purple-800 mb-3">Featured Image</h5>
                     <div class="flex items-start gap-4">
                         {{-- Thumbnail --}}
-                        <div class="w-36 h-28 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
+                        <div class="w-48 h-36 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
                             <img x-show="featuredPhoto" x-cloak :src="featuredPhoto?.url_large || featuredPhoto?.url_thumb" class="w-full h-full object-cover">
                             <div x-show="!featuredPhoto && featuredSearching" x-cloak class="w-full h-full flex items-center justify-center bg-purple-100">
                                 <svg class="w-6 h-6 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -899,7 +899,7 @@
                             <template x-for="(photo, fidx) in featuredResults" :key="fidx">
                                 <div @click="featuredPhoto = photo" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-colors"
                                      :class="featuredPhoto && featuredPhoto.url_thumb === photo.url_thumb ? 'border-purple-500' : 'border-gray-200 hover:border-purple-300'">
-                                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-20 object-cover" loading="lazy">
+                                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-40 object-cover" loading="lazy">
                                 </div>
                             </template>
                         </div>
@@ -924,7 +924,7 @@
                                 <div class="p-3">
                                     <div class="flex items-start gap-3">
                                         {{-- Thumbnail --}}
-                                        <div class="w-28 h-20 flex-shrink-0 rounded overflow-hidden bg-gray-100">
+                                        <div class="w-40 h-28 flex-shrink-0 rounded overflow-hidden bg-gray-100">
                                             <img x-show="ps.autoPhoto" x-cloak :src="ps.autoPhoto?.url_thumb" class="w-full h-full object-cover">
                                             <div x-show="!ps.autoPhoto && autoFetchingPhotos" x-cloak class="w-full h-full flex items-center justify-center bg-purple-50">
                                                 <svg class="w-5 h-5 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -1001,7 +1001,7 @@
                             <div x-show="photoResults.length > 0" x-cloak class="grid grid-cols-3 md:grid-cols-5 gap-2">
                                 <template x-for="(photo, pidx) in photoResults" :key="pidx">
                                     <div class="relative group cursor-pointer" @click="insertingPhoto = photo; photoCaption = photo.alt || articleTitle">
-                                        <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-20 object-cover rounded-lg border border-gray-200">
+                                        <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-40 object-cover rounded-lg border border-gray-200">
                                         <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 rounded-lg transition-all flex items-center justify-center">
                                             <span class="text-white text-xs font-medium opacity-0 group-hover:opacity-100">Select</span>
                                         </div>
