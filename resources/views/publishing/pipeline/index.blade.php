@@ -1744,6 +1744,9 @@ function publishPipeline() {
                 if (state.featuredFilename) this.featuredFilename = state.featuredFilename;
                 if (state.resolvedPrompt) this.resolvedPrompt = state.resolvedPrompt;
                 if (state.articleDescription) this.articleDescription = state.articleDescription;
+                if (state.aiDetectionResults) this.aiDetectionResults = state.aiDetectionResults;
+                if (state.aiDetectionRan) this.aiDetectionRan = state.aiDetectionRan;
+                if (state.aiDetectionAllPass !== undefined) this.aiDetectionAllPass = state.aiDetectionAllPass;
                 // Find Articles state
                 if (state.sourceTab) this.sourceTab = state.sourceTab;
                 if (state.newsMode) this.newsMode = state.newsMode;
@@ -1834,16 +1837,38 @@ function publishPipeline() {
                 const restoredTemplate = state?.selectedTemplate || null;
 
                 Promise.all([this.loadUserPresets(), this.loadUserTemplates()]).then(() => {
+                    // Restore saved preset or auto-select default
                     if (restoredPresetId) {
                         this.selectedPresetId = String(restoredPresetId);
                         this.selectedPreset = this.presets.find(p => p.id == restoredPresetId) || restoredPreset;
-                        if (this.selectedPreset) this.loadPresetFields('preset', this.selectedPreset);
+                    } else {
+                        const defaultPreset = this.presets.find(p => p.is_default);
+                        if (defaultPreset) {
+                            this.selectedPresetId = String(defaultPreset.id);
+                            this.selectedPreset = defaultPreset;
+                        }
                     }
+                    if (this.selectedPreset) this.loadPresetFields('preset', this.selectedPreset);
+
+                    // Restore saved template or auto-select default
                     if (restoredTemplateId) {
                         this.selectedTemplateId = String(restoredTemplateId);
                         this.selectedTemplate = this.templates.find(t => t.id == restoredTemplateId) || restoredTemplate;
-                        if (this.selectedTemplate) this.loadPresetFields('template', this.selectedTemplate);
+                    } else {
+                        const defaultTemplate = this.templates.find(t => t.is_default);
+                        if (defaultTemplate) {
+                            this.selectedTemplateId = String(defaultTemplate.id);
+                            this.selectedTemplate = defaultTemplate;
+                        }
                     }
+                    if (this.selectedTemplate) this.loadPresetFields('template', this.selectedTemplate);
+
+                    // Auto-select site from default preset if no site saved
+                    if (this.selectedPreset?.default_site_id && !this.selectedSiteId) {
+                        this.selectedSiteId = String(this.selectedPreset.default_site_id);
+                        this.selectedSite = this.sites.find(s => s.id == this.selectedPreset.default_site_id) || null;
+                    }
+
                     finishRestore();
                 });
             } else {
@@ -1926,6 +1951,9 @@ function publishPipeline() {
                 featuredFilename: this.featuredFilename,
                 resolvedPrompt: this.resolvedPrompt,
                 articleDescription: this.articleDescription,
+                aiDetectionResults: this.aiDetectionResults,
+                aiDetectionRan: this.aiDetectionRan,
+                aiDetectionAllPass: this.aiDetectionAllPass,
                 // Find Articles state
                 sourceTab: this.sourceTab,
                 newsMode: this.newsMode,
