@@ -128,7 +128,7 @@ class ArticleGenerationService
      * @param string|null $changeRequest
      * @return string
      */
-    private function buildPrompt(array $sourceTexts, ?int $templateId, ?int $presetId, ?string $customPrompt, ?string $changeRequest): string
+    public function buildPrompt(array $sourceTexts, ?int $templateId, ?int $presetId, ?string $customPrompt, ?string $changeRequest): string
     {
         // Load master spin prompt
         $masterPrompt = PublishMasterSetting::where('type', 'master_spin_prompt')

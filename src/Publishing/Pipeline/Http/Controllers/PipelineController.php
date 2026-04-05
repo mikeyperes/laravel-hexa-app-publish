@@ -132,6 +132,33 @@ class PipelineController extends Controller
     }
 
     /**
+     * Preview the resolved prompt without spinning.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function previewPrompt(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'source_texts'   => 'nullable|array',
+            'source_texts.*' => 'nullable|string',
+            'template_id'    => 'nullable|integer',
+            'preset_id'      => 'nullable|integer',
+            'custom_prompt'  => 'nullable|string|max:5000',
+        ]);
+
+        $prompt = app(ArticleGenerationService::class)->buildPrompt(
+            $validated['source_texts'] ?? ['[Source articles will be inserted here]'],
+            $validated['template_id'] ?? null,
+            $validated['preset_id'] ?? null,
+            $validated['custom_prompt'] ?? null,
+            null
+        );
+
+        return response()->json(['success' => true, 'prompt' => $prompt]);
+    }
+
+    /**
      * Search users by name or email for type-ahead selectors.
      *
      * @param Request $request
