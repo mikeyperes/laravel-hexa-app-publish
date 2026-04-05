@@ -148,9 +148,9 @@
             <div class="flex items-center gap-3 max-w-md">
                 <select x-model="defaultSiteId" @change="saveDefaultSite()" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">-- No default --</option>
-                    <template x-for="s in enabledSites" :key="s.id">
-                        <option :value="String(s.id)" x-text="s.name + ' (' + s.url + ')'"></option>
-                    </template>
+                    @foreach($sites as $s)
+                        <option value="{{ $s->id }}">{{ $s->name }} ({{ $s->url }})</option>
+                    @endforeach
                 </select>
                 <span x-show="defaultSiteSaved" x-cloak x-transition class="text-xs text-green-600 font-medium">Saved</span>
                 <span x-show="defaultSiteError" x-cloak class="text-xs text-red-600" x-text="defaultSiteError"></span>
@@ -338,7 +338,7 @@
         </div>
 
         {{-- WordPress Sites Activity Log --}}
-        <div class="mt-4 bg-gray-900 rounded-lg border border-gray-700 p-4 font-mono text-xs max-h-48 overflow-y-auto">
+        <div id="site-activity-log" class="mt-4 bg-gray-900 rounded-lg border border-gray-700 p-4 font-mono text-xs max-h-48 overflow-y-auto">
             <div class="flex items-center justify-between mb-2">
                 <span class="text-gray-400 uppercase tracking-wide text-[10px] font-semibold">Activity Log</span>
                 <button x-show="siteLog.length > 0" x-cloak @click="siteLog = []" class="text-[10px] text-gray-500 hover:text-gray-300">Clear</button>
