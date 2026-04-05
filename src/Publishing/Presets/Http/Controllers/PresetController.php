@@ -6,7 +6,6 @@ use hexa_core\Http\Controllers\Controller;
 use hexa_core\Forms\Services\FormRegistryService;
 use hexa_core\Forms\Services\FormHydrationService;
 use hexa_core\Forms\Services\FormValidationService;
-use hexa_core\ListRegistry\Models\ListItem;
 use hexa_app_publish\Models\PublishPreset;
 use hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm;
 use Illuminate\Http\JsonResponse;
@@ -14,7 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * PublishPresetController — CRUD for article publishing presets.
+ * PublishPresetController — CRUD for WordPress publishing presets.
+ * Uses the core form definition system for create, edit, store, update.
  */
 class PresetController extends Controller
 {
@@ -25,10 +25,10 @@ class PresetController extends Controller
     ) {}
 
     /**
-     * List presets, optionally filtered by user. Load list values for dropdowns.
+     * List presets, optionally filtered by user.
      *
      * @param Request $request
-     * @return View
+     * @return View|JsonResponse
      */
     public function index(Request $request): View|JsonResponse
     {
@@ -44,64 +44,57 @@ class PresetController extends Controller
             return response()->json($presets);
         }
 
-        $editingPreset = null;
-        if ($request->filled('edit')) {
-            $editingPreset = PublishPreset::with('user')->find($request->input('edit'));
-        }
-
         return view('app-publish::publishing.presets.index', [
-            'presets'          => $presets,
-            'editingPreset'    => $editingPreset,
-            'tones'            => ListItem::getValues('tones'),
-            'imagePreferences' => ListItem::getValues('image_preferences'),
-            'imageLayouts'     => ListItem::getValues('image_layout_rules'),
-            'publishActions'   => [
-                'publish_immediate' => 'Publish Immediately',
-                'draft_local'       => 'Save as Local Draft',
-                'draft_wordpress'   => 'Save as WordPress Draft',
-                'schedule'          => 'Schedule for Later',
-            ],
+            'presets' => $presets,
         ]);
     }
 
     /**
-     * Create a new preset.
+     * Show create form — uses form-definition system.
+     *
+     * @param Request $request
+     * @return View
+     */
+    public function create(Request $request): View
+    {
+        $form = $this->resolveForm('create');
+
+        return view('app-publish::publishing.presets.create', [
+            'form' => $form,
+            'formValues' => WordPressPresetForm::values(null, [
+                'user_id' => $request->input('user_id'),
+            ]),
+        ]);
+    }
+
+    /**
+     * Store a new preset — uses form registry + validation + dehydration.
      *
      * @param Request $request
      * @return JsonResponse
      */
     public function store(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name'                   => 'required|string|max:255',
-            'status'                 => 'nullable|in:draft,active',
-            'is_default'             => 'nullable|boolean',
-            'user_id'                => 'nullable|integer|exists:users,id',
-            'default_site_id'        => 'nullable|integer',
-            'follow_links'           => 'nullable|in:follow,nofollow',
-            'tone'                   => 'nullable|string|max:100',
-            'image_preference'       => 'nullable|string|max:100',
-            'default_publish_action' => 'nullable|in:publish_immediate,draft_local,draft_wordpress,schedule',
-            'default_category_count' => 'nullable|integer|min:0|max:20',
-            'default_tag_count'      => 'nullable|integer|min:0|max:50',
-            'image_layout'           => 'nullable|string|max:100',
-        ]);
+        $form = $this->resolveForm('create');
+        $payload = $this->normalizedFormPayload($request, $form);
+        $validated = $this->formValidation->validate($payload, $form, ['mode' => 'create', 'context' => 'create']);
+        $data = $this->formHydration->dehydrate($form, $validated);
+        $data['status'] = $this->validatedStatus($request, 'draft');
+        $data['user_id'] = $data['user_id'] ?? auth()->id();
 
-        $validated['user_id'] = $validated['user_id'] ?? auth()->id();
-        $validated['status'] = $validated['status'] ?? 'draft';
-
-        if (!empty($validated['is_default'])) {
-            PublishPreset::where('user_id', $validated['user_id'])->update(['is_default' => false]);
+        if (!empty($data['is_default'])) {
+            PublishPreset::where('user_id', $data['user_id'])->update(['is_default' => false]);
         }
 
-        $preset = PublishPreset::create($validated);
+        $preset = PublishPreset::create($data);
 
         hexaLog('publish', 'preset_created', "Preset created: {$preset->name}");
 
         return response()->json([
             'success' => true,
             'message' => "Preset '{$preset->name}' created successfully.",
-            'preset'  => $preset->load('user'),
+            'preset' => $preset->load('user'),
+            'redirect' => route('publish.presets.edit', $preset->id),
         ]);
     }
 
@@ -117,12 +110,12 @@ class PresetController extends Controller
 
         return response()->json([
             'success' => true,
-            'preset'  => $preset,
+            'preset' => $preset,
         ]);
     }
 
     /**
-     * Edit form for a preset — uses the form definition system.
+     * Edit form — uses form-definition system.
      *
      * @param int $id
      * @return View
@@ -140,7 +133,7 @@ class PresetController extends Controller
     }
 
     /**
-     * Update a preset.
+     * Update a preset — uses form registry + validation + dehydration.
      *
      * @param Request $request
      * @param int $id
@@ -149,27 +142,23 @@ class PresetController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $preset = PublishPreset::findOrFail($id);
-
-        $validated = $request->validate([
-            'name'                   => 'required|string|max:255',
-            'status'                 => 'nullable|in:draft,active',
-            'is_default'             => 'nullable|boolean',
-            'user_id'                => 'nullable|integer|exists:users,id',
-            'default_site_id'        => 'nullable|integer',
-            'follow_links'           => 'nullable|in:follow,nofollow',
-            'tone'                   => 'nullable|string|max:100',
-            'image_preference'       => 'nullable|string|max:100',
-            'default_publish_action' => 'nullable|in:publish_immediate,draft_local,draft_wordpress,schedule',
-            'default_category_count' => 'nullable|integer|min:0|max:20',
-            'default_tag_count'      => 'nullable|integer|min:0|max:50',
-            'image_layout'           => 'nullable|string|max:100',
+        $form = $this->resolveForm('edit', $preset);
+        $payload = $this->normalizedFormPayload($request, $form);
+        $validated = $this->formValidation->validate($payload, $form, [
+            'mode' => 'edit',
+            'context' => 'edit',
+            'record' => $preset,
         ]);
+        $data = $this->formHydration->dehydrate($form, $validated);
+        $data['status'] = $this->validatedStatus($request, $preset->status ?? 'draft');
 
-        if (!empty($validated['is_default'])) {
-            PublishPreset::where('user_id', $preset->user_id)->where('id', '!=', $preset->id)->update(['is_default' => false]);
+        if (!empty($data['is_default'])) {
+            PublishPreset::where('user_id', $preset->user_id)
+                ->where('id', '!=', $preset->id)
+                ->update(['is_default' => false]);
         }
 
-        $preset->update($validated);
+        $preset->update($data);
 
         hexaLog('publish', 'preset_updated', "Preset updated: {$preset->name}");
 
@@ -180,7 +169,7 @@ class PresetController extends Controller
     }
 
     /**
-     * Toggle a preset as default for its user. Unsets all other defaults for that user.
+     * Toggle a preset as default for its user.
      *
      * @param int $id
      * @return JsonResponse
@@ -195,7 +184,6 @@ class PresetController extends Controller
             return response()->json(['success' => true, 'message' => "'{$preset->name}' is no longer the default.", 'is_default' => false]);
         }
 
-        // Unset all other defaults for this user
         PublishPreset::where('user_id', $preset->user_id)->where('id', '!=', $preset->id)->update(['is_default' => false]);
         $preset->update(['is_default' => true]);
 
@@ -225,7 +213,7 @@ class PresetController extends Controller
     }
 
     /**
-     * Resolve the WordPress preset form definition.
+     * Resolve the form definition from the registry.
      *
      * @param string $mode
      * @param PublishPreset|null $preset
@@ -238,5 +226,46 @@ class PresetController extends Controller
             'context' => $mode,
             'record' => $preset,
         ]);
+    }
+
+    /**
+     * Normalize form payload — handle missing booleans/arrays.
+     * Matches TemplateController::normalizedFormPayload() exactly.
+     *
+     * @param Request $request
+     * @param mixed $form
+     * @return array
+     */
+    protected function normalizedFormPayload(Request $request, $form): array
+    {
+        $payload = $request->all();
+
+        foreach ($form->getFields() as $field) {
+            if (($field->isMultiple() || in_array($field->type(), ['checkbox_group', 'multiselect', 'array'], true))
+                && !$request->has($field->name())
+            ) {
+                $payload[$field->name()] = [];
+            }
+
+            if (in_array($field->type(), ['boolean', 'toggle'], true) && !$request->has($field->name())) {
+                $payload[$field->name()] = false;
+            }
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Validate and return the status field.
+     *
+     * @param Request $request
+     * @param string $default
+     * @return string
+     */
+    protected function validatedStatus(Request $request, string $default = 'draft'): string
+    {
+        $status = $request->input('status', $default);
+
+        return in_array($status, ['draft', 'active'], true) ? $status : $default;
     }
 }

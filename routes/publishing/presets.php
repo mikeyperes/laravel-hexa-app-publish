@@ -3,6 +3,7 @@
 use hexa_app_publish\Publishing\Presets\Http\Controllers\PresetController;
 
 Route::get('/publishing/presets', [PresetController::class, 'index'])->name('publish.presets.index');
+Route::get('/publishing/presets/create', [PresetController::class, 'create'])->name('publish.presets.create');
 Route::post('/publishing/presets', [PresetController::class, 'store'])->name('publish.presets.store');
 Route::get('/publishing/presets/{id}', [PresetController::class, 'show'])->name('publish.presets.show');
 Route::get('/publishing/presets/{id}/edit', [PresetController::class, 'edit'])->name('publish.presets.edit');

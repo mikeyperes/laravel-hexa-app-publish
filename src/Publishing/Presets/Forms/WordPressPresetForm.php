@@ -3,6 +3,7 @@
 namespace hexa_app_publish\Publishing\Presets\Forms;
 
 use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
+use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_core\Forms\Definitions\FieldDefinition;
 use hexa_core\Forms\Definitions\FormDefinition;
 use hexa_core\Forms\Services\FormRegistryService;
@@ -52,6 +53,15 @@ class WordPressPresetForm
                     ->placeholder('e.g. Standard Editorial')
                     ->columns('md:col-span-2')
                     ->meta(['section' => 'basic'])
+                    ->contexts(['create', 'edit']),
+
+                FieldDefinition::make('default_site_id', 'select', 'Default WordPress Site')
+                    ->rules(['nullable', 'integer'])
+                    ->options(fn () => self::siteOptions())
+                    ->meta([
+                        'empty_label' => '— No default site —',
+                        'section' => 'basic',
+                    ])
                     ->contexts(['create', 'edit']),
 
                 FieldDefinition::make('follow_links', 'select', 'Follow Links')
@@ -217,6 +227,18 @@ class WordPressPresetForm
     protected static function userOptions(): array
     {
         return User::orderBy('name')->pluck('name', 'id')->map(fn ($v) => (string) $v)->toArray();
+    }
+
+    /**
+     * @return array
+     */
+    protected static function siteOptions(): array
+    {
+        return PublishSite::orderBy('name')
+            ->get(['id', 'name', 'url'])
+            ->pluck('name', 'id')
+            ->map(fn ($name, $id) => (string) $name)
+            ->toArray();
     }
 
     /**
