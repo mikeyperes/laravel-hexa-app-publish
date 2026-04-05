@@ -1,12 +1,13 @@
 {{--
     Shared preset fields JS mixin.
-    Include before any Alpine component that uses preset fields.
+    Field types are auto-detected from the data — NO hardcoded field names.
 
-    Usage:
-        1. @include('app-publish::partials.preset-fields-mixin')
-        2. In Alpine: ...presetFieldsMixin('template'), ...presetFieldsMixin('preset')
-        3. Call: this.loadPresetFields('template', templateData)
-        4. Read: this.getPresetValue('template', 'tone')
+    Type detection:
+    - boolean values → toggle switch
+    - integer values → number input
+    - array values → comma-separated text input
+    - string > 100 chars → textarea
+    - string ≤ 100 chars → text input
 --}}
 <script>
     function presetFieldsMixin(prefix) {
@@ -14,52 +15,59 @@
         data[prefix + '_defaults'] = {};
         data[prefix + '_overrides'] = {};
         data[prefix + '_dirty'] = {};
-        data[prefix + '_expanded'] = false;
+        data[prefix + '_types'] = {};
         return data;
     }
 
-    /**
-     * Load preset/template fields into the mixin state.
-     * Call from your Alpine component: this.loadPresetFields('template', templateObject)
-     *
-     * @param {string} prefix - 'template' or 'preset'
-     * @param {object} data - The template/preset record with all fields
-     * @param {array} fields - Which fields to expose (null = auto-detect)
-     */
     function _loadPresetFields(component, prefix, data, fields) {
         if (!data) {
             component[prefix + '_defaults'] = {};
             component[prefix + '_overrides'] = {};
             component[prefix + '_dirty'] = {};
+            component[prefix + '_types'] = {};
             return;
         }
 
-        // Auto-detect fields: exclude meta, FKs, relationships, timestamps
         const excludeKeys = ['id', 'created_at', 'updated_at', 'deleted_at', 'name', 'status', 'is_default',
             'publish_account_id', 'user_id', 'created_by', 'description',
             'default_site_id', 'default_template_id', 'default_preset_id',
             'account', 'user', 'creator', 'site', 'campaigns', 'articles', 'template', 'preset'];
 
         const defaults = {};
+        const types = {};
         const keys = fields || Object.keys(data).filter(k => {
             if (excludeKeys.includes(k)) return false;
             if (k.endsWith('_id')) return false;
             const val = data[k];
             if (val === null || val === undefined || val === '') return false;
-            if (typeof val === 'object' && !Array.isArray(val)) return false; // Skip relationship objects
+            if (typeof val === 'object' && !Array.isArray(val)) return false;
             return true;
         });
 
         keys.forEach(k => {
-            defaults[k] = data[k];
+            const val = data[k];
+            defaults[k] = val;
+            // Auto-detect type from value
+            if (typeof val === 'boolean') {
+                types[k] = 'boolean';
+            } else if (Array.isArray(val)) {
+                types[k] = 'array';
+            } else if (typeof val === 'number' || (typeof val === 'string' && /^\d+$/.test(val) && k.match(/count|min|max|links|photos/i))) {
+                types[k] = 'number';
+                defaults[k] = parseInt(val) || 0;
+            } else if (typeof val === 'string' && val.length > 100) {
+                types[k] = 'textarea';
+            } else {
+                types[k] = 'text';
+            }
         });
 
         component[prefix + '_defaults'] = defaults;
         component[prefix + '_overrides'] = {};
         component[prefix + '_dirty'] = {};
+        component[prefix + '_types'] = types;
     }
 
-    // These are meant to be mixed into Alpine components via methods
     const presetFieldsMethods = {
         loadPresetFields(prefix, data, fields) {
             _loadPresetFields(this, prefix, data, fields);
@@ -76,8 +84,10 @@
         isPresetDirty(prefix, field) {
             return !!this[prefix + '_dirty']?.[field];
         },
+        getPresetFieldType(prefix, field) {
+            return this[prefix + '_types']?.[field] || 'text';
+        },
         getPresetOverrides(prefix) {
-            // Returns merged: defaults + overrides
             const result = { ...this[prefix + '_defaults'] };
             const overrides = this[prefix + '_overrides'] || {};
             Object.keys(overrides).forEach(k => { result[k] = overrides[k]; });

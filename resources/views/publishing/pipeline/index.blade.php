@@ -899,7 +899,7 @@
                             <template x-for="(photo, fidx) in featuredResults" :key="fidx">
                                 <div @click="featuredPhoto = photo" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-colors"
                                      :class="featuredPhoto && featuredPhoto.url_thumb === photo.url_thumb ? 'border-purple-500' : 'border-gray-200 hover:border-purple-300'">
-                                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-40 object-cover" loading="lazy">
+                                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-60 object-cover" loading="lazy">
                                 </div>
                             </template>
                         </div>
@@ -998,7 +998,7 @@
                             <div x-show="photoResults.length > 0" x-cloak class="grid grid-cols-3 md:grid-cols-5 gap-2">
                                 <template x-for="(photo, pidx) in photoResults" :key="pidx">
                                     <div class="relative group cursor-pointer" @click="insertingPhoto = photo; photoCaption = photo.alt || articleTitle">
-                                        <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-40 object-cover rounded-lg border border-gray-200">
+                                        <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-60 object-cover rounded-lg border border-gray-200">
                                         <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 rounded-lg transition-all flex items-center justify-center">
                                             <span class="text-white text-xs font-medium opacity-0 group-hover:opacity-100">Select</span>
                                         </div>
