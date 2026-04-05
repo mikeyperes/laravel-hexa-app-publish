@@ -1634,6 +1634,7 @@ function publishPipeline() {
         ...presetFieldsMethods,
         savingDraft: false,
         _draftSaveTimer: null,
+        filenamePattern: @json($filenamePattern ?? 'hexa_{draft_id}_{seo_name}'),
 
         // Notification
         notification: { show: false, type: 'success', message: '' },
@@ -2391,9 +2392,10 @@ function publishPipeline() {
                 if (data.success) {
                     this.photoSuggestions[idx].alt_text = data.alt;
                     this.photoSuggestions[idx].caption = data.caption;
-                    this.photoSuggestions[idx].suggestedFilename = data.filename;
-                    console.log('[Photo Meta #' + idx + '] OLD: alt="' + oldAlt + '" caption="' + oldCaption + '" file="' + oldFilename + '"');
-                    console.log('[Photo Meta #' + idx + '] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + data.filename + '"');
+                    // Filename comes from settings pattern, not AI
+                    this.photoSuggestions[idx].suggestedFilename = this.buildFilename(ps.search_term, idx + 1);
+                    console.log('[Photo Meta #' + idx + '] OLD: alt="' + oldAlt + '" caption="' + oldCaption + '"');
+                    console.log('[Photo Meta #' + idx + '] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + this.photoSuggestions[idx].suggestedFilename + '"');
                     this.showNotification('success', 'Metadata refreshed for photo #' + (idx + 1));
                 } else {
                     console.error('[Photo Meta #' + idx + '] Error:', data.message || 'Unknown error');
@@ -2426,9 +2428,10 @@ function publishPipeline() {
                 if (data.success) {
                     this.featuredAlt = data.alt;
                     this.featuredCaption = data.caption;
-                    this.featuredFilename = data.filename;
-                    console.log('[Featured Meta] OLD: alt="' + oldAlt + '" caption="' + oldCaption + '" file="' + oldFilename + '"');
-                    console.log('[Featured Meta] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + data.filename + '"');
+                    // Filename comes from settings pattern, not AI
+                    this.featuredFilename = this.buildFilename(this.featuredImageSearch, 0);
+                    console.log('[Featured Meta] OLD: alt="' + oldAlt + '" caption="' + oldCaption + '"');
+                    console.log('[Featured Meta] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + this.featuredFilename + '"');
                     this.showNotification('success', 'Featured image metadata refreshed');
                 } else {
                     console.error('[Featured Meta] Error:', data.message || 'Unknown error');
@@ -2459,9 +2462,10 @@ function publishPipeline() {
                 if (data.success) {
                     this.overlayPhotoAlt = data.alt;
                     this.overlayPhotoCaption = data.caption;
-                    this.overlayPhotoFilename = data.filename;
+                    // Filename comes from settings pattern, not AI
+                    this.overlayPhotoFilename = this.buildFilename(this.photoSearch || this.insertingPhoto?.alt, 0);
                     this.overlayMetaGenerated = true;
-                    console.log('[Overlay Meta] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + data.filename + '"');
+                    console.log('[Overlay Meta] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + this.overlayPhotoFilename + '"');
                     this.showNotification('success', 'Photo metadata generated');
                 } else {
                     console.error('[Overlay Meta] Error:', data.message || 'Unknown error');
@@ -2984,6 +2988,7 @@ function publishPipeline() {
                     if (photos.length > 0) {
                         this.photoSuggestions[idx].autoPhoto = photos[0];
                         this.photoSuggestions[idx].searchResults = photos;
+                        this.photoSuggestions[idx].suggestedFilename = this.buildFilename(ps.search_term, idx + 1);
                         this.updatePlaceholderInEditor(idx);
                     } else {
                         this.updatePlaceholderError(idx, 'No photos found');
@@ -3046,6 +3051,19 @@ function publishPipeline() {
 
         _slugify(str) {
             return String(str || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 80);
+        },
+
+        buildFilename(searchTerm, index) {
+            const slug = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 60);
+            const now = new Date();
+            const dateStr = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+            return (this.filenamePattern || 'hexa_{draft_id}_{seo_name}')
+                .replace('{draft_id}', this.draftId || '0')
+                .replace('{seo_name}', slug(searchTerm))
+                .replace('{index}', String(index || 1))
+                .replace('{article_slug}', slug(this.articleTitle))
+                .replace('{date}', dateStr)
+                .replace('{post_id}', '0');
         },
 
         countWordsFromHtml(html) {

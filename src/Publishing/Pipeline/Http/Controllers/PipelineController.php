@@ -130,6 +130,7 @@ class PipelineController extends Controller
             'draftState'     => $draftState,
             'templateSchema' => \hexa_app_publish\Publishing\Templates\Models\PublishTemplate::getFieldSchema(),
             'presetSchema'   => \hexa_app_publish\Publishing\Presets\Models\PublishPreset::getFieldSchema(),
+            'filenamePattern' => \hexa_core\Models\Setting::getValue('wp_photo_filename_pattern', 'hexa_{draft_id}_{seo_name}'),
         ]);
     }
 
