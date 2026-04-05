@@ -1696,6 +1696,7 @@ function publishPipeline() {
                 if (state.selectedSiteId) {
                     this.selectedSiteId = String(state.selectedSiteId);
                     this.selectedSite = state.selectedSite || null;
+                    this.authorsLoading = true;
                     this.siteConn.status = state.siteConnStatus ?? null;
                     this.siteConn.message = state.siteConnMessage || '';
                     if (state.siteConnLog) this.siteConn.log = state.siteConnLog;
@@ -1766,6 +1767,7 @@ function publishPipeline() {
             if (draftState.selectedSiteId) {
                 this.selectedSiteId = String(draftState.selectedSiteId);
                 this.selectedSite = this.sites.find(s => s.id == draftState.selectedSiteId) || draftState.selectedSite || null;
+                this.authorsLoading = true;
                 this.siteConn.status = draftState.siteConnStatus ?? this.siteConn.status;
                 if (draftState.siteConnStatus === true) {
                     this.siteConn.message = 'Loaded from saved draft.';
