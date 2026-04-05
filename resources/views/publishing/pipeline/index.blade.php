@@ -1105,8 +1105,9 @@
                                     <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
                                 </template>
                             </select>
-                            <svg x-show="siteConn.testing" x-cloak class="w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                            <span x-show="!siteConn.testing && siteConn.authors.length > 0" x-cloak class="text-xs text-gray-400" x-text="siteConn.authors.length + ' authors'"></span>
+                            <svg x-show="siteConn.testing || authorsLoading" x-cloak class="w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <span x-show="authorsLoading" x-cloak class="text-xs text-blue-500">Loading authors...</span>
+                            <span x-show="!siteConn.testing && !authorsLoading && siteConn.authors.length > 0" x-cloak class="text-xs text-gray-400" x-text="siteConn.authors.length + ' authors'"></span>
                             <a x-show="publishAuthor && selectedSite" x-cloak :href="(selectedSite?.url || '').replace(/\/$/, '') + '/author/' + publishAuthor + '/'" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 inline-flex items-center gap-0.5" title="View author on WordPress">
                                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                             </a>
@@ -1601,6 +1602,7 @@ function publishPipeline() {
         publishAction: 'draft_local',
         publishAuthor: '',
         publishAuthorSource: '',
+        authorsLoading: false,
         scheduleDate: '',
         publishing: false,
         publishResult: null,
@@ -1804,6 +1806,7 @@ function publishPipeline() {
                 if (shouldPersistRestoredDraftState) this.autoSaveDraft();
                 // Auto-load authors and default author for selected site
                 if (this.selectedSiteId) {
+                    this.authorsLoading = true;
                     fetch('/publish/sites/' + this.selectedSiteId + '/authors', {
                         headers: { 'Accept': 'application/json' }
                     }).then(r => r.json()).then(d => {
@@ -1812,7 +1815,8 @@ function publishPipeline() {
                             this.publishAuthor = d.default_author;
                             this.publishAuthorSource = 'profile';
                         }
-                    }).catch(() => {});
+                        this.authorsLoading = false;
+                    }).catch(() => { this.authorsLoading = false; });
                 }
                 // Always load prompt preview — default prompt exists even without template/preset
                 this.refreshPromptPreview();
