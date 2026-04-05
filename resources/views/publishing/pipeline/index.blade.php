@@ -1097,7 +1097,7 @@
                 </div>
 
                 {{-- Create Article Activity Log (collapsible at bottom) --}}
-                <div x-show="spinLog.length > 0" x-cloak class="mt-4" x-data="{ showLog: false }">
+                <div x-show="$root.spinLog && $root.spinLog.length > 0" x-cloak class="mt-4" x-data="{ showLog: false }">
                     <button @click="showLog = !showLog" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
                         <svg class="w-3 h-3 transition-transform" :class="showLog ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                         Activity Log (<span x-text="$root.spinLog.length"></span> entries)
@@ -1698,6 +1698,11 @@ function publishPipeline() {
                 this.openSteps = [6];
                 this.completedSteps = Array.from(new Set([...(this.completedSteps || []), 1, 2, 3, 4, 5]));
             }
+
+            // Auto-complete steps based on restored data
+            if (this.selectedUser && !this.completedSteps.includes(1)) this.completedSteps.push(1);
+            if (this.selectedSiteId && !this.completedSteps.includes(2)) this.completedSteps.push(2);
+            if (this.sources.length > 0 && !this.completedSteps.includes(3)) this.completedSteps.push(3);
 
             const finishRestore = () => {
                 this._restoring = false;
