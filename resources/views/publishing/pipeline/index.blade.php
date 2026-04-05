@@ -139,6 +139,32 @@
                 @include('app-publish::partials.preset-fields', ['prefix' => 'preset', 'label' => 'WordPress Preset Settings'])
             </div>
 
+            {{-- Article Preset (beside WordPress Template) --}}
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h5 class="text-sm font-semibold text-gray-700">Article Preset</h5>
+                    <button @click="editingTemplate = !editingTemplate" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingTemplate ? 'Cancel' : 'Edit'"></button>
+                </div>
+                <div x-show="!editingTemplate && selectedTemplate" class="text-sm space-y-1">
+                    <p class="font-medium text-gray-800" x-text="selectedTemplate?.name || 'None'"></p>
+                    <p class="text-xs text-gray-500"><span class="text-gray-400">Engine:</span> <span x-text="selectedTemplate?.ai_engine || '—'"></span> &middot; <span class="text-gray-400">Tone:</span> <span x-text="Array.isArray(selectedTemplate?.tone) ? selectedTemplate.tone.join(', ') : (selectedTemplate?.tone || '—')"></span> &middot; <span class="text-gray-400">Words:</span> <span x-text="(selectedTemplate?.word_count_min || '—') + '-' + (selectedTemplate?.word_count_max || '—')"></span></p>
+                </div>
+                <div x-show="!editingTemplate && !selectedTemplate" class="text-xs text-gray-400">No article preset selected — using defaults.</div>
+                <div x-show="editingTemplate" x-cloak class="mt-2">
+                    <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
+                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Loading...
+                    </div>
+                    <select x-show="!templatesLoading" x-model="selectedTemplateId" @change="selectTemplate(); editingTemplate = false; refreshPromptPreview()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">-- No preset --</option>
+                        <template x-for="t in templates" :key="t.id">
+                            <option :value="t.id" x-text="t.name"></option>
+                        </template>
+                    </select>
+                </div>
+                @include('app-publish::partials.preset-fields', ['prefix' => 'template', 'label' => 'Article Preset Settings'])
+            </div>
+
             {{-- Website selection --}}
             <div>
                 <label class="block text-xs text-gray-500 mb-1">WordPress Site</label>
@@ -177,7 +203,7 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 3: Find Articles
+         Step 3: Find Articles / Generate Content
          ══════════════════════════════════════════════════════════════ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 3, 'opacity-50': !isStepAccessible(3) }">
         <button @click="toggleStep(3)" :disabled="!isStepAccessible(3)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
@@ -187,12 +213,22 @@
                     <template x-if="completedSteps.includes(3)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(3)"><span>3</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Find Articles</span>
+                <span class="font-semibold text-gray-800" x-text="isGenerateMode ? 'Generate Content' : 'Find Articles'"></span>
                 <span x-show="sources.length > 0" x-cloak class="text-sm text-green-600" x-text="sources.length + ' source(s)'"></span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(3) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <div x-show="openSteps.includes(3)" x-cloak x-collapse class="px-4 pb-4">
+
+            {{-- Generate Content mode (for press-release, listicle, expert-article, pr-full-feature) --}}
+            <div x-show="isGenerateMode" x-cloak class="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                <p class="text-sm text-gray-500 mb-2">Content generation for <span class="font-medium text-gray-700" x-text="selectedTemplate?.article_type?.replace(/-/g, ' ') || 'this article type'"></span></p>
+                <p class="text-xs text-gray-400">This feature is under development. The content generation process will be customized based on the selected article type.</p>
+                <button @click="completeStep(3); completeStep(4); openStep(5)" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Skip to AI & Spin</button>
+            </div>
+
+            {{-- Find Articles mode (for editorial, opinion, news-report, local-news) --}}
+            <div x-show="!isGenerateMode">
             {{-- Tabs --}}
             <div class="flex border-b border-gray-200 mb-4">
                 <button @click="sourceTab = 'paste'" :class="sourceTab === 'paste' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">Paste Links</button>
@@ -345,6 +381,7 @@
             <div class="mt-3" x-show="sources.length > 0" x-cloak>
                 <button @click="completeStep(3); openStep(4)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to Fetch &rarr;</button>
             </div>
+            </div>{{-- end !isGenerateMode --}}
         </div>
     </div>
 
@@ -525,31 +562,7 @@
         </button>
         <div x-show="openSteps.includes(5)" x-cloak x-collapse class="px-4 pb-4">
 
-            {{-- AI Template (auto-loaded, edit to change) --}}
-            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-                <div class="flex items-center justify-between mb-2">
-                    <h5 class="text-sm font-semibold text-gray-700">AI Template</h5>
-                    <button @click="editingTemplate = !editingTemplate" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingTemplate ? 'Cancel' : 'Edit'"></button>
-                </div>
-                <div x-show="!editingTemplate && selectedTemplate" class="text-sm space-y-1">
-                    <p class="font-medium text-gray-800" x-text="selectedTemplate?.name || 'None'"></p>
-                    <p class="text-xs text-gray-500"><span class="text-gray-400">Engine:</span> <span x-text="selectedTemplate?.ai_engine || '—'"></span> &middot; <span class="text-gray-400">Tone:</span> <span x-text="Array.isArray(selectedTemplate?.tone) ? selectedTemplate.tone.join(', ') : (selectedTemplate?.tone || '—')"></span> &middot; <span class="text-gray-400">Words:</span> <span x-text="(selectedTemplate?.word_count_min || '—') + '-' + (selectedTemplate?.word_count_max || '—')"></span></p>
-                </div>
-                <div x-show="!editingTemplate && !selectedTemplate" class="text-xs text-gray-400">No AI template selected — using defaults.</div>
-                <div x-show="editingTemplate" x-cloak class="mt-2">
-                    <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
-                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        Loading...
-                    </div>
-                    <select x-show="!templatesLoading" x-model="selectedTemplateId" @change="selectTemplate(); editingTemplate = false; refreshPromptPreview()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">-- No template --</option>
-                        <template x-for="t in templates" :key="t.id">
-                            <option :value="t.id" x-text="t.name"></option>
-                        </template>
-                    </select>
-                </div>
-                @include('app-publish::partials.preset-fields', ['prefix' => 'template', 'label' => 'AI Template Settings'])
-            </div>
+            {{-- Article Preset moved to Step 2 --}}
             <div class="flex flex-wrap items-end gap-3 mb-4">
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">AI Model</label>
@@ -1159,7 +1172,7 @@
                         </button>
                     </div>
                     <div class="flex items-center gap-4 text-xs text-gray-400">
-                        <a href="{{ route('publish.templates.index') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">AI Templates <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                        <a href="{{ route('publish.templates.index') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">Article Presets <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
                         <a href="{{ route('publish.smart-edits.index') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">Smart Edits <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
                         <a href="{{ route('publish.settings.master') }}" target="_blank" class="hover:text-blue-600 inline-flex items-center gap-1">Settings <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
                     </div>
@@ -1248,7 +1261,7 @@
                 <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Publish Action</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? 'Publish immediately' : (publishAction === 'draft_wp' ? 'WordPress draft' : (publishAction === 'future' ? 'Scheduled' : 'Local draft'))"></p></div>
 
                 {{-- Template & Preset --}}
-                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">AI Template</span><p class="text-sm text-gray-800" x-text="selectedTemplate ? selectedTemplate.name : 'Default'"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Article Preset</span><p class="text-sm text-gray-800" x-text="selectedTemplate ? selectedTemplate.name : 'Default'"></p></div>
                 <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">WP Preset</span><p class="text-sm text-gray-800" x-text="selectedPreset ? selectedPreset.name : 'None'"></p></div>
                 <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">AI Model</span><p class="text-sm font-mono text-gray-800" x-text="aiModel"></p></div>
 
@@ -1550,7 +1563,13 @@ function publishPipeline() {
         currentStep: 1,
         openSteps: [1],
         completedSteps: [],
-        stepLabels: ['User', 'Website & Template', 'Find Articles', 'Fetch Articles from Source', 'AI & Spin', 'Create Article', 'Review & Publish'],
+        get isGenerateMode() {
+            const genTypes = ['press-release', 'listicle', 'expert-article', 'pr-full-feature'];
+            return genTypes.includes(this.selectedTemplate?.article_type);
+        },
+        get stepLabels() {
+            return ['User', 'Website & Template', this.isGenerateMode ? 'Generate Content' : 'Find Articles', 'Fetch Articles from Source', 'AI & Spin', 'Create Article', 'Review & Publish'];
+        },
 
         // Step 1 — User
         selectedUser: null,

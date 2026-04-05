@@ -1,7 +1,7 @@
 {{-- Templates list --}}
 @extends('layouts.app')
-@section('title', 'Templates')
-@section('header', 'Article Templates')
+@section('title', 'Article Presets')
+@section('header', 'Article Presets')
 
 @section('content')
 <div class="space-y-4">
