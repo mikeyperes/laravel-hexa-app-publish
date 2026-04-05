@@ -2328,6 +2328,7 @@ function publishPipeline() {
                     this.featuredAlt = data.alt;
                     this.featuredCaption = data.caption;
                     this.featuredFilename = data.filename;
+                }
             } catch (e) {}
             this.featuredRefreshingMeta = false;
         },
