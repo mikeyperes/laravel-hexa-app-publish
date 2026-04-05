@@ -49,6 +49,27 @@
                         rows="3" class="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm bg-white font-mono"></textarea>
                 </template>
 
+                {{-- Checkbox group (multi-select with predefined options) --}}
+                <template x-if="getPresetFieldType('{{ $p }}', field) === 'checkbox'">
+                    <div class="flex flex-wrap gap-3">
+                        <template x-for="[optVal, optLabel] in Object.entries(getPresetFieldOptions('{{ $p }}', field) || {})" :key="optVal">
+                            <label class="inline-flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer">
+                                <input type="checkbox"
+                                    :checked="(getPresetValue('{{ $p }}', field) || []).includes(optVal)"
+                                    @change="
+                                        let arr = [...({{ $p }}_overrides[field] || getPresetValue('{{ $p }}', field) || [])];
+                                        const i = arr.indexOf(optVal);
+                                        if (i === -1) arr.push(optVal); else arr.splice(i, 1);
+                                        {{ $p }}_overrides[field] = arr;
+                                        {{ $p }}_dirty[field] = true;
+                                    "
+                                    class="rounded border-gray-300 text-blue-600">
+                                <span x-text="optLabel"></span>
+                            </label>
+                        </template>
+                    </div>
+                </template>
+
                 {{-- Boolean --}}
                 <template x-if="getPresetFieldType('{{ $p }}', field) === 'boolean'">
                     <div class="flex items-center gap-2">

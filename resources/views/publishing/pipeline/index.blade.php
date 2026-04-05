@@ -1115,10 +1115,10 @@
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">Publish As</label>
                         <div class="flex items-center gap-2">
-                            <select x-model="publishAuthor" @change="publishAuthorSource = 'manual'; autoSaveDraft()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <select x-model="publishAuthor" @change="publishAuthorSource = 'manual'; autoSaveDraft()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" x-effect="$nextTick(() => { if (publishAuthor) $el.value = publishAuthor; })">
                                 <option value="">— Default author —</option>
-                                <template x-if="publishAuthor && siteConn.authors.length === 0">
-                                    <option :value="publishAuthor" x-text="publishAuthor" selected></option>
+                                <template x-if="publishAuthor && !siteConn.authors.some(a => a.user_login === publishAuthor)">
+                                    <option :value="publishAuthor" x-text="publishAuthor"></option>
                                 </template>
                                 <template x-for="a in siteConn.authors" :key="a.user_login">
                                     <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
