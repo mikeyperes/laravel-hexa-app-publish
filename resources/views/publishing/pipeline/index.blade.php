@@ -1724,6 +1724,14 @@ function publishPipeline() {
             const finishRestore = () => {
                 this._restoring = false;
                 if (shouldPersistRestoredDraftState) this.autoSaveDraft();
+                // Auto-load authors if site is selected but authors are empty
+                if (this.selectedSiteId && (!this.siteConn.authors || this.siteConn.authors.length === 0)) {
+                    fetch('/publish/sites/' + this.selectedSiteId + '/authors', {
+                        headers: { 'Accept': 'application/json' }
+                    }).then(r => r.json()).then(d => {
+                        if (d.authors) this.siteConn.authors = d.authors;
+                    }).catch(() => {});
+                }
                 // Auto-load prompt preview if template/preset is selected
                 if (this.selectedTemplateId || this.selectedPresetId) {
                     this.refreshPromptPreview();
