@@ -855,63 +855,54 @@
                     Generating titles, categories & tags...
                 </div>
 
-                {{-- Featured Image --}}
+                {{-- Featured Image — photo + metadata in one card --}}
                 <div x-show="featuredImageSearch" x-cloak class="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-4">
-                    <h5 class="text-sm font-semibold text-purple-800 mb-2">Featured Image</h5>
+                    <h5 class="text-sm font-semibold text-purple-800 mb-3">Featured Image</h5>
                     <div class="flex items-start gap-4">
-                        <div class="w-48 h-32 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                        {{-- Thumbnail --}}
+                        <div class="w-36 h-28 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
                             <img x-show="featuredPhoto" x-cloak :src="featuredPhoto?.url_large || featuredPhoto?.url_thumb" class="w-full h-full object-cover">
-                            <div x-show="!featuredPhoto && featuredSearching" x-cloak class="w-full h-full flex items-center justify-center bg-purple-50">
-                                <svg class="w-8 h-8 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <div x-show="!featuredPhoto && featuredSearching" x-cloak class="w-full h-full flex items-center justify-center bg-purple-100">
+                                <svg class="w-6 h-6 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             </div>
                             <div x-show="!featuredPhoto && !featuredSearching" class="w-full h-full flex items-center justify-center text-gray-300">
-                                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                             </div>
                         </div>
-                        <div class="flex-1">
-                            <p class="text-xs text-purple-600 mb-1">AI suggested search:</p>
-                            <div class="flex gap-2 mb-2">
-                                <input type="text" x-model="featuredImageSearch" class="flex-1 border border-purple-300 rounded-lg px-3 py-1.5 text-sm">
-                                <button @click="searchFeaturedImage()" :disabled="featuredSearching" class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1">
-                                    <svg x-show="featuredSearching" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                    Search
+                        {{-- Info + metadata --}}
+                        <div class="flex-1 space-y-1.5">
+                            <p x-show="featuredPhoto" x-cloak class="text-[11px] text-gray-400" x-text="(featuredPhoto?.source || '') + ' — ' + (featuredPhoto?.width || '') + 'x' + (featuredPhoto?.height || '')"></p>
+                            <div x-show="featuredPhoto" x-cloak class="space-y-1">
+                                <div><label class="text-[10px] text-gray-400 uppercase">Alt Text</label><input type="text" x-model="featuredAlt" class="w-full border border-purple-200 rounded px-2 py-1 text-xs bg-white" placeholder="Alt text..."></div>
+                                <div><label class="text-[10px] text-gray-400 uppercase">Caption</label><input type="text" x-model="featuredCaption" class="w-full border border-purple-200 rounded px-2 py-1 text-xs bg-white" placeholder="Caption..."></div>
+                                <div><label class="text-[10px] text-gray-400 uppercase">WordPress Filename</label><p class="text-xs font-mono text-gray-600 bg-white rounded px-2 py-1 border border-purple-100" x-text="featuredFilename || 'auto'"></p></div>
+                            </div>
+                            <div class="flex items-center gap-3 pt-1">
+                                <button x-show="featuredPhoto" x-cloak @click.stop="refreshFeaturedMeta()" :disabled="featuredRefreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50">
+                                    <svg class="w-3 h-3" :class="featuredRefreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                    <span x-text="featuredRefreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
                                 </button>
-                                <button x-show="featuredPhoto" x-cloak @click="featuredPhoto = null" class="text-xs text-red-500 hover:text-red-700 px-2">Remove</button>
+                                <button x-show="featuredPhoto" x-cloak @click="featuredPhoto = null; featuredAlt = ''; featuredCaption = ''; featuredFilename = ''" class="text-[11px] text-red-500 hover:text-red-700">Remove</button>
                             </div>
-                            <p x-show="featuredPhoto" x-cloak class="text-xs text-gray-500 mb-2" x-text="(featuredPhoto?.width || '?') + 'x' + (featuredPhoto?.height || '?') + ' — ' + (featuredPhoto?.source || '?')"></p>
                         </div>
                     </div>
-                    {{-- Featured image metadata --}}
-                    <div x-show="featuredPhoto" x-cloak class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
-                        <div>
-                            <label class="block text-[10px] text-gray-400 uppercase mb-0.5">Alt Text</label>
-                            <input type="text" x-model="featuredAlt" class="w-full border border-purple-200 rounded px-2.5 py-1 text-sm bg-white" placeholder="Alt text...">
+                    {{-- Search + results below --}}
+                    <div class="mt-3">
+                        <div class="flex gap-2 mb-2">
+                            <input type="text" x-model="featuredImageSearch" class="flex-1 border border-purple-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search for featured image...">
+                            <button @click="searchFeaturedImage()" :disabled="featuredSearching" class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1">
+                                <svg x-show="featuredSearching" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                Search
+                            </button>
                         </div>
-                        <div>
-                            <label class="block text-[10px] text-gray-400 uppercase mb-0.5">Caption</label>
-                            <input type="text" x-model="featuredCaption" class="w-full border border-purple-200 rounded px-2.5 py-1 text-sm bg-white" placeholder="Caption...">
+                        <div x-show="featuredResults.length > 1" x-cloak class="grid grid-cols-4 gap-2">
+                            <template x-for="(photo, fidx) in featuredResults" :key="fidx">
+                                <div @click="featuredPhoto = photo" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-colors"
+                                     :class="featuredPhoto && featuredPhoto.url_thumb === photo.url_thumb ? 'border-purple-500' : 'border-gray-200 hover:border-purple-300'">
+                                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-20 object-cover" loading="lazy">
+                                </div>
+                            </template>
                         </div>
-                        <div>
-                            <label class="block text-[10px] text-gray-400 uppercase mb-0.5">WordPress Filename</label>
-                            <input type="text" x-model="featuredFilename" class="w-full border border-purple-200 rounded px-2.5 py-1 text-sm bg-white" placeholder="featured-image.jpg">
-                        </div>
-                    </div>
-                    <div x-show="featuredPhoto" x-cloak class="mt-2 flex items-center gap-3">
-                        <button @click="refreshFeaturedMeta()" :disabled="featuredRefreshingMeta" class="text-xs text-purple-600 hover:text-purple-800 inline-flex items-center gap-1 disabled:opacity-50">
-                            <svg class="w-3 h-3" :class="featuredRefreshingMeta ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24"><path x-show="!featuredRefreshingMeta" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/><circle x-show="featuredRefreshingMeta" class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path x-show="featuredRefreshingMeta" class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                            <span x-text="featuredRefreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
-                        </button>
-                        <button @click="featuredPhoto = null; featuredAlt = ''; featuredCaption = ''; featuredFilename = ''" class="text-xs text-red-500 hover:text-red-700">Remove</button>
-                    </div>
-                    {{-- Featured image search results --}}
-                    <div x-show="featuredResults.length > 1" x-cloak class="mt-3 grid grid-cols-4 gap-2">
-                        <template x-for="(photo, idx) in featuredResults" :key="idx">
-                            <div @click="featuredPhoto = photo" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-colors"
-                                 :class="featuredPhoto && featuredPhoto.url_thumb === photo.url_thumb ? 'border-purple-500' : 'border-gray-200 hover:border-purple-300'">
-                                <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-20 object-cover" loading="lazy">
-                                <p class="text-[10px] text-gray-400 px-1 py-0.5 truncate" x-text="photo.source"></p>
-                            </div>
-                        </template>
                     </div>
                 </div>
 
@@ -925,38 +916,52 @@
                         </span>
                     </div>
 
-                    {{-- AI photo suggestions — one per row with thumbnail --}}
-                    <div x-show="photoSuggestions.length > 0" class="space-y-2 mb-3">
+                    {{-- AI photo suggestions — photo + metadata in one card --}}
+                    <div x-show="photoSuggestions.length > 0" class="space-y-3 mb-3">
                         <template x-for="(ps, idx) in photoSuggestions" :key="idx">
                             <div x-show="!ps.removed" class="border rounded-lg overflow-hidden" :class="ps.confirmed ? 'border-green-300 bg-green-50' : 'border-purple-200 bg-white'">
-                                <div class="flex items-center gap-3 p-3 cursor-pointer" @click="expandedSuggestions.includes(idx) ? expandedSuggestions = expandedSuggestions.filter(i => i !== idx) : expandedSuggestions.push(idx)">
-                                    <div class="w-24 h-18 flex-shrink-0 rounded overflow-hidden bg-gray-100" style="width:96px;height:72px;">
-                                        <img x-show="ps.autoPhoto" x-cloak :src="ps.autoPhoto?.url_thumb" class="w-full h-full object-cover">
-                                        <div x-show="!ps.autoPhoto && autoFetchingPhotos" x-cloak class="w-full h-full flex items-center justify-center bg-purple-50">
-                                            <svg class="w-5 h-5 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                {{-- Photo + info + metadata — all in one section --}}
+                                <div class="p-3">
+                                    <div class="flex items-start gap-3">
+                                        {{-- Thumbnail --}}
+                                        <div class="w-28 h-20 flex-shrink-0 rounded overflow-hidden bg-gray-100">
+                                            <img x-show="ps.autoPhoto" x-cloak :src="ps.autoPhoto?.url_thumb" class="w-full h-full object-cover">
+                                            <div x-show="!ps.autoPhoto && autoFetchingPhotos" x-cloak class="w-full h-full flex items-center justify-center bg-purple-50">
+                                                <svg class="w-5 h-5 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                            </div>
+                                            <div x-show="!ps.autoPhoto && !autoFetchingPhotos" class="w-full h-full flex items-center justify-center text-gray-300">
+                                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                            </div>
                                         </div>
-                                        <div x-show="!ps.autoPhoto && !autoFetchingPhotos" class="w-full h-full flex items-center justify-center text-gray-300">
-                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                        {{-- Info + metadata --}}
+                                        <div class="flex-1 min-w-0 space-y-1.5">
+                                            <p class="text-sm font-medium text-purple-700 break-words" x-text="ps.search_term"></p>
+                                            <p x-show="ps.autoPhoto" x-cloak class="text-[11px] text-gray-400" x-text="(ps.autoPhoto?.source || '') + ' — ' + (ps.autoPhoto?.width || '') + 'x' + (ps.autoPhoto?.height || '')"></p>
+                                            {{-- Metadata fields --}}
+                                            <div x-show="ps.autoPhoto" x-cloak class="space-y-1">
+                                                <div><label class="text-[10px] text-gray-400 uppercase">Alt Text</label><input type="text" x-model="photoSuggestions[idx].alt_text" class="w-full border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Alt text..."></div>
+                                                <div><label class="text-[10px] text-gray-400 uppercase">Caption</label><input type="text" x-model="photoSuggestions[idx].caption" class="w-full border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Caption..."></div>
+                                                <div><label class="text-[10px] text-gray-400 uppercase">WordPress Filename</label><p class="text-xs font-mono text-gray-600 bg-gray-50 rounded px-2 py-1" x-text="photoSuggestions[idx].suggestedFilename || 'auto'"></p></div>
+                                            </div>
+                                        </div>
+                                        {{-- Action buttons --}}
+                                        <div class="flex items-center gap-1 flex-shrink-0">
+                                            <button @click.stop="confirmPhoto(idx)" x-show="!ps.confirmed && ps.autoPhoto" x-cloak class="p-1.5 rounded hover:bg-green-100 text-green-600" title="Confirm"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></button>
+                                            <span x-show="ps.confirmed" x-cloak class="text-xs text-green-600 font-medium px-1">Confirmed</span>
+                                            <button @click.stop="expandedSuggestions.includes(idx) ? expandedSuggestions = expandedSuggestions.filter(i => i !== idx) : expandedSuggestions.push(idx)" class="p-1.5 rounded hover:bg-blue-100 text-blue-600" title="Change"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg></button>
+                                            <button @click.stop="removePhotoPlaceholder(idx)" class="p-1.5 rounded hover:bg-red-100 text-red-600" title="Remove"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                                            <svg class="w-4 h-4 text-gray-400 transition-transform" :class="expandedSuggestions.includes(idx) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                                         </div>
                                     </div>
-                                    <div class="flex-1 min-w-0">
-                                        <p class="text-sm font-medium text-purple-700 break-words" x-text="ps.search_term"></p>
-                                        <p class="text-xs text-gray-500 break-words" x-text="ps.alt_text || ps.caption"></p>
-                                    </div>
-                                    <div class="flex items-center gap-1 flex-shrink-0">
-                                        <button @click.stop="confirmPhoto(idx)" x-show="!ps.confirmed && ps.autoPhoto" x-cloak class="p-1.5 rounded hover:bg-green-100 text-green-600" title="Confirm photo">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                    {{-- AI Refresh Metadata --}}
+                                    <div x-show="ps.autoPhoto" x-cloak class="mt-1.5 ml-[124px]">
+                                        <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50">
+                                            <svg class="w-3 h-3" :class="ps.refreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                            <span x-text="ps.refreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
                                         </button>
-                                        <span x-show="ps.confirmed" x-cloak class="text-xs text-green-600 font-medium px-1">Confirmed</span>
-                                        <button @click.stop="expandedSuggestions.includes(idx) ? expandedSuggestions = expandedSuggestions.filter(i => i !== idx) : expandedSuggestions.push(idx)" class="p-1.5 rounded hover:bg-blue-100 text-blue-600" title="Change photo">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
-                                        </button>
-                                        <button @click.stop="removePhotoPlaceholder(idx)" class="p-1.5 rounded hover:bg-red-100 text-red-600" title="Remove">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                        </button>
-                                        <svg class="w-4 h-4 text-gray-400 transition-transform" :class="expandedSuggestions.includes(idx) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                                     </div>
                                 </div>
+                                {{-- Expanded: search + results (only for changing photo) --}}
                                 <div x-show="expandedSuggestions.includes(idx)" x-cloak class="p-3 pt-0 border-t border-gray-100">
                                     <div class="flex gap-2 mb-2">
                                         <input type="text" :value="ps.search_term" @input="photoSuggestions[idx].search_term = $event.target.value" @keydown.enter="searchPhotosForSuggestion(idx)" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search...">
@@ -965,7 +970,7 @@
                                             <span x-text="ps.searching ? 'Searching...' : 'Search'"></span>
                                         </button>
                                     </div>
-                                    <div x-show="ps.searchResults && ps.searchResults.length > 0" x-cloak class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                                    <div x-show="ps.searchResults && ps.searchResults.length > 0" x-cloak class="grid grid-cols-2 md:grid-cols-4 gap-2">
                                         <template x-for="(photo, pidx) in (ps.searchResults || [])" :key="pidx">
                                             <div class="cursor-pointer rounded-lg overflow-hidden border-2 hover:border-blue-400 transition-colors"
                                                  :class="ps.autoPhoto && ps.autoPhoto.url_thumb === photo.url_thumb ? 'border-purple-400' : 'border-gray-200'"
@@ -973,28 +978,6 @@
                                                 <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-44 object-cover">
                                             </div>
                                         </template>
-                                    </div>
-                                    {{-- Inline photo info (alt text, caption, filename) --}}
-                                    <div x-show="ps.autoPhoto" x-cloak class="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
-                                        <div class="flex items-center gap-2 text-xs text-gray-500">
-                                            <span x-text="(ps.autoPhoto?.source || '?') + ' — ' + (ps.autoPhoto?.width || '?') + 'x' + (ps.autoPhoto?.height || '?')"></span>
-                                        </div>
-                                        <div>
-                                            <label class="block text-xs text-gray-400 mb-0.5">Alt Text</label>
-                                            <input type="text" x-model="photoSuggestions[idx].alt_text" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Alt text...">
-                                        </div>
-                                        <div>
-                                            <label class="block text-xs text-gray-400 mb-0.5">Caption</label>
-                                            <input type="text" x-model="photoSuggestions[idx].caption" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Caption...">
-                                        </div>
-                                        <div>
-                                            <label class="block text-xs text-gray-400 mb-0.5">WordPress Filename</label>
-                                            <input type="text" x-model="photoSuggestions[idx].suggestedFilename" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono" placeholder="photo-1.jpg">
-                                        </div>
-                                        <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-xs text-purple-600 hover:text-purple-800 inline-flex items-center gap-1 mt-1 disabled:opacity-50">
-                                            <svg class="w-3 h-3" :class="ps.refreshingMeta ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24"><circle x-show="ps.refreshingMeta" class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path x-show="ps.refreshingMeta" class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/><path x-show="!ps.refreshingMeta" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                            <span x-text="ps.refreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
-                                        </button>
                                     </div>
                                 </div>
                             </div>
