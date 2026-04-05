@@ -1726,6 +1726,7 @@ function publishPipeline() {
                 if (state.featuredAlt) this.featuredAlt = state.featuredAlt;
                 if (state.featuredCaption) this.featuredCaption = state.featuredCaption;
                 if (state.featuredFilename) this.featuredFilename = state.featuredFilename;
+                if (state.resolvedPrompt) this.resolvedPrompt = state.resolvedPrompt;
                 // Find Articles state
                 if (state.sourceTab) this.sourceTab = state.sourceTab;
                 if (state.newsMode) this.newsMode = state.newsMode;
@@ -1780,6 +1781,9 @@ function publishPipeline() {
             if (this.selectedUser && !this.completedSteps.includes(1)) this.completedSteps.push(1);
             if (this.selectedSiteId && !this.completedSteps.includes(2)) this.completedSteps.push(2);
             if (this.sources.length > 0 && !this.completedSteps.includes(3)) this.completedSteps.push(3);
+            if (this.checkResults.length > 0 && !this.completedSteps.includes(4)) this.completedSteps.push(4);
+            if (this.spunContent && !this.completedSteps.includes(5)) this.completedSteps.push(5);
+            if (this.spunContent && !this.completedSteps.includes(6)) this.completedSteps.push(6);
 
             const finishRestore = () => {
                 this._restoring = false;
@@ -1897,6 +1901,7 @@ function publishPipeline() {
                 featuredAlt: this.featuredAlt,
                 featuredCaption: this.featuredCaption,
                 featuredFilename: this.featuredFilename,
+                resolvedPrompt: this.resolvedPrompt,
                 // Find Articles state
                 sourceTab: this.sourceTab,
                 newsMode: this.newsMode,
@@ -2362,6 +2367,9 @@ function publishPipeline() {
         async refreshPhotoMeta(idx) {
             const ps = this.photoSuggestions[idx];
             if (!ps) return;
+            const oldAlt = ps.alt_text || '';
+            const oldCaption = ps.caption || '';
+            const oldFilename = ps.suggestedFilename || '';
             this.photoSuggestions[idx].refreshingMeta = true;
             try {
                 const articleText = (this.spunContent || '').replace(/<[^>]*>/g, '').substring(0, 2000);
@@ -2379,12 +2387,24 @@ function publishPipeline() {
                     this.photoSuggestions[idx].alt_text = data.alt;
                     this.photoSuggestions[idx].caption = data.caption;
                     this.photoSuggestions[idx].suggestedFilename = data.filename;
+                    console.log('[Photo Meta #' + idx + '] OLD: alt="' + oldAlt + '" caption="' + oldCaption + '" file="' + oldFilename + '"');
+                    console.log('[Photo Meta #' + idx + '] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + data.filename + '"');
+                    this.showNotification('success', 'Metadata refreshed for photo #' + (idx + 1));
+                } else {
+                    console.error('[Photo Meta #' + idx + '] Error:', data.message || 'Unknown error');
+                    this.showNotification('error', 'Failed to refresh metadata: ' + (data.message || 'Unknown error'));
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error('[Photo Meta #' + idx + '] Exception:', e);
+                this.showNotification('error', 'Failed to refresh metadata: ' + e.message);
+            }
             this.photoSuggestions[idx].refreshingMeta = false;
         },
 
         async refreshFeaturedMeta() {
+            const oldAlt = this.featuredAlt || '';
+            const oldCaption = this.featuredCaption || '';
+            const oldFilename = this.featuredFilename || '';
             this.featuredRefreshingMeta = true;
             try {
                 const articleText = (this.spunContent || '').replace(/<[^>]*>/g, '').substring(0, 2000);
@@ -2402,8 +2422,17 @@ function publishPipeline() {
                     this.featuredAlt = data.alt;
                     this.featuredCaption = data.caption;
                     this.featuredFilename = data.filename;
+                    console.log('[Featured Meta] OLD: alt="' + oldAlt + '" caption="' + oldCaption + '" file="' + oldFilename + '"');
+                    console.log('[Featured Meta] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + data.filename + '"');
+                    this.showNotification('success', 'Featured image metadata refreshed');
+                } else {
+                    console.error('[Featured Meta] Error:', data.message || 'Unknown error');
+                    this.showNotification('error', 'Failed to refresh metadata: ' + (data.message || 'Unknown error'));
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error('[Featured Meta] Exception:', e);
+                this.showNotification('error', 'Failed to refresh metadata: ' + e.message);
+            }
             this.featuredRefreshingMeta = false;
         },
 
@@ -2426,8 +2455,16 @@ function publishPipeline() {
                     this.overlayPhotoAlt = data.alt;
                     this.overlayPhotoCaption = data.caption;
                     this.overlayPhotoFilename = data.filename;
+                    console.log('[Overlay Meta] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + data.filename + '"');
+                    this.showNotification('success', 'Photo metadata generated');
+                } else {
+                    console.error('[Overlay Meta] Error:', data.message || 'Unknown error');
+                    this.showNotification('error', 'Failed to get metadata: ' + (data.message || 'Unknown error'));
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error('[Overlay Meta] Exception:', e);
+                this.showNotification('error', 'Failed to get metadata: ' + e.message);
+            }
             this.overlayMetaLoading = false;
         },
 
