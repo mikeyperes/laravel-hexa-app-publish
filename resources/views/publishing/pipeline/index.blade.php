@@ -115,7 +115,10 @@
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <div class="flex items-center justify-between mb-2">
                     <h5 class="text-sm font-semibold text-gray-700">WordPress Template</h5>
-                    <button @click="editingPreset = !editingPreset" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingPreset ? 'Cancel' : 'Edit'"></button>
+                    <div class="flex items-center gap-2">
+                        <a x-show="selectedPreset" x-cloak :href="'/publish/presets/' + selectedPresetId + '/edit'" target="_blank" class="text-xs text-gray-400 hover:text-blue-600 inline-flex items-center gap-0.5">Edit on preset page <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                        <button @click="editingPreset = !editingPreset" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingPreset ? 'Cancel' : 'Edit'"></button>
+                    </div>
                 </div>
                 {{-- Display current preset --}}
                 <div x-show="!editingPreset && selectedPreset" class="text-sm space-y-1">
@@ -143,7 +146,10 @@
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <div class="flex items-center justify-between mb-2">
                     <h5 class="text-sm font-semibold text-gray-700">Article Preset</h5>
-                    <button @click="editingTemplate = !editingTemplate" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingTemplate ? 'Cancel' : 'Edit'"></button>
+                    <div class="flex items-center gap-2">
+                        <a x-show="selectedTemplate" x-cloak :href="'/publish/article-presets/' + selectedTemplateId + '/edit'" target="_blank" class="text-xs text-gray-400 hover:text-blue-600 inline-flex items-center gap-0.5">Edit on preset page <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                        <button @click="editingTemplate = !editingTemplate" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingTemplate ? 'Cancel' : 'Edit'"></button>
+                    </div>
                 </div>
                 <div x-show="!editingTemplate && selectedTemplate" class="text-sm space-y-1">
                     <p class="font-medium text-gray-800" x-text="selectedTemplate?.name || 'None'"></p>

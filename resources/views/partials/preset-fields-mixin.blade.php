@@ -13,29 +13,48 @@
     }
 
     function _loadPresetFields(component, prefix, data, schema) {
-        if (!data) {
+        if (!data && !schema) {
             component[prefix + '_defaults'] = {};
             component[prefix + '_overrides'] = {};
             component[prefix + '_dirty'] = {};
             return;
         }
 
-        const excludeKeys = ['id', 'created_at', 'updated_at', 'deleted_at', 'name', 'status', 'is_default',
-            'publish_account_id', 'user_id', 'created_by', 'description',
-            'default_site_id', 'default_template_id', 'default_preset_id',
-            'account', 'user', 'creator', 'site', 'campaigns', 'articles', 'template', 'preset'];
-
         const defaults = {};
-        const keys = Object.keys(data).filter(k => {
-            if (excludeKeys.includes(k)) return false;
-            if (k.endsWith('_id')) return false;
-            const val = data[k];
-            if (val === null || val === undefined || val === '') return false;
-            if (typeof val === 'object' && !Array.isArray(val)) return false;
-            return true;
-        });
+        const resolvedSchema = schema || component[prefix + '_schema'] || {};
 
-        keys.forEach(k => { defaults[k] = data[k]; });
+        // Use schema keys as the source of truth — show ALL fields, even if null
+        const schemaKeys = Object.keys(resolvedSchema);
+        if (schemaKeys.length > 0) {
+            schemaKeys.forEach(k => {
+                const val = data ? data[k] : null;
+                const type = resolvedSchema[k]?.type || 'text';
+                // Set appropriate default for each type
+                if (val !== null && val !== undefined) {
+                    defaults[k] = val;
+                } else if (type === 'checkbox' || type === 'array') {
+                    defaults[k] = [];
+                } else if (type === 'number') {
+                    defaults[k] = '';
+                } else if (type === 'boolean') {
+                    defaults[k] = false;
+                } else {
+                    defaults[k] = '';
+                }
+            });
+        } else if (data) {
+            // Fallback: no schema, use data keys (legacy behavior)
+            const excludeKeys = ['id', 'created_at', 'updated_at', 'deleted_at', 'name', 'status', 'is_default',
+                'publish_account_id', 'user_id', 'created_by', 'description',
+                'default_site_id', 'default_template_id', 'default_preset_id',
+                'account', 'user', 'creator', 'site', 'campaigns', 'articles', 'template', 'preset'];
+            Object.keys(data).filter(k => {
+                if (excludeKeys.includes(k) || k.endsWith('_id')) return false;
+                const val = data[k];
+                if (typeof val === 'object' && !Array.isArray(val)) return false;
+                return true;
+            }).forEach(k => { defaults[k] = data[k] ?? ''; });
+        }
 
         component[prefix + '_defaults'] = defaults;
         component[prefix + '_overrides'] = {};
