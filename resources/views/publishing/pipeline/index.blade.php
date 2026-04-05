@@ -129,7 +129,7 @@
                         <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         Loading...
                     </div>
-                    <select x-show="!presetsLoading" x-model="selectedPresetId" @change="selectPreset(); editingPreset = false" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <select x-show="!presetsLoading" x-model="selectedPresetId" @change="selectPreset(); editingPreset = false; refreshPromptPreview()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="">-- No preset --</option>
                         <template x-for="p in presets" :key="p.id">
                             <option :value="p.id" x-text="p.name"></option>
@@ -541,7 +541,7 @@
                         <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         Loading...
                     </div>
-                    <select x-show="!templatesLoading" x-model="selectedTemplateId" @change="selectTemplate(); editingTemplate = false" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <select x-show="!templatesLoading" x-model="selectedTemplateId" @change="selectTemplate(); editingTemplate = false; refreshPromptPreview()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="">-- No template --</option>
                         <template x-for="t in templates" :key="t.id">
                             <option :value="t.id" x-text="t.name"></option>
@@ -573,34 +573,25 @@
                 <textarea x-model="articleDescription" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Short summary for SEO meta description and excerpt..."></textarea>
             </div>
 
-            {{-- Custom prompt input --}}
+            {{-- Custom prompt input — live-updates resolved prompt --}}
             <div class="mb-4">
                 <label class="block text-xs text-gray-500 mb-1">Custom Instructions <span class="text-gray-400">(takes precedence over template/preset)</span></label>
-                <textarea x-model="customPrompt" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Write in first person, focus on the financial impact, include expert quotes..."></textarea>
+                <textarea x-model="customPrompt" @input.debounce.500ms="refreshPromptPreview()" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Write in first person, focus on the financial impact, include expert quotes..."></textarea>
             </div>
 
-            {{-- View Full Prompt (live preview via AJAX) --}}
-            <div class="mb-4" x-data="{ showPrompt: false }" x-init="$watch('showPrompt', v => { if (v && !$root.resolvedPrompt) $root.refreshPromptPreview(); })">
-                <div class="flex items-center gap-2">
-                    <button @click="showPrompt = !showPrompt" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
-                        <svg class="w-3 h-3 transition-transform" :class="showPrompt ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                        View Full Prompt
-                    </button>
-                    <button x-show="showPrompt" x-cloak @click="$root.refreshPromptPreview()" class="text-xs text-blue-500 hover:text-blue-700 inline-flex items-center gap-1">
-                        <svg class="w-3 h-3" :class="$root.promptLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                        Refresh
-                    </button>
+            {{-- Resolved Prompt — always visible, live-updating --}}
+            <div class="mb-4">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-xs text-gray-500 font-medium">Resolved Prompt</span>
+                    <span x-show="promptLoading" x-cloak class="text-xs text-blue-400 inline-flex items-center gap-1">
+                        <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Updating...
+                    </span>
                 </div>
-                <div x-show="showPrompt" x-cloak class="mt-2 bg-gray-900 text-gray-300 rounded-xl p-4 text-xs font-mono overflow-y-auto break-words whitespace-pre-wrap" style="max-height:500px;">
-                    <template x-if="$root.resolvedPrompt">
-                        <pre class="text-green-300 whitespace-pre-wrap break-words" x-text="$root.resolvedPrompt"></pre>
-                    </template>
-                    <template x-if="!$root.resolvedPrompt && $root.promptLoading">
-                        <p class="text-blue-400">Loading prompt...</p>
-                    </template>
-                    <template x-if="!$root.resolvedPrompt && !$root.promptLoading">
-                        <p class="text-gray-500">Click "Refresh" or expand to load the resolved prompt.</p>
-                    </template>
+                <div class="bg-gray-900 text-gray-300 rounded-xl p-4 text-xs font-mono overflow-y-auto break-words whitespace-pre-wrap" style="max-height:400px;">
+                    <pre x-show="resolvedPrompt" class="text-green-300 whitespace-pre-wrap break-words" x-text="resolvedPrompt"></pre>
+                    <p x-show="!resolvedPrompt && promptLoading" x-cloak class="text-blue-400">Loading prompt...</p>
+                    <p x-show="!resolvedPrompt && !promptLoading" x-cloak class="text-gray-500">Prompt will load when a template or preset is selected.</p>
                 </div>
             </div>
 
