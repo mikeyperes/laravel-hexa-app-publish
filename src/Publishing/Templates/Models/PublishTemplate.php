@@ -54,6 +54,30 @@ class PublishTemplate extends Model
     ];
 
     /**
+     * Return field schema for preset field rendering.
+     * Each field declares its type and options — the UI renders accordingly.
+     *
+     * @return array
+     */
+    public static function getFieldSchema(): array
+    {
+        $models = collect(config('anthropic.models', []))->pluck('name', 'id')->toArray();
+        return [
+            'ai_engine'          => ['type' => 'select', 'options' => $models],
+            'article_type'       => ['type' => 'select', 'options' => ['editorial','opinion','news-report','local-news','expert-article','pr-full-feature','press-release','listicle','how-to','review']],
+            'ai_prompt'          => ['type' => 'textarea'],
+            'tone'               => ['type' => 'array'],
+            'word_count_min'     => ['type' => 'number'],
+            'word_count_max'     => ['type' => 'number'],
+            'photos_per_article' => ['type' => 'number'],
+            'photo_sources'      => ['type' => 'array'],
+            'max_links'          => ['type' => 'number'],
+            'structure'          => ['type' => 'array'],
+            'rules'              => ['type' => 'array'],
+        ];
+    }
+
+    /**
      * @return BelongsTo
      */
     public function account(): BelongsTo

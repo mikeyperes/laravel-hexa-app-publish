@@ -128,6 +128,8 @@ class PipelineController extends Controller
             'newsCategories' => $newsCategories,
             'draftUser'      => $draftUser,
             'draftState'     => $draftState,
+            'templateSchema' => \hexa_app_publish\Publishing\Templates\Models\PublishTemplate::getFieldSchema(),
+            'presetSchema'   => \hexa_app_publish\Publishing\Presets\Models\PublishPreset::getFieldSchema(),
         ]);
     }
 

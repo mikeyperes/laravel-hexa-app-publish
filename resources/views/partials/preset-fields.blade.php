@@ -1,6 +1,5 @@
 {{--
-    Shared preset fields — auto-detects field types from data.
-    NO hardcoded field names. Types come from presetFieldsMixin.
+    Shared preset fields — types from server schema, no hardcoding.
 --}}
 
 @php $p = $prefix ?? 'template'; @endphp
@@ -18,7 +17,39 @@
             <div class="rounded-lg px-3 py-2" :class="[isPresetDirty('{{ $p }}', field) ? 'bg-orange-50 ring-1 ring-orange-200' : 'bg-gray-50', getPresetFieldType('{{ $p }}', field) === 'textarea' ? 'md:col-span-2' : '']">
                 <label class="block text-[11px] text-gray-400 mb-1 uppercase tracking-wide" x-text="field.replace(/_/g, ' ')"></label>
 
-                {{-- Boolean → toggle --}}
+                {{-- Select (options from server schema) --}}
+                <template x-if="getPresetFieldType('{{ $p }}', field) === 'select'">
+                    <select :value="getPresetValue('{{ $p }}', field)"
+                        @change="{{ $p }}_overrides[field] = $event.target.value; {{ $p }}_dirty[field] = true"
+                        class="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm bg-white">
+                        <template x-for="[optVal, optLabel] in Object.entries(getPresetFieldOptions('{{ $p }}', field) || {})" :key="optVal">
+                            <option :value="optVal" x-text="optLabel" :selected="getPresetValue('{{ $p }}', field) === optVal"></option>
+                        </template>
+                    </select>
+                </template>
+
+                {{-- Number --}}
+                <template x-if="getPresetFieldType('{{ $p }}', field) === 'number'">
+                    <input type="number" :value="getPresetValue('{{ $p }}', field)"
+                        @input="{{ $p }}_overrides[field] = parseInt($event.target.value) || 0; {{ $p }}_dirty[field] = true"
+                        class="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm bg-white" min="0">
+                </template>
+
+                {{-- Array --}}
+                <template x-if="getPresetFieldType('{{ $p }}', field) === 'array'">
+                    <input type="text" :value="(getPresetValue('{{ $p }}', field) || []).join(', ')"
+                        @input="{{ $p }}_overrides[field] = $event.target.value.split(',').map(s => s.trim()).filter(Boolean); {{ $p }}_dirty[field] = true"
+                        class="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm bg-white" placeholder="Comma separated">
+                </template>
+
+                {{-- Textarea --}}
+                <template x-if="getPresetFieldType('{{ $p }}', field) === 'textarea'">
+                    <textarea :value="getPresetValue('{{ $p }}', field)"
+                        @input="{{ $p }}_overrides[field] = $event.target.value; {{ $p }}_dirty[field] = true"
+                        rows="3" class="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm bg-white font-mono"></textarea>
+                </template>
+
+                {{-- Boolean --}}
                 <template x-if="getPresetFieldType('{{ $p }}', field) === 'boolean'">
                     <div class="flex items-center gap-2">
                         <button type="button" @click="{{ $p }}_overrides[field] = !getPresetValue('{{ $p }}', field); {{ $p }}_dirty[field] = true"
@@ -31,28 +62,7 @@
                     </div>
                 </template>
 
-                {{-- Number → number input --}}
-                <template x-if="getPresetFieldType('{{ $p }}', field) === 'number'">
-                    <input type="number" :value="getPresetValue('{{ $p }}', field)"
-                        @input="{{ $p }}_overrides[field] = parseInt($event.target.value) || 0; {{ $p }}_dirty[field] = true"
-                        class="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm bg-white" min="0">
-                </template>
-
-                {{-- Array → comma-separated --}}
-                <template x-if="getPresetFieldType('{{ $p }}', field) === 'array'">
-                    <input type="text" :value="(getPresetValue('{{ $p }}', field) || []).join(', ')"
-                        @input="{{ $p }}_overrides[field] = $event.target.value.split(',').map(s => s.trim()).filter(Boolean); {{ $p }}_dirty[field] = true"
-                        class="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm bg-white" placeholder="Comma separated">
-                </template>
-
-                {{-- Textarea → long text --}}
-                <template x-if="getPresetFieldType('{{ $p }}', field) === 'textarea'">
-                    <textarea :value="getPresetValue('{{ $p }}', field)"
-                        @input="{{ $p }}_overrides[field] = $event.target.value; {{ $p }}_dirty[field] = true"
-                        rows="3" class="w-full border border-gray-200 rounded px-2.5 py-1.5 text-sm bg-white font-mono"></textarea>
-                </template>
-
-                {{-- Text → default text input --}}
+                {{-- Text (default) --}}
                 <template x-if="getPresetFieldType('{{ $p }}', field) === 'text'">
                     <input type="text" :value="getPresetValue('{{ $p }}', field)"
                         @input="{{ $p }}_overrides[field] = $event.target.value; {{ $p }}_dirty[field] = true"

@@ -132,6 +132,8 @@ function campaignShow() {
     return {
         ...presetFieldsMixin('template'),
         ...presetFieldsMixin('preset'),
+        template_schema: @json(\hexa_app_publish\Publishing\Templates\Models\PublishTemplate::getFieldSchema()),
+        preset_schema: @json(\hexa_app_publish\Publishing\Presets\Models\PublishPreset::getFieldSchema()),
         ...presetFieldsMethods,
 
         running: false, runResult: '', runSuccess: false,

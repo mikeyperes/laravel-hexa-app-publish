@@ -1609,6 +1609,8 @@ function publishPipeline() {
         ...siteConnectionMixin(),
         ...presetFieldsMixin('template'),
         ...presetFieldsMixin('preset'),
+        template_schema: @json($templateSchema ?? []),
+        preset_schema: @json($presetSchema ?? []),
         ...presetFieldsMethods,
         savingDraft: false,
         _draftSaveTimer: null,
