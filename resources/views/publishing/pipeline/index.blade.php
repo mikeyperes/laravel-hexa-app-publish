@@ -1403,9 +1403,10 @@
 
     {{-- Global notification banner --}}
     {{-- Photo Search Overlay (triggered from TinyMCE toolbar) --}}
-    <div x-show="showPhotoOverlay" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" @keydown.escape.window="showPhotoOverlay = false">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] overflow-y-auto">
-            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+    {{-- Photo Search Overlay --}}
+    <div x-show="showPhotoOverlay" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-0 m-0" style="top:0;left:0;right:0;bottom:0;" @click.self="showPhotoOverlay = false" @keydown.escape.window="showPhotoOverlay = false">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl mx-4 max-h-[90vh] overflow-y-auto" @click.stop>
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
                 <h3 class="font-semibold text-gray-800">Search & Insert Photo</h3>
                 <button @click="showPhotoOverlay = false" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </div>
@@ -1417,23 +1418,35 @@
                         Search
                     </button>
                 </div>
-                <div x-show="photoResults.length > 0" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div x-show="photoResults.length > 0" class="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <template x-for="(photo, pidx) in photoResults" :key="pidx">
-                        <div class="cursor-pointer rounded-lg overflow-hidden border-2 hover:border-purple-400 transition-colors" :class="insertingPhoto === photo ? 'border-purple-500 ring-2 ring-purple-200' : 'border-gray-200'" @click="insertingPhoto = photo; photoCaption = photo.alt || articleTitle">
+                        <div class="cursor-pointer rounded-lg overflow-hidden border-2 hover:border-purple-400 transition-colors" :class="insertingPhoto === photo ? 'border-purple-500 ring-2 ring-purple-200' : 'border-gray-200'" @click="insertingPhoto = photo; photoCaption = photo.alt || articleTitle; overlayPhotoAlt = ''; overlayPhotoCaption = ''; overlayPhotoFilename = '';">
                             <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-48 object-cover">
                             <p class="text-[10px] text-gray-400 px-2 py-1 truncate" x-text="(photo.source || '') + ' — ' + (photo.width || '') + 'x' + (photo.height || '')"></p>
                         </div>
                     </template>
                 </div>
+                {{-- Selected photo details + metadata --}}
                 <div x-show="insertingPhoto" x-cloak class="mt-4 border-t border-gray-200 pt-4">
-                    <div class="mb-3">
-                        <label class="block text-xs text-gray-500 mb-1">Caption / Alt Text</label>
-                        <input type="text" x-model="photoCaption" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Photo caption...">
+                    <div class="flex items-start gap-4 mb-4">
+                        <img :src="insertingPhoto?.url_thumb" class="w-32 h-24 object-cover rounded-lg flex-shrink-0">
+                        <div class="flex-1 space-y-2">
+                            <p class="text-xs text-gray-400" x-text="(insertingPhoto?.source || '') + ' — ' + (insertingPhoto?.width || '') + 'x' + (insertingPhoto?.height || '')"></p>
+                            <div><label class="text-[10px] text-gray-400 uppercase">Alt Text</label><input type="text" x-model="overlayPhotoAlt" class="w-full border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Alt text..."></div>
+                            <div><label class="text-[10px] text-gray-400 uppercase">Caption</label><input type="text" x-model="overlayPhotoCaption" class="w-full border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Caption..."></div>
+                            <div><label class="text-[10px] text-gray-400 uppercase">Filename</label><p class="text-xs font-mono text-gray-600 bg-gray-50 rounded px-2 py-1" x-text="overlayPhotoFilename || 'auto'"></p></div>
+                        </div>
                     </div>
-                    <button @click="insertPhotoIntoEditor(); showPhotoOverlay = false" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 inline-flex items-center gap-1">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        Insert at Cursor
-                    </button>
+                    <div class="flex items-center gap-3">
+                        <button @click="getOverlayPhotoMeta()" :disabled="overlayMetaLoading" class="text-xs text-purple-600 hover:text-purple-800 inline-flex items-center gap-1 disabled:opacity-50 border border-purple-200 px-3 py-1.5 rounded-lg">
+                            <svg class="w-3 h-3" :class="overlayMetaLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            <span x-text="overlayMetaLoading ? 'Generating...' : 'Get Metadata'"></span>
+                        </button>
+                        <button @click="photoCaption = overlayPhotoAlt || photoCaption; insertPhotoIntoEditor(); showPhotoOverlay = false" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 inline-flex items-center gap-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            Insert at Cursor
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1553,6 +1566,10 @@ function publishPipeline() {
         showPhotoOverlay: false,
         insertingPhoto: null,
         photoCaption: '',
+        overlayPhotoAlt: '',
+        overlayPhotoCaption: '',
+        overlayPhotoFilename: '',
+        overlayMetaLoading: false,
         _photoSuggestionIdx: null,
         expandedSuggestions: [],
         autoFetchingPhotos: false,
@@ -1706,6 +1723,9 @@ function publishPipeline() {
                     this.featuredPhoto = state.featuredPhoto;
                     this.featuredResults = [state.featuredPhoto];
                 }
+                if (state.featuredAlt) this.featuredAlt = state.featuredAlt;
+                if (state.featuredCaption) this.featuredCaption = state.featuredCaption;
+                if (state.featuredFilename) this.featuredFilename = state.featuredFilename;
                 // Find Articles state
                 if (state.sourceTab) this.sourceTab = state.sourceTab;
                 if (state.newsMode) this.newsMode = state.newsMode;
@@ -1820,6 +1840,9 @@ function publishPipeline() {
             this.$watch('photoSuggestions', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
             this.$watch('featuredImageSearch', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
             this.$watch('featuredPhoto', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
+            this.$watch('featuredAlt', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
+            this.$watch('featuredCaption', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
+            this.$watch('featuredFilename', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
             this.$watch('siteConn.status', () => this.savePipelineState());
             this.$watch('siteConn.authors', () => this.savePipelineState());
             this.$watch('newsResults', () => this.savePipelineState());
@@ -1871,6 +1894,9 @@ function publishPipeline() {
                 photoSuggestions: this.photoSuggestions,
                 featuredImageSearch: this.featuredImageSearch,
                 featuredPhoto: this.featuredPhoto,
+                featuredAlt: this.featuredAlt,
+                featuredCaption: this.featuredCaption,
+                featuredFilename: this.featuredFilename,
                 // Find Articles state
                 sourceTab: this.sourceTab,
                 newsMode: this.newsMode,
@@ -2379,6 +2405,30 @@ function publishPipeline() {
                 }
             } catch (e) {}
             this.featuredRefreshingMeta = false;
+        },
+
+        async getOverlayPhotoMeta() {
+            if (!this.insertingPhoto) return;
+            this.overlayMetaLoading = true;
+            try {
+                const articleText = (this.spunContent || '').replace(/<[^>]*>/g, '').substring(0, 2000);
+                const resp = await fetch('{{ route("publish.pipeline.photo-meta") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({
+                        search_term: this.photoSearch || this.insertingPhoto.alt || '',
+                        article_title: this.articleTitle || '',
+                        article_text: articleText,
+                    })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    this.overlayPhotoAlt = data.alt;
+                    this.overlayPhotoCaption = data.caption;
+                    this.overlayPhotoFilename = data.filename;
+                }
+            } catch (e) {}
+            this.overlayMetaLoading = false;
         },
 
         async refreshPromptPreview() {
