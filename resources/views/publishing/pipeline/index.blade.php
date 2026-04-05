@@ -1402,6 +1402,43 @@
     </div>
 
     {{-- Global notification banner --}}
+    {{-- Photo Search Overlay (triggered from TinyMCE toolbar) --}}
+    <div x-show="showPhotoOverlay" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" @keydown.escape.window="showPhotoOverlay = false">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] overflow-y-auto">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 class="font-semibold text-gray-800">Search & Insert Photo</h3>
+                <button @click="showPhotoOverlay = false" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+            </div>
+            <div class="p-6">
+                <div class="flex gap-2 mb-4">
+                    <input type="text" x-model="photoSearch" @keydown.enter="searchManualPhotos()" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Search for photos...">
+                    <button @click="searchManualPhotos()" :disabled="photoSearching" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1">
+                        <svg x-show="photoSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Search
+                    </button>
+                </div>
+                <div x-show="photoResults.length > 0" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <template x-for="(photo, pidx) in photoResults" :key="pidx">
+                        <div class="cursor-pointer rounded-lg overflow-hidden border-2 hover:border-purple-400 transition-colors" :class="insertingPhoto === photo ? 'border-purple-500 ring-2 ring-purple-200' : 'border-gray-200'" @click="insertingPhoto = photo; photoCaption = photo.alt || articleTitle">
+                            <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-48 object-cover">
+                            <p class="text-[10px] text-gray-400 px-2 py-1 truncate" x-text="(photo.source || '') + ' — ' + (photo.width || '') + 'x' + (photo.height || '')"></p>
+                        </div>
+                    </template>
+                </div>
+                <div x-show="insertingPhoto" x-cloak class="mt-4 border-t border-gray-200 pt-4">
+                    <div class="mb-3">
+                        <label class="block text-xs text-gray-500 mb-1">Caption / Alt Text</label>
+                        <input type="text" x-model="photoCaption" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Photo caption...">
+                    </div>
+                    <button @click="insertPhotoIntoEditor(); showPhotoOverlay = false" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 inline-flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                        Insert at Cursor
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div x-show="notification.show" x-cloak
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0 translate-y-2"
@@ -1513,6 +1550,7 @@ function publishPipeline() {
         photoSearching: false,
         photoResults: [],
         showPhotoPanel: false,
+        showPhotoOverlay: false,
         insertingPhoto: null,
         photoCaption: '',
         _photoSuggestionIdx: null,
@@ -2659,15 +2697,14 @@ function publishPipeline() {
                             setup: function(ed) {
                                 // Custom "Add Photo" toolbar button
                                 ed.ui.registry.addButton('addPhotoBtn', {
-                                    icon: 'image',
-                                    tooltip: 'Add Photo at Cursor',
+                                    icon: 'gallery',
+                                    tooltip: 'Search & Insert Photo',
                                     onAction: function() {
                                         self._photoSuggestionIdx = null;
                                         self.photoSearch = '';
-                                        self.showPhotoPanel = true;
-                                        self.$nextTick(() => {
-                                            document.querySelector('[data-photo-section]')?.scrollIntoView({behavior: 'smooth', block: 'center'});
-                                        });
+                                        self.photoResults = [];
+                                        self.insertingPhoto = null;
+                                        self.showPhotoOverlay = true;
                                     }
                                 });
 
