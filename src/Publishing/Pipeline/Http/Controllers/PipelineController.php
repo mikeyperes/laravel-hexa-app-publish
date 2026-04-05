@@ -137,6 +137,56 @@ class PipelineController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
+    /**
+     * Generate contextual photo metadata via AI (Haiku).
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function generatePhotoMeta(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'search_term'    => 'required|string|max:200',
+            'article_title'  => 'nullable|string|max:500',
+            'article_text'   => 'nullable|string|max:2000',
+        ]);
+
+        $anthropic = app(\hexa_package_anthropic\Services\AnthropicService::class);
+        $prompt = "You are a photo metadata expert. Generate contextual metadata for a stock photo used in an article.\n\n"
+            . "Photo search term: " . $validated['search_term'] . "\n"
+            . "Article title: " . ($validated['article_title'] ?? '') . "\n"
+            . "Article excerpt: " . mb_substr($validated['article_text'] ?? '', 0, 1000) . "\n\n"
+            . "Respond ONLY with JSON, no other text:\n"
+            . '{"alt":"contextual alt text describing what this photo represents in the article context (under 125 chars)","caption":"one sentence explaining why this photo is relevant to the article","filename":"seo-friendly-lowercase-hyphenated-name-no-extension"}';
+
+        $result = $anthropic->chat(
+            'You are a photo metadata expert. Output ONLY valid JSON.',
+            $prompt,
+            'claude-haiku-4-5-20251001',
+            256
+        );
+
+        if (!$result['success']) {
+            return response()->json(['success' => false, 'message' => $result['message'] ?? 'AI call failed']);
+        }
+
+        $content = $result['data']['content'] ?? '';
+        $content = preg_replace('/^```json\s*/i', '', $content);
+        $content = preg_replace('/\s*```$/', '', $content);
+        $parsed = json_decode(trim($content), true);
+
+        if (!$parsed || !isset($parsed['alt'])) {
+            return response()->json(['success' => false, 'message' => 'Failed to parse AI response']);
+        }
+
+        return response()->json([
+            'success'  => true,
+            'alt'      => $parsed['alt'] ?? '',
+            'caption'  => $parsed['caption'] ?? '',
+            'filename' => $parsed['filename'] ?? '',
+        ]);
+    }
+
     public function previewPrompt(Request $request): JsonResponse
     {
         $validated = $request->validate([

@@ -942,6 +942,10 @@
                                                 <div><label class="text-[10px] text-gray-400 uppercase">Alt Text</label><input type="text" x-model="photoSuggestions[idx].alt_text" class="w-full border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Alt text..."></div>
                                                 <div><label class="text-[10px] text-gray-400 uppercase">Caption</label><input type="text" x-model="photoSuggestions[idx].caption" class="w-full border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Caption..."></div>
                                                 <div><label class="text-[10px] text-gray-400 uppercase">WordPress Filename</label><p class="text-xs font-mono text-gray-600 bg-gray-50 rounded px-2 py-1" x-text="photoSuggestions[idx].suggestedFilename || 'auto'"></p></div>
+                                                <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50 mt-0.5">
+                                                    <svg class="w-3 h-3" :class="ps.refreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                                    <span x-text="ps.refreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
+                                                </button>
                                             </div>
                                         </div>
                                         {{-- Action buttons --}}
@@ -952,13 +956,6 @@
                                             <button @click.stop="removePhotoPlaceholder(idx)" class="p-1.5 rounded hover:bg-red-100 text-red-600" title="Remove"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
                                             <svg class="w-4 h-4 text-gray-400 transition-transform" :class="expandedSuggestions.includes(idx) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                                         </div>
-                                    </div>
-                                    {{-- AI Refresh Metadata --}}
-                                    <div x-show="ps.autoPhoto" x-cloak class="mt-1.5 ml-[124px]">
-                                        <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50">
-                                            <svg class="w-3 h-3" :class="ps.refreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                            <span x-text="ps.refreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
-                                        </button>
                                     </div>
                                 </div>
                                 {{-- Expanded: search + results (only for changing photo) --}}
@@ -2293,24 +2290,22 @@ function publishPipeline() {
             if (!ps) return;
             this.photoSuggestions[idx].refreshingMeta = true;
             try {
-                const articleText = this.spunContent ? this.spunContent.substring(0, 2000) : this.articleTitle || '';
-                const resp = await fetch('{{ route("publish.pipeline.preview-prompt") }}', {
+                const articleText = (this.spunContent || '').replace(/<[^>]*>/g, '').substring(0, 2000);
+                const resp = await fetch('{{ route("publish.pipeline.photo-meta") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ custom_prompt: 'Generate ONLY a JSON object for this photo placement in the article. The photo search term is "' + ps.search_term + '". Article context: ' + articleText.substring(0, 500) + '\n\nRespond ONLY with JSON: {"alt":"contextual alt text under 125 chars","caption":"one sentence caption explaining relevance to article","filename":"seo-filename-no-extension"}', source_texts: [] })
+                    body: JSON.stringify({
+                        search_term: ps.search_term,
+                        article_title: this.articleTitle || '',
+                        article_text: articleText,
+                    })
                 });
-                // Actually use the metadata endpoint with haiku for speed
-                const metaResp = await fetch('{{ route("publish.pipeline.metadata") }}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ article_html: '<p>Photo: ' + ps.search_term + '</p><p>Article: ' + this.articleTitle + '</p><p>' + articleText.substring(0, 1000) + '</p>' })
-                });
-                // For now, generate locally from article context
-                const title = this.articleTitle || 'article';
-                const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 40);
-                this.photoSuggestions[idx].alt_text = ps.search_term + ' — ' + title.substring(0, 80);
-                this.photoSuggestions[idx].caption = 'Image related to ' + title;
-                this.photoSuggestions[idx].suggestedFilename = slug + '-' + (idx + 1) + '.jpg';
+                const data = await resp.json();
+                if (data.success) {
+                    this.photoSuggestions[idx].alt_text = data.alt;
+                    this.photoSuggestions[idx].caption = data.caption;
+                    this.photoSuggestions[idx].suggestedFilename = data.filename;
+                }
             } catch (e) {}
             this.photoSuggestions[idx].refreshingMeta = false;
         },
@@ -2318,11 +2313,21 @@ function publishPipeline() {
         async refreshFeaturedMeta() {
             this.featuredRefreshingMeta = true;
             try {
-                const title = this.articleTitle || 'article';
-                const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 40);
-                this.featuredAlt = this.featuredImageSearch + ' — ' + title.substring(0, 80);
-                this.featuredCaption = 'Featured image for ' + title;
-                this.featuredFilename = slug + '-featured.jpg';
+                const articleText = (this.spunContent || '').replace(/<[^>]*>/g, '').substring(0, 2000);
+                const resp = await fetch('{{ route("publish.pipeline.photo-meta") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({
+                        search_term: this.featuredImageSearch,
+                        article_title: this.articleTitle || '',
+                        article_text: articleText,
+                    })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    this.featuredAlt = data.alt;
+                    this.featuredCaption = data.caption;
+                    this.featuredFilename = data.filename;
             } catch (e) {}
             this.featuredRefreshingMeta = false;
         },

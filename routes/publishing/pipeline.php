@@ -11,6 +11,7 @@ Route::post('/article/publish/publish', [PipelineController::class, 'publishToWo
 Route::post('/article/publish/save-draft', [PipelineController::class, 'saveDraft'])->name('publish.pipeline.save-draft');
 Route::post('/article/publish/detect-ai', [PipelineController::class, 'detectAi'])->name('publish.pipeline.detect-ai');
 Route::post('/article/publish/preview-prompt', [PipelineController::class, 'previewPrompt'])->name('publish.pipeline.preview-prompt');
+Route::post('/article/publish/photo-meta', [PipelineController::class, 'generatePhotoMeta'])->name('publish.pipeline.photo-meta');
 
 // User search (shared AJAX endpoint for type-ahead)
 Route::get('/api/users/search', [PipelineController::class, 'searchUsers'])->name('publish.users.search');
