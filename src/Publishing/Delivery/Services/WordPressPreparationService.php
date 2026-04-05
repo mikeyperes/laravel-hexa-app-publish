@@ -127,21 +127,24 @@ class WordPressPreparationService
         $articleTitle = $options['title'] ?? 'article';
         $draftId = $options['draft_id'] ?? 0;
 
-        // Build photo metadata lookup
+        // Build photo metadata lookup from photo_suggestions (legacy) + photo_meta (new)
         $photoMeta = [];
         foreach ($options['photo_suggestions'] ?? [] as $ps) {
             if (!empty($ps['autoPhoto']['url_large'])) {
                 $photoMeta[$ps['autoPhoto']['url_large']] = $ps;
             }
         }
+        // Indexed photo_meta from pipeline (ordered, matched by position)
+        $photoMetaIndexed = $options['photo_meta'] ?? [];
 
         foreach ($imageUrls as $imgUrl) {
             if (str_starts_with($imgUrl, rtrim($site->url, '/'))) continue;
 
             $ps = $photoMeta[$imgUrl] ?? null;
-            $altText = $ps['alt_text'] ?? '';
-            $caption = $ps['caption'] ?? '';
-            $seoName = $ps['suggestedFilename'] ?? '';
+            $pm = $photoMetaIndexed[$imgIndex] ?? null;
+            $altText = $pm['alt_text'] ?? $ps['alt_text'] ?? '';
+            $caption = $pm['caption'] ?? $ps['caption'] ?? '';
+            $seoName = $pm['filename'] ?? $ps['suggestedFilename'] ?? '';
 
             if (!$altText && preg_match('/<img[^>]+src\s*=\s*["\']' . preg_quote($imgUrl, '/') . '["\'][^>]*alt\s*=\s*["\']([^"\']*)["\'][^>]*>/i', $html, $altMatch)) {
                 $altText = $altMatch[1];
@@ -157,7 +160,10 @@ class WordPressPreparationService
             ) . '.' . $ext;
             $imgIndex++;
 
-            $send('step', "Uploading: {$properFilename}...");
+            $send('step', "Uploading photo {$imgIndex}/" . count($imageUrls) . ": {$properFilename}");
+            $send('info', "  Source: " . Str::limit($imgUrl, 100));
+            if ($altText) $send('info', "  Alt: {$altText}");
+            if ($caption) $send('info', "  Caption: " . Str::limit($caption, 100));
 
             if ($mode === 'ssh') {
                 $uploadResult = $this->wptoolkit->wpCliUploadMedia($server, $installId, $imgUrl, $properFilename, $altText, $caption, $altText);
@@ -167,10 +173,11 @@ class WordPressPreparationService
 
             if ($uploadResult['success'] && !empty($uploadResult['data']['media_url'])) {
                 $imageMap[$imgUrl] = $uploadResult['data']['media_url'];
-                $wpImages[] = $uploadResult['data'];
-                $send('success', "Uploaded: {$properFilename} → " . Str::limit($uploadResult['data']['media_url'], 80), ['wp_image' => $uploadResult['data']]);
+                $wpImg = $uploadResult['data'];
+                $wpImages[] = $wpImg;
+                $send('success', "  Uploaded: media_id=" . ($wpImg['media_id'] ?? '?') . " | " . ($wpImg['file_size'] ? round($wpImg['file_size'] / 1024) . ' KB' : '') . " | " . Str::limit($wpImg['media_url'] ?? '', 80), ['wp_image' => $wpImg]);
             } else {
-                $send('warning', "Failed to upload: {$properFilename} — " . ($uploadResult['message'] ?? 'unknown error'));
+                $send('error', "  Failed: {$properFilename} — " . ($uploadResult['message'] ?? 'unknown error'));
             }
         }
 

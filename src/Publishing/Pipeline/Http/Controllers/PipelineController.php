@@ -352,6 +352,14 @@ class PipelineController extends Controller
             'pipeline_session_id' => 'nullable|string|max:100',
             'draft_id'            => 'nullable|integer',
             'photo_suggestions'   => 'nullable|array',
+            'photo_meta'          => 'nullable|array',
+            'photo_meta.*.alt_text'  => 'nullable|string',
+            'photo_meta.*.caption'   => 'nullable|string',
+            'photo_meta.*.filename'  => 'nullable|string',
+            'featured_meta'       => 'nullable|array',
+            'featured_meta.alt_text' => 'nullable|string',
+            'featured_meta.caption'  => 'nullable|string',
+            'featured_meta.filename' => 'nullable|string',
         ]);
 
         $site = PublishSite::findOrFail($validated['site_id']);
@@ -370,6 +378,8 @@ class PipelineController extends Controller
                 'categories'        => $validated['categories'] ?? [],
                 'tags'              => $validated['tags'] ?? [],
                 'photo_suggestions' => $validated['photo_suggestions'] ?? [],
+                'photo_meta'        => $validated['photo_meta'] ?? [],
+                'featured_meta'     => $validated['featured_meta'] ?? null,
                 'draft_id'          => $validated['draft_id'] ?? 0,
             ], $send);
 

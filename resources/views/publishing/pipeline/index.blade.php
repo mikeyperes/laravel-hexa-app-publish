@@ -1217,16 +1217,69 @@
             <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 space-y-3">
                 <h5 class="text-base font-semibold text-gray-800 mb-2">Review</h5>
 
-                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Title</span><p class="text-sm font-bold text-gray-900 break-words" x-text="articleTitle || 'No title set'"></p></div>
-                <div x-show="articleDescription" class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Description</span><p class="text-sm text-gray-700 break-words" x-text="articleDescription"></p></div>
-                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Website</span><p class="text-sm text-gray-800"><span x-text="selectedSite ? selectedSite.name : 'Not selected'"></span> <span x-show="selectedSite" class="text-xs text-gray-400 break-all" x-text="'(' + (selectedSite?.url || '') + ')'"></span></p></div>
-                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Author</span><p class="text-sm text-gray-800" x-text="publishAuthor || 'Default'"></p></div>
-                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Word Count</span><p class="text-sm font-bold text-gray-800" x-text="spunWordCount + ' words'"></p></div>
-                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">AI Model</span><p class="text-sm font-mono text-gray-800" x-text="aiModel"></p></div>
-                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">WP Template</span><p class="text-sm text-gray-800" x-text="selectedPreset ? selectedPreset.name : 'None'"></p></div>
-                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Photos</span><p class="text-sm text-gray-800" x-text="photoSuggestions.filter(p => !p.removed).length + ' photo(s)'"></p></div>
-                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Links</span><p class="text-sm text-gray-800" x-text="suggestedUrls.length + ' link(s)'"></p></div>
-                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Draft ID</span><p class="text-sm text-gray-800" x-text="'#' + draftId"></p></div>
+                {{-- Article Info --}}
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Title</span><p class="text-sm font-bold text-gray-900 break-words" x-text="articleTitle || 'No title set'"></p></div>
+                <div x-show="articleDescription" class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Description</span><p class="text-sm text-gray-700 break-words" x-text="articleDescription"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Word Count</span><p class="text-sm font-bold text-gray-800" x-text="spunWordCount + ' words'"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Draft ID</span><p class="text-sm font-mono text-gray-800" x-text="'#' + draftId"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Draft URL</span><a :href="'/article/publish?id=' + draftId" class="text-sm text-blue-600 hover:underline break-all" x-text="'/article/publish?id=' + draftId"></a></div>
+
+                {{-- Publishing Info --}}
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
+                    <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Website</span>
+                    <div class="text-sm text-gray-800">
+                        <span x-text="selectedSite ? selectedSite.name : 'Not selected'"></span>
+                        <a x-show="selectedSite" :href="selectedSite?.url" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 ml-1 inline-flex items-center gap-0.5">
+                            <span x-text="selectedSite?.url" class="break-all"></span>
+                            <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                        </a>
+                    </div>
+                </div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
+                    <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Author</span>
+                    <div class="text-sm text-gray-800 inline-flex items-center gap-1">
+                        <span x-text="publishAuthor || 'Default'"></span>
+                        <a x-show="publishAuthor && selectedSite" x-cloak :href="(selectedSite?.url || '').replace(/\/$/, '') + '/author/' + publishAuthor + '/'" target="_blank" class="text-blue-500 hover:text-blue-700">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                        </a>
+                        <span x-show="publishAuthorSource === 'profile'" x-cloak class="text-[10px] text-gray-400">(from profile)</span>
+                    </div>
+                </div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Publish Action</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? 'Publish immediately' : (publishAction === 'draft_wp' ? 'WordPress draft' : (publishAction === 'future' ? 'Scheduled' : 'Local draft'))"></p></div>
+
+                {{-- Template & Preset --}}
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">AI Template</span><p class="text-sm text-gray-800" x-text="selectedTemplate ? selectedTemplate.name : 'Default'"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">WP Preset</span><p class="text-sm text-gray-800" x-text="selectedPreset ? selectedPreset.name : 'None'"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">AI Model</span><p class="text-sm font-mono text-gray-800" x-text="aiModel"></p></div>
+
+                {{-- Content Stats --}}
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Photos</span><p class="text-sm text-gray-800" x-text="photoSuggestions.filter(p => !p.removed).length + ' photo(s)' + (featuredPhoto ? ' + featured' : '')"></p></div>
+                <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Links</span><p class="text-sm text-gray-800" x-text="suggestedUrls.length + ' link(s)'"></p></div>
+                <div x-show="tokenUsage" class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Token Usage</span><p class="text-sm font-mono text-gray-800" x-text="(tokenUsage?.input_tokens || 0) + ' in / ' + (tokenUsage?.output_tokens || 0) + ' out'"></p></div>
+
+                {{-- AI Detection Summary --}}
+                <div x-show="aiDetectionRan" class="flex items-start gap-3 py-1.5 border-b border-gray-100">
+                    <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">AI Detection</span>
+                    <div class="text-sm">
+                        <span x-show="aiDetectionAllPass" class="text-green-600 font-medium">All Pass</span>
+                        <span x-show="!aiDetectionAllPass" class="text-red-600 font-medium">Flagged</span>
+                        <template x-for="(det, key) in aiDetectionResults" :key="key">
+                            <span class="text-xs text-gray-500 ml-2" x-text="key + ': ' + (det.score !== undefined ? det.score + '%' : (det.error ? 'Error' : '—'))"></span>
+                        </template>
+                    </div>
+                </div>
+
+                {{-- Featured Image --}}
+                <div x-show="featuredPhoto" class="flex items-start gap-3 py-1.5 border-b border-gray-100">
+                    <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Featured Image</span>
+                    <div class="flex items-center gap-3">
+                        <img x-show="featuredPhoto?.url_thumb" :src="featuredPhoto?.url_thumb" class="w-16 h-12 object-cover rounded flex-shrink-0">
+                        <div class="text-xs text-gray-600">
+                            <p x-text="featuredAlt || 'No alt text'" class="break-words"></p>
+                            <p class="font-mono text-gray-400" x-text="featuredFilename || 'auto'"></p>
+                        </div>
+                    </div>
+                </div>
 
                 {{-- Categories --}}
                 <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
@@ -1271,8 +1324,8 @@
                 <div x-show="featuredPhoto" class="flex items-start gap-3 py-1"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Image</span><p class="text-sm text-gray-600 break-all" x-text="featuredPhoto?.url_large || featuredPhoto?.url_thumb || ''"></p></div>
             </div>
 
-            {{-- ═══ Prepare for WordPress ═══ --}}
-            <div class="border border-gray-200 rounded-xl p-5 mb-4">
+            {{-- ═══ Prepare for WordPress (only for WP actions) ═══ --}}
+            <div x-show="publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future'" x-cloak class="border border-gray-200 rounded-xl p-5 mb-4">
                 <h5 class="text-sm font-semibold text-gray-700 mb-3">Prepare for WordPress</h5>
 
                 <button @click="prepareForWp()" :disabled="preparing || prepareComplete" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 mb-4">
@@ -3280,6 +3333,16 @@ function publishPipeline() {
                         categories: this.suggestedCategories,
                         tags: this.suggestedTags,
                         draft_id: this.draftId,
+                        photo_meta: this.photoSuggestions.filter(p => !p.removed && p.autoPhoto).map((p, i) => ({
+                            alt_text: p.alt_text || '',
+                            caption: p.caption || '',
+                            filename: p.suggestedFilename || this.buildFilename(p.search_term, i + 1),
+                        })),
+                        featured_meta: this.featuredPhoto ? {
+                            alt_text: this.featuredAlt || '',
+                            caption: this.featuredCaption || '',
+                            filename: this.featuredFilename || this.buildFilename(this.featuredImageSearch, 0),
+                        } : null,
                     })
                 });
 
