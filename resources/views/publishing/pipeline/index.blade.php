@@ -1104,6 +1104,9 @@
                             </select>
                             <svg x-show="siteConn.testing" x-cloak class="w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             <span x-show="!siteConn.testing && siteConn.authors.length > 0" x-cloak class="text-xs text-gray-400" x-text="siteConn.authors.length + ' authors'"></span>
+                            <a x-show="publishAuthor && selectedSite" x-cloak :href="(selectedSite?.url || '').replace(/\/$/, '') + '/author/' + publishAuthor + '/'" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 inline-flex items-center gap-0.5" title="View author on WordPress">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                            </a>
                         </div>
                         <p x-show="publishAuthorSource === 'profile' && publishAuthor" x-cloak class="text-[11px] text-gray-400 mt-0.5">Default author from user profile</p>
                     </div>
@@ -1706,6 +1709,7 @@ function publishPipeline() {
                 if (state.articleTitle) this.articleTitle = state.articleTitle;
                 if (state.publishAction) this.publishAction = state.publishAction;
                 if (state.publishAuthor) this.publishAuthor = state.publishAuthor;
+                if (state.publishAuthorSource) this.publishAuthorSource = state.publishAuthorSource;
                 if (state.spunContent || state.editorContent) {
                     const restoredEditorHtml = state.editorContent || state.spunContent;
                     this.spunContent = restoredEditorHtml;
@@ -1795,13 +1799,13 @@ function publishPipeline() {
             const finishRestore = () => {
                 this._restoring = false;
                 if (shouldPersistRestoredDraftState) this.autoSaveDraft();
-                // Auto-load authors if site is selected but authors are empty
-                if (this.selectedSiteId && (!this.siteConn.authors || this.siteConn.authors.length === 0)) {
+                // Auto-load authors and default author for selected site
+                if (this.selectedSiteId) {
                     fetch('/publish/sites/' + this.selectedSiteId + '/authors', {
                         headers: { 'Accept': 'application/json' }
                     }).then(r => r.json()).then(d => {
                         if (d.authors) this.siteConn.authors = d.authors;
-                        if (d.default_author && !this.publishAuthor) {
+                        if (d.default_author && this.publishAuthorSource !== 'manual') {
                             this.publishAuthor = d.default_author;
                             this.publishAuthorSource = 'profile';
                         }
@@ -1894,6 +1898,7 @@ function publishPipeline() {
                 articleTitle: this.articleTitle,
                 publishAction: this.publishAction,
                 publishAuthor: this.publishAuthor,
+                publishAuthorSource: this.publishAuthorSource,
                 spunContent: this.spunContent,
                 spunWordCount: this.spunWordCount,
                 suggestedTitles: this.suggestedTitles,
