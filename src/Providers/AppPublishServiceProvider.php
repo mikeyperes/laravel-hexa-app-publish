@@ -81,6 +81,12 @@ class AppPublishServiceProvider extends ServiceProvider
             $registry->registerSidebarLink('publish.schedule.index', 'Calendar', 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', 'Schedule', 'app-publish', 23);
         }
 
+        // Settings card on /settings page
+        view()->composer('settings.index', function ($view) {
+            $view->getFactory()->startPush('settings-cards',
+                view('app-publish::partials.settings-card')->render());
+        });
+
         // Inject API key settings into the core integrations page
         view()->composer('settings.integrations', function ($view) {
             $factory = $view->getFactory();
