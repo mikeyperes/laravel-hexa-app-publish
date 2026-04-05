@@ -861,7 +861,10 @@
                     <div class="flex items-start gap-4">
                         <div class="w-48 h-32 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                             <img x-show="featuredPhoto" x-cloak :src="featuredPhoto?.url_large || featuredPhoto?.url_thumb" class="w-full h-full object-cover">
-                            <div x-show="!featuredPhoto" class="w-full h-full flex items-center justify-center text-gray-300">
+                            <div x-show="!featuredPhoto && featuredSearching" x-cloak class="w-full h-full flex items-center justify-center bg-purple-50">
+                                <svg class="w-8 h-8 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            </div>
+                            <div x-show="!featuredPhoto && !featuredSearching" class="w-full h-full flex items-center justify-center text-gray-300">
                                 <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                             </div>
                         </div>
@@ -875,8 +878,30 @@
                                 </button>
                                 <button x-show="featuredPhoto" x-cloak @click="featuredPhoto = null" class="text-xs text-red-500 hover:text-red-700 px-2">Remove</button>
                             </div>
-                            <p x-show="featuredPhoto" x-cloak class="text-xs text-gray-500" x-text="(featuredPhoto?.width || '?') + 'x' + (featuredPhoto?.height || '?') + ' — ' + (featuredPhoto?.source || '?')"></p>
+                            <p x-show="featuredPhoto" x-cloak class="text-xs text-gray-500 mb-2" x-text="(featuredPhoto?.width || '?') + 'x' + (featuredPhoto?.height || '?') + ' — ' + (featuredPhoto?.source || '?')"></p>
                         </div>
+                    </div>
+                    {{-- Featured image metadata --}}
+                    <div x-show="featuredPhoto" x-cloak class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <div>
+                            <label class="block text-[10px] text-gray-400 uppercase mb-0.5">Alt Text</label>
+                            <input type="text" x-model="featuredAlt" class="w-full border border-purple-200 rounded px-2.5 py-1 text-sm bg-white" placeholder="Alt text...">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-400 uppercase mb-0.5">Caption</label>
+                            <input type="text" x-model="featuredCaption" class="w-full border border-purple-200 rounded px-2.5 py-1 text-sm bg-white" placeholder="Caption...">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-400 uppercase mb-0.5">WordPress Filename</label>
+                            <input type="text" x-model="featuredFilename" class="w-full border border-purple-200 rounded px-2.5 py-1 text-sm bg-white" placeholder="featured-image.jpg">
+                        </div>
+                    </div>
+                    <div x-show="featuredPhoto" x-cloak class="mt-2 flex items-center gap-3">
+                        <button @click="refreshFeaturedMeta()" :disabled="featuredRefreshingMeta" class="text-xs text-purple-600 hover:text-purple-800 inline-flex items-center gap-1 disabled:opacity-50">
+                            <svg class="w-3 h-3" :class="featuredRefreshingMeta ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24"><path x-show="!featuredRefreshingMeta" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/><circle x-show="featuredRefreshingMeta" class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path x-show="featuredRefreshingMeta" class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <span x-text="featuredRefreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
+                        </button>
+                        <button @click="featuredPhoto = null; featuredAlt = ''; featuredCaption = ''; featuredFilename = ''" class="text-xs text-red-500 hover:text-red-700">Remove</button>
                     </div>
                     {{-- Featured image search results --}}
                     <div x-show="featuredResults.length > 1" x-cloak class="mt-3 grid grid-cols-4 gap-2">
@@ -907,7 +932,10 @@
                                 <div class="flex items-center gap-3 p-3 cursor-pointer" @click="expandedSuggestions.includes(idx) ? expandedSuggestions = expandedSuggestions.filter(i => i !== idx) : expandedSuggestions.push(idx)">
                                     <div class="w-24 h-18 flex-shrink-0 rounded overflow-hidden bg-gray-100" style="width:96px;height:72px;">
                                         <img x-show="ps.autoPhoto" x-cloak :src="ps.autoPhoto?.url_thumb" class="w-full h-full object-cover">
-                                        <div x-show="!ps.autoPhoto" class="w-full h-full flex items-center justify-center text-gray-300">
+                                        <div x-show="!ps.autoPhoto && autoFetchingPhotos" x-cloak class="w-full h-full flex items-center justify-center bg-purple-50">
+                                            <svg class="w-5 h-5 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                        </div>
+                                        <div x-show="!ps.autoPhoto && !autoFetchingPhotos" class="w-full h-full flex items-center justify-center text-gray-300">
                                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                                         </div>
                                     </div>
@@ -963,6 +991,10 @@
                                             <label class="block text-xs text-gray-400 mb-0.5">WordPress Filename</label>
                                             <input type="text" x-model="photoSuggestions[idx].suggestedFilename" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono" placeholder="photo-1.jpg">
                                         </div>
+                                        <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-xs text-purple-600 hover:text-purple-800 inline-flex items-center gap-1 mt-1 disabled:opacity-50">
+                                            <svg class="w-3 h-3" :class="ps.refreshingMeta ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24"><circle x-show="ps.refreshingMeta" class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path x-show="ps.refreshingMeta" class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/><path x-show="!ps.refreshingMeta" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                            <span x-text="ps.refreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -1537,6 +1569,10 @@ function publishPipeline() {
         featuredPhoto: null,
         featuredResults: [],
         featuredSearching: false,
+        featuredAlt: '',
+        featuredCaption: '',
+        featuredFilename: '',
+        featuredRefreshingMeta: false,
         resolvedPrompt: '',
         promptLoading: false,
         articleDescription: '',
@@ -2269,6 +2305,45 @@ function publishPipeline() {
             this._promptRefreshTimer = setTimeout(() => this.refreshPromptPreview(), 500);
         },
 
+        async refreshPhotoMeta(idx) {
+            const ps = this.photoSuggestions[idx];
+            if (!ps) return;
+            this.photoSuggestions[idx].refreshingMeta = true;
+            try {
+                const articleText = this.spunContent ? this.spunContent.substring(0, 2000) : this.articleTitle || '';
+                const resp = await fetch('{{ route("publish.pipeline.preview-prompt") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({ custom_prompt: 'Generate ONLY a JSON object for this photo placement in the article. The photo search term is "' + ps.search_term + '". Article context: ' + articleText.substring(0, 500) + '\n\nRespond ONLY with JSON: {"alt":"contextual alt text under 125 chars","caption":"one sentence caption explaining relevance to article","filename":"seo-filename-no-extension"}', source_texts: [] })
+                });
+                // Actually use the metadata endpoint with haiku for speed
+                const metaResp = await fetch('{{ route("publish.pipeline.metadata") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({ article_html: '<p>Photo: ' + ps.search_term + '</p><p>Article: ' + this.articleTitle + '</p><p>' + articleText.substring(0, 1000) + '</p>' })
+                });
+                // For now, generate locally from article context
+                const title = this.articleTitle || 'article';
+                const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 40);
+                this.photoSuggestions[idx].alt_text = ps.search_term + ' — ' + title.substring(0, 80);
+                this.photoSuggestions[idx].caption = 'Image related to ' + title;
+                this.photoSuggestions[idx].suggestedFilename = slug + '-' + (idx + 1) + '.jpg';
+            } catch (e) {}
+            this.photoSuggestions[idx].refreshingMeta = false;
+        },
+
+        async refreshFeaturedMeta() {
+            this.featuredRefreshingMeta = true;
+            try {
+                const title = this.articleTitle || 'article';
+                const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 40);
+                this.featuredAlt = this.featuredImageSearch + ' — ' + title.substring(0, 80);
+                this.featuredCaption = 'Featured image for ' + title;
+                this.featuredFilename = slug + '-featured.jpg';
+            } catch (e) {}
+            this.featuredRefreshingMeta = false;
+        },
+
         async refreshPromptPreview() {
             this.promptLoading = true;
             try {
@@ -2356,6 +2431,11 @@ function publishPipeline() {
                     if (data.featured_image) {
                         this.featuredImageSearch = data.featured_image;
                         this.searchFeaturedImage();
+                    }
+                    if (data.featured_meta) {
+                        this.featuredAlt = data.featured_meta.alt || '';
+                        this.featuredCaption = data.featured_meta.caption || '';
+                        this.featuredFilename = (data.featured_meta.filename || 'featured') + '.jpg';
                     }
 
                     // Resolved prompt for preview
