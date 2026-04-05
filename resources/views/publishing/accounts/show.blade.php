@@ -163,7 +163,7 @@
             <template x-if="enabledSites.length > 0">
                 <div class="border border-gray-200 rounded-lg divide-y divide-gray-100">
                     <template x-for="site in enabledSites" :key="site.id">
-                        <div class="px-4 py-3 hover:bg-gray-50" x-data="{ testingWrite: false, writeResult: null, loadingAuthors: false, authors: [], selectedAuthor: site.default_author || '', authorSaved: false, authorError: '' }" x-init="
+                        <div class="px-4 py-3 hover:bg-gray-50" x-data="{ testingWrite: false, writeResult: null, removing: false, loadingAuthors: false, authors: [], selectedAuthor: site.default_author || '', authorSaved: false, authorError: '' }" x-init="
                             loadingAuthors = true;
                             fetch('/publish/sites/' + site.id + '/authors', { headers: { 'Accept': 'application/json' } })
                                 .then(r => r.json()).then(d => { authors = d.authors || []; if (d.default_author) selectedAuthor = d.default_author; loadingAuthors = false; })
@@ -180,13 +180,18 @@
                                 <div class="flex items-center gap-2 flex-shrink-0 ml-3">
                                     <button @click="
                                         testingWrite = true; writeResult = null;
+                                        $root.logSite('info', 'Testing write access for ' + site.name + ' (' + site.url + ')...');
                                         fetch('/publish/sites/' + site.id + '/test-write', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content } })
-                                            .then(r => r.json()).then(d => { writeResult = d; testingWrite = false; }).catch(() => { writeResult = { success: false, message: 'Network error' }; testingWrite = false; })
+                                            .then(r => r.json()).then(d => { writeResult = d; testingWrite = false; $root.logSite(d.success ? 'success' : 'error', site.name + ': ' + (d.message || (d.success ? 'Write test passed' : 'Write test failed'))); })
+                                            .catch(e => { writeResult = { success: false, message: 'Network error' }; testingWrite = false; $root.logSite('error', site.name + ': Network error — ' + e.message); })
                                     " :disabled="testingWrite" class="text-xs px-2 py-1 border rounded inline-flex items-center gap-1" :class="writeResult?.success ? 'border-green-300 text-green-700 bg-green-50' : (writeResult?.success === false ? 'border-red-300 text-red-700 bg-red-50' : 'border-gray-300 text-gray-600 hover:bg-gray-100')">
                                         <svg x-show="testingWrite" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                                         <span x-text="testingWrite ? 'Testing...' : (writeResult?.success ? 'Write OK' : (writeResult?.success === false ? 'Failed' : 'Test Write'))"></span>
                                     </button>
-                                    <button @click="removeSite(site.id)" class="text-xs text-red-500 hover:text-red-700 px-2 py-1 border border-red-200 rounded hover:bg-red-50">Remove</button>
+                                    <button @click="removing = true; $root.logSite('info', 'Removing site ' + site.name + '...'); $root.removeSite(site.id, site.name).then(() => removing = false)" :disabled="removing" class="text-xs text-red-500 hover:text-red-700 px-2 py-1 border border-red-200 rounded hover:bg-red-50 disabled:opacity-50 inline-flex items-center gap-1">
+                                        <svg x-show="removing" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                        <span x-text="removing ? 'Removing...' : 'Remove'"></span>
+                                    </button>
                                 </div>
                             </div>
                             {{-- Write test error --}}
@@ -324,6 +329,24 @@
                     </div>
                 </template>
             </div>
+        </div>
+
+        {{-- WordPress Sites Activity Log --}}
+        <div x-show="siteLog.length > 0" x-cloak class="mt-4 bg-gray-900 rounded-lg border border-gray-700 p-4 font-mono text-xs space-y-1 max-h-48 overflow-y-auto">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-gray-400 uppercase tracking-wide text-[10px] font-semibold">Activity Log</span>
+                <button @click="siteLog = []" class="text-[10px] text-gray-500 hover:text-gray-300">Clear</button>
+            </div>
+            <template x-for="(entry, idx) in siteLog" :key="idx">
+                <div class="flex items-start gap-2 py-0.5" :class="{
+                    'text-green-400': entry.type === 'success',
+                    'text-red-400': entry.type === 'error',
+                    'text-gray-400': entry.type === 'info'
+                }">
+                    <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
+                    <span x-text="entry.message" class="break-words"></span>
+                </div>
+            </template>
         </div>
     </div>
 
@@ -539,6 +562,7 @@ function userProfile() {
         defaultSiteId: '{{ $defaultSiteId ?? '' }}',
         defaultSiteSaved: false,
 
+        siteLog: [],
         scanning: false,
         scanBanner: '',
         scanSuccess: false,
@@ -548,6 +572,14 @@ function userProfile() {
         addingIdx: -1,
 
         csrfToken: document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+
+        _logTime() {
+            return new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        },
+
+        logSite(type, message) {
+            this.siteLog.push({ type, message, time: this._logTime() });
+        },
 
         isSiteAdded(url) {
             return this.enabledSites.some(s => s.url === url);
@@ -650,24 +682,24 @@ function userProfile() {
             this.addingIdx = -1;
         },
 
-        async removeSite(siteId) {
+        async removeSite(siteId, siteName) {
             try {
                 const res = await fetch('/publish/users/{{ $user->id }}/remove-site/' + siteId, {
                     method: 'DELETE',
                     headers: { 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
                 });
                 const data = await res.json();
-                this.scanSuccess = data.success;
-                this.scanBanner = data.message;
                 if (data.success) {
                     this.enabledSites = this.enabledSites.filter(s => s.id !== siteId);
                     if (String(this.defaultSiteId) === String(siteId)) {
                         this.defaultSiteId = '';
                     }
+                    this.logSite('success', 'Removed site: ' + (siteName || siteId));
+                } else {
+                    this.logSite('error', 'Failed to remove ' + (siteName || siteId) + ': ' + (data.message || 'Unknown error'));
                 }
             } catch (e) {
-                this.scanSuccess = false;
-                this.scanBanner = 'Error: ' + e.message;
+                this.logSite('error', 'Failed to remove ' + (siteName || siteId) + ': ' + e.message);
             }
         },
 

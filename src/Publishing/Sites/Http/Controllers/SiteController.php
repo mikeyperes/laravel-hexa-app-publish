@@ -278,6 +278,14 @@ class SiteController extends Controller
             'last_error' => $result['success'] ? null : $result['message'],
         ]);
 
+        hexaLog('publish', 'site_test_write', ($result['success'] ? 'Write test passed' : 'Write test failed') . " for \"{$site->name}\" ({$site->url})", [
+            'site_id' => $site->id,
+            'site_name' => $site->name,
+            'site_url' => $site->url,
+            'success' => $result['success'],
+            'authors_count' => count($authors),
+        ]);
+
         $result['authors'] = $authors;
         $result['default_author'] = $site->default_author;
         return response()->json($result);

@@ -307,7 +307,15 @@ class AccountController extends Controller
         }
 
         $name = $site->name;
+        $url = $site->url;
         $site->delete();
+
+        hexaLog('publish', 'site_removed', "Removed site \"{$name}\" ({$url}) from user #{$id}", [
+            'user_id' => $id,
+            'site_id' => $siteId,
+            'site_name' => $name,
+            'site_url' => $url,
+        ]);
 
         return response()->json(['success' => true, 'message' => "Site \"{$name}\" removed."]);
     }
