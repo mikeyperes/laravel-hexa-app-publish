@@ -1605,8 +1605,8 @@ function publishPipeline() {
             if (state) {
                 if (state.selectedUser) this.selectedUser = state.selectedUser;
                 if (state.currentStep) this.currentStep = state.currentStep;
-                if (state.openSteps) this.openSteps = state.openSteps;
-                if (state.completedSteps) this.completedSteps = state.completedSteps;
+                if (state.openSteps) this.openSteps = Array.isArray(state.openSteps) ? state.openSteps : Object.values(state.openSteps);
+                if (state.completedSteps) this.completedSteps = Array.isArray(state.completedSteps) ? state.completedSteps : Object.values(state.completedSteps);
                 if (state.selectedSiteId) {
                     this.selectedSiteId = String(state.selectedSiteId);
                     this.selectedSite = state.selectedSite || null;
