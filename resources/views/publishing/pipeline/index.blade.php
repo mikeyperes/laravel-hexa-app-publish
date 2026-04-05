@@ -1720,7 +1720,9 @@ function publishPipeline() {
                 if (state.selectedTitleIdx !== undefined) { this.selectedTitleIdx = state.selectedTitleIdx; if (this.suggestedTitles[this.selectedTitleIdx]) this.articleTitle = this.suggestedTitles[this.selectedTitleIdx]; }
                 if (state.editorContent) this.editorContent = state.editorContent;
                 if (state.tokenUsage) this.tokenUsage = state.tokenUsage;
-                if (state.photoSuggestions) this.photoSuggestions = state.photoSuggestions;
+                if (state.photoSuggestions) {
+                    this.photoSuggestions = state.photoSuggestions.map(ps => ({ ...ps, refreshingMeta: false, searching: false }));
+                }
                 if (state.featuredImageSearch) this.featuredImageSearch = state.featuredImageSearch;
                 if (state.featuredPhoto) {
                     this.featuredPhoto = state.featuredPhoto;
@@ -1769,7 +1771,7 @@ function publishPipeline() {
                 this.$nextTick(() => this.setSpinEditor(draftState.body));
             }
             if ((!Array.isArray(this.photoSuggestions) || this.photoSuggestions.length === 0) && Array.isArray(draftState.photoSuggestions)) {
-                this.photoSuggestions = draftState.photoSuggestions;
+                this.photoSuggestions = draftState.photoSuggestions.map(ps => ({ ...ps, refreshingMeta: false, searching: false }));
             }
             if (!this.featuredImageSearch && draftState.featuredImageSearch) {
                 this.featuredImageSearch = draftState.featuredImageSearch;
