@@ -1717,6 +1717,10 @@ function publishPipeline() {
             const finishRestore = () => {
                 this._restoring = false;
                 if (shouldPersistRestoredDraftState) this.autoSaveDraft();
+                // Auto-load prompt preview if template/preset is selected
+                if (this.selectedTemplateId || this.selectedPresetId) {
+                    this.refreshPromptPreview();
+                }
                 if (this.featuredImageSearch && !this.featuredPhoto) {
                     this.searchFeaturedImage();
                 }
@@ -1764,6 +1768,10 @@ function publishPipeline() {
             this.$watch('siteConn.status', () => this.savePipelineState());
             this.$watch('siteConn.authors', () => this.savePipelineState());
             this.$watch('newsResults', () => this.savePipelineState());
+            // Auto-refresh prompt preview on any prompt-affecting change
+            this.$watch('selectedTemplateId', () => { if (!this._restoring) this._queuePromptRefresh(); });
+            this.$watch('selectedPresetId', () => { if (!this._restoring) this._queuePromptRefresh(); });
+            this.$watch('customPrompt', () => { if (!this._restoring) this._queuePromptRefresh(); });
             this.$watch('newsMode', () => this.savePipelineState());
             this.$watch('newsCategory', () => this.savePipelineState());
         },
@@ -2262,6 +2270,12 @@ function publishPipeline() {
         _logSpin(type, message) {
             const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
             this.spinLog.push({ type, message, time });
+        },
+
+        _promptRefreshTimer: null,
+        _queuePromptRefresh() {
+            clearTimeout(this._promptRefreshTimer);
+            this._promptRefreshTimer = setTimeout(() => this.refreshPromptPreview(), 500);
         },
 
         async refreshPromptPreview() {
