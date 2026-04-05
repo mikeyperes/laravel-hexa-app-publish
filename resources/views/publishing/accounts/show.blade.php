@@ -149,10 +149,11 @@
                 <select x-model="defaultSiteId" @change="saveDefaultSite()" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">-- No default --</option>
                     <template x-for="s in enabledSites" :key="s.id">
-                        <option :value="s.id" x-text="s.name + ' (' + s.url + ')'"></option>
+                        <option :value="String(s.id)" x-text="s.name + ' (' + s.url + ')'"></option>
                     </template>
                 </select>
                 <span x-show="defaultSiteSaved" x-cloak x-transition class="text-xs text-green-600 font-medium">Saved</span>
+                <span x-show="defaultSiteError" x-cloak class="text-xs text-red-600" x-text="defaultSiteError"></span>
             </div>
         </div>
 
@@ -163,12 +164,7 @@
             <template x-if="enabledSites.length > 0">
                 <div class="border border-gray-200 rounded-lg divide-y divide-gray-100">
                     <template x-for="site in enabledSites" :key="site.id">
-                        <div class="px-4 py-3 hover:bg-gray-50" x-data="{ testingWrite: false, writeResult: null, removing: false, loadingAuthors: false, authors: [], selectedAuthor: site.default_author || '', authorSaved: false, authorError: '' }" x-init="
-                            loadingAuthors = true;
-                            fetch('/publish/sites/' + site.id + '/authors', { headers: { 'Accept': 'application/json' } })
-                                .then(r => r.json()).then(d => { authors = d.authors || []; if (d.default_author) selectedAuthor = d.default_author; loadingAuthors = false; })
-                                .catch(() => { loadingAuthors = false; });
-                        ">
+                        <div class="px-4 py-3 hover:bg-gray-50" x-data="{ testingWrite: false, writeResult: null, removing: false, loadingAuthors: false, authorsLoaded: false, authors: [], selectedAuthor: site.default_author || '', authorSaved: false, authorError: '' }">
                             <div class="flex items-center justify-between">
                                 <div class="flex-1 min-w-0">
                                     <p class="text-sm font-medium text-gray-900 break-words" x-text="site.name"></p>
@@ -196,15 +192,25 @@
                             </div>
                             {{-- Write test error --}}
                             <p x-show="writeResult?.success === false" x-cloak class="text-xs text-red-600 mt-1 break-words" x-text="writeResult?.message"></p>
-                            {{-- Default Author dropdown --}}
-                            <div class="mt-2 flex items-center gap-2">
+                            {{-- Default Author --}}
+                            <div class="mt-2 flex items-center gap-2 flex-wrap">
                                 <svg class="w-3.5 h-3.5 text-purple-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
                                 <label class="text-xs text-gray-500 flex-shrink-0">Default Author</label>
+                                {{-- Show stored author name if not yet loaded --}}
+                                <span x-show="!authorsLoaded && selectedAuthor" x-cloak class="text-xs text-purple-600 font-medium" x-text="selectedAuthor"></span>
+                                {{-- Load Authors button --}}
+                                <button x-show="!authorsLoaded && !loadingAuthors" x-cloak @click="
+                                    loadingAuthors = true;
+                                    fetch('/publish/sites/' + site.id + '/authors', { headers: { 'Accept': 'application/json' } })
+                                        .then(r => r.json()).then(d => { authors = d.authors || []; if (d.default_author) selectedAuthor = d.default_author; authorsLoaded = true; loadingAuthors = false; $dispatch('site-log', { type: 'info', message: site.name + ': ' + (d.authors?.length || 0) + ' authors loaded' }); })
+                                        .catch(e => { loadingAuthors = false; $dispatch('site-log', { type: 'error', message: site.name + ': Failed to load authors — ' + e.message }); });
+                                " class="text-[11px] text-purple-500 hover:text-purple-700 border border-purple-200 px-2 py-0.5 rounded">Load Authors</button>
                                 <svg x-show="loadingAuthors" x-cloak class="w-3 h-3 animate-spin text-purple-500 flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                <select x-show="!loadingAuthors && authors.length > 0" x-cloak x-model="selectedAuthor" @change="
+                                {{-- Author dropdown (after load) --}}
+                                <select x-show="authorsLoaded && authors.length > 0" x-cloak x-model="selectedAuthor" @change="
                                     authorSaved = false; authorError = '';
                                     fetch('/publish/sites/' + site.id + '/set-author', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content }, body: JSON.stringify({ author: selectedAuthor }) })
-                                        .then(r => r.json()).then(d => { if (d.success) { authorSaved = true; setTimeout(() => authorSaved = false, 2000); } else { authorError = d.message || 'Save failed'; } })
+                                        .then(r => r.json()).then(d => { if (d.success) { authorSaved = true; $dispatch('site-log', { type: 'success', message: site.name + ': Default author set to ' + selectedAuthor }); setTimeout(() => authorSaved = false, 2000); } else { authorError = d.message || 'Save failed'; } })
                                         .catch(e => { authorError = e.message; });
                                 " class="border border-gray-300 rounded px-2 py-1 text-xs">
                                     <option value="">— No default —</option>
@@ -212,7 +218,7 @@
                                         <option :value="author.user_login" x-text="(author.display_name || author.user_login) + ' (' + author.user_login + ')'"></option>
                                     </template>
                                 </select>
-                                <span x-show="!loadingAuthors && authors.length === 0" x-cloak class="text-xs text-gray-400">No authors found</span>
+                                <span x-show="authorsLoaded && authors.length === 0" x-cloak class="text-xs text-gray-400">No authors found</span>
                                 <span x-show="authorSaved" x-cloak x-transition class="text-xs text-green-600 font-medium">Saved</span>
                                 <span x-show="authorError" x-cloak class="text-xs text-red-600" x-text="authorError"></span>
                             </div>
@@ -562,7 +568,7 @@ function userProfile() {
 
         // Enabled sites (Alpine-driven)
         enabledSites: @json($sitesJson),
-        defaultSiteId: '{{ $defaultSiteId ?? '' }}',
+        defaultSiteId: @json((string) ($defaultSiteId ?? '')),
         defaultSiteSaved: false,
 
         siteLog: [],
@@ -706,10 +712,13 @@ function userProfile() {
             }
         },
 
+        defaultSiteError: '',
+
         async saveDefaultSite() {
             this.defaultSiteSaved = false;
+            this.defaultSiteError = '';
             try {
-                const resp = await fetch('{{ route("publish.accounts.update-default-site", $user->id) }}', {
+                const resp = await fetch('/publish/users/{{ $user->id }}/default-site', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' },
                     body: JSON.stringify({ default_site_id: this.defaultSiteId || null })
@@ -717,9 +726,16 @@ function userProfile() {
                 const data = await resp.json();
                 if (data.success) {
                     this.defaultSiteSaved = true;
-                    setTimeout(() => this.defaultSiteSaved = false, 2000);
+                    this.logSite('success', 'Default website updated');
+                    setTimeout(() => this.defaultSiteSaved = false, 3000);
+                } else {
+                    this.defaultSiteError = data.message || 'Save failed';
+                    this.logSite('error', 'Failed to save default website: ' + this.defaultSiteError);
                 }
-            } catch (e) {}
+            } catch (e) {
+                this.defaultSiteError = 'Network error: ' + e.message;
+                this.logSite('error', 'Failed to save default website: ' + e.message);
+            }
         },
 
         async scanWordPress() {
