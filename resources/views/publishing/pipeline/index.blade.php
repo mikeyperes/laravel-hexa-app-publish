@@ -713,6 +713,12 @@
                         No AI detectors are enabled. Configure in <a href="{{ route('publish.settings.master') }}" class="text-purple-400 hover:text-purple-300">Settings</a>.
                     </div>
 
+                    {{-- Loading state --}}
+                    <div x-show="aiDetecting" x-cloak class="text-xs text-purple-400 text-center py-2 inline-flex items-center justify-center gap-2 w-full">
+                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Running AI detection scan...
+                    </div>
+
                     {{-- Waiting state --}}
                     <div x-show="!aiDetectionRan && !aiDetecting" x-cloak class="text-xs text-gray-500 text-center py-2">
                         Detection runs automatically after spin completes.
@@ -1744,7 +1750,11 @@ function publishPipeline() {
                 if (state.featuredFilename) this.featuredFilename = state.featuredFilename;
                 if (state.resolvedPrompt) this.resolvedPrompt = state.resolvedPrompt;
                 if (state.articleDescription) this.articleDescription = state.articleDescription;
-                if (state.aiDetectionResults) this.aiDetectionResults = state.aiDetectionResults;
+                if (state.aiDetectionResults) {
+                    const restored = state.aiDetectionResults;
+                    Object.keys(restored).forEach(k => { restored[k].loading = false; });
+                    this.aiDetectionResults = restored;
+                }
                 if (state.aiDetectionRan) this.aiDetectionRan = state.aiDetectionRan;
                 if (state.aiDetectionAllPass !== undefined) this.aiDetectionAllPass = state.aiDetectionAllPass;
                 // Find Articles state
