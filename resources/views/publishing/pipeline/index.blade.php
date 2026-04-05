@@ -1112,7 +1112,7 @@
                 <div x-show="$root.spinLog && $root.spinLog.length > 0" x-cloak class="mt-4" x-data="{ showLog: false }">
                     <button @click="showLog = !showLog" class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
                         <svg class="w-3 h-3 transition-transform" :class="showLog ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                        Activity Log (<span x-text="$root.spinLog.length"></span> entries)
+                        Activity Log (<span x-text="($root.spinLog || []).length"></span> entries)
                     </button>
                     <div x-show="showLog" x-cloak class="mt-1 bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto">
                         <template x-for="(entry, idx) in $root.spinLog" :key="idx">
@@ -1411,8 +1411,8 @@
             </div>
             <div class="p-6">
                 <div class="flex gap-2 mb-4">
-                    <input type="text" x-model="photoSearch" @keydown.enter="searchManualPhotos()" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Search for photos...">
-                    <button @click="searchManualPhotos()" :disabled="photoSearching" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1">
+                    <input type="text" x-model="photoSearch" @keydown.enter="searchPhotos()" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Search for photos...">
+                    <button @click="searchPhotos()" :disabled="photoSearching" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1">
                         <svg x-show="photoSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         Search
                     </button>
