@@ -1096,7 +1096,7 @@
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">Publish As</label>
                         <div class="flex items-center gap-2">
-                            <select x-model="publishAuthor" @change="autoSaveDraft()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <select x-model="publishAuthor" @change="publishAuthorSource = 'manual'; autoSaveDraft()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
                                 <option value="">— Default author —</option>
                                 <template x-for="a in siteConn.authors" :key="a.user_login">
                                     <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
@@ -1105,6 +1105,7 @@
                             <svg x-show="siteConn.testing" x-cloak class="w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             <span x-show="!siteConn.testing && siteConn.authors.length > 0" x-cloak class="text-xs text-gray-400" x-text="siteConn.authors.length + ' authors'"></span>
                         </div>
+                        <p x-show="publishAuthorSource === 'profile' && publishAuthor" x-cloak class="text-[11px] text-gray-400 mt-0.5">Default author from user profile</p>
                     </div>
                 </div>
 
@@ -1593,6 +1594,7 @@ function publishPipeline() {
         // Step 10 — Publish
         publishAction: 'draft_local',
         publishAuthor: '',
+        publishAuthorSource: '',
         scheduleDate: '',
         publishing: false,
         publishResult: null,
@@ -2087,7 +2089,7 @@ function publishPipeline() {
                             // Authors loaded
                         },
                         onSuccess: (d) => {
-                            if (d.default_author) this.publishAuthor = d.default_author;
+                            if (d.default_author) { this.publishAuthor = d.default_author; this.publishAuthorSource = 'profile'; }
                             this.completeStep(2);
                             this.autoSaveDraft();
                             if (!this._restoring) this.openStep(3);
