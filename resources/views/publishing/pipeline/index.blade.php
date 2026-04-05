@@ -567,12 +567,6 @@
                 </button>
             </div>
 
-            {{-- Short description --}}
-            <div class="mb-4">
-                <label class="block text-xs text-gray-500 mb-1">Article Description / Excerpt</label>
-                <textarea x-model="articleDescription" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Short summary for SEO meta description and excerpt..."></textarea>
-            </div>
-
             {{-- Custom prompt input — live-updates resolved prompt --}}
             <div class="mb-4">
                 <label class="block text-xs text-gray-500 mb-1">Custom Instructions <span class="text-gray-400">(takes precedence over template/preset)</span></label>
@@ -768,6 +762,12 @@
                     <label class="block text-xs text-gray-500 mb-1">Article Title</label>
                     <div x-show="metadataLoading && !articleTitle" class="w-full border border-gray-200 rounded-lg px-4 py-3 bg-gray-50 animate-pulse h-[60px]"></div>
                     <textarea x-show="!metadataLoading || articleTitle" x-model="articleTitle" rows="2" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-lg font-bold resize-none overflow-hidden" placeholder="Enter article title..." @input="$el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px'"></textarea>
+                </div>
+
+                {{-- Article Description / Excerpt --}}
+                <div class="mb-3">
+                    <label class="block text-xs text-gray-500 mb-1">Article Description / Excerpt</label>
+                    <textarea x-model="articleDescription" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Short summary for SEO meta description and excerpt..."></textarea>
                 </div>
 
                 <x-hexa-tinymce name="spin-preview" value="" preset="wordpress" :height="700" id="spin-preview-editor" />
