@@ -122,15 +122,28 @@ class PipelineController extends Controller
             'aiModel' => $draft->ai_engine_used ?: '',
         ];
 
+        // Resolve form definitions for pipeline context
+        $formRegistry = app(\hexa_core\Forms\Services\FormRegistryService::class);
+        $articlePresetForm = $formRegistry->resolve(
+            \hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm::FORM_KEY,
+            ['mode' => 'pipeline', 'context' => 'pipeline']
+        );
+        $wpPresetForm = $formRegistry->resolve(
+            \hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm::FORM_KEY,
+            ['mode' => 'pipeline', 'context' => 'pipeline']
+        );
+
         return view('app-publish::publishing.pipeline.index', [
-            'sites'          => $sites,
-            'draftId'        => $draft->id,
-            'newsCategories' => $newsCategories,
-            'draftUser'      => $draftUser,
-            'draftState'     => $draftState,
-            'templateSchema' => \hexa_app_publish\Publishing\Templates\Models\PublishTemplate::getFieldSchema(),
-            'presetSchema'   => \hexa_app_publish\Publishing\Presets\Models\PublishPreset::getFieldSchema(),
-            'filenamePattern' => \hexa_core\Models\Setting::getValue('wp_photo_filename_pattern', 'hexa_{draft_id}_{seo_name}'),
+            'sites'             => $sites,
+            'draftId'           => $draft->id,
+            'newsCategories'    => $newsCategories,
+            'draftUser'         => $draftUser,
+            'draftState'        => $draftState,
+            'templateSchema'    => \hexa_app_publish\Publishing\Templates\Models\PublishTemplate::getFieldSchema(),
+            'presetSchema'      => \hexa_app_publish\Publishing\Presets\Models\PublishPreset::getFieldSchema(),
+            'articlePresetForm' => $articlePresetForm,
+            'wpPresetForm'      => $wpPresetForm,
+            'filenamePattern'   => \hexa_core\Models\Setting::getValue('wp_photo_filename_pattern', 'hexa_{draft_id}_{seo_name}'),
         ]);
     }
 
