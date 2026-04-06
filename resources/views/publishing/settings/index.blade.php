@@ -141,50 +141,21 @@
         <p class="text-xs text-gray-400 mt-2">Preview: <span class="font-mono text-gray-600" x-text="pattern.replace('{draft_id}', '33').replace('{seo_name}', 'college-sports-reform').replace('{index}', '1').replace('{article_slug}', 'trump-signs-executive-order').replace('{date}', '20260404').replace('{post_id}', '1234') + '.jpg'"></span></p>
     </div>
 
-    {{-- ═══ Master Spin Prompt ═══ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" x-data="{ savingPrompt: false, promptSaved: false }">
-        <div class="px-5 py-4 border-b border-gray-200">
-            <h3 class="font-semibold text-gray-800">Master Spin Prompt</h3>
-            <p class="text-xs text-gray-500 mt-1">This is the EXACT prompt sent to AI when spinning articles. Use shortcodes for dynamic values.</p>
-        </div>
-        <div class="p-5">
-            @php
-                $masterSpinPrompt = \hexa_app_publish\Models\PublishMasterSetting::where('type', 'master_spin_prompt')->where('is_active', true)->value('content') ?? '';
-            @endphp
-            <textarea id="master-spin-prompt" rows="20" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm font-mono leading-relaxed" placeholder="Enter the master spin prompt...">{{ $masterSpinPrompt }}</textarea>
-
-            <div class="mt-3 flex items-center gap-3">
-                <button @click="
-                    savingPrompt = true; promptSaved = false;
-                    const content = document.getElementById('master-spin-prompt').value;
-                    fetch('/publishing/settings/save-prompt', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
-                        body: JSON.stringify({ content: content })
-                    }).then(r => r.json()).then(d => { savingPrompt = false; promptSaved = d.success; setTimeout(() => promptSaved = false, 3000); }).catch(() => savingPrompt = false);
-                " :disabled="savingPrompt" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
-                    <svg x-show="savingPrompt" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="savingPrompt ? 'Saving...' : (promptSaved ? 'Saved!' : 'Save Prompt')"></span>
-                </button>
-                <span x-show="promptSaved" x-cloak class="text-sm text-green-600 font-medium">Saved successfully</span>
+    {{-- ═══ Spin Prompts — managed in Prompt Center ═══ --}}
+    @if(Route::has('prompt-center.index'))
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="font-semibold text-gray-800">Spin Prompts</h3>
+                <p class="text-xs text-gray-500 mt-1">AI prompts are now managed in the Prompt Center.</p>
             </div>
-
-            {{-- Shortcode Reference --}}
-            <div class="mt-4 bg-gray-50 rounded-lg p-4">
-                <h4 class="text-sm font-semibold text-gray-700 mb-2">Available Shortcodes</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-1 text-xs">
-                    <div><code class="bg-gray-200 px-1 rounded">{custom_instructions}</code> — User's custom input from pipeline</div>
-                    <div><code class="bg-gray-200 px-1 rounded">{wordpress_guidelines}</code> — WP publishing guidelines (from above)</div>
-                    <div><code class="bg-gray-200 px-1 rounded">{spinning_guidelines}</code> — AI spinning guidelines (from below)</div>
-                    <div><code class="bg-gray-200 px-1 rounded">{preset_config}</code> — WP preset: tone, format, links, images</div>
-                    <div><code class="bg-gray-200 px-1 rounded">{template_config}</code> — AI template: prompt, tone, type, word count</div>
-                    <div><code class="bg-gray-200 px-1 rounded">{photo_count}</code> — Number of photos (from template or default 2-4)</div>
-                    <div><code class="bg-gray-200 px-1 rounded">{source_articles}</code> — The actual source article texts</div>
-                    <div><code class="bg-gray-200 px-1 rounded">{featured_image_preference}</code> — Featured image preference from preset</div>
-                </div>
-            </div>
+            <a href="{{ route('prompt-center.index') }}" class="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-amber-700 inline-flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Open Prompt Center
+            </a>
         </div>
     </div>
+    @endif
 
     {{-- ═══ Master AI Spinning Guidelines ═══ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">

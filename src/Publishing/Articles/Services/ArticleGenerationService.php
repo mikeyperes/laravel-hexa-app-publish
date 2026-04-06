@@ -231,9 +231,28 @@ class ArticleGenerationService
     /**
      * @return string
      */
+    /**
+     * Get the default prompt — from Prompt Center if available, otherwise hardcoded fallback.
+     *
+     * @return string
+     */
     private function defaultPrompt(): string
     {
-        return "You are a professional content writer. Rewrite the provided source articles into a single new unique article.\n\n{custom_instructions}\n\n{wordpress_guidelines}\n\n{spinning_guidelines}\n\n{preset_config}\n\n{template_config}\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links. Do NOT output markdown.\n\nSUPPORTING LINKS: Include 3-5 relevant external links within the article using <a href=\"URL\" target=\"_blank\"> tags. These should link to real, credible news articles, official sources, government sites, or research that support the claims being made. Do NOT link to the source articles provided — find independent supporting references.\n\nPHOTO PLACEMENT: Insert HTML comments for photos at natural breaking points. Use this EXACT format with 4 fields separated by pipes:\n<!-- PHOTO: stock photo search term | contextual alt text | contextual caption | seo-filename -->\n\nRules for each field:\n- Search term: specific, visual, commonly available stock photo subjects (NOT article-specific events)\n- Alt text: describe what the photo represents IN THE CONTEXT OF THIS ARTICLE (under 125 chars). NOT stock photo description.\n- Caption: a short sentence explaining why this image is relevant to the surrounding article text\n- SEO filename: lowercase-hyphenated, no extension (e.g. college-sports-nil-reform)\n\nPlace {photo_count} photo markers.\n\nFEATURED IMAGE: Output one line with the same 4-field format:\n<!-- FEATURED: stock photo search term | contextual alt text | caption for featured image | seo-filename -->\n\nMETADATA: At the very end of your response, output a JSON block:\n<!-- METADATA: {\"titles\":[\"title1\",\"title2\",...10 titles],\"categories\":[\"cat1\",\"cat2\",...15 categories],\"tags\":[\"tag1\",\"tag2\",...15 tags],\"description\":\"A 1-2 sentence SEO meta description summarizing the article\"} -->\n\nThe titles should be compelling and SEO-friendly. Categories are broad topics. Tags are specific keywords. Description is a concise meta description for SEO (under 160 characters).\n\n{source_articles}";
+        // Try Prompt Center first
+        if (class_exists(\hexa_package_prompt_center\Prompts\Categories\Services\PromptService::class)) {
+            try {
+                $promptService = app(\hexa_package_prompt_center\Prompts\Categories\Services\PromptService::class);
+                $default = $promptService->getDefault('general-article-spin');
+                if ($default && !empty($default->body)) {
+                    return $default->body;
+                }
+            } catch (\Throwable $e) {
+                // Fall through to hardcoded
+            }
+        }
+
+        // Hardcoded fallback
+        return "You are a professional content writer. Rewrite the provided source articles into a single new unique article.\n\n{custom_instructions}\n\n{wordpress_guidelines}\n\n{spinning_guidelines}\n\n{preset_config}\n\n{template_config}\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links. Do NOT output markdown.\n\nSUPPORTING LINKS: Include 3-5 relevant external links within the article using <a href=\"URL\" target=\"_blank\"> tags.\n\nPHOTO PLACEMENT: Insert HTML comments for photos at natural breaking points. Use this EXACT format:\n<!-- PHOTO: stock photo search term | contextual alt text | contextual caption | seo-filename -->\n\nPlace {photo_count} photo markers.\n\nFEATURED IMAGE: Output one line:\n<!-- FEATURED: stock photo search term | contextual alt text | caption for featured image | seo-filename -->\n\nMETADATA: At the very end:\n<!-- METADATA: {\"titles\":[...10],\"categories\":[...15],\"tags\":[...15],\"description\":\"...\"} -->\n\n{source_articles}";
     }
 
     /**
