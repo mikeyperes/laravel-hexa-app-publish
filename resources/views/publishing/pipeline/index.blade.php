@@ -120,12 +120,17 @@
                         <button @click="editingPreset = !editingPreset" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingPreset ? 'Cancel' : 'Edit'"></button>
                     </div>
                 </div>
+                {{-- Loading spinner --}}
+                <div x-show="presetsLoading" x-cloak class="flex items-center gap-2 text-sm text-blue-500 py-2">
+                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Loading WordPress presets...
+                </div>
                 {{-- Display current preset --}}
-                <div x-show="!editingPreset && selectedPreset" class="text-sm space-y-1">
+                <div x-show="!presetsLoading && !editingPreset && selectedPreset" class="text-sm space-y-1">
                     <p class="font-medium text-gray-800" x-text="selectedPreset?.name || 'None'"></p>
                     <p class="text-xs text-gray-500"><span class="text-gray-400">Tone:</span> <span x-text="selectedPreset?.tone || '—'"></span> &middot; <span class="text-gray-400">Format:</span> <span x-text="selectedPreset?.article_format || '—'"></span></p>
                 </div>
-                <div x-show="!editingPreset && !selectedPreset" class="text-xs text-gray-400">No template selected — using defaults.</div>
+                <div x-show="!presetsLoading && !editingPreset && !selectedPreset" class="text-xs text-gray-400">No template selected — using defaults.</div>
                 {{-- Edit mode --}}
                 <div x-show="editingPreset" x-cloak class="mt-2">
                     <div x-show="presetsLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
@@ -151,11 +156,16 @@
                         <button @click="editingTemplate = !editingTemplate" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingTemplate ? 'Cancel' : 'Edit'"></button>
                     </div>
                 </div>
-                <div x-show="!editingTemplate && selectedTemplate" class="text-sm space-y-1">
+                {{-- Loading spinner --}}
+                <div x-show="templatesLoading" x-cloak class="flex items-center gap-2 text-sm text-blue-500 py-2">
+                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Loading article presets...
+                </div>
+                <div x-show="!templatesLoading && !editingTemplate && selectedTemplate" class="text-sm space-y-1">
                     <p class="font-medium text-gray-800" x-text="selectedTemplate?.name || 'None'"></p>
                     <p class="text-xs text-gray-500"><span class="text-gray-400">Engine:</span> <span x-text="selectedTemplate?.ai_engine || '—'"></span> &middot; <span class="text-gray-400">Tone:</span> <span x-text="Array.isArray(selectedTemplate?.tone) ? selectedTemplate.tone.join(', ') : (selectedTemplate?.tone || '—')"></span> &middot; <span class="text-gray-400">Words:</span> <span x-text="(selectedTemplate?.word_count_min || '—') + '-' + (selectedTemplate?.word_count_max || '—')"></span></p>
                 </div>
-                <div x-show="!editingTemplate && !selectedTemplate" class="text-xs text-gray-400">No article preset selected — using defaults.</div>
+                <div x-show="!templatesLoading && !editingTemplate && !selectedTemplate" class="text-xs text-gray-400">No article preset selected — using defaults.</div>
                 <div x-show="editingTemplate" x-cloak class="mt-2">
                     <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
                         <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -1923,6 +1933,8 @@ function publishPipeline() {
             };
 
             if (this.selectedUser) {
+                this.presetsLoading = true;
+                this.templatesLoading = true;
                 const restoredPresetId = draftState.selectedPresetId || state?.selectedPresetId || '';
                 const restoredPreset = state?.selectedPreset || null;
                 const restoredTemplateId = draftState.selectedTemplateId || state?.selectedTemplateId || '';
