@@ -94,7 +94,7 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════
-         Step 2: Website & Template
+         Step 2: Article Configuration
          ══════════════════════════════════════════════════════════════ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 2, 'opacity-50': !isStepAccessible(2) }">
         <button @click="toggleStep(2)" :disabled="!isStepAccessible(2)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
@@ -104,7 +104,7 @@
                     <template x-if="completedSteps.includes(2)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(2)"><span>2</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Website & Template</span>
+                <span class="font-semibold text-gray-800">Article Configuration</span>
                 <span x-show="selectedSite && siteConn.status === true" x-cloak class="text-sm text-green-600" x-text="selectedSite?.name"></span>
                 <span x-show="selectedSite && siteConn.status === null && siteConn.testing" x-cloak class="text-sm text-blue-500 inline-flex items-center gap-1">
                     <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -115,10 +115,21 @@
         </button>
         <div x-show="openSteps.includes(2)" x-cloak x-collapse class="px-4 pb-4 space-y-4">
 
-            {{-- WP Template (auto-loaded, edit to change) --}}
+            {{-- Article Type (standalone, not inside preset) --}}
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Article Type</label>
+                <select x-model="template_overrides.article_type" @change="template_dirty.article_type = true" class="w-full md:w-1/3 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">— Select article type —</option>
+                    @foreach(config('hws-publish.article_types', []) as $type)
+                        <option value="{{ $type }}">{{ ucwords(str_replace('-', ' ', $type)) }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            {{-- WordPress Preset (moved below Article Preset) --}}
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <div class="flex items-center justify-between mb-2">
-                    <h5 class="text-sm font-semibold text-gray-700">WordPress Template</h5>
+                    <h5 class="text-sm font-semibold text-gray-700">WordPress Preset</h5>
                     <div class="flex items-center gap-2">
                         <a x-show="selectedPreset" x-cloak :href="'/publish/presets/' + selectedPresetId + '/edit'" target="_blank" class="text-xs text-gray-400 hover:text-blue-600 inline-flex items-center gap-0.5">Edit on preset page <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
                         <button @click="editingPreset = !editingPreset" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingPreset ? 'Cancel' : 'Edit'"></button>
@@ -158,7 +169,7 @@
                 </div>
             </div>
 
-            {{-- Article Preset (beside WordPress Template) --}}
+            {{-- Article Preset (beside WordPress Preset) --}}
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <div class="flex items-center justify-between mb-2">
                     <h5 class="text-sm font-semibold text-gray-700">Article Preset</h5>
@@ -265,19 +276,42 @@
                         </div>
                         <div>
                             <h4 class="text-base font-semibold text-gray-800">Press Release</h4>
-                            <p class="text-xs text-gray-400">Generate a press release article from provided details</p>
+                            <p class="text-xs text-gray-400">Provide press release details for AI-generated content</p>
                         </div>
                     </div>
-                    <div class="bg-gray-50 rounded-lg p-4 text-sm text-gray-500">
-                        <p class="font-medium text-gray-600 mb-2">Workflow — pending implementation</p>
-                        <ul class="list-disc list-inside space-y-1 text-xs text-gray-400">
-                            <li>Company/organization name and details</li>
-                            <li>Press release subject and key points</li>
-                            <li>Quotes and spokesperson information</li>
-                            <li>Contact information and boilerplate</li>
-                            <li>AI generates formatted press release</li>
-                        </ul>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Press Release Date <span class="text-red-500">*</span></label>
+                            <input type="date" x-model="pressReleaseDate" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <p class="text-xs text-gray-400 mt-1">e.g. January 1, 2023 or March 2, 2023</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Press Release Location <span class="text-red-500">*</span></label>
+                            <input type="text" x-model="pressReleaseLocation" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Miami, Florida">
+                            <p class="text-xs text-gray-400 mt-1">e.g. Miami, Florida / New York, New York / Montreal, Quebec</p>
+                        </div>
                     </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Contact Name & Details</label>
+                            <input type="text" x-model="pressReleaseContact" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Sarah Smith, Instagram - @sarasmith">
+                            <p class="text-xs text-gray-400 mt-1">e.g. Sarah Smith, email - sarasmith@gmail.com</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Contact URL</label>
+                            <input type="url" x-model="pressReleaseContactUrl" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. https://instagram.com/sarasmith">
+                            <p class="text-xs text-gray-400 mt-1">e.g. https://instagram.com/sarasmith or mailto:sarasmith@gmail.com</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Content Dump</label>
+                        <textarea x-model="pressReleaseContent" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm leading-relaxed" style="min-height: 200px; resize: vertical;" placeholder="Paste your press release content, notes, key points, quotes, or any raw material here..."></textarea>
+                        <p class="text-xs text-gray-400 mt-1">Paste any raw content, key points, quotes, or notes that should be included in the press release</p>
+                    </div>
+
                     <button @click="completeStep(3); completeStep(4); openStep(5)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to AI & Spin &rarr;</button>
                 </div>
 
@@ -490,7 +524,7 @@
     {{-- ══════════════════════════════════════════════════════════════
          Step 4: Fetch Articles from Source
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 4, 'opacity-50': !isStepAccessible(4) }">
+    <div x-show="currentArticleType !== 'press-release'" class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 4, 'opacity-50': !isStepAccessible(4) }">
         <button @click="toggleStep(4)" :disabled="!isStepAccessible(4)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
@@ -1678,7 +1712,7 @@ function publishPipeline() {
             return this.template_overrides?.article_type ?? this.selectedTemplate?.article_type ?? null;
         },
         get stepLabels() {
-            return ['User', 'Website & Template', this.isGenerateMode ? 'Generate Content' : 'Find Articles', 'Fetch Articles from Source', 'AI & Spin', 'Create Article', 'Review & Publish'];
+            return ['User', 'Article Configuration', this.isGenerateMode ? 'Generate Content' : 'Find Articles', 'Fetch Articles from Source', 'AI & Spin', 'Create Article', 'Review & Publish'];
         },
 
         // Step 1 — User
@@ -1761,6 +1795,11 @@ function publishPipeline() {
         showPhotoPanel: false,
         showPhotoOverlay: false,
         showUploadPortal: false,
+        pressReleaseDate: '',
+        pressReleaseLocation: '',
+        pressReleaseContact: '',
+        pressReleaseContactUrl: '',
+        pressReleaseContent: '',
         insertingPhoto: null,
         photoCaption: '',
         overlayPhotoAlt: '',
