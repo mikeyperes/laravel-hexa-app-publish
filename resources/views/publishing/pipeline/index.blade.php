@@ -4,7 +4,11 @@
 @section('header', 'Publish Article — #' . $draftId)
 
 @section('content')
-<div class="max-w-6xl mx-auto space-y-4" x-data="publishPipeline()">
+<div class="max-w-6xl mx-auto space-y-4" x-data="publishPipeline()"
+     @hexa-form-changed.window="
+        if ($event.detail.component_id === 'article-preset-form') { template_overrides[$event.detail.field] = $event.detail.value; template_dirty[$event.detail.field] = true; }
+        if ($event.detail.component_id === 'wp-preset-form') { preset_overrides[$event.detail.field] = $event.detail.value; preset_dirty[$event.detail.field] = true; }
+     ">
 
     {{-- Session ID + Clear button --}}
     <div class="flex items-center justify-between">
@@ -150,7 +154,7 @@
                         values="{}"
                         id="wp-preset-form"
                         label="WordPress Preset Settings"
-                        @hexa-form-changed.window="if ($event.detail.component_id === 'wp-preset-form') { preset_overrides[$event.detail.field] = $event.detail.value; preset_dirty[$event.detail.field] = true; }" />
+                        />
                 </div>
             </div>
 
@@ -191,7 +195,7 @@
                         values="{}"
                         id="article-preset-form"
                         label="Article Preset Settings"
-                        @hexa-form-changed.window="if ($event.detail.component_id === 'article-preset-form') { template_overrides[$event.detail.field] = $event.detail.value; template_dirty[$event.detail.field] = true; }" />
+                        />
                 </div>
             </div>
 
@@ -254,7 +258,7 @@
             <div x-show="isGenerateMode" x-cloak>
 
                 {{-- Press Release --}}
-                <div x-show="selectedTemplate?.article_type === 'press-release'" class="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+                <div x-show="currentArticleType === 'press-release'" class="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
                     <div class="flex items-center gap-3 mb-2">
                         <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
                             <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
@@ -278,7 +282,7 @@
                 </div>
 
                 {{-- Listicle --}}
-                <div x-show="selectedTemplate?.article_type === 'listicle'" class="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+                <div x-show="currentArticleType === 'listicle'" class="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
                     <div class="flex items-center gap-3 mb-2">
                         <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
                             <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
@@ -301,13 +305,13 @@
                 </div>
 
                 {{-- Expert Article / PR Full Feature (shared section) --}}
-                <div x-show="selectedTemplate?.article_type === 'expert-article' || selectedTemplate?.article_type === 'pr-full-feature'" class="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+                <div x-show="currentArticleType === 'expert-article' || currentArticleType === 'pr-full-feature'" class="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
                     <div class="flex items-center gap-3 mb-2">
                         <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
                             <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
                         </div>
                         <div>
-                            <h4 class="text-base font-semibold text-gray-800" x-text="selectedTemplate?.article_type === 'pr-full-feature' ? 'PR Full Feature' : 'Expert Article'"></h4>
+                            <h4 class="text-base font-semibold text-gray-800" x-text="currentArticleType === 'pr-full-feature' ? 'PR Full Feature' : 'Expert Article'"></h4>
                             <p class="text-xs text-gray-400">Generate an authoritative article from expert input</p>
                         </div>
                     </div>
@@ -1666,7 +1670,12 @@ function publishPipeline() {
         completedSteps: [],
         get isGenerateMode() {
             const genTypes = ['press-release', 'listicle', 'expert-article', 'pr-full-feature'];
-            return genTypes.includes(this.selectedTemplate?.article_type);
+            // Check overrides first (user changed article_type in the form), then template default
+            const articleType = this.template_overrides?.article_type ?? this.selectedTemplate?.article_type;
+            return genTypes.includes(articleType);
+        },
+        get currentArticleType() {
+            return this.template_overrides?.article_type ?? this.selectedTemplate?.article_type ?? null;
         },
         get stepLabels() {
             return ['User', 'Website & Template', this.isGenerateMode ? 'Generate Content' : 'Find Articles', 'Fetch Articles from Source', 'AI & Spin', 'Create Article', 'Review & Publish'];
