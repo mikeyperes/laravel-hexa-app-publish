@@ -65,6 +65,11 @@
     const presetFieldsMethods = {
         loadPresetFields(prefix, data, schema) {
             _loadPresetFields(this, prefix, data, schema || this[prefix + '_schema']);
+            // Dispatch to core reactive form component if present
+            const formId = prefix === 'preset' ? 'wp-preset-form' : 'article-preset-form';
+            window.dispatchEvent(new CustomEvent('hexa-form-load', {
+                detail: { component_id: formId, values: this[prefix + '_defaults'] || {} }
+            }));
         },
         restorePresetDefaults(prefix) {
             this[prefix + '_overrides'] = {};

@@ -144,7 +144,14 @@
                         </template>
                     </select>
                 </div>
-                @include('app-publish::partials.preset-fields', ['prefix' => 'preset', 'label' => 'WordPress Preset Settings'])
+                <div x-show="selectedPreset" x-cloak>
+                    <x-hexa-reactive-form
+                        :fields-json="json_encode($wpPresetForm->toClientPayload('pipeline'))"
+                        values="{}"
+                        id="wp-preset-form"
+                        label="WordPress Preset Settings"
+                        @hexa-form-changed.window="if ($event.detail.component_id === 'wp-preset-form') { preset_overrides[$event.detail.field] = $event.detail.value; preset_dirty[$event.detail.field] = true; }" />
+                </div>
             </div>
 
             {{-- Article Preset (beside WordPress Template) --}}
@@ -178,7 +185,14 @@
                         </template>
                     </select>
                 </div>
-                @include('app-publish::partials.preset-fields', ['prefix' => 'template', 'label' => 'Article Preset Settings'])
+                <div x-show="selectedTemplate" x-cloak>
+                    <x-hexa-reactive-form
+                        :fields-json="json_encode($articlePresetForm->toClientPayload('pipeline'))"
+                        values="{}"
+                        id="article-preset-form"
+                        label="Article Preset Settings"
+                        @hexa-form-changed.window="if ($event.detail.component_id === 'article-preset-form') { template_overrides[$event.detail.field] = $event.detail.value; template_dirty[$event.detail.field] = true; }" />
+                </div>
             </div>
 
             {{-- Website selection --}}
