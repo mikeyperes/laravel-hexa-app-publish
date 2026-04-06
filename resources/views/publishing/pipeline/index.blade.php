@@ -126,6 +126,47 @@
                 </select>
             </div>
 
+            {{-- Article Preset (beside WordPress Preset) --}}
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h5 class="text-sm font-semibold text-gray-700">Article Preset</h5>
+                    <div class="flex items-center gap-2">
+                        <a x-show="selectedTemplate" x-cloak :href="'/publish/article-presets/' + selectedTemplateId + '/edit'" target="_blank" class="text-xs text-gray-400 hover:text-blue-600 inline-flex items-center gap-0.5">Edit on preset page <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                        <button @click="editingTemplate = !editingTemplate" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingTemplate ? 'Cancel' : 'Edit'"></button>
+                    </div>
+                </div>
+                {{-- Loading spinner --}}
+                <div x-show="templatesLoading" x-cloak class="flex items-center gap-2 text-sm text-blue-500 py-2">
+                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Loading article presets...
+                </div>
+                <div x-show="!templatesLoading && !editingTemplate && selectedTemplate" class="text-sm space-y-1">
+                    <p class="font-medium text-gray-800" x-text="selectedTemplate?.name || 'None'"></p>
+                    <p class="text-xs text-gray-500"><span class="text-gray-400">Engine:</span> <span x-text="selectedTemplate?.ai_engine || '—'"></span> &middot; <span class="text-gray-400">Tone:</span> <span x-text="Array.isArray(selectedTemplate?.tone) ? selectedTemplate.tone.join(', ') : (selectedTemplate?.tone || '—')"></span> &middot; <span class="text-gray-400">Words:</span> <span x-text="(selectedTemplate?.word_count_min || '—') + '-' + (selectedTemplate?.word_count_max || '—')"></span></p>
+                </div>
+                <div x-show="!templatesLoading && !editingTemplate && !selectedTemplate" class="text-xs text-gray-400">No article preset selected — using defaults.</div>
+                <div x-show="editingTemplate" x-cloak class="mt-2">
+                    <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
+                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Loading...
+                    </div>
+                    <select x-show="!templatesLoading" x-model="selectedTemplateId" @change="selectTemplate(); editingTemplate = false; refreshPromptPreview()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">-- No preset --</option>
+                        <template x-for="t in templates" :key="t.id">
+                            <option :value="t.id" x-text="t.name"></option>
+                        </template>
+                    </select>
+                </div>
+                <div x-show="selectedTemplate" x-cloak>
+                    <x-hexa-reactive-form
+                        :fields-json="json_encode($articlePresetForm->toClientPayload('pipeline'))"
+                        values="{}"
+                        id="article-preset-form"
+                        label="Article Preset Settings"
+                        />
+                </div>
+            </div>
+
             {{-- WordPress Preset (moved below Article Preset) --}}
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <div class="flex items-center justify-between mb-2">
@@ -165,47 +206,6 @@
                         values="{}"
                         id="wp-preset-form"
                         label="WordPress Preset Settings"
-                        />
-                </div>
-            </div>
-
-            {{-- Article Preset (beside WordPress Preset) --}}
-            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <h5 class="text-sm font-semibold text-gray-700">Article Preset</h5>
-                    <div class="flex items-center gap-2">
-                        <a x-show="selectedTemplate" x-cloak :href="'/publish/article-presets/' + selectedTemplateId + '/edit'" target="_blank" class="text-xs text-gray-400 hover:text-blue-600 inline-flex items-center gap-0.5">Edit on preset page <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
-                        <button @click="editingTemplate = !editingTemplate" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingTemplate ? 'Cancel' : 'Edit'"></button>
-                    </div>
-                </div>
-                {{-- Loading spinner --}}
-                <div x-show="templatesLoading" x-cloak class="flex items-center gap-2 text-sm text-blue-500 py-2">
-                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    Loading article presets...
-                </div>
-                <div x-show="!templatesLoading && !editingTemplate && selectedTemplate" class="text-sm space-y-1">
-                    <p class="font-medium text-gray-800" x-text="selectedTemplate?.name || 'None'"></p>
-                    <p class="text-xs text-gray-500"><span class="text-gray-400">Engine:</span> <span x-text="selectedTemplate?.ai_engine || '—'"></span> &middot; <span class="text-gray-400">Tone:</span> <span x-text="Array.isArray(selectedTemplate?.tone) ? selectedTemplate.tone.join(', ') : (selectedTemplate?.tone || '—')"></span> &middot; <span class="text-gray-400">Words:</span> <span x-text="(selectedTemplate?.word_count_min || '—') + '-' + (selectedTemplate?.word_count_max || '—')"></span></p>
-                </div>
-                <div x-show="!templatesLoading && !editingTemplate && !selectedTemplate" class="text-xs text-gray-400">No article preset selected — using defaults.</div>
-                <div x-show="editingTemplate" x-cloak class="mt-2">
-                    <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
-                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        Loading...
-                    </div>
-                    <select x-show="!templatesLoading" x-model="selectedTemplateId" @change="selectTemplate(); editingTemplate = false; refreshPromptPreview()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">-- No preset --</option>
-                        <template x-for="t in templates" :key="t.id">
-                            <option :value="t.id" x-text="t.name"></option>
-                        </template>
-                    </select>
-                </div>
-                <div x-show="selectedTemplate" x-cloak>
-                    <x-hexa-reactive-form
-                        :fields-json="json_encode($articlePresetForm->toClientPayload('pipeline'))"
-                        values="{}"
-                        id="article-preset-form"
-                        label="Article Preset Settings"
                         />
                 </div>
             </div>
@@ -1917,13 +1917,21 @@ function publishPipeline() {
             }
 
             if (state) {
-                if (state.selectedUser) this.selectedUser = state.selectedUser;
-                if (state.currentStep) this.currentStep = state.currentStep;
+                // ── Declarative restore — all persistentFields auto-restore ──
+                for (const key of this.persistentFields) {
+                    if (state[key] !== undefined && state[key] !== null) {
+                        this[key] = state[key];
+                    }
+                }
+
+                // ── Special handling for fields that need post-processing ──
+                // Arrays that may serialize as objects in Alpine proxy
                 if (state.openSteps) this.openSteps = Array.isArray(state.openSteps) ? state.openSteps : Object.values(state.openSteps);
                 if (state.completedSteps) this.completedSteps = Array.isArray(state.completedSteps) ? state.completedSteps : Object.values(state.completedSteps);
+
+                // Site connection (nested object)
                 if (state.selectedSiteId) {
                     this.selectedSiteId = String(state.selectedSiteId);
-                    this.selectedSite = state.selectedSite || null;
                     this.authorsLoading = true;
                     this.siteConn.status = state.siteConnStatus ?? null;
                     this.siteConn.message = state.siteConnMessage || '';
@@ -1934,16 +1942,8 @@ function publishPipeline() {
                         this.selectedSite = this.sites.find(s => s.id == state.selectedSiteId) || state.selectedSite || null;
                     });
                 }
-                if (state.sources) this.sources = state.sources;
-                if (state.checkResults) { this.checkResults = state.checkResults; this.checkPassCount = state.checkResults.filter(r => r.success).length; }
-                if (state.approvedSources) this.approvedSources = state.approvedSources;
-                if (state.discardedSources) this.discardedSources = state.discardedSources;
-                if (state.expandedSources) this.expandedSources = state.expandedSources;
-                if (state.aiModel) this.aiModel = state.aiModel;
-                if (state.articleTitle) this.articleTitle = state.articleTitle;
-                if (state.publishAction) this.publishAction = state.publishAction;
-                if (state.publishAuthor) this.publishAuthor = state.publishAuthor;
-                if (state.publishAuthorSource) this.publishAuthorSource = state.publishAuthorSource;
+
+                // Editor content needs TinyMCE sync
                 if (state.spunContent || state.editorContent) {
                     const restoredEditorHtml = state.editorContent || state.spunContent;
                     this.spunContent = restoredEditorHtml;
@@ -1951,42 +1951,31 @@ function publishPipeline() {
                     this.setSpinEditor(restoredEditorHtml);
                     this.extractArticleLinks(restoredEditorHtml);
                 }
-                if (state.suggestedTitles) this.suggestedTitles = state.suggestedTitles;
-                if (state.suggestedCategories) this.suggestedCategories = state.suggestedCategories;
-                if (state.suggestedTags) this.suggestedTags = state.suggestedTags;
-                if (state.selectedCategories) this.selectedCategories = state.selectedCategories;
-                if (state.selectedTags) this.selectedTags = state.selectedTags;
-                if (state.selectedTitleIdx !== undefined) { this.selectedTitleIdx = state.selectedTitleIdx; if (this.suggestedTitles[this.selectedTitleIdx]) this.articleTitle = this.suggestedTitles[this.selectedTitleIdx]; }
-                if (state.editorContent) this.editorContent = state.editorContent;
-                if (state.tokenUsage) this.tokenUsage = state.tokenUsage;
+
+                // Title from suggested titles
+                if (state.selectedTitleIdx !== undefined && this.suggestedTitles[this.selectedTitleIdx]) {
+                    this.articleTitle = this.suggestedTitles[this.selectedTitleIdx];
+                }
+
+                // Check results count
+                if (state.checkResults) {
+                    this.checkPassCount = state.checkResults.filter(r => r.success).length;
+                }
+
+                // Photo suggestions — reset loading flags + rebuild filenames
                 if (state.photoSuggestions) {
                     this.photoSuggestions = state.photoSuggestions.map((ps, idx) => ({ ...ps, refreshingMeta: false, searching: false, suggestedFilename: this.buildFilename(ps.search_term, idx + 1) }));
                 }
-                if (state.featuredImageSearch) this.featuredImageSearch = state.featuredImageSearch;
+
+                // Featured photo needs results array
                 if (state.featuredPhoto) {
-                    this.featuredPhoto = state.featuredPhoto;
                     this.featuredResults = [state.featuredPhoto];
                 }
-                if (state.featuredAlt) this.featuredAlt = state.featuredAlt;
-                if (state.featuredCaption) this.featuredCaption = state.featuredCaption;
-                if (state.featuredFilename) this.featuredFilename = state.featuredFilename;
-                if (state.resolvedPrompt) this.resolvedPrompt = state.resolvedPrompt;
-                if (state.articleDescription) this.articleDescription = state.articleDescription;
+
+                // AI detection — reset loading flags
                 if (state.aiDetectionResults) {
-                    const restored = state.aiDetectionResults;
-                    Object.keys(restored).forEach(k => { restored[k].loading = false; });
-                    this.aiDetectionResults = restored;
+                    Object.keys(this.aiDetectionResults).forEach(k => { this.aiDetectionResults[k].loading = false; });
                 }
-                if (state.aiDetectionRan) this.aiDetectionRan = state.aiDetectionRan;
-                if (state.aiDetectionAllPass !== undefined) this.aiDetectionAllPass = state.aiDetectionAllPass;
-                // Find Articles state
-                if (state.sourceTab) this.sourceTab = state.sourceTab;
-                if (state.newsMode) this.newsMode = state.newsMode;
-                if (state.newsCategory) this.newsCategory = state.newsCategory;
-                if (state.newsTrendingSelected) this.newsTrendingSelected = state.newsTrendingSelected;
-                if (state.newsSearch) this.newsSearch = state.newsSearch;
-                if (state.newsResults) this.newsResults = state.newsResults;
-                if (state.newsHasSearched) this.newsHasSearched = state.newsHasSearched;
 
                 shouldPersistRestoredDraftState = !draftState.selectedSiteId && (
                     !!state.selectedSiteId ||
@@ -2139,64 +2128,52 @@ function publishPipeline() {
             this.$watch('newsCategory', () => this.savePipelineState());
         },
 
+        // ── Declarative persistent fields ─────────────────────
+        // Add a field name here = auto-saved AND auto-restored.
+        get persistentFields() {
+            return [
+                // Step tracking
+                'currentStep', 'openSteps', 'completedSteps',
+                // Step 1 — User
+                'selectedUser',
+                // Step 2 — Presets + Site
+                'selectedPresetId', 'selectedPreset', 'selectedTemplateId', 'selectedTemplate',
+                'selectedSiteId', 'selectedSite',
+                'template_overrides', 'template_dirty', 'preset_overrides', 'preset_dirty',
+                // Step 3 — Sources
+                'sources', 'sourceTab', 'newsMode', 'newsCategory', 'newsTrendingSelected',
+                'newsSearch', 'newsResults', 'newsHasSearched',
+                // Step 4 — Fetch
+                'checkResults', 'approvedSources', 'discardedSources', 'expandedSources',
+                // Step 5 — AI Spin
+                'aiModel', 'spunContent', 'spunWordCount', 'suggestedTitles',
+                'suggestedCategories', 'suggestedTags', 'selectedCategories', 'selectedTags',
+                'selectedTitleIdx', 'tokenUsage', 'resolvedPrompt',
+                // Step 6 — Create Article
+                'articleTitle', 'articleDescription', 'editorContent',
+                'photoSuggestions', 'featuredImageSearch', 'featuredPhoto',
+                'featuredAlt', 'featuredCaption', 'featuredFilename',
+                // Step 7 — Publish
+                'publishAction', 'publishAuthor', 'publishAuthorSource',
+                // AI Detection
+                'aiDetectionResults', 'aiDetectionRan', 'aiDetectionAllPass',
+                // Press Release fields
+                'pressReleaseDate', 'pressReleaseLocation', 'pressReleaseContact',
+                'pressReleaseContactUrl', 'pressReleaseContent',
+            ];
+        },
+
         savePipelineState() {
-            const state = {
-                _v: this._stateVersion,
-                draftId: this.draftId,
-                selectedUser: this.selectedUser,
-                currentStep: this.currentStep,
-                openSteps: this.openSteps,
-                completedSteps: this.completedSteps,
-                selectedPresetId: this.selectedPresetId,
-                selectedPreset: this.selectedPreset,
-                selectedTemplateId: this.selectedTemplateId,
-                selectedTemplate: this.selectedTemplate,
-                selectedSiteId: this.selectedSiteId,
-                selectedSite: this.selectedSite,
-                siteConnStatus: this.siteConn.status,
-                siteConnMessage: this.siteConn.message,
-                siteConnLog: this.siteConn.log,
-                siteConnAuthors: this.siteConn.authors,
-                sources: this.sources,
-                checkResults: this.checkResults,
-                approvedSources: this.approvedSources,
-                discardedSources: this.discardedSources,
-                expandedSources: this.expandedSources,
-                aiModel: this.aiModel,
-                articleTitle: this.articleTitle,
-                publishAction: this.publishAction,
-                publishAuthor: this.publishAuthor,
-                publishAuthorSource: this.publishAuthorSource,
-                spunContent: this.spunContent,
-                spunWordCount: this.spunWordCount,
-                suggestedTitles: this.suggestedTitles,
-                suggestedCategories: this.suggestedCategories,
-                suggestedTags: this.suggestedTags,
-                selectedCategories: this.selectedCategories,
-                selectedTags: this.selectedTags,
-                selectedTitleIdx: this.selectedTitleIdx,
-                editorContent: this.editorContent,
-                tokenUsage: this.tokenUsage,
-                photoSuggestions: this.photoSuggestions,
-                featuredImageSearch: this.featuredImageSearch,
-                featuredPhoto: this.featuredPhoto,
-                featuredAlt: this.featuredAlt,
-                featuredCaption: this.featuredCaption,
-                featuredFilename: this.featuredFilename,
-                resolvedPrompt: this.resolvedPrompt,
-                articleDescription: this.articleDescription,
-                aiDetectionResults: this.aiDetectionResults,
-                aiDetectionRan: this.aiDetectionRan,
-                aiDetectionAllPass: this.aiDetectionAllPass,
-                // Find Articles state
-                sourceTab: this.sourceTab,
-                newsMode: this.newsMode,
-                newsCategory: this.newsCategory,
-                newsTrendingSelected: this.newsTrendingSelected,
-                newsSearch: this.newsSearch,
-                newsResults: this.newsResults,
-                newsHasSearched: this.newsHasSearched,
-            };
+            const state = { _v: this._stateVersion, draftId: this.draftId };
+            // Site connection (nested object — save flat)
+            state.siteConnStatus = this.siteConn.status;
+            state.siteConnMessage = this.siteConn.message;
+            state.siteConnLog = this.siteConn.log;
+            state.siteConnAuthors = this.siteConn.authors;
+            // All declared persistent fields
+            for (const key of this.persistentFields) {
+                state[key] = this[key];
+            }
             localStorage.setItem(this.pipelineStateKey, JSON.stringify(state));
             localStorage.removeItem('publishPipelineState');
         },

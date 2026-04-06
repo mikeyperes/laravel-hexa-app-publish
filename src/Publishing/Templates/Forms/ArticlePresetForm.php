@@ -66,7 +66,7 @@ class ArticlePresetForm
                         'empty_label' => '— None —',
                         'section' => 'basic',
                     ])
-                    ->contexts(['create', 'edit', 'pipeline']),
+                    ->contexts(['create', 'edit']),
 
                 FieldDefinition::make('ai_company', 'select', 'AI Company')
                     ->default(fn () => self::defaultCompany())
