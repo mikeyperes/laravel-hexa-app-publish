@@ -3,6 +3,7 @@
 namespace hexa_app_publish\Providers;
 
 use hexa_app_publish\Console\RunCampaignsCommand;
+use hexa_app_publish\Publishing\Uploads\Console\CleanupOrphanUploadsCommand;
 use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
 use hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm;
 use hexa_app_publish\Services\PublishService;
@@ -43,7 +44,7 @@ class AppPublishServiceProvider extends ServiceProvider
         $this->registerForms();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([RunCampaignsCommand::class]);
+            $this->commands([RunCampaignsCommand::class, CleanupOrphanUploadsCommand::class]);
         }
     }
 

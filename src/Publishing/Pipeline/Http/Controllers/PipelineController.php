@@ -481,6 +481,17 @@ class PipelineController extends Controller
 
         hexaLog('publish', 'pipeline_published', "Pipeline published to {$site->name}: {$validated['title']} (WP ID: {$result['post_id']}, Article: {$article->article_id})");
 
+        // Clean up temp uploads for this article (publish/draft_wp only, not future)
+        if (in_array($validated['status'], ['publish', 'draft'], true) && !empty($validated['draft_id'])) {
+            try {
+                $uploadCleanup = app(\hexa_app_publish\Publishing\Uploads\Services\ArticleUploadService::class);
+                $uploadCleanup->cleanupAfterPublish((int) $validated['draft_id']);
+            } catch (\Throwable $e) {
+                // Non-critical — log but don't fail the publish
+                hexaLog('publish', 'upload_cleanup_error', "Upload cleanup failed for draft #{$validated['draft_id']}: {$e->getMessage()}");
+            }
+        }
+
         return response()->json([
             'success'    => true,
             'message'    => "Article published to {$site->name}. WP Post ID: {$result['post_id']}.",

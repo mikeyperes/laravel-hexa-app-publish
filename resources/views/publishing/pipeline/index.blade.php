@@ -1487,9 +1487,12 @@
         </div>
     </div>
 
-    {{-- Global notification banner --}}
+    {{-- Upload Portal Modal (triggered from TinyMCE toolbar) --}}
+    <div x-show="showUploadPortal" x-cloak>
+        @include('upload-portal::components.upload-portal', ['context' => 'article', 'contextId' => $draftId, 'multi' => true])
+    </div>
+
     {{-- Photo Search Overlay (triggered from TinyMCE toolbar) --}}
-    {{-- Photo Search Overlay --}}
     <div x-show="showPhotoOverlay" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-0 m-0" style="top:0;left:0;right:0;bottom:0;" @click.self="showPhotoOverlay = false" @keydown.escape.window="showPhotoOverlay = false">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl mx-4 max-h-[90vh] overflow-y-auto" @click.stop>
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
@@ -1656,6 +1659,7 @@ function publishPipeline() {
         photoResults: [],
         showPhotoPanel: false,
         showPhotoOverlay: false,
+        showUploadPortal: false,
         insertingPhoto: null,
         photoCaption: '',
         overlayPhotoAlt: '',
@@ -2920,7 +2924,7 @@ function publishPipeline() {
                         editor.setContent(html || '');
                         hexaReinitTinyMCE('spin-preview-editor', {
                             plugins: 'lists link image media table fullscreen wordcount code searchreplace autolink autoresize',
-                            toolbar: 'undo redo | blocks | bold italic underline strikethrough | bullist numlist | link image media | addPhotoBtn | table | alignleft aligncenter alignright | outdent indent | fullscreen code searchreplace',
+                            toolbar: 'undo redo | blocks | bold italic underline strikethrough | bullist numlist | link image media | addPhotoBtn uploadPhotoBtn | table | alignleft aligncenter alignright | outdent indent | fullscreen code searchreplace',
                             menubar: true,
                             min_height: 400,
                             autoresize_bottom_margin: 50,
@@ -2938,6 +2942,15 @@ function publishPipeline() {
                                         self.photoResults = [];
                                         self.insertingPhoto = null;
                                         self.showPhotoOverlay = true;
+                                    }
+                                });
+
+                                // Custom "Upload Photo" toolbar button
+                                ed.ui.registry.addButton('uploadPhotoBtn', {
+                                    icon: 'upload',
+                                    tooltip: 'Upload Photo from Device',
+                                    onAction: function() {
+                                        self.showUploadPortal = true;
                                     }
                                 });
 
