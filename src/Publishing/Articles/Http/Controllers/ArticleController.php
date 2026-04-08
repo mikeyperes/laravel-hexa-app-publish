@@ -3,12 +3,16 @@
 namespace hexa_app_publish\Publishing\Articles\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_core\Services\GenericService;
 use hexa_app_publish\Models\PublishAccount;
 use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Models\PublishTemplate;
-use hexa_app_publish\Services\PublishService;
+use hexa_app_publish\Publishing\Articles\Http\Requests\InsertLinksRequest;
+use hexa_app_publish\Publishing\Articles\Http\Requests\ScrapeUrlRequest;
+use hexa_app_publish\Publishing\Articles\Http\Requests\SearchDiscoveryRequest;
+use hexa_app_publish\Publishing\Articles\Http\Requests\SpinArticleRequest;
+use hexa_app_publish\Publishing\Articles\Http\Requests\StoreArticleRequest;
+use hexa_app_publish\Publishing\Articles\Http\Requests\UpdateArticleRequest;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Discovery\Media\Services\MediaSearchService;
@@ -24,19 +28,6 @@ use Illuminate\View\View;
 
 class ArticleController extends Controller
 {
-    protected GenericService $generic;
-    protected PublishService $publishService;
-
-    /**
-     * @param GenericService $generic
-     * @param PublishService $publishService
-     */
-    public function __construct(GenericService $generic, PublishService $publishService)
-    {
-        $this->generic = $generic;
-        $this->publishService = $publishService;
-    }
-
     /**
      * List all articles with filters.
      *
@@ -129,19 +120,9 @@ class ArticleController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreArticleRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'publish_account_id' => 'required|exists:publish_accounts,id',
-            'publish_site_id' => 'required|exists:publish_sites,id',
-            'publish_template_id' => 'nullable|exists:publish_templates,id',
-            'title' => 'required|string|max:500',
-            'body' => 'nullable|string',
-            'excerpt' => 'nullable|string|max:1000',
-            'article_type' => 'nullable|string|max:50',
-            'delivery_mode' => 'nullable|in:draft-local,draft-wordpress,auto-publish,review,notify',
-            'notes' => 'nullable|string',
-        ]);
+        $validated = $request->validated();
 
         $validated['article_id'] = PublishArticle::generateArticleId();
         $validated['status'] = 'drafting';
@@ -203,21 +184,10 @@ class ArticleController extends Controller
      * @param int $id
      * @return JsonResponse
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function update(UpdateArticleRequest $request, int $id): JsonResponse
     {
-        $article = PublishArticle::findOrFail($id);
-
-        $validated = $request->validate([
-            'title' => 'nullable|string|max:500',
-            'body' => 'nullable|string',
-            'excerpt' => 'nullable|string|max:1000',
-            'article_type' => 'nullable|string|max:50',
-            'status' => 'nullable|in:' . implode(',', config('hws-publish.article_statuses', [])),
-            'delivery_mode' => 'nullable|in:draft-local,draft-wordpress,auto-publish,review,notify',
-            'photos' => 'nullable|array',
-            'links_injected' => 'nullable|array',
-            'notes' => 'nullable|string',
-        ]);
+        $article = $this->findArticle($id);
+        $validated = $request->validated();
 
         if (isset($validated['body'])) {
             $validated['word_count'] = str_word_count(strip_tags($validated['body']));
@@ -241,7 +211,7 @@ class ArticleController extends Controller
      */
     public function publish(int $id): JsonResponse
     {
-        $article = PublishArticle::with('site')->findOrFail($id);
+        $article = $this->findArticle($id, ['site']);
         $site = $article->site;
         $wpStatus = ($article->delivery_mode === 'draft-wordpress') ? 'draft' : 'publish';
 
@@ -276,10 +246,10 @@ class ArticleController extends Controller
      */
     public function aiCheck(int $id): JsonResponse
     {
-        $article = PublishArticle::findOrFail($id);
+        $article = $this->findArticle($id);
+        $text = $this->articleText($article->body);
 
-        $text = strip_tags($article->body ?? '');
-        if (strlen($text) < 50) {
+        if (!$this->hasMinimumContent($article->body, 50)) {
             return response()->json(['success' => false, 'message' => 'Article content too short for AI detection.']);
         }
 
@@ -305,10 +275,10 @@ class ArticleController extends Controller
      */
     public function seoCheck(int $id): JsonResponse
     {
-        $article = PublishArticle::findOrFail($id);
+        $article = $this->findArticle($id);
         $html = $article->body ?? '';
 
-        if (strlen(strip_tags($html)) < 50) {
+        if (!$this->hasMinimumContent($html, 50)) {
             return response()->json(['success' => false, 'message' => 'Article content too short for SEO analysis.']);
         }
 
@@ -331,17 +301,13 @@ class ArticleController extends Controller
      * @param int $id
      * @return JsonResponse
      */
-    public function spin(Request $request, int $id): JsonResponse
+    public function spin(SpinArticleRequest $request, int $id): JsonResponse
     {
-        $article = PublishArticle::with('template')->findOrFail($id);
-
-        $validated = $request->validate([
-            'ai_engine' => 'required|in:anthropic,chatgpt',
-            'instruction' => 'nullable|string|max:2000',
-        ]);
+        $article = $this->findArticle($id, ['template', 'site']);
+        $validated = $request->validated();
 
         $body = $article->body;
-        if (!$body || strlen(strip_tags($body)) < 20) {
+        if (!$this->hasMinimumContent($body, 20)) {
             return response()->json(['success' => false, 'message' => 'Article has no content to spin.']);
         }
 
@@ -407,13 +373,9 @@ class ArticleController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function searchPhotos(Request $request): JsonResponse
+    public function searchPhotos(SearchDiscoveryRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'query' => 'required|string|max:255',
-            'sources' => 'nullable|array',
-            'per_page' => 'nullable|integer|min:1|max:50',
-        ]);
+        $validated = $request->validated();
 
         $result = app(MediaSearchService::class)->searchPhotos(
             $validated['query'],
@@ -436,13 +398,9 @@ class ArticleController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function searchSources(Request $request): JsonResponse
+    public function searchSources(SearchDiscoveryRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'query' => 'required|string|max:255',
-            'sources' => 'nullable|array',
-            'per_page' => 'nullable|integer|min:1|max:50',
-        ]);
+        $validated = $request->validated();
 
         $result = app(SourceDiscoveryService::class)->searchArticles($validated['query'], [
             'sources'  => $validated['sources'] ?? ['google-news-rss', 'gnews', 'newsdata'],
@@ -464,11 +422,9 @@ class ArticleController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function scrapeUrl(Request $request): JsonResponse
+    public function scrapeUrl(ScrapeUrlRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'url' => 'required|url|max:2048',
-        ]);
+        $validated = $request->validated();
 
         $result = app(SourceExtractionService::class)->extract($validated['url']);
 
@@ -482,28 +438,20 @@ class ArticleController extends Controller
      * @param int $id
      * @return JsonResponse
      */
-    public function insertLinks(Request $request, int $id): JsonResponse
+    public function insertLinks(InsertLinksRequest $request, int $id): JsonResponse
     {
-        $article = PublishArticle::with('site')->findOrFail($id);
+        $article = $this->findArticle($id, ['site']);
 
-        if (!$article->body || strlen(strip_tags($article->body)) < 50) {
+        if (!$this->hasMinimumContent($article->body, 50)) {
             return response()->json(['success' => false, 'message' => 'Article has no content for link insertion.']);
         }
 
-        $validated = $request->validate([
-            'max_links' => 'nullable|integer|min:1|max:20',
-            'link_ids' => 'nullable|array',
-        ]);
-
+        $validated = $request->validated();
         $maxLinks = $validated['max_links'] ?? 5;
 
         // Get links — either specific IDs or auto-select from account
         if (!empty($validated['link_ids'])) {
-            $links = \hexa_app_publish\Models\PublishLinkList::whereIn('id', $validated['link_ids'])
-                ->where('active', true)
-                ->get()
-                ->map(fn($l) => ['url' => $l->url, 'anchor_text' => $l->anchor_text, 'context' => $l->context])
-                ->toArray();
+            $links = $this->loadSelectedLinks($validated['link_ids']);
         } else {
             $links = app(LinkInsertionService::class)->getAvailableLinks($article->publish_account_id, $maxLinks);
         }
@@ -530,5 +478,33 @@ class ArticleController extends Controller
             'report' => $result['data']['report'] ?? [],
             'body' => $result['data']['html'] ?? null,
         ]);
+    }
+
+    private function findArticle(int $id, array $relations = []): PublishArticle
+    {
+        return PublishArticle::with($relations)->findOrFail($id);
+    }
+
+    private function articleText(?string $html): string
+    {
+        return strip_tags($html ?? '');
+    }
+
+    private function hasMinimumContent(?string $html, int $minimumLength): bool
+    {
+        return strlen($this->articleText($html)) >= $minimumLength;
+    }
+
+    private function loadSelectedLinks(array $linkIds): array
+    {
+        return \hexa_app_publish\Models\PublishLinkList::whereIn('id', $linkIds)
+            ->where('active', true)
+            ->get()
+            ->map(fn($link) => [
+                'url' => $link->url,
+                'anchor_text' => $link->anchor_text,
+                'context' => $link->context,
+            ])
+            ->toArray();
     }
 }
