@@ -6,7 +6,7 @@ use hexa_core\Http\Controllers\Controller;
 use hexa_core\Forms\Services\FormRegistryService;
 use hexa_core\Forms\Services\FormHydrationService;
 use hexa_core\Forms\Services\FormValidationService;
-use hexa_app_publish\Models\PublishPreset;
+use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

@@ -3,7 +3,7 @@
 namespace hexa_app_publish\Publishing\Articles\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_app_publish\Models\PublishArticle;
+use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
 use hexa_app_publish\Services\ArticleDeleteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

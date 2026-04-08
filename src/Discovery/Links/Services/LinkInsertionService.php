@@ -2,8 +2,8 @@
 
 namespace hexa_app_publish\Discovery\Links\Services;
 
-use hexa_app_publish\Models\PublishLinkList;
-use hexa_app_publish\Models\PublishSitemap;
+use hexa_app_publish\Discovery\Links\Models\PublishLinkList;
+use hexa_app_publish\Discovery\Links\Models\PublishSitemap;
 use hexa_package_anthropic\Services\AnthropicService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;

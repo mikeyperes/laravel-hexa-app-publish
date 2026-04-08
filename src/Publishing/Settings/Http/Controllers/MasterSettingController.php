@@ -4,7 +4,7 @@ namespace hexa_app_publish\Publishing\Settings\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
 use hexa_core\Models\Setting;
-use hexa_app_publish\Models\PublishMasterSetting;
+use hexa_app_publish\Publishing\Settings\Models\PublishMasterSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;

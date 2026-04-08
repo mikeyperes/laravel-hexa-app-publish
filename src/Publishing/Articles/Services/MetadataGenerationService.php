@@ -2,7 +2,7 @@
 
 namespace hexa_app_publish\Publishing\Articles\Services;
 
-use hexa_app_publish\Models\AiActivityLog;
+use hexa_app_publish\Quality\Detection\Models\AiActivityLog;
 use hexa_package_anthropic\Services\AnthropicService;
 
 /**

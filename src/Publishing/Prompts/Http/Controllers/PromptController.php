@@ -3,7 +3,7 @@
 namespace hexa_app_publish\Publishing\Prompts\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_app_publish\Models\PublishPrompt;
+use hexa_app_publish\Publishing\Prompts\Models\PublishPrompt;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;

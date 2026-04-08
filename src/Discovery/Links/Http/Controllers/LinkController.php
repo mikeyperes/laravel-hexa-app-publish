@@ -3,9 +3,9 @@
 namespace hexa_app_publish\Discovery\Links\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_app_publish\Models\PublishAccount;
-use hexa_app_publish\Models\PublishLinkList;
-use hexa_app_publish\Models\PublishSitemap;
+use hexa_app_publish\Publishing\Accounts\Models\PublishAccount;
+use hexa_app_publish\Discovery\Links\Models\PublishLinkList;
+use hexa_app_publish\Discovery\Links\Models\PublishSitemap;
 use hexa_app_publish\Discovery\Links\Services\LinkInsertionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

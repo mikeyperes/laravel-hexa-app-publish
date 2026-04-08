@@ -2,7 +2,7 @@
 
 namespace hexa_app_publish\Publishing\Articles\Services;
 
-use hexa_app_publish\Models\PublishArticle;
+use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
 
 /**
  * ArticlePersistenceService — single source of truth for article create/update.

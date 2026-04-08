@@ -3,7 +3,7 @@
 namespace hexa_app_publish\Publishing\Schedule\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_app_publish\Models\PublishSite;
+use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;

@@ -3,7 +3,7 @@
 namespace hexa_app_publish\Quality\SmartEdits\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_app_publish\Models\AiSmartEditTemplate;
+use hexa_app_publish\Quality\SmartEdits\Models\AiSmartEditTemplate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;

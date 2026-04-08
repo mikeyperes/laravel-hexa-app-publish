@@ -4,8 +4,8 @@ namespace hexa_app_publish\Publishing\Sites\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
 use hexa_core\Services\GenericService;
-use hexa_app_publish\Models\PublishAccount;
-use hexa_app_publish\Models\PublishSite;
+use hexa_app_publish\Publishing\Accounts\Models\PublishAccount;
+use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_app_publish\Services\PublishService;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;

@@ -3,10 +3,10 @@
 namespace hexa_app_publish\Publishing\Dashboard\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_app_publish\Models\PublishAccount;
-use hexa_app_publish\Models\PublishArticle;
-use hexa_app_publish\Models\PublishCampaign;
-use hexa_app_publish\Models\PublishSite;
+use hexa_app_publish\Publishing\Accounts\Models\PublishAccount;
+use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
+use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
+use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use Illuminate\View\View;
 
 class DashboardController extends Controller

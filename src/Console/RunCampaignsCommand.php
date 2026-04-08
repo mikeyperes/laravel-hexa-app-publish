@@ -3,7 +3,7 @@
 namespace hexa_app_publish\Console;
 
 use Illuminate\Console\Command;
-use hexa_app_publish\Models\PublishCampaign;
+use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
 use hexa_app_publish\Publishing\Campaigns\Services\CampaignExecutionService;
 
 /**

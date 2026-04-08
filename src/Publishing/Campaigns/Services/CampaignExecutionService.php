@@ -2,8 +2,8 @@
 
 namespace hexa_app_publish\Publishing\Campaigns\Services;
 
-use hexa_app_publish\Models\PublishCampaign;
-use hexa_app_publish\Models\PublishSite;
+use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
+use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
 use hexa_app_publish\Publishing\Articles\Services\ArticlePersistenceService;
 use hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService;
