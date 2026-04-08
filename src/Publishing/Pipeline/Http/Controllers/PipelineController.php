@@ -6,21 +6,25 @@ use hexa_core\Http\Controllers\Controller;
 use hexa_core\Models\Setting;
 use hexa_core\Models\User;
 use hexa_app_publish\Models\PublishArticle;
-use hexa_app_publish\Models\PublishMasterSetting;
-use hexa_app_publish\Models\PublishPreset;
-use hexa_app_publish\Models\PublishPrompt;
-use hexa_app_publish\Models\AiActivityLog;
-use hexa_app_publish\Models\PublishTemplate;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
 use hexa_app_publish\Publishing\Articles\Services\MetadataGenerationService;
 use hexa_app_publish\Publishing\Articles\Services\ArticlePersistenceService;
 use hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService;
+use hexa_app_publish\Publishing\Pipeline\Http\Requests\CheckSourcesRequest;
+use hexa_app_publish\Publishing\Pipeline\Http\Requests\DetectAiRequest;
+use hexa_app_publish\Publishing\Pipeline\Http\Requests\GenerateMetadataRequest;
+use hexa_app_publish\Publishing\Pipeline\Http\Requests\GeneratePhotoMetaRequest;
+use hexa_app_publish\Publishing\Pipeline\Http\Requests\PrepareForWordpressRequest;
+use hexa_app_publish\Publishing\Pipeline\Http\Requests\PreviewPromptRequest;
+use hexa_app_publish\Publishing\Pipeline\Http\Requests\PublishToWordpressRequest;
+use hexa_app_publish\Publishing\Pipeline\Http\Requests\SaveDraftRequest;
+use hexa_app_publish\Publishing\Pipeline\Http\Requests\SpinRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * PublishPipelineController — 11-step article publishing pipeline.
@@ -40,13 +44,6 @@ class PipelineController extends Controller
         $this->sourceExtraction = $sourceExtraction;
     }
 
-    /**
-     * Resolve the WHM server for a WP Toolkit site.
-    /**
-     * Show the pipeline page.
-     *
-     * @return View
-     */
     public function index(Request $request)
     {
         // If no ?id= in URL, reuse an existing empty draft or create one
@@ -147,25 +144,9 @@ class PipelineController extends Controller
         ]);
     }
 
-    /**
-     * Preview the resolved prompt without spinning.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
-    /**
-     * Generate contextual photo metadata via AI (Haiku).
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function generatePhotoMeta(Request $request): JsonResponse
+    public function generatePhotoMeta(GeneratePhotoMetaRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'search_term'    => 'required|string|max:200',
-            'article_title'  => 'nullable|string|max:500',
-            'article_text'   => 'nullable|string|max:2000',
-        ]);
+        $validated = $request->validated();
 
         $anthropic = app(\hexa_package_anthropic\Services\AnthropicService::class);
         $prompt = "You are a photo metadata expert. Generate contextual metadata for a stock photo used in an article.\n\n"
@@ -203,15 +184,9 @@ class PipelineController extends Controller
         ]);
     }
 
-    public function previewPrompt(Request $request): JsonResponse
+    public function previewPrompt(PreviewPromptRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'source_texts'   => 'nullable|array',
-            'source_texts.*' => 'nullable|string',
-            'template_id'    => 'nullable|integer',
-            'preset_id'      => 'nullable|integer',
-            'custom_prompt'  => 'nullable|string|max:5000',
-        ]);
+        $validated = $request->validated();
 
         $prompt = app(ArticleGenerationService::class)->buildPrompt(
             $validated['source_texts'] ?? ['[Source articles will be inserted here]'],
@@ -255,18 +230,9 @@ class PipelineController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function checkSources(Request $request): JsonResponse
+    public function checkSources(CheckSourcesRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'urls'        => 'required|array|min:1',
-            'urls.*'      => 'required|url|max:2048',
-            'user_agent'  => 'nullable|string|max:100',
-            'method'      => 'nullable|in:auto,readability,css,regex',
-            'retries'     => 'nullable|integer|min:0|max:5',
-            'timeout'     => 'nullable|integer|min:5|max:60',
-            'min_words'   => 'nullable|integer|min:10|max:1000',
-            'auto_fallback' => 'nullable|boolean',
-        ]);
+        $validated = $request->validated();
 
         $extraction = $this->sourceExtraction->extractMultiple($validated['urls'], [
             'method'        => $validated['method'] ?? 'auto',
@@ -293,19 +259,9 @@ class PipelineController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function spin(Request $request): JsonResponse
+    public function spin(SpinRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'source_texts'       => 'required|array|min:1',
-            'source_texts.*'     => 'required|string',
-            'template_id'        => 'nullable|integer|exists:publish_templates,id',
-            'preset_id'          => 'nullable|integer|exists:publish_presets,id',
-            'model'              => 'required|string|max:100',
-            'change_request'     => 'nullable|string|max:2000',
-            'custom_prompt'      => 'nullable|string|max:5000',
-            'master_setting_ids' => 'nullable|array',
-            'master_setting_ids.*' => 'integer|exists:publish_master_settings,id',
-        ]);
+        $validated = $request->validated();
 
         $result = app(ArticleGenerationService::class)->generate(
             $validated['source_texts'],
@@ -337,11 +293,9 @@ class PipelineController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function generateMetadata(Request $request): JsonResponse
+    public function generateMetadata(GenerateMetadataRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'article_html' => 'required|string',
-        ]);
+        $validated = $request->validated();
 
         $result = app(MetadataGenerationService::class)->generate($validated['article_html']);
 
@@ -354,26 +308,9 @@ class PipelineController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function prepareForWordpress(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function prepareForWordpress(PrepareForWordpressRequest $request): StreamedResponse
     {
-        $validated = $request->validate([
-            'html'                => 'required|string',
-            'title'               => 'nullable|string|max:500',
-            'site_id'             => 'required|integer|exists:publish_sites,id',
-            'categories'          => 'nullable|array',
-            'tags'                => 'nullable|array',
-            'pipeline_session_id' => 'nullable|string|max:100',
-            'draft_id'            => 'nullable|integer',
-            'photo_suggestions'   => 'nullable|array',
-            'photo_meta'          => 'nullable|array',
-            'photo_meta.*.alt_text'  => 'nullable|string',
-            'photo_meta.*.caption'   => 'nullable|string',
-            'photo_meta.*.filename'  => 'nullable|string',
-            'featured_meta'       => 'nullable|array',
-            'featured_meta.alt_text' => 'nullable|string',
-            'featured_meta.caption'  => 'nullable|string',
-            'featured_meta.filename' => 'nullable|string',
-        ]);
+        $validated = $request->validated();
 
         $site = PublishSite::findOrFail($validated['site_id']);
         $prepService = app(\hexa_app_publish\Publishing\Delivery\Services\WordPressPreparationService::class);
@@ -412,36 +349,9 @@ class PipelineController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function publishToWordpress(Request $request): JsonResponse
+    public function publishToWordpress(PublishToWordpressRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'html'                => 'required|string',
-            'title'               => 'required|string|max:500',
-            'site_id'             => 'required|integer|exists:publish_sites,id',
-            'category_ids'        => 'nullable|array',
-            'tag_ids'             => 'nullable|array',
-            'status'              => 'required|in:publish,draft,future',
-            'date'                => 'nullable|date',
-            'pipeline_session_id' => 'nullable|string|max:100',
-            'categories'          => 'nullable|array',
-            'tags'                => 'nullable|array',
-            'wp_images'           => 'nullable|array',
-            'word_count'          => 'nullable|integer',
-            'ai_model'            => 'nullable|string|max:100',
-            'ai_cost'             => 'nullable|numeric',
-            'ai_provider'         => 'nullable|string|max:50',
-            'ai_tokens_input'     => 'nullable|integer',
-            'ai_tokens_output'    => 'nullable|integer',
-            'resolved_prompt'     => 'nullable|string',
-            'photo_suggestions'   => 'nullable|array',
-            'featured_image_search' => 'nullable|string|max:500',
-            'author'              => 'nullable|string|max:255',
-            'sources'             => 'nullable|array',
-            'template_id'         => 'nullable|integer',
-            'preset_id'           => 'nullable|integer',
-            'user_id'             => 'nullable|integer',
-            'draft_id'     => 'nullable|integer|exists:publish_articles,id',
-        ]);
+        $validated = $request->validated();
 
         $site = PublishSite::findOrFail($validated['site_id']);
 
@@ -521,27 +431,9 @@ class PipelineController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function saveDraft(Request $request): JsonResponse
+    public function saveDraft(SaveDraftRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'draft_id'    => 'nullable|integer|exists:publish_articles,id',
-            'title'       => 'nullable|string|max:500',
-            'body'        => 'nullable|string',
-            'excerpt'     => 'nullable|string|max:1000',
-            'user_id'     => 'nullable|integer|exists:users,id',
-            'site_id'     => 'nullable|integer|exists:publish_sites,id',
-            'preset_id'   => 'nullable|integer',
-            'prompt_id'   => 'nullable|integer',
-            'ai_model'    => 'nullable|string|max:100',
-            'author'      => 'nullable|string|max:255',
-            'sources'     => 'nullable|array',
-            'tags'        => 'nullable|array',
-            'categories'  => 'nullable|array',
-            'notes'       => 'nullable|string',
-            'template_id' => 'nullable|integer',
-            'photo_suggestions' => 'nullable|array',
-            'featured_image_search' => 'nullable|string|max:500',
-        ]);
+        $validated = $request->validated();
 
         $data = [
             'title'            => $validated['title'] ?? 'Untitled Pipeline Draft',
@@ -581,28 +473,9 @@ class PipelineController extends Controller
         ]);
     }
 
-    /**
-     * Create a taxonomy term (category or tag) on a WordPress site.
-     *
-     * @param string $siteUrl
-     * @param string $username
-     * @param string $password
-     * @param string $taxonomy  Either 'categories' or 'tags'
-     * @param string $name      The term name
-    /**
-    /**
-     * Run AI detection on article text using all enabled detectors.
-     * Returns results per detector with scores and flagged sentences.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function detectAi(Request $request): JsonResponse
+    public function detectAi(DetectAiRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'text' => 'required|string|min:10',
-            'article_id' => 'nullable|integer',
-        ]);
+        $validated = $request->validated();
 
         $text = strip_tags($validated['text']);
         $results = [];
