@@ -207,36 +207,7 @@ class WordPressPreparationService
      */
     private function createCategories(PublishSite $site, string $mode, ?WhmServer $server, ?string $installId, array $categories, callable $send): array
     {
-        if (empty($categories)) {
-            $send('step', "No categories to create");
-            return [];
-        }
-
-        $send('info', "Creating " . count($categories) . " categories...");
-        $categoryIds = [];
-
-        if ($mode === 'ssh') {
-            $batchResult = $this->wptoolkit->wpCliBatchCategories($server, $installId, $categories);
-            $categoryIds = $batchResult['term_ids'] ?? [];
-        } else {
-            $existingCats = $this->wp->getCategories($site->url, $site->wp_username, $site->wp_application_password);
-            $existingCatMap = [];
-            if ($existingCats['success']) {
-                foreach ($existingCats['data'] as $cat) $existingCatMap[strtolower($cat['name'])] = $cat['id'];
-            }
-            foreach ($categories as $catName) {
-                $catNameLower = strtolower(trim($catName));
-                if (isset($existingCatMap[$catNameLower])) {
-                    $categoryIds[] = $existingCatMap[$catNameLower];
-                } else {
-                    $catResult = $this->createTaxonomyViaRest($site->url, $site->wp_username, $site->wp_application_password, 'categories', $catName);
-                    if ($catResult) $categoryIds[] = $catResult;
-                }
-            }
-        }
-
-        $send('success', count($categoryIds) . "/" . count($categories) . " categories ready");
-        return $categoryIds;
+        return $this->resolveTaxonomyIds($site, $mode, $server, $installId, $categories, 'categories', $send);
     }
 
     /**
@@ -252,36 +223,80 @@ class WordPressPreparationService
      */
     private function createTags(PublishSite $site, string $mode, ?WhmServer $server, ?string $installId, array $tags, callable $send): array
     {
-        if (empty($tags)) {
-            $send('step', "No tags to create");
+        return $this->resolveTaxonomyIds($site, $mode, $server, $installId, $tags, 'tags', $send);
+    }
+
+    /**
+     * Create or resolve WordPress taxonomy terms.
+     *
+     * @param PublishSite $site
+     * @param string $mode
+     * @param WhmServer|null $server
+     * @param string|null $installId
+     * @param array $terms
+     * @param string $taxonomy categories|tags
+     * @param callable $send
+     * @return array
+     */
+    private function resolveTaxonomyIds(PublishSite $site, string $mode, ?WhmServer $server, ?string $installId, array $terms, string $taxonomy, callable $send): array
+    {
+        if (empty($terms)) {
+            $send('step', "No {$taxonomy} to create");
             return [];
         }
 
-        $send('info', "Creating " . count($tags) . " tags...");
-        $tagIds = [];
+        $send('info', "Creating " . count($terms) . " {$taxonomy}...");
 
         if ($mode === 'ssh') {
-            $batchResult = $this->wptoolkit->wpCliBatchTags($server, $installId, $tags);
-            $tagIds = $batchResult['term_ids'] ?? [];
-        } else {
-            $existingTags = $this->wp->getTags($site->url, $site->wp_username, $site->wp_application_password);
-            $existingTagMap = [];
-            if ($existingTags['success']) {
-                foreach ($existingTags['data'] as $tag) $existingTagMap[strtolower($tag['name'])] = $tag['id'];
-            }
-            foreach ($tags as $tagName) {
-                $tagNameLower = strtolower(trim($tagName));
-                if (isset($existingTagMap[$tagNameLower])) {
-                    $tagIds[] = $existingTagMap[$tagNameLower];
-                } else {
-                    $tagResult = $this->createTaxonomyViaRest($site->url, $site->wp_username, $site->wp_application_password, 'tags', $tagName);
-                    if ($tagResult) $tagIds[] = $tagResult;
-                }
+            $batchResult = match ($taxonomy) {
+                'categories' => $this->wptoolkit->wpCliBatchCategories($server, $installId, $terms),
+                'tags' => $this->wptoolkit->wpCliBatchTags($server, $installId, $terms),
+                default => ['term_ids' => []],
+            };
+
+            $termIds = $batchResult['term_ids'] ?? [];
+            $send('success', count($termIds) . "/" . count($terms) . " {$taxonomy} ready");
+
+            return $termIds;
+        }
+
+        $existingTerms = match ($taxonomy) {
+            'categories' => $this->wp->getCategories($site->url, $site->wp_username, $site->wp_application_password),
+            'tags' => $this->wp->getTags($site->url, $site->wp_username, $site->wp_application_password),
+            default => ['success' => false, 'data' => []],
+        };
+
+        $existingTermMap = [];
+        if ($existingTerms['success']) {
+            foreach ($existingTerms['data'] as $term) {
+                $existingTermMap[strtolower($term['name'])] = $term['id'];
             }
         }
 
-        $send('success', count($tagIds) . "/" . count($tags) . " tags ready");
-        return $tagIds;
+        $termIds = [];
+        foreach ($terms as $termName) {
+            $termNameLower = strtolower(trim($termName));
+            if (isset($existingTermMap[$termNameLower])) {
+                $termIds[] = $existingTermMap[$termNameLower];
+                continue;
+            }
+
+            $createdId = $this->createTaxonomyViaRest(
+                $site->url,
+                $site->wp_username,
+                $site->wp_application_password,
+                $taxonomy,
+                $termName
+            );
+
+            if ($createdId) {
+                $termIds[] = $createdId;
+            }
+        }
+
+        $send('success', count($termIds) . "/" . count($terms) . " {$taxonomy} ready");
+
+        return $termIds;
     }
 
     /**
