@@ -19,6 +19,9 @@ use hexa_package_wptoolkit\Services\WpToolkitService;
  */
 class WordPressDeliveryService
 {
+    private const MODE_SSH = 'ssh';
+    private const MODE_REST = 'rest';
+
     protected WpToolkitService $wptoolkit;
     protected WordPressService $wp;
 
@@ -48,10 +51,7 @@ class WordPressDeliveryService
      */
     public function createPost(PublishSite $site, string $title, string $html, string $status = 'draft', array $options = []): array
     {
-        $connectionType = $site->connection_type ?? 'wptoolkit';
-        $isSsh = ($connectionType === 'wptoolkit');
-
-        if ($isSsh) {
+        if ($this->usesSsh($site)) {
             return $this->createViaSsh($site, $title, $html, $status, $options);
         }
 
@@ -72,7 +72,7 @@ class WordPressDeliveryService
     {
         $resolved = $this->resolveServer($site);
         if (!$resolved['server'] || !$site->wordpress_install_id) {
-            return ['success' => false, 'message' => "Site '{$site->name}' is missing WP Toolkit configuration.", 'post_id' => null, 'post_url' => null, 'mode' => 'ssh'];
+            return $this->failure("Site '{$site->name}' is missing WP Toolkit configuration.", self::MODE_SSH);
         }
 
         $date = ($status === 'future' && !empty($options['date'])) ? $options['date'] : null;
@@ -89,14 +89,18 @@ class WordPressDeliveryService
         );
 
         if (!$result['success']) {
-            return ['success' => false, 'message' => $result['message'] ?? 'SSH publish failed.', 'post_id' => null, 'post_url' => null, 'mode' => 'ssh'];
+            return $this->failure($result['message'] ?? 'SSH publish failed.', self::MODE_SSH);
         }
 
-        // SSH returns only post_id — build URL from site
         $postId = $result['data']['post_id'] ?? null;
-        $postUrl = $postId ? rtrim($site->url, '/') . '/?p=' . $postId : null;
 
-        return ['success' => true, 'message' => $result['message'] ?? 'Published via SSH.', 'post_id' => $postId, 'post_url' => $postUrl, 'mode' => 'ssh'];
+        return $this->success(
+            $site,
+            self::MODE_SSH,
+            $result['message'] ?? 'Published via SSH.',
+            $postId,
+            $result['data']['post_url'] ?? null
+        );
     }
 
     /**
@@ -112,28 +116,74 @@ class WordPressDeliveryService
     private function createViaRest(PublishSite $site, string $title, string $html, string $status, array $options): array
     {
         if (!$site->wp_username || !$site->wp_application_password) {
-            return ['success' => false, 'message' => "Site '{$site->name}' has no WordPress REST credentials.", 'post_id' => null, 'post_url' => null, 'mode' => 'rest'];
+            return $this->failure("Site '{$site->name}' has no WordPress REST credentials.", self::MODE_REST);
         }
 
-        $postData = [
-            'title'   => $title,
-            'content' => $html,
-            'status'  => $status,
-        ];
-        if (!empty($options['category_ids'])) $postData['categories'] = $options['category_ids'];
-        if (!empty($options['tag_ids'])) $postData['tags'] = $options['tag_ids'];
-        if ($status === 'future' && !empty($options['date'])) $postData['date'] = $options['date'];
+        $postData = $this->buildPostData($title, $html, $status, $options);
 
         $result = $this->wp->createPost($site->url, $site->wp_username, $site->wp_application_password, $postData);
 
         if (!$result['success']) {
-            return ['success' => false, 'message' => $result['message'] ?? 'REST publish failed.', 'post_id' => null, 'post_url' => null, 'mode' => 'rest'];
+            return $this->failure($result['message'] ?? 'REST publish failed.', self::MODE_REST);
         }
 
-        $postId = $result['data']['post_id'] ?? null;
-        $postUrl = $result['data']['post_url'] ?? ($postId ? rtrim($site->url, '/') . '/?p=' . $postId : null);
+        return $this->success(
+            $site,
+            self::MODE_REST,
+            $result['message'] ?? 'Published via REST.',
+            $result['data']['post_id'] ?? null,
+            $result['data']['post_url'] ?? null
+        );
+    }
 
-        return ['success' => true, 'message' => $result['message'] ?? 'Published via REST.', 'post_id' => $postId, 'post_url' => $postUrl, 'mode' => 'rest'];
+    private function usesSsh(PublishSite $site): bool
+    {
+        return ($site->connection_type ?? 'wptoolkit') === 'wptoolkit';
+    }
+
+    private function buildPostData(string $title, string $html, string $status, array $options): array
+    {
+        $postData = [
+            'title' => $title,
+            'content' => $html,
+            'status' => $status,
+        ];
+
+        if (!empty($options['category_ids'])) {
+            $postData['categories'] = $options['category_ids'];
+        }
+
+        if (!empty($options['tag_ids'])) {
+            $postData['tags'] = $options['tag_ids'];
+        }
+
+        if ($status === 'future' && !empty($options['date'])) {
+            $postData['date'] = $options['date'];
+        }
+
+        return $postData;
+    }
+
+    private function failure(string $message, string $mode): array
+    {
+        return [
+            'success' => false,
+            'message' => $message,
+            'post_id' => null,
+            'post_url' => null,
+            'mode' => $mode,
+        ];
+    }
+
+    private function success(PublishSite $site, string $mode, string $message, ?int $postId, ?string $postUrl = null): array
+    {
+        return [
+            'success' => true,
+            'message' => $message,
+            'post_id' => $postId,
+            'post_url' => $postUrl ?: ($postId ? rtrim($site->url, '/') . '/?p=' . $postId : null),
+            'mode' => $mode,
+        ];
     }
 
     /**
