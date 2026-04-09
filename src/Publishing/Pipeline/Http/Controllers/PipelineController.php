@@ -130,6 +130,27 @@ class PipelineController extends Controller
             ['mode' => 'pipeline', 'context' => 'pipeline']
         );
 
+        // AI detection packages status for the detector panel
+        $aiDetectors = [];
+        $detectorMap = [
+            'gptzero'     => ['class' => 'hexa_package_gptzero\\Services\\GptZeroService',     'name' => 'GPTZero',     'key' => 'gptzero_api_key'],
+            'copyleaks'   => ['class' => 'hexa_package_copyleaks\\Services\\CopyleaksService', 'name' => 'Copyleaks',   'key' => 'copyleaks_api_key'],
+            'originality' => ['class' => 'hexa_package_originality\\Services\\OriginalityService', 'name' => 'Originality.ai', 'key' => 'originality_api_key'],
+            'sapling'     => ['class' => 'hexa_package_sapling\\Services\\SaplingService',     'name' => 'Sapling',     'key' => 'sapling_api_key'],
+            'zerogpt'     => ['class' => 'hexa_package_zerogpt\\Services\\ZeroGptService',     'name' => 'ZeroGPT',     'key' => 'zerogpt_api_key'],
+        ];
+        foreach ($detectorMap as $key => $det) {
+            $installed = class_exists($det['class']);
+            $apiKey = Setting::getValue($det['key']);
+            $aiDetectors[$key] = [
+                'name'       => $det['name'],
+                'installed'  => $installed,
+                'enabled'    => $installed && Setting::getValue($key . '_enabled', '1') === '1',
+                'has_key'    => !empty($apiKey),
+                'debug_mode' => Setting::getValue($key . '_debug', '0') === '1',
+            ];
+        }
+
         return view('app-publish::publishing.pipeline.index', [
             'sites'             => $sites,
             'draftId'           => $draft->id,
@@ -141,6 +162,7 @@ class PipelineController extends Controller
             'articlePresetForm' => $articlePresetForm,
             'wpPresetForm'      => $wpPresetForm,
             'filenamePattern'   => \hexa_core\Models\Setting::getValue('wp_photo_filename_pattern', 'hexa_{draft_id}_{seo_name}'),
+            'aiDetectors'       => $aiDetectors,
         ]);
     }
 
