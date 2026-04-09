@@ -778,19 +778,28 @@
                     </span>
                     <svg class="w-4 h-4 text-gray-400 transition-transform" :class="promptLogOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                 </button>
-                <div x-show="promptLogOpen" x-cloak x-transition class="bg-gray-900 border border-gray-700 border-t-0 rounded-b-lg">
-                    <template x-for="(entry, idx) in promptLog" :key="idx">
-                        <div class="border-b border-gray-800 last:border-b-0 px-4 py-3">
-                            <div class="flex items-start gap-3">
-                                <code class="text-blue-400 text-xs font-mono whitespace-nowrap flex-shrink-0" x-text="entry.shortcode"></code>
-                                <div class="min-w-0 flex-1">
-                                    <div class="text-xs text-gray-400 mb-1" x-text="entry.source"></div>
-                                    <div x-show="entry.value && entry.value !== ''" x-cloak class="bg-gray-800 rounded px-2 py-1.5 text-xs text-green-300 font-mono break-words whitespace-pre-wrap" x-text="entry.value"></div>
-                                    <div x-show="!entry.value || entry.value === ''" x-cloak class="text-xs text-gray-600 italic">empty</div>
-                                </div>
-                            </div>
-                        </div>
-                    </template>
+                <div x-show="promptLogOpen" x-cloak x-transition class="bg-gray-900 border border-gray-700 border-t-0 rounded-b-lg overflow-hidden">
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="border-b border-gray-800">
+                                <th class="text-left px-3 py-2 text-gray-500 font-medium w-40">Shortcode</th>
+                                <th class="text-left px-3 py-2 text-gray-500 font-medium">Source</th>
+                                <th class="text-left px-3 py-2 text-gray-500 font-medium">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="(entry, idx) in promptLog" :key="idx">
+                                <tr class="border-b border-gray-800/50 last:border-b-0 hover:bg-gray-800/30">
+                                    <td class="px-3 py-1.5 align-top"><code class="text-blue-400 font-mono" x-text="entry.shortcode"></code></td>
+                                    <td class="px-3 py-1.5 align-top text-gray-400" x-text="entry.source"></td>
+                                    <td class="px-3 py-1.5 align-top">
+                                        <span x-show="entry.value && entry.value !== ''" class="text-green-300 font-mono break-words" x-text="entry.value.length > 80 ? entry.value.substring(0, 80) + '...' : entry.value"></span>
+                                        <span x-show="!entry.value || entry.value === ''" class="text-gray-600 italic">empty</span>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
