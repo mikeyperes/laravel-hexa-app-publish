@@ -720,11 +720,20 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">AI Model</label>
                     <select x-model="aiModel" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        @foreach(config('anthropic.models', []) as $model)
-                            @if($model['type'] === 'api' || $model['type'] === 'both')
-                                <option value="{{ $model['id'] }}">{{ $model['name'] }}</option>
-                            @endif
-                        @endforeach
+                        <optgroup label="Claude">
+                            @foreach(config('anthropic.models', []) as $model)
+                                @if($model['type'] === 'api' || $model['type'] === 'both')
+                                    <option value="{{ $model['id'] }}">Claude — {{ $model['name'] }}</option>
+                                @endif
+                            @endforeach
+                        </optgroup>
+                        @if(config('chatgpt.models'))
+                        <optgroup label="GPT">
+                            @foreach(config('chatgpt.models', []) as $model)
+                                <option value="{{ $model['id'] }}">GPT — {{ $model['name'] }}</option>
+                            @endforeach
+                        </optgroup>
+                        @endif
                     </select>
                 </div>
                 <button @click="spinArticle()" :disabled="spinning" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2">

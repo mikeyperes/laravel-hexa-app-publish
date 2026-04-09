@@ -23,13 +23,17 @@ class ArticleGenerationService
 {
     protected AnthropicService $anthropic;
 
-    /** Claude pricing per million tokens */
+    /** Pricing per million tokens */
     private const PRICING = [
         'claude-opus-4-6'              => ['input' => 15.0, 'output' => 75.0],
         'claude-opus-4-20250514'       => ['input' => 15.0, 'output' => 75.0],
         'claude-sonnet-4-6'            => ['input' => 3.0,  'output' => 15.0],
         'claude-sonnet-4-20250514'     => ['input' => 3.0,  'output' => 15.0],
         'claude-haiku-4-5-20251001'    => ['input' => 0.80, 'output' => 4.0],
+        'gpt-4o'                       => ['input' => 2.50, 'output' => 10.0],
+        'gpt-4-turbo'                  => ['input' => 10.0, 'output' => 30.0],
+        'gpt-4'                        => ['input' => 30.0, 'output' => 60.0],
+        'gpt-3.5-turbo'                => ['input' => 0.50, 'output' => 1.50],
     ];
 
     /**
@@ -67,8 +71,14 @@ class ArticleGenerationService
         // Build the system prompt
         $systemPrompt = $this->buildPrompt($sourceTexts, $templateId, $presetId, $customPrompt, $changeRequest);
 
-        // Call AI
-        $result = $this->anthropic->chat($systemPrompt, 'Generate the article now.', $model, 8192);
+        // Call AI — route to correct provider
+        $isOpenAI = str_starts_with($model, 'gpt-');
+        if ($isOpenAI) {
+            $chatgpt = app(\hexa_package_chatgpt\Services\ChatGptService::class);
+            $result = $chatgpt->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
+        } else {
+            $result = $this->anthropic->chat($systemPrompt, 'Generate the article now.', $model, 8192);
+        }
 
         if (!$result['success']) {
             return [
@@ -110,7 +120,7 @@ class ArticleGenerationService
             'usage'            => $usage,
             'model'            => $result['data']['model'] ?? $model,
             'cost'             => round($cost, 6),
-            'provider'         => 'anthropic',
+            'provider'         => $isOpenAI ? 'openai' : 'anthropic',
             'photo_suggestions' => $photoSuggestions['photos'],
             'featured_image'   => $featuredImage['search'],
             'featured_meta'    => $featuredImage['featured_meta'] ?? null,
@@ -489,9 +499,12 @@ class ArticleGenerationService
      */
     private function logActivity(string $model, string $agent, string $systemPrompt, string $content, array $usage): void
     {
-        $apiKey = \hexa_core\Models\Setting::getValue('anthropic_api_key', '');
+        $isOpenAI = str_starts_with($model, 'gpt-');
+        $apiKey = $isOpenAI
+            ? \hexa_core\Models\Setting::getValue('chatgpt_api_key', '')
+            : \hexa_core\Models\Setting::getValue('anthropic_api_key', '');
         AiActivityLog::logCall([
-            'provider'          => 'anthropic',
+            'provider'          => $isOpenAI ? 'openai' : 'anthropic',
             'model'             => $model,
             'agent'             => $agent,
             'prompt_tokens'     => $usage['input_tokens'] ?? 0,
