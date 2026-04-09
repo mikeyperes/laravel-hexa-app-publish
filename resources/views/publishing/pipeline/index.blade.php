@@ -965,11 +965,30 @@
                 <p class="text-sm text-red-700" x-text="spinError"></p>
             </div>
 
-            {{-- Token usage --}}
-            <div x-show="tokenUsage" x-cloak class="mb-4 flex gap-4 text-xs text-gray-500">
-                <span>Prompt tokens: <span class="font-medium text-gray-700" x-text="tokenUsage?.input_tokens || 0"></span></span>
-                <span>Completion tokens: <span class="font-medium text-gray-700" x-text="tokenUsage?.output_tokens || 0"></span></span>
-                <span>Total: <span class="font-medium text-gray-700" x-text="(tokenUsage?.input_tokens || 0) + (tokenUsage?.output_tokens || 0)"></span></span>
+            {{-- AI Call Report --}}
+            <div x-show="lastAiCall" x-cloak class="mb-4 bg-gray-900 rounded-xl border border-gray-700 p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h5 class="text-xs font-semibold text-gray-400 uppercase tracking-wide">AI Call Report</h5>
+                    <span class="text-xs text-gray-500" x-text="lastAiCall?.timestamp_utc || ''"></span>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div>
+                        <span class="text-gray-500">Provider</span>
+                        <p class="font-medium text-white" x-text="lastAiCall?.provider || '—'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Model</span>
+                        <p class="font-medium text-white" x-text="lastAiCall?.model || '—'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Cost</span>
+                        <p class="font-medium text-green-400" x-text="'$' + (lastAiCall?.cost || 0).toFixed(4)"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Tokens</span>
+                        <p class="font-medium text-white" x-text="(lastAiCall?.usage?.input_tokens || 0) + ' in / ' + (lastAiCall?.usage?.output_tokens || 0) + ' out'"></p>
+                    </div>
+                </div>
             </div>
 
         </div>
