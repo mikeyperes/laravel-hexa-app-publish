@@ -6,8 +6,7 @@
 @section('content')
 <div class="max-w-6xl mx-auto space-y-4" x-data="publishPipeline()"
      @hexa-form-changed.window="
-        if ($event.detail.component_id === 'article-preset-form') { template_overrides[$event.detail.field] = $event.detail.value; template_dirty[$event.detail.field] = true; }
-        if ($event.detail.component_id === 'wp-preset-form') { preset_overrides[$event.detail.field] = $event.detail.value; preset_dirty[$event.detail.field] = true; }
+        if ($event.detail.component_id === 'article-preset-form') { $data.template_overrides[$event.detail.field] = $event.detail.value; $data.template_dirty[$event.detail.field] = true; $data.savePipelineState(); }
      ">
 
     {{-- Session ID + Clear button --}}
@@ -118,7 +117,11 @@
             {{-- Article Type (standalone, not inside preset) --}}
             <div>
                 <label class="block text-xs text-gray-500 mb-1">Article Type</label>
-                <select x-model="template_overrides.article_type" @change="template_dirty.article_type = true" class="w-full md:w-1/3 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-blue-500 py-2">
+                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Loading...
+                </div>
+                <select x-show="!templatesLoading" id="article-type-select" x-model="template_overrides.article_type" @change="$data.template_dirty.article_type = true" class="w-full md:w-1/3 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">— Select article type —</option>
                     @foreach(config('hws-publish.article_types', []) as $type)
                         <option value="{{ $type }}">{{ ucwords(str_replace('-', ' ', $type)) }}</option>
@@ -126,94 +129,14 @@
                 </select>
             </div>
 
-            {{-- Article Preset (beside WordPress Preset) --}}
-            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <h5 class="text-sm font-semibold text-gray-700">Article Preset</h5>
-                    <div class="flex items-center gap-2">
-                        <a x-show="selectedTemplate" x-cloak :href="'/publish/article-presets/' + selectedTemplateId + '/edit'" target="_blank" class="text-xs text-gray-400 hover:text-blue-600 inline-flex items-center gap-0.5">Edit on preset page <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
-                        <button @click="editingTemplate = !editingTemplate" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingTemplate ? 'Cancel' : 'Edit'"></button>
-                    </div>
-                </div>
-                {{-- Loading spinner --}}
-                <div x-show="templatesLoading" x-cloak class="flex items-center gap-2 text-sm text-blue-500 py-2">
-                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    Loading article presets...
-                </div>
-                <div x-show="!templatesLoading && !editingTemplate && selectedTemplate" class="text-sm space-y-1">
-                    <p class="font-medium text-gray-800" x-text="selectedTemplate?.name || 'None'"></p>
-                    <p class="text-xs text-gray-500"><span class="text-gray-400">Engine:</span> <span x-text="selectedTemplate?.ai_engine || '—'"></span> &middot; <span class="text-gray-400">Tone:</span> <span x-text="Array.isArray(selectedTemplate?.tone) ? selectedTemplate.tone.join(', ') : (selectedTemplate?.tone || '—')"></span> &middot; <span class="text-gray-400">Words:</span> <span x-text="(selectedTemplate?.word_count_min || '—') + '-' + (selectedTemplate?.word_count_max || '—')"></span></p>
-                </div>
-                <div x-show="!templatesLoading && !editingTemplate && !selectedTemplate" class="text-xs text-gray-400">No article preset selected — using defaults.</div>
-                <div x-show="editingTemplate" x-cloak class="mt-2">
-                    <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
-                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        Loading...
-                    </div>
-                    <select x-show="!templatesLoading" x-model="selectedTemplateId" @change="selectTemplate(); editingTemplate = false; refreshPromptPreview()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">-- No preset --</option>
-                        <template x-for="t in templates" :key="t.id">
-                            <option :value="t.id" x-text="t.name"></option>
-                        </template>
-                    </select>
-                </div>
-                <div x-show="selectedTemplate" x-cloak>
-                    <x-hexa-reactive-form
-                        :fields-json="json_encode($articlePresetForm->toClientPayload('pipeline'))"
-                        values="{}"
-                        id="article-preset-form"
-                        label="Article Preset Settings"
-                        />
-                </div>
-            </div>
-
-            {{-- WordPress Preset (moved below Article Preset) --}}
-            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <h5 class="text-sm font-semibold text-gray-700">WordPress Preset</h5>
-                    <div class="flex items-center gap-2">
-                        <a x-show="selectedPreset" x-cloak :href="'/publish/presets/' + selectedPresetId + '/edit'" target="_blank" class="text-xs text-gray-400 hover:text-blue-600 inline-flex items-center gap-0.5">Edit on preset page <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
-                        <button @click="editingPreset = !editingPreset" class="text-xs text-blue-600 hover:text-blue-800" x-text="editingPreset ? 'Cancel' : 'Edit'"></button>
-                    </div>
-                </div>
-                {{-- Loading spinner --}}
-                <div x-show="presetsLoading" x-cloak class="flex items-center gap-2 text-sm text-blue-500 py-2">
-                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    Loading WordPress presets...
-                </div>
-                {{-- Display current preset --}}
-                <div x-show="!presetsLoading && !editingPreset && selectedPreset" class="text-sm space-y-1">
-                    <p class="font-medium text-gray-800" x-text="selectedPreset?.name || 'None'"></p>
-                    <p class="text-xs text-gray-500"><span class="text-gray-400">Tone:</span> <span x-text="selectedPreset?.tone || '—'"></span> &middot; <span class="text-gray-400">Format:</span> <span x-text="selectedPreset?.article_format || '—'"></span></p>
-                </div>
-                <div x-show="!presetsLoading && !editingPreset && !selectedPreset" class="text-xs text-gray-400">No template selected — using defaults.</div>
-                {{-- Edit mode --}}
-                <div x-show="editingPreset" x-cloak class="mt-2">
-                    <div x-show="presetsLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
-                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        Loading...
-                    </div>
-                    <select x-show="!presetsLoading" x-model="selectedPresetId" @change="selectPreset(); editingPreset = false; refreshPromptPreview()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">-- No preset --</option>
-                        <template x-for="p in presets" :key="p.id">
-                            <option :value="p.id" x-text="p.name"></option>
-                        </template>
-                    </select>
-                </div>
-                <div x-show="selectedPreset" x-cloak>
-                    <x-hexa-reactive-form
-                        :fields-json="json_encode($wpPresetForm->toClientPayload('pipeline'))"
-                        values="{}"
-                        id="wp-preset-form"
-                        label="WordPress Preset Settings"
-                        />
-                </div>
-            </div>
-
             {{-- Website selection --}}
             <div>
                 <label class="block text-xs text-gray-500 mb-1">WordPress Site</label>
-                <select x-model="selectedSiteId" @change="selectSite()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+                <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-blue-500 py-2">
+                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Loading...
+                </div>
+                <select x-show="!templatesLoading" x-model="selectedSiteId" @change="selectSite()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
                     <option value="">-- Select a site --</option>
                     <template x-for="s in sites" :key="s.id">
                         <option :value="String(s.id)" :selected="String(s.id) === selectedSiteId" x-text="s.name + ' (' + s.url + ')'"></option>
@@ -239,6 +162,59 @@
                     </template>
                 </div>
             </div>
+
+            {{-- Article Preset (includes WordPress publishing fields) --}}
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-3 pb-3 border-b border-gray-200">
+                    <div>
+                        <h5 class="text-sm font-bold text-gray-800">Article Preset</h5>
+                        <div x-show="selectedTemplate && !editingTemplate" x-cloak class="mt-1">
+                            <p class="text-base font-semibold text-gray-900" x-text="selectedTemplate?.name || 'None'"></p>
+                            <div class="flex flex-wrap items-center gap-2 mt-1">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700" x-text="selectedTemplate?.ai_engine || '—'"></span>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700" x-text="'Tone: ' + (Array.isArray(selectedTemplate?.tone) ? selectedTemplate.tone.join(', ') : (selectedTemplate?.tone || '—'))"></span>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600" x-text="(selectedTemplate?.word_count_min || '—') + '–' + (selectedTemplate?.word_count_max || '—') + ' words'"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <a x-show="selectedTemplate" x-cloak :href="'/publish/article-presets/' + selectedTemplateId + '/edit'" target="_blank" class="text-xs text-gray-400 hover:text-blue-600 inline-flex items-center gap-0.5">Edit on preset page <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                        <button @click="editingTemplate = !editingTemplate" class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 border border-blue-200 rounded hover:bg-blue-50" x-text="editingTemplate ? 'Cancel' : 'Change'"></button>
+                    </div>
+                </div>
+                {{-- Loading spinner --}}
+                <div x-show="templatesLoading" x-cloak class="flex items-center gap-2 text-sm text-blue-500 py-2">
+                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Loading article presets...
+                </div>
+                <div x-show="!templatesLoading && !editingTemplate && !selectedTemplate" class="text-xs text-gray-400 py-2">No article preset selected — using defaults.</div>
+                <div x-show="editingTemplate" x-cloak class="mt-2">
+                    <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
+                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Loading...
+                    </div>
+                    <select x-show="!templatesLoading" x-model="selectedTemplateId" @change="selectTemplate(); editingTemplate = false; refreshPromptPreview()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">-- No preset --</option>
+                        <template x-for="t in templates" :key="t.id">
+                            <option :value="t.id" x-text="t.name"></option>
+                        </template>
+                    </select>
+                </div>
+                {{-- Loading spinner while templates are being fetched --}}
+                <div x-show="templatesLoading" x-cloak class="flex items-center justify-center gap-2 py-6 text-sm text-blue-500">
+                    <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Loading preset settings...
+                </div>
+                <div x-show="selectedTemplate && !templatesLoading" x-cloak>
+                    <x-hexa-reactive-form
+                        :fields-json="json_encode($articlePresetForm->toClientPayload('pipeline'))"
+                        values="{}"
+                        id="article-preset-form"
+                        label="Article Preset Settings"
+                        />
+                </div>
+            </div>
+
 
             {{-- Next button — always visible when site selected --}}
             <div x-show="selectedSite" class="mt-3">
@@ -346,20 +322,72 @@
                         </div>
                         <div>
                             <h4 class="text-base font-semibold text-gray-800" x-text="currentArticleType === 'pr-full-feature' ? 'PR Full Feature' : 'Expert Article'"></h4>
-                            <p class="text-xs text-gray-400">Generate an authoritative article from expert input</p>
+                            <p class="text-xs text-gray-400">Select profiles to feature in this article</p>
                         </div>
                     </div>
-                    <div class="bg-gray-50 rounded-lg p-4 text-sm text-gray-500">
-                        <p class="font-medium text-gray-600 mb-2">Workflow — pending implementation</p>
-                        <ul class="list-disc list-inside space-y-1 text-xs text-gray-400">
-                            <li>Expert/author profile and credentials</li>
-                            <li>Topic expertise and key insights</li>
-                            <li>Supporting data and references</li>
-                            <li>Desired angle and audience</li>
-                            <li>AI generates expert-level feature article</li>
-                        </ul>
+
+                    {{-- PR Subject Picker --}}
+                    <div class="space-y-3">
+                        <label class="text-sm font-medium text-gray-700">Select PR Subjects</label>
+                        <div class="relative">
+                            <input type="text" x-model="prProfileSearch" @input.debounce.300ms="searchPrProfiles()" @focus="searchPrProfiles()"
+                                placeholder="Search profiles by name..."
+                                class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                            <svg x-show="prProfileSearching" x-cloak class="absolute right-3 top-2.5 w-5 h-5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+
+                            {{-- Search results dropdown --}}
+                            <div x-show="prProfileResults.length > 0 && prProfileDropdownOpen" x-cloak @click.away="prProfileDropdownOpen = false"
+                                class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                                <template x-for="profile in prProfileResults" :key="profile.id">
+                                    <button @click="addPrProfile(profile); prProfileDropdownOpen = false;"
+                                        class="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 flex items-center gap-3"
+                                        :class="selectedPrProfiles.some(p => p.id === profile.id) ? 'opacity-40 cursor-not-allowed' : ''"
+                                        :disabled="selectedPrProfiles.some(p => p.id === profile.id)">
+                                        <div class="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                            <img x-show="profile.photo_url" x-cloak :src="profile.photo_url" class="w-full h-full object-cover">
+                                            <svg x-show="!profile.photo_url" class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="text-sm font-medium text-gray-900 truncate" x-text="profile.name"></p>
+                                            <p class="text-xs text-gray-400" x-text="profile.type + (profile.description ? ' — ' + profile.description.substring(0, 60) : '')"></p>
+                                        </div>
+                                        <span x-show="selectedPrProfiles.some(p => p.id === profile.id)" x-cloak class="text-xs text-gray-400">Added</span>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+
+                        {{-- Selected profiles --}}
+                        <div x-show="selectedPrProfiles.length > 0" x-cloak class="space-y-2">
+                            <p class="text-xs text-gray-500 font-medium" x-text="selectedPrProfiles.length + ' subject(s) selected'"></p>
+                            <template x-for="(profile, pidx) in selectedPrProfiles" :key="profile.id">
+                                <div class="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                                    <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                        <img x-show="profile.photo_url" x-cloak :src="profile.photo_url" class="w-full h-full object-cover">
+                                        <svg x-show="!profile.photo_url" class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-semibold text-gray-900" x-text="profile.name"></p>
+                                        <p class="text-xs text-gray-500" x-text="profile.type"></p>
+                                        <p x-show="profile.description" x-cloak class="text-xs text-gray-400 mt-0.5 break-words" x-text="profile.description"></p>
+                                    </div>
+                                    <a :href="'/profiles/' + profile.id" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 flex-shrink-0" title="View profile">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                    </a>
+                                    <button @click="selectedPrProfiles.splice(pidx, 1); savePipelineState();" class="text-red-400 hover:text-red-600 flex-shrink-0" title="Remove">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+
+                        <p x-show="selectedPrProfiles.length === 0" class="text-sm text-gray-400">No subjects selected. Search and add profiles above.</p>
                     </div>
-                    <button @click="completeStep(3); completeStep(4); openStep(5)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to AI & Spin &rarr;</button>
+
+                    <button @click="completeStep(3); completeStep(4); openStep(5)" :disabled="selectedPrProfiles.length === 0"
+                        class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Continue to AI & Spin &rarr;
+                    </button>
                 </div>
             </div>
 
@@ -419,9 +447,9 @@
                 {{-- Trending --}}
                 <div x-show="newsMode === 'trending'" class="space-y-2">
                     <div class="flex flex-wrap gap-2">
-                        <button @click="selectTrendingCategory('')" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsTrendingSelected && !newsCategory ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">All</button>
+                        <button @click="selectTrendingCategory('')" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsTrendingSelected && !newsCategory ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">All</button>
                         @foreach($newsCategories as $cat)
-                        <button @click="selectTrendingCategory('{{ $cat }}')" :disabled="newsSearching" class="px-3 py-1 rounded-full text-xs font-medium disabled:opacity-50" :class="newsTrendingSelected && newsCategory === '{{ $cat }}' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">{{ ucfirst($cat) }}</button>
+                        <button @click="selectTrendingCategory('{{ $cat }}')" class="px-3 py-1 rounded-full text-xs font-medium" :class="newsTrendingSelected && newsCategory === '{{ $cat }}' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">{{ ucfirst($cat) }}</button>
                         @endforeach
                     </div>
                     <p x-show="!newsTrendingSelected && !newsSearching" x-cloak class="text-xs text-gray-500">Choose a trending category to load articles.</p>
@@ -451,14 +479,15 @@
                     <p class="text-xs text-gray-500 mb-2" x-text="newsResults.length + ' article(s) found'"></p>
                     <div class="space-y-2 max-h-[600px] overflow-y-auto">
                         <template x-for="(article, idx) in newsResults" :key="idx">
-                            <div class="border rounded-lg p-3" :class="sources.some(s => s.url === article.url) ? 'border-gray-100 bg-gray-50 opacity-60' : 'border-gray-200 hover:bg-gray-50'">
-                                <div class="flex items-start gap-3">
-                                    <img x-show="article.image" x-cloak :src="article.image" :alt="article.title" loading="lazy" class="rounded object-cover flex-shrink-0 bg-gray-100" style="width:150px;height:100px;" onerror="this.style.display='none'">
+                            <div class="border rounded-lg p-4" :class="sources.some(s => s.url === article.url) ? 'border-gray-100 bg-gray-50 opacity-60' : 'border-gray-200 hover:bg-gray-50'">
+                                <div class="flex items-start gap-4">
+                                    <img x-show="article.image" x-cloak :src="article.image" :alt="article.title" loading="lazy" class="rounded-lg object-cover flex-shrink-0 bg-gray-100" style="width:195px;height:130px;" onerror="this.style.display='none'">
                                     <div class="flex-1 min-w-0">
-                                        <p class="text-base font-semibold text-gray-900 break-words" x-text="article.title"></p>
-                                        <p class="text-xs text-gray-500 mt-1 break-words line-clamp-2" x-text="article.description"></p>
-                                        <div class="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
-                                            <span x-text="article.source_name"></span>
+                                        <p class="text-base font-semibold text-gray-900 break-words leading-snug" x-text="article.title"></p>
+                                        <p class="text-xs text-gray-500 mt-0.5" x-text="(() => { try { return new URL(article.url).hostname; } catch { return ''; } })()"></p>
+                                        <p class="text-xs text-gray-400 mt-0.5" x-text="article.source_name"></p>
+                                        <p class="text-sm text-gray-600 mt-1.5 break-words line-clamp-3" x-text="article.description"></p>
+                                        <div class="flex items-center gap-3 mt-2 text-xs text-gray-400">
                                             <span x-text="article.published_at"></span>
                                             <span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500" x-text="article.source_api"></span>
                                         </div>
@@ -630,10 +659,6 @@
                                 <p x-show="!result.success" class="text-sm text-red-600 font-medium mt-1" x-text="'Extraction failed — ' + (result.message || 'unknown error')"></p>
                             </div>
                             <div class="flex items-center gap-2 flex-shrink-0">
-                                <button x-show="result.success" @click.stop="approveSource(idx)" class="px-4 py-2 rounded-lg font-semibold text-sm transition-colors" :class="approvedSources.includes(idx) ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300'">
-                                    <svg class="w-5 h-5 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                                    <span x-text="approvedSources.includes(idx) ? 'Approved' : 'Approve'"></span>
-                                </button>
                                 <button x-show="!result.success" @click.stop="saveFailedSource(idx)" class="text-xs text-orange-600 hover:text-orange-800 px-2 py-1 bg-orange-50 rounded">Find Another</button>
                                 <button x-show="!result.success" @click.stop="removeSource(idx)" class="text-xs text-red-600 hover:text-red-800 px-2 py-1 bg-red-50 rounded">Remove</button>
                                 <svg x-show="result.success" class="w-5 h-5 text-gray-400 transition-transform" :class="expandedSources.includes(idx) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -654,17 +679,9 @@
                                 </div>
                                 {{-- Action buttons with separator --}}
                                 <div x-show="result.success" class="px-6 py-3 border-t border-gray-100 flex items-center gap-3">
-                                    <button @click.stop="approveSource(idx)" class="text-sm font-medium px-4 py-2 rounded-lg inline-flex items-center gap-1.5 transition-colors" :class="approvedSources.includes(idx) ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                        <span x-text="approvedSources.includes(idx) ? 'Approved' : 'Approve'"></span>
-                                    </button>
                                     <button @click.stop="discardSource(idx)" class="text-sm font-medium px-4 py-2 rounded-lg inline-flex items-center gap-1.5 transition-colors" :class="discardedSources.includes(idx) ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                         <span x-text="discardedSources.includes(idx) ? 'Discarded' : 'Discard'"></span>
-                                    </button>
-                                    <button @click.stop class="text-sm font-medium px-4 py-2 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 inline-flex items-center gap-1.5 transition-colors">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                        Retry
                                     </button>
                                 </div>
                             </div>
@@ -714,6 +731,10 @@
                     <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     <span x-text="spinning ? 'Spinning...' : (spunContent ? 'Re-spin' : 'Spin Article')"></span>
                 </button>
+                <p x-show="spunContent && !spinning" x-cloak class="text-sm text-green-600 mt-1 inline-flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    Article spun successfully — <span x-text="spunWordCount + ' words'"></span>
+                </p>
             </div>
 
             {{-- Custom prompt input — live-updates resolved prompt --}}
@@ -735,6 +756,32 @@
                     <pre x-show="resolvedPrompt" class="text-green-300 whitespace-pre-wrap break-words" x-text="resolvedPrompt"></pre>
                     <p x-show="!resolvedPrompt && promptLoading" x-cloak class="text-blue-400">Loading prompt...</p>
                     <p x-show="!resolvedPrompt && !promptLoading" x-cloak class="text-gray-500">Prompt will load when a template or preset is selected.</p>
+                </div>
+            </div>
+
+            {{-- ═══ Prompt Injections Log ═══ --}}
+            <div x-show="promptLog.length > 0" x-cloak class="mb-4">
+                <button @click="promptLogOpen = !promptLogOpen" class="w-full flex items-center justify-between bg-gray-800 hover:bg-gray-750 border border-gray-700 rounded-lg px-4 py-2.5 text-left transition-colors">
+                    <span class="text-xs font-semibold text-gray-300 uppercase tracking-wide flex items-center gap-2">
+                        <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                        Prompt Injections
+                        <span class="text-gray-500 font-normal normal-case" x-text="'(' + promptLog.length + ' resolved)'"></span>
+                    </span>
+                    <svg class="w-4 h-4 text-gray-400 transition-transform" :class="promptLogOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <div x-show="promptLogOpen" x-cloak x-transition class="bg-gray-900 border border-gray-700 border-t-0 rounded-b-lg">
+                    <template x-for="(entry, idx) in promptLog" :key="idx">
+                        <div class="border-b border-gray-800 last:border-b-0 px-4 py-3">
+                            <div class="flex items-start gap-3">
+                                <code class="text-blue-400 text-xs font-mono whitespace-nowrap flex-shrink-0" x-text="entry.shortcode"></code>
+                                <div class="min-w-0 flex-1">
+                                    <div class="text-xs text-gray-400 mb-1" x-text="entry.source"></div>
+                                    <div x-show="entry.value && entry.value !== ''" x-cloak class="bg-gray-800 rounded px-2 py-1.5 text-xs text-green-300 font-mono break-words whitespace-pre-wrap" x-text="entry.value"></div>
+                                    <div x-show="!entry.value || entry.value === ''" x-cloak class="text-xs text-gray-600 italic">empty</div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </div>
 
@@ -868,9 +915,37 @@
                         Running AI detection scan...
                     </div>
 
-                    {{-- Waiting state --}}
-                    <div x-show="!aiDetectionRan && !aiDetecting" x-cloak class="text-xs text-gray-500 text-center py-2">
-                        Detection runs automatically after spin completes.
+                    {{-- Detector status — always visible before scan runs --}}
+                    <div x-show="!aiDetectionRan && !aiDetecting" x-cloak class="space-y-2 py-2">
+                        <p class="text-xs text-gray-500 mb-2">Detection runs automatically after spin completes.</p>
+                        @foreach($aiDetectors as $key => $det)
+                        <div class="flex items-center gap-3 bg-gray-800 rounded-lg px-3 py-2">
+                            @if($det['enabled'] && $det['has_key'])
+                                <svg class="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            @elseif(!$det['installed'])
+                                <svg class="w-4 h-4 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                            @else
+                                <svg class="w-4 h-4 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                            @endif
+                            <span class="text-sm text-white font-medium">{{ $det['name'] }}</span>
+                            @if(!$det['installed'])
+                                <span class="text-[10px] text-gray-500">Not installed</span>
+                            @elseif(!$det['enabled'])
+                                <span class="text-[10px] text-gray-500">Disabled</span>
+                            @elseif(!$det['has_key'])
+                                <span class="text-[10px] text-yellow-400">No API key</span>
+                            @else
+                                <span class="text-[10px] text-green-400">Ready</span>
+                            @endif
+                            @if($det['debug_mode'])
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-900 text-yellow-300" title="Debug mode uses mock/test responses without consuming API credits">DEBUG</span>
+                            @endif
+                        </div>
+                        @endforeach
+                        @if(collect($aiDetectors)->where('enabled', true)->where('has_key', true)->isEmpty())
+                            <p class="text-[11px] text-gray-500 mt-1">No detectors are ready. Configure API keys in <a href="{{ route('publish.settings.master') }}" class="text-purple-400 hover:text-purple-300">Settings</a>.</p>
+                        @endif
+                        <p class="text-[10px] text-gray-600 mt-1">Debug mode: uses mock/test responses without consuming API credits. Scores are simulated.</p>
                     </div>
                 </div>
             </div>
@@ -928,6 +1003,13 @@ function publishPipeline() {
         selectedPresetId: '',
         selectedPreset: null,
         editingPreset: false,
+
+        // Step 3 — PR Subject Profiles
+        prProfileSearch: '',
+        prProfileResults: [],
+        prProfileSearching: false,
+        prProfileDropdownOpen: false,
+        selectedPrProfiles: [],
 
         // Step 3 — Website
         sites: @json($sites ?? []),
@@ -1029,6 +1111,8 @@ function publishPipeline() {
         preparedHtml: '',
         preparedCategoryIds: [],
         preparedTagIds: [],
+        preparedFeaturedMediaId: null,
+        preparedFeaturedWpUrl: null,
 
         // Step 10 — Publish
         publishAction: 'draft_local',
@@ -1052,6 +1136,8 @@ function publishPipeline() {
         featuredFilename: '',
         featuredRefreshingMeta: false,
         resolvedPrompt: '',
+        promptLog: [],
+        promptLogOpen: false,
         promptLoading: false,
         articleDescription: '',
         spinLog: [],
@@ -1253,16 +1339,36 @@ function publishPipeline() {
                 if (this.featuredImageSearch && !this.featuredPhoto) {
                     this.searchFeaturedImage();
                 }
+                // If there's already spun content, ensure Create Article is accessible
+                if (this.spunContent || this.editorContent) {
+                    if (!this.completedSteps.includes(5)) this.completedSteps.push(5);
+                    if (this.currentStep <= 5) {
+                        this.currentStep = 6;
+                        this.openSteps = [6];
+                    }
+                }
+                // Restore step from URL query string (overrides saved state)
+                const urlStep = new URLSearchParams(window.location.search).get('step');
+                if (urlStep) {
+                    const s = parseInt(urlStep);
+                    if (s >= 1 && s <= 7 && this.isStepAccessible(s)) {
+                        this.currentStep = s;
+                        this.openSteps = [s];
+                    }
+                }
             };
 
             if (this.selectedUser) {
                 this.presetsLoading = true;
                 this.templatesLoading = true;
+                window.dispatchEvent(new CustomEvent('hexa-form-loading', { detail: { component_id: 'article-preset-form', loading: true } }));
                 const restoredPresetId = draftState.selectedPresetId || state?.selectedPresetId || '';
                 const restoredPreset = state?.selectedPreset || null;
                 const restoredTemplateId = draftState.selectedTemplateId || state?.selectedTemplateId || '';
                 const restoredTemplate = state?.selectedTemplate || null;
 
+                // Load bookmarks in background (non-blocking)
+                this.loadBookmarks();
                 Promise.all([this.loadUserPresets(), this.loadUserTemplates()]).then(() => {
                     // Restore saved preset or auto-select default
                     if (restoredPresetId) {
@@ -1275,7 +1381,13 @@ function publishPipeline() {
                             this.selectedPreset = defaultPreset;
                         }
                     }
-                    if (this.selectedPreset) this.loadPresetFields('preset', this.selectedPreset);
+                    if (this.selectedPreset) {
+                        this.loadPresetFields('preset', this.selectedPreset, null, state?.preset_overrides || null);
+                    }
+                    if (state?.preset_overrides) {
+                        Object.assign(this.preset_overrides, state.preset_overrides);
+                        if (state.preset_dirty) Object.assign(this.preset_dirty, state.preset_dirty);
+                    }
 
                     // Restore saved template or auto-select default
                     if (restoredTemplateId) {
@@ -1288,7 +1400,19 @@ function publishPipeline() {
                             this.selectedTemplate = defaultTemplate;
                         }
                     }
-                    if (this.selectedTemplate) this.loadPresetFields('template', this.selectedTemplate);
+                    if (this.selectedTemplate) {
+                        // Pass saved overrides directly so loadPresetFields sends merged values to the form
+                        this.loadPresetFields('template', this.selectedTemplate, null, state?.template_overrides || null);
+                    }
+                    // Re-apply saved overrides to the pipeline override layer
+                    if (state?.template_overrides) {
+                        Object.assign(this.template_overrides, state.template_overrides);
+                        if (state.template_dirty) Object.assign(this.template_dirty, state.template_dirty);
+                    }
+                    // Sync article_type to standalone dropdown
+                    if (this.selectedTemplate?.article_type && !this.template_overrides?.article_type) {
+                        this.template_overrides.article_type = this.selectedTemplate.article_type;
+                    }
 
                     // Auto-select site from default preset if no site saved
                     if (this.selectedPreset?.default_site_id && !this.selectedSiteId) {
@@ -1302,34 +1426,23 @@ function publishPipeline() {
                 finishRestore();
             }
 
-            this.$watch('currentStep', () => this.savePipelineState());
-            this.$watch('completedSteps', () => this.savePipelineState());
-            this.$watch('selectedUser', () => this.savePipelineState());
-            this.$watch('selectedPresetId', () => this.savePipelineState());
-            this.$watch('selectedTemplateId', () => this.savePipelineState());
-            this.$watch('selectedSiteId', () => this.savePipelineState());
-            this.$watch('publishAuthor', () => this.savePipelineState());
-            this.$watch('sources', () => this.savePipelineState());
-            this.$watch('checkResults', () => this.savePipelineState());
-            this.$watch('aiModel', () => this.savePipelineState());
-            this.$watch('articleTitle', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
-            this.$watch('spunContent', () => this.savePipelineState());
-            this.$watch('editorContent', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
-            this.$watch('photoSuggestions', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
-            this.$watch('featuredImageSearch', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
-            this.$watch('featuredPhoto', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
-            this.$watch('featuredAlt', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
-            this.$watch('featuredCaption', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
-            this.$watch('featuredFilename', () => { this.savePipelineState(); if (!this._restoring) this.queueAutoSaveDraft(); });
+            // ── Auto-watch ALL persistent fields for save ──
+            const draftTriggers = ['articleTitle', 'editorContent', 'photoSuggestions', 'featuredImageSearch', 'featuredPhoto', 'featuredAlt', 'featuredCaption', 'featuredFilename'];
+            for (const field of this.persistentFields) {
+                this.$watch(field, () => {
+                    this.savePipelineState();
+                    if (!this._restoring && draftTriggers.includes(field)) {
+                        this.queueAutoSaveDraft();
+                    }
+                });
+            }
+            // Site connection (nested, not in persistentFields)
             this.$watch('siteConn.status', () => this.savePipelineState());
             this.$watch('siteConn.authors', () => this.savePipelineState());
-            this.$watch('newsResults', () => this.savePipelineState());
-            // Auto-refresh prompt preview on any prompt-affecting change
+            // Prompt preview refresh
             this.$watch('selectedTemplateId', () => { if (!this._restoring) this._queuePromptRefresh(); });
             this.$watch('selectedPresetId', () => { if (!this._restoring) this._queuePromptRefresh(); });
             this.$watch('customPrompt', () => { if (!this._restoring) this._queuePromptRefresh(); });
-            this.$watch('newsMode', () => this.savePipelineState());
-            this.$watch('newsCategory', () => this.savePipelineState());
         },
 
         // ── Declarative persistent fields ─────────────────────
@@ -1345,7 +1458,7 @@ function publishPipeline() {
                 'selectedSiteId', 'selectedSite',
                 'template_overrides', 'template_dirty', 'preset_overrides', 'preset_dirty',
                 // Step 3 — Sources
-                'sources', 'sourceTab', 'newsMode', 'newsCategory', 'newsTrendingSelected',
+                'sources', 'sourceTab', 'pasteText', 'newsMode', 'newsCategory', 'newsTrendingSelected',
                 'newsSearch', 'newsResults', 'newsHasSearched',
                 // Step 4 — Fetch
                 'checkResults', 'approvedSources', 'discardedSources', 'expandedSources',
@@ -1364,6 +1477,8 @@ function publishPipeline() {
                 // Press Release fields
                 'pressReleaseDate', 'pressReleaseLocation', 'pressReleaseContact',
                 'pressReleaseContactUrl', 'pressReleaseContent',
+                // PR Full Feature — profile subjects
+                'selectedPrProfiles',
             ];
         },
 
@@ -1374,9 +1489,11 @@ function publishPipeline() {
             state.siteConnMessage = this.siteConn.message;
             state.siteConnLog = this.siteConn.log;
             state.siteConnAuthors = this.siteConn.authors;
+            // Deep-clone helper — strips Alpine proxy wrappers so JSON.stringify works
+            const clone = (v) => { try { return JSON.parse(JSON.stringify(v)); } catch { return v; } };
             // All declared persistent fields
             for (const key of this.persistentFields) {
-                state[key] = this[key];
+                state[key] = clone(this[key]);
             }
             localStorage.setItem(this.pipelineStateKey, JSON.stringify(state));
             localStorage.removeItem('publishPipelineState');
@@ -1409,12 +1526,21 @@ function publishPipeline() {
             this.photoSuggestions = [];
             this.featuredImageSearch = '';
             this.featuredPhoto = null;
+            this.selectedPrProfiles = [];
         },
 
         // ── Navigation ────────────────────────────────────
         isStepAccessible(step) {
             if (step === 1) return true;
+            // Step 4 (Fetch) requires at least one source selected
+            if (step === 4 && this.sources.length === 0 && !this.isGenerateMode) return false;
             return this.completedSteps.includes(step - 1) || this.completedSteps.includes(step);
+        },
+
+        _syncStepToUrl() {
+            const url = new URL(window.location);
+            url.searchParams.set('step', this.currentStep);
+            history.replaceState(null, '', url.toString());
         },
 
         goToStep(step) {
@@ -1423,6 +1549,7 @@ function publishPipeline() {
                 if (!this.openSteps.includes(step)) {
                     this.openSteps = [step];
                 }
+                this._syncStepToUrl();
             }
         },
 
@@ -1434,11 +1561,13 @@ function publishPipeline() {
             } else {
                 this.openSteps = [step];
             }
+            this._syncStepToUrl();
         },
 
         openStep(step) {
             this.currentStep = step;
             this.openSteps = [step];
+            if (!this._restoring) this._syncStepToUrl();
         },
 
         completeStep(step) {
@@ -1556,7 +1685,7 @@ function publishPipeline() {
                             if (d.default_author) { this.publishAuthor = d.default_author; this.publishAuthorSource = 'profile'; }
                             this.completeStep(2);
                             this.autoSaveDraft();
-                            if (!this._restoring) this.openStep(3);
+                            // Don't auto-advance — user should review preset settings
                         },
                     });
                 }
@@ -1621,11 +1750,17 @@ function publishPipeline() {
             this.searchNews();
         },
 
+        _newsAbortController: null,
+
         async searchNews() {
             if (this.newsMode === 'keyword' && !this.newsSearch.trim()) return;
             if (this.newsMode === 'local' && !this.newsSearch.trim()) return;
             if (this.newsMode === 'genre' && !this.newsCategory && !this.newsSearch.trim()) return;
             if (this.newsMode === 'trending' && !this.newsTrendingSelected) return;
+            // Abort any in-flight search
+            if (this._newsAbortController) { try { this._newsAbortController.abort(); } catch {} }
+            this._newsAbortController = new AbortController();
+            const signal = this._newsAbortController.signal;
             this.newsSearching = true;
             this.newsResults = [];
             this.newsHasSearched = false;
@@ -1638,18 +1773,43 @@ function publishPipeline() {
                         mode: this.newsMode,
                         category: this.newsCategory,
                         country: this.newsCountry,
-                    })
+                    }),
+                    signal,
                 });
                 const data = await resp.json();
                 this.newsResults = (data.data && data.data.articles) ? data.data.articles : [];
                 this.newsHasSearched = true;
             } catch (e) {
+                if (e.name === 'AbortError') return; // Cancelled by new search — don't update state
                 this.newsResults = [];
                 this.newsHasSearched = true;
                 this.showNotification('error', 'Search failed: ' + e.message);
             } finally {
-                this.newsSearching = false;
+                if (!signal.aborted) this.newsSearching = false;
             }
+        },
+
+        async searchPrProfiles() {
+            this.prProfileSearching = true;
+            this.prProfileDropdownOpen = true;
+            try {
+                const params = new URLSearchParams({ q: this.prProfileSearch || '' });
+                const resp = await fetch('{{ route("publish.profiles.search") }}?' + params.toString(), {
+                    headers: { 'Accept': 'application/json' }
+                });
+                this.prProfileResults = await resp.json();
+            } catch (e) {
+                this.prProfileResults = [];
+            }
+            this.prProfileSearching = false;
+        },
+
+        addPrProfile(profile) {
+            if (this.selectedPrProfiles.some(p => p.id === profile.id)) return;
+            this.selectedPrProfiles.push(profile);
+            this.prProfileSearch = '';
+            this.prProfileResults = [];
+            this.savePipelineState();
         },
 
         async loadBookmarks() {
@@ -1956,7 +2116,10 @@ function publishPipeline() {
                     })
                 });
                 const data = await resp.json();
-                if (data.success) this.resolvedPrompt = data.prompt;
+                if (data.success) {
+                    this.resolvedPrompt = data.prompt;
+                    this.promptLog = data.log || [];
+                }
             } catch (e) { /* silent */ }
             this.promptLoading = false;
         },
@@ -2042,11 +2205,16 @@ function publishPipeline() {
 
                     this.queueAutoSaveDraft(300);
 
-                    // Auto-run AI detection after spin
-                    this.$nextTick(() => this.runAiDetection());
-                    // Auto-advance to Create Article step
+                    // Always advance to Create Article after spin
                     this.completeStep(5);
-                    this.openStep(6);
+                    // Open both AI & Spin and Create Article
+                    this.currentStep = 6;
+                    this.openSteps = [5, 6];
+                    if (!this._restoring) this._syncStepToUrl();
+                    // Run AI detection in background (non-blocking)
+                    if (this.aiDetectionEnabled) {
+                        this.$nextTick(() => this.runAiDetection());
+                    }
                 } else {
                     this.spinError = data.message;
                     this._logSpin('error', 'Spin failed: ' + data.message);
@@ -2699,6 +2867,7 @@ function publishPipeline() {
                             caption: p.caption || '',
                             filename: p.suggestedFilename || this.buildFilename(p.search_term, i + 1),
                         })),
+                        featured_url: this.featuredPhoto?.url_large || this.featuredPhoto?.url || null,
                         featured_meta: this.featuredPhoto ? {
                             alt_text: this.featuredAlt || '',
                             caption: this.featuredCaption || '',
@@ -2738,6 +2907,8 @@ function publishPipeline() {
                                         this.preparedHtml = event.html || this.editorContent;
                                         this.preparedCategoryIds = event.category_ids || [];
                                         this.preparedTagIds = event.tag_ids || [];
+                                        this.preparedFeaturedMediaId = event.featured_media_id || null;
+                                        this.preparedFeaturedWpUrl = event.featured_wp_url || null;
                                         if (event.wp_images) {
                                             event.wp_images.forEach(img => { this.uploadedImages[img.source_url] = img; });
                                         }
@@ -2784,16 +2955,19 @@ function publishPipeline() {
 
             const wpStatus = this.publishAction === 'future' ? 'future' : (this.publishAction === 'draft_wp' ? 'draft' : 'publish');
 
+            this._logPrepare('step', 'Starting publish to ' + this.selectedSite.name + '...');
+
             try {
                 const resp = await fetch('{{ route('publish.pipeline.publish') }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
                     body: JSON.stringify({
                         html: this.preparedHtml || this.editorContent,
                         title: this.articleTitle || 'Untitled',
                         site_id: this.selectedSite.id,
                         category_ids: this.preparedCategoryIds,
                         tag_ids: this.preparedTagIds,
+                        featured_media_id: this.preparedFeaturedMediaId || null,
                         status: wpStatus,
                         date: this.publishAction === 'future' ? this.scheduleDate : null,
                         draft_id: this.draftId,
@@ -2816,16 +2990,42 @@ function publishPipeline() {
                         user_id: this.selectedUser?.id || null,
                     })
                 });
-                const data = await resp.json();
 
-                if (data.success) {
-                    this.publishResult = data;
-                    this.completeStep(7);
-                    this.showNotification('success', data.message);
-                } else {
-                    this.publishError = data.message;
+                // Read SSE stream
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const event = JSON.parse(line.substring(6));
+                                this._logPrepare(event.type, event.message);
+
+                                if (event.type === 'done') {
+                                    if (event.success) {
+                                        this.publishResult = event;
+                                        this.completeStep(7);
+                                        this.showNotification('success', event.message);
+                                    } else {
+                                        this.publishError = event.message;
+                                        this.showNotification('error', event.message || 'Publish failed');
+                                    }
+                                }
+                            } catch (parseErr) { /* skip malformed */ }
+                        }
+                    }
                 }
             } catch (e) {
+                this._logPrepare('error', 'Connection error: ' + (e.message || 'Request failed'));
                 this.publishError = 'Network error during publishing.';
             }
             this.publishing = false;

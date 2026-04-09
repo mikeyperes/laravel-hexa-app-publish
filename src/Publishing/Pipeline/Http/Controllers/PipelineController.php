@@ -188,15 +188,20 @@ class PipelineController extends Controller
     {
         $validated = $request->validated();
 
-        $prompt = app(ArticleGenerationService::class)->buildPrompt(
+        $result = app(ArticleGenerationService::class)->buildPrompt(
             $validated['source_texts'] ?? ['[Source articles will be inserted here]'],
             $validated['template_id'] ?? null,
             $validated['preset_id'] ?? null,
             $validated['custom_prompt'] ?? null,
-            null
+            null,
+            true
         );
 
-        return response()->json(['success' => true, 'prompt' => $prompt]);
+        return response()->json([
+            'success' => true,
+            'prompt'  => $result['prompt'],
+            'log'     => $result['log'],
+        ]);
     }
 
     /**
@@ -219,6 +224,48 @@ class PipelineController extends Controller
             ->get(['id', 'name', 'email']);
 
         return response()->json($users);
+    }
+
+    /**
+     * Search local profiles for the PR subject picker.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function searchProfiles(Request $request): JsonResponse
+    {
+        $query = $request->input('q', '');
+        $type = $request->input('type');
+
+        if (strlen($query) < 1) {
+            $profileClass = 'hexa_package_profiles\\Models\\Profile';
+            if (!class_exists($profileClass)) {
+                return response()->json([]);
+            }
+            $profiles = $profileClass::with(['type', 'customFields'])
+                ->where('is_active', true)
+                ->when($type, fn($q) => $q->whereHas('type', fn($tq) => $tq->where('slug', $type)))
+                ->orderBy('name')
+                ->limit(20)
+                ->get();
+        } else {
+            $serviceClass = 'hexa_package_profiles\\Services\\ProfileService';
+            if (!class_exists($serviceClass)) {
+                return response()->json([]);
+            }
+            $profiles = app($serviceClass)->searchProfiles($query, $type);
+        }
+
+        return response()->json($profiles->map(fn($p) => [
+            'id'          => $p->id,
+            'name'        => $p->name,
+            'slug'        => $p->slug,
+            'description' => $p->description,
+            'photo_url'   => $p->photo_url,
+            'type'        => $p->type?->name ?? '—',
+            'type_slug'   => $p->type?->slug ?? '',
+            'fields'      => $p->customFields->pluck('field_value', 'field_key')->toArray(),
+        ])->values());
     }
 
     /**
@@ -349,79 +396,106 @@ class PipelineController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function publishToWordpress(PublishToWordpressRequest $request): JsonResponse
+    public function publishToWordpress(PublishToWordpressRequest $request): StreamedResponse
     {
         $validated = $request->validated();
-
         $site = PublishSite::findOrFail($validated['site_id']);
 
-        // Deliver to WordPress via shared service
-        $delivery = app(WordPressDeliveryService::class);
-        $result = $delivery->createPost($site, $validated['title'], $validated['html'], $validated['status'], [
-            'category_ids' => $validated['category_ids'] ?? [],
-            'tag_ids'      => $validated['tag_ids'] ?? [],
-            'date'         => ($validated['status'] === 'future' && !empty($validated['date'])) ? $validated['date'] : null,
-        ]);
+        return response()->stream(function () use ($validated, $site) {
+            $send = function (string $type, string $message, array $extra = []) {
+                $event = array_merge(['type' => $type, 'message' => $message, 'time' => now()->format('H:i:s')], $extra);
+                echo "data: " . json_encode($event) . "\n\n";
+                if (ob_get_level()) ob_flush();
+                flush();
+            };
 
-        if (!$result['success']) {
-            hexaLog('publish', 'pipeline_publish_failed', "Pipeline publish failed to {$site->name}: {$result['message']}");
-            return response()->json($result);
-        }
+            $send('step', "Connecting to {$site->name}...");
+            $send('step', "Creating WordPress post ({$validated['status']})...");
+            $send('info', "Title: {$validated['title']}");
+            if (!empty($validated['author'])) $send('info', "Author: {$validated['author']}");
+            if (!empty($validated['featured_media_id'])) $send('info', "Featured media ID: {$validated['featured_media_id']}");
 
-        // Persist article via shared service
-        $persistence = app(ArticlePersistenceService::class);
-        $article = $persistence->createOrUpdate([
-            'pipeline_session_id' => $validated['pipeline_session_id'] ?? null,
-            'user_id'             => $validated['user_id'] ?? auth()->id(),
-            'publish_site_id'     => $site->id,
-            'publish_template_id' => $validated['template_id'] ?? null,
-            'preset_id'           => $validated['preset_id'] ?? null,
-            'title'               => $validated['title'],
-            'body'                => $validated['html'],
-            'word_count'          => $validated['word_count'] ?? str_word_count(strip_tags($validated['html'])),
-            'ai_engine_used'      => $validated['ai_model'] ?? null,
-            'ai_cost'             => $validated['ai_cost'] ?? null,
-            'ai_provider'         => $validated['ai_provider'] ?? 'anthropic',
-            'ai_tokens_input'     => $validated['ai_tokens_input'] ?? null,
-            'ai_tokens_output'    => $validated['ai_tokens_output'] ?? null,
-            'resolved_prompt'     => $validated['resolved_prompt'] ?? null,
-            'photo_suggestions'   => $validated['photo_suggestions'] ?? null,
-            'featured_image_search' => $validated['featured_image_search'] ?? null,
-            'user_ip'             => request()->ip(),
-            'author'              => $validated['author'] ?? $site->default_author ?? null,
-            'status'              => 'completed',
-            'wp_post_id'          => $result['post_id'],
-            'wp_post_url'         => $result['post_url'],
-            'wp_status'           => $validated['status'],
-            'published_at'        => now(),
-            'source_articles'     => $validated['sources'] ?? null,
-            'categories'          => $validated['categories'] ?? null,
-            'tags'                => $validated['tags'] ?? null,
-            'wp_images'           => $validated['wp_images'] ?? null,
-            'links_injected'      => null,
-            'created_by'          => auth()->id(),
-        ], $validated['draft_id'] ?? null);
+            $delivery = app(WordPressDeliveryService::class);
+            $result = $delivery->createPost($site, $validated['title'], $validated['html'], $validated['status'], [
+                'category_ids' => $validated['category_ids'] ?? [],
+                'tag_ids'      => $validated['tag_ids'] ?? [],
+                'date'         => ($validated['status'] === 'future' && !empty($validated['date'])) ? $validated['date'] : null,
+                'featured_media_id' => $validated['featured_media_id'] ?? null,
+                'author'            => $validated['author'] ?? null,
+            ]);
 
-        hexaLog('publish', 'pipeline_published', "Pipeline published to {$site->name}: {$validated['title']} (WP ID: {$result['post_id']}, Article: {$article->article_id})");
-
-        // Clean up temp uploads for this article (publish/draft_wp only, not future)
-        if (in_array($validated['status'], ['publish', 'draft'], true) && !empty($validated['draft_id'])) {
-            try {
-                $uploadCleanup = app(\hexa_app_publish\Publishing\Uploads\Services\ArticleUploadService::class);
-                $uploadCleanup->cleanupAfterPublish((int) $validated['draft_id']);
-            } catch (\Throwable $e) {
-                // Non-critical — log but don't fail the publish
-                hexaLog('publish', 'upload_cleanup_error', "Upload cleanup failed for draft #{$validated['draft_id']}: {$e->getMessage()}");
+            if (!$result['success']) {
+                hexaLog('publish', 'pipeline_publish_failed', "Pipeline publish failed to {$site->name}: {$result['message']}");
+                $send('error', "WordPress publish failed: {$result['message']}");
+                $send('done', 'Publish failed.', ['success' => false, 'message' => $result['message']]);
+                return;
             }
-        }
 
-        return response()->json([
-            'success'    => true,
-            'message'    => "Article published to {$site->name}. WP Post ID: {$result['post_id']}.",
-            'post_id'    => $result['post_id'],
-            'post_url'   => $result['post_url'],
-            'article_id' => $article->id,
-            'article_url' => route('publish.articles.show', $article->id),
+            $send('success', "WordPress post created — ID: {$result['post_id']}");
+            if ($result['post_url']) $send('success', "Permalink: {$result['post_url']}");
+
+            $send('step', 'Saving article record...');
+            $persistence = app(ArticlePersistenceService::class);
+            $article = $persistence->createOrUpdate([
+                'pipeline_session_id' => $validated['pipeline_session_id'] ?? null,
+                'user_id'             => $validated['user_id'] ?? auth()->id(),
+                'publish_site_id'     => $site->id,
+                'publish_template_id' => $validated['template_id'] ?? null,
+                'preset_id'           => $validated['preset_id'] ?? null,
+                'title'               => $validated['title'],
+                'body'                => $validated['html'],
+                'word_count'          => $validated['word_count'] ?? str_word_count(strip_tags($validated['html'])),
+                'ai_engine_used'      => $validated['ai_model'] ?? null,
+                'ai_cost'             => $validated['ai_cost'] ?? null,
+                'ai_provider'         => $validated['ai_provider'] ?? 'anthropic',
+                'ai_tokens_input'     => $validated['ai_tokens_input'] ?? null,
+                'ai_tokens_output'    => $validated['ai_tokens_output'] ?? null,
+                'resolved_prompt'     => $validated['resolved_prompt'] ?? null,
+                'photo_suggestions'   => $validated['photo_suggestions'] ?? null,
+                'featured_image_search' => $validated['featured_image_search'] ?? null,
+                'user_ip'             => request()->ip(),
+                'author'              => $validated['author'] ?? $site->default_author ?? null,
+                'status'              => 'completed',
+                'wp_post_id'          => $result['post_id'],
+                'wp_post_url'         => $result['post_url'],
+                'wp_status'           => $validated['status'],
+                'published_at'        => now(),
+                'source_articles'     => $validated['sources'] ?? null,
+                'categories'          => $validated['categories'] ?? null,
+                'tags'                => $validated['tags'] ?? null,
+                'wp_images'           => $validated['wp_images'] ?? null,
+                'links_injected'      => null,
+                'created_by'          => auth()->id(),
+            ], $validated['draft_id'] ?? null);
+
+            $send('success', "Article saved — #{$article->article_id}");
+            hexaLog('publish', 'pipeline_published', "Pipeline published to {$site->name}: {$validated['title']} (WP ID: {$result['post_id']}, Article: {$article->article_id})");
+
+            if (in_array($validated['status'], ['publish', 'draft'], true) && !empty($validated['draft_id'])) {
+                $send('step', 'Cleaning up temporary uploads...');
+                try {
+                    $uploadCleanup = app(\hexa_app_publish\Publishing\Uploads\Services\ArticleUploadService::class);
+                    $uploadCleanup->cleanupAfterPublish((int) $validated['draft_id']);
+                    $send('success', 'Temp uploads cleaned.');
+                } catch (\Throwable $e) {
+                    $send('warning', 'Upload cleanup failed: ' . $e->getMessage());
+                    hexaLog('publish', 'upload_cleanup_error', "Upload cleanup failed for draft #{$validated['draft_id']}: {$e->getMessage()}");
+                }
+            }
+
+            $send('done', "Published to {$site->name}!", [
+                'success'     => true,
+                'message'     => "Article published to {$site->name}. WP Post ID: {$result['post_id']}.",
+                'post_id'     => $result['post_id'],
+                'post_url'    => $result['post_url'],
+                'article_id'  => $article->id,
+                'article_url' => route('publish.articles.show', $article->id),
+            ]);
+        }, 200, [
+            'Content-Type'      => 'text/event-stream',
+            'Cache-Control'     => 'no-cache',
+            'Connection'        => 'keep-alive',
+            'X-Accel-Buffering' => 'no',
         ]);
     }
 

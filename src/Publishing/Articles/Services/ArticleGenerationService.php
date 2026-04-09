@@ -2,10 +2,10 @@
 
 namespace hexa_app_publish\Publishing\Articles\Services;
 
-use hexa_app_publish\Models\AiActivityLog;
-use hexa_app_publish\Models\PublishMasterSetting;
-use hexa_app_publish\Models\PublishPreset;
-use hexa_app_publish\Models\PublishTemplate;
+use hexa_app_publish\Quality\Detection\Models\AiActivityLog;
+use hexa_app_publish\Publishing\Settings\Models\PublishMasterSetting;
+use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
+use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
 use hexa_package_anthropic\Services\AnthropicService;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
@@ -127,10 +127,13 @@ class ArticleGenerationService
      * @param int|null $presetId
      * @param string|null $customPrompt
      * @param string|null $changeRequest
-     * @return string
+     * @param bool $withLog Whether to return resolution log alongside the prompt
+     * @return string|array Returns string normally, or ['prompt' => ..., 'log' => [...]] when $withLog is true
      */
-    public function buildPrompt(array $sourceTexts, ?int $templateId, ?int $presetId, ?string $customPrompt, ?string $changeRequest): string
+    public function buildPrompt(array $sourceTexts, ?int $templateId, ?int $presetId, ?string $customPrompt, ?string $changeRequest, bool $withLog = false): string|array
     {
+        $log = [];
+
         // Load master spin prompt
         $masterPrompt = PublishMasterSetting::where('type', 'master_spin_prompt')
             ->where('is_active', true)
@@ -138,6 +141,21 @@ class ArticleGenerationService
 
         if (empty($masterPrompt)) {
             $masterPrompt = $this->defaultPrompt();
+            $log[] = ['shortcode' => '(master prompt)', 'source' => 'Hardcoded fallback', 'value' => '(default prompt template)'];
+        } else {
+            $log[] = ['shortcode' => '(master prompt)', 'source' => 'Master Setting: master_spin_prompt', 'value' => '(custom prompt from settings)'];
+        }
+
+        // Try Prompt Center override
+        if (class_exists(\hexa_package_prompt_center\Prompts\Categories\Services\PromptService::class)) {
+            try {
+                $promptService = app(\hexa_package_prompt_center\Prompts\Categories\Services\PromptService::class);
+                $default = $promptService->getDefault('general-article-spin');
+                if ($default && !empty($default->body)) {
+                    $masterPrompt = $default->body;
+                    $log[0] = ['shortcode' => '(master prompt)', 'source' => 'Prompt Center: ' . $default->name, 'value' => '(from Prompt Center template)'];
+                }
+            } catch (\Throwable $e) {}
         }
 
         // Load settings for shortcode replacement
@@ -148,6 +166,7 @@ class ArticleGenerationService
         // Preset config
         $presetConfig = '';
         $imagePreference = '';
+        $preset = null;
         if ($presetId) {
             $preset = PublishPreset::find($presetId);
             if ($preset) {
@@ -164,6 +183,7 @@ class ArticleGenerationService
         // Template config
         $templateConfig = '';
         $photoCount = '2-4';
+        $template = null;
         if ($templateId) {
             $template = PublishTemplate::find($templateId);
             if ($template) {
@@ -177,31 +197,98 @@ class ArticleGenerationService
             }
         }
 
+        // Dynamic metadata counts — pull from preset, fall back to defaults
+        $titleCount = 10;
+        $categoryCount = 15;
+        $tagCount = 15;
+        $titleSource = 'Default (10)';
+        $categorySource = 'Default (15)';
+        $tagSource = 'Default (15)';
+
+        if ($preset) {
+            if ($preset->default_category_count) {
+                $categoryCount = (int) $preset->default_category_count;
+                $categorySource = "Preset: {$preset->name} → default_category_count = {$categoryCount}";
+            }
+            if ($preset->default_tag_count) {
+                $tagCount = (int) $preset->default_tag_count;
+                $tagSource = "Preset: {$preset->name} → default_tag_count = {$tagCount}";
+            }
+        }
+
         // Build source articles text
         $sourceTextsStr = $this->buildSourceText($sourceTexts, $changeRequest);
+        $sourceWordCount = str_word_count(strip_tags($sourceTextsStr));
+
+        // Build shortcode replacements with logging
+        $replacements = [
+            '{custom_instructions}' => [
+                'value' => !empty($customPrompt) ? "=== PRIORITY INSTRUCTIONS ===\n{$customPrompt}" : '',
+                'source' => !empty($customPrompt) ? 'User input' : 'Empty (no custom instructions)',
+            ],
+            '{wordpress_guidelines}' => [
+                'value' => $wpGuidelines ? "=== WordPress Guidelines ===\n{$wpGuidelines}" : '',
+                'source' => $wpGuidelines ? 'Master Setting: wordpress_guidelines' : 'Empty (no guidelines set)',
+            ],
+            '{spinning_guidelines}' => [
+                'value' => $spinGuidelines ? "=== Spinning Guidelines ===\n{$spinGuidelines}" : '',
+                'source' => $spinGuidelines ? 'Master Setting: spinning_guidelines' : 'Empty (no guidelines set)',
+            ],
+            '{preset_config}' => [
+                'value' => $presetConfig ? "=== Preset Config ===\n{$presetConfig}" : '',
+                'source' => $preset ? "Preset: {$preset->name}" : 'Empty (no preset selected)',
+            ],
+            '{template_config}' => [
+                'value' => $templateConfig ? "=== Template Config ===\n{$templateConfig}" : '',
+                'source' => $template ? "Template: {$template->name}" : 'Empty (no template selected)',
+            ],
+            '{photo_count}' => [
+                'value' => $photoCount,
+                'source' => $template && $template->photos_per_article ? "Template: {$template->name} → photos_per_article = {$photoCount}" : 'Default (2-4)',
+            ],
+            '{title_count}' => [
+                'value' => (string) $titleCount,
+                'source' => $titleSource,
+            ],
+            '{category_count}' => [
+                'value' => (string) $categoryCount,
+                'source' => $categorySource,
+            ],
+            '{tag_count}' => [
+                'value' => (string) $tagCount,
+                'source' => $tagSource,
+            ],
+            '{source_articles}' => [
+                'value' => $sourceTextsStr,
+                'source' => count($sourceTexts) . ' source(s), ~' . number_format($sourceWordCount) . ' words',
+            ],
+            '{featured_image_preference}' => [
+                'value' => $imagePreference,
+                'source' => $imagePreference ? "Preset: {$preset->name} → image_preference" : 'Empty',
+            ],
+        ];
 
         // Replace all shortcodes
-        $prompt = str_replace([
-            '{custom_instructions}',
-            '{wordpress_guidelines}',
-            '{spinning_guidelines}',
-            '{preset_config}',
-            '{template_config}',
-            '{photo_count}',
-            '{source_articles}',
-            '{featured_image_preference}',
-        ], [
-            !empty($customPrompt) ? "=== PRIORITY INSTRUCTIONS ===\n{$customPrompt}" : '',
-            $wpGuidelines ? "=== WordPress Guidelines ===\n{$wpGuidelines}" : '',
-            $spinGuidelines ? "=== Spinning Guidelines ===\n{$spinGuidelines}" : '',
-            $presetConfig ? "=== Preset Config ===\n{$presetConfig}" : '',
-            $templateConfig ? "=== Template Config ===\n{$templateConfig}" : '',
-            $photoCount,
-            $sourceTextsStr,
-            $imagePreference,
-        ], $masterPrompt);
+        $keys = array_keys($replacements);
+        $values = array_map(fn ($r) => $r['value'], $replacements);
+        $prompt = str_replace($keys, $values, $masterPrompt);
 
-        return preg_replace("/\n{3,}/", "\n\n", trim($prompt));
+        // Build log entries
+        foreach ($replacements as $shortcode => $info) {
+            $log[] = [
+                'shortcode' => $shortcode,
+                'source'    => $info['source'],
+                'value'     => mb_strlen($info['value']) > 200 ? mb_substr($info['value'], 0, 200) . '...' : $info['value'],
+            ];
+        }
+
+        $result = preg_replace("/\n{3,}/", "\n\n", trim($prompt));
+
+        if ($withLog) {
+            return ['prompt' => $result, 'log' => $log];
+        }
+
+        return $result;
     }
 
     /**
@@ -238,21 +325,7 @@ class ArticleGenerationService
      */
     private function defaultPrompt(): string
     {
-        // Try Prompt Center first
-        if (class_exists(\hexa_package_prompt_center\Prompts\Categories\Services\PromptService::class)) {
-            try {
-                $promptService = app(\hexa_package_prompt_center\Prompts\Categories\Services\PromptService::class);
-                $default = $promptService->getDefault('general-article-spin');
-                if ($default && !empty($default->body)) {
-                    return $default->body;
-                }
-            } catch (\Throwable $e) {
-                // Fall through to hardcoded
-            }
-        }
-
-        // Hardcoded fallback
-        return "You are a professional content writer. Rewrite the provided source articles into a single new unique article.\n\n{custom_instructions}\n\n{wordpress_guidelines}\n\n{spinning_guidelines}\n\n{preset_config}\n\n{template_config}\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links. Do NOT output markdown.\n\nSUPPORTING LINKS: Include 3-5 relevant external links within the article using <a href=\"URL\" target=\"_blank\"> tags.\n\nPHOTO PLACEMENT: Insert HTML comments for photos at natural breaking points. Use this EXACT format:\n<!-- PHOTO: stock photo search term | contextual alt text | contextual caption | seo-filename -->\n\nPlace {photo_count} photo markers.\n\nFEATURED IMAGE: Output one line:\n<!-- FEATURED: stock photo search term | contextual alt text | caption for featured image | seo-filename -->\n\nMETADATA: At the very end:\n<!-- METADATA: {\"titles\":[...10],\"categories\":[...15],\"tags\":[...15],\"description\":\"...\"} -->\n\n{source_articles}";
+        return "You are a professional content writer. Rewrite the provided source articles into a single new unique article.\n\n{custom_instructions}\n\n{wordpress_guidelines}\n\n{spinning_guidelines}\n\n{preset_config}\n\n{template_config}\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include an <h1> title. Start with <h2> for section headings. Use <p> for paragraphs. Use <strong> and <em> for emphasis. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links. Do NOT output markdown.\n\nSUPPORTING LINKS: Include 3-5 relevant external links within the article using <a href=\"URL\" target=\"_blank\"> tags.\n\nPHOTO PLACEMENT: Insert HTML comments for photos at natural breaking points. Use this EXACT format:\n<!-- PHOTO: stock photo search term | contextual alt text | contextual caption | seo-filename -->\n\nPlace {photo_count} photo markers.\n\nFEATURED IMAGE: Output one line:\n<!-- FEATURED: stock photo search term | contextual alt text | caption for featured image | seo-filename -->\n\nMETADATA: At the very end of your response, output a JSON block:\n<!-- METADATA: {\"titles\":[\"title1\",\"title2\",...{title_count} titles],\"categories\":[\"cat1\",\"cat2\",...{category_count} categories],\"tags\":[\"tag1\",\"tag2\",...{tag_count} tags],\"description\":\"A 1-2 sentence SEO meta description summarizing the article\"} -->\n\nThe titles should be compelling and SEO-friendly. Categories are broad topics. Tags are specific keywords. Description is a concise meta description for SEO (under 160 characters).\n\n{source_articles}";
     }
 
     /**

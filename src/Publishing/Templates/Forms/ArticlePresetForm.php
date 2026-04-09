@@ -7,6 +7,7 @@ use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
 use hexa_core\Forms\Definitions\FieldDefinition;
 use hexa_core\Forms\Definitions\FormDefinition;
 use hexa_core\Forms\Services\FormRegistryService;
+use hexa_core\ListRegistry\Models\ListItem;
 
 class ArticlePresetForm
 {
@@ -159,12 +160,57 @@ class ArticlePresetForm
                     ])
                     ->contexts(['create', 'edit', 'pipeline']),
 
+                // ── WordPress publishing fields (merged from WP Preset) ──
+                FieldDefinition::make('follow_links', 'select', 'Follow Links')
+                    ->default('follow')
+                    ->rules(['nullable', 'string', 'in:follow,nofollow,sponsored,ugc'])
+                    ->options(['follow' => 'Follow', 'nofollow' => 'Nofollow', 'sponsored' => 'Sponsored', 'ugc' => 'UGC'])
+                    ->meta(['empty_label' => '— Select —', 'section' => 'wordpress'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('image_preference', 'select', 'Image Preference')
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::listItemOptions('image_preferences'))
+                    ->meta(['empty_label' => 'Select preference...', 'section' => 'wordpress'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('default_publish_action', 'select', 'Default Publish Action')
+                    ->rules(['nullable', 'string', 'max:50'])
+                    ->options([
+                        'publish_immediate' => 'Publish Immediately',
+                        'draft_local' => 'Save as Local Draft',
+                        'draft_wordpress' => 'Save as WordPress Draft',
+                        'schedule' => 'Schedule for Later',
+                    ])
+                    ->meta(['empty_label' => 'Select action...', 'section' => 'wordpress'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('default_category_count', 'number', 'Category Count')
+                    ->default(3)
+                    ->rules(['nullable', 'integer', 'min:0', 'max:20'])
+                    ->placeholder('3')
+                    ->meta(['section' => 'wordpress'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('default_tag_count', 'number', 'Tag Count')
+                    ->default(5)
+                    ->rules(['nullable', 'integer', 'min:0', 'max:50'])
+                    ->placeholder('5')
+                    ->meta(['section' => 'wordpress'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('image_layout', 'select', 'Image Layout')
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::listItemOptions('image_layout_rules'))
+                    ->meta(['empty_label' => 'Select layout...', 'section' => 'wordpress'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
                 FieldDefinition::make('is_default', 'boolean', 'Set as default template')
                     ->default(false)
                     ->rules(['nullable', 'boolean'])
                     ->columns('md:col-span-2')
                     ->meta([
-                        'section' => 'defaults',
+                        'section' => 'wordpress',
                     ])
                     ->contexts(['create', 'edit']),
             ]);
@@ -357,6 +403,16 @@ class ArticlePresetForm
         }
 
         return array_values((array) config('hws-publish.photo_sources', []));
+    }
+
+    protected static function listItemOptions(string $category): array
+    {
+        $values = ListItem::getValues($category);
+        $options = [];
+        foreach ($values as $val) {
+            $options[$val] = $val;
+        }
+        return $options;
     }
 
     protected static function labelMap(array $values, ?callable $labelResolver = null): array

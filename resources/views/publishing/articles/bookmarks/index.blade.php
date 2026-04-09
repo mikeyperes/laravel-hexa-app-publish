@@ -36,52 +36,30 @@
             <span class="text-sm text-blue-600">+ Add</span>
         </div>
 
-        <div x-show="showAdd" x-cloak class="p-5 bg-gray-50 border-b border-gray-200">
+        <div x-show="showAdd" x-cloak class="p-5 bg-gray-50 border-b border-gray-200"
+             @hexa-search-selected.window="if ($event.detail.component_id === 'bookmark-user') { newBookmark.user_id = $event.detail.item.id; selectedUserName = $event.detail.item.name; }"
+             @hexa-search-cleared.window="if ($event.detail.component_id === 'bookmark-user') { newBookmark.user_id = ''; selectedUserName = ''; }">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">URL</label>
-                    <input type="url" x-model="newBookmark.url" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://...">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Title</label>
-                    <input type="text" x-model="newBookmark.title" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Article title">
-                </div>
-                <div>
                     <label class="block text-xs text-gray-500 mb-1">Assign to User</label>
-                    <div class="relative">
-                        <input type="text" x-model="userSearchQuery" @input.debounce.300ms="searchBookmarkUsers()" placeholder="Type to search..."
-                               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <div x-show="userSearchResults.length > 0" x-cloak class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                            <template x-for="user in userSearchResults" :key="user.id">
-                                <button type="button" @click="newBookmark.user_id = user.id; userSearchQuery = user.name; userSearchResults = []"
-                                        class="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50" x-text="user.name + ' (' + user.email + ')'"></button>
-                            </template>
-                        </div>
-                    </div>
+                    <x-hexa-smart-search
+                        url="{{ route('api.search.users') }}"
+                        name="user_id"
+                        placeholder="Type to search users..."
+                        display-field="name"
+                        subtitle-field="email"
+                        value-field="id"
+                        id="bookmark-user"
+                        show-id
+                    />
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Source</label>
-                    <select x-model="newBookmark.source" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <option value="">Select source...</option>
-                        <option value="google">Google</option>
-                        <option value="social">Social Media</option>
-                        <option value="rss">RSS Feed</option>
-                        <option value="newsletter">Newsletter</option>
-                        <option value="direct">Direct</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Tags (comma separated)</label>
-                    <input type="text" x-model="newBookmark.tags" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="tag1, tag2, tag3">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Notes</label>
-                    <input type="text" x-model="newBookmark.notes" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Quick note about this bookmark">
+                    <label class="block text-xs text-gray-500 mb-1">URL <span class="text-red-500">*</span></label>
+                    <input type="url" x-model="newBookmark.url" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://...">
                 </div>
             </div>
             <div class="mt-3 flex items-center gap-2">
-                <button @click="saveBookmark()" :disabled="saving" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
+                <button @click="saveBookmark()" :disabled="saving || !newBookmark.url" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2">
                     <svg x-show="saving" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
                     <span x-text="saving ? 'Saving...' : 'Save Bookmark'"></span>
                 </button>
@@ -224,25 +202,26 @@ function bookmarksManager() {
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
     return {
         showAdd: false,
-        newBookmark: { url: '', title: '', user_id: '', source: '', tags: '', notes: '' },
-        userSearchQuery: '', userSearchResults: [],
+        newBookmark: { url: '', user_id: '' },
+        selectedUserName: '',
         saving: false, result: '', success: false,
         editingId: null, editData: {}, updating: false, editResult: '', editSuccess: false,
-        async searchBookmarkUsers() {
-            if (this.userSearchQuery.length < 2) { this.userSearchResults = []; return; }
-            try {
-                const r = await fetch('{{ route("publish.users.search") }}?q=' + encodeURIComponent(this.userSearchQuery), { headers: { 'Accept': 'application/json' } });
-                this.userSearchResults = await r.json();
-            } catch(e) { this.userSearchResults = []; }
-        },
+        // User search handled by hexa-smart-search component
         async saveBookmark() {
             this.saving = true; this.result = '';
             try {
                 const r = await fetch('{{ route("publish.bookmarks.store") }}', { method: 'POST', headers, body: JSON.stringify(this.newBookmark) });
-                const d = await r.json(); this.success = d.success; this.result = d.message;
-                if (d.success) setTimeout(() => location.reload(), 600);
-            } catch(e) { this.success = false; this.result = 'Error: ' + e.message; }
-            this.saving = false;
+                const d = await r.json();
+                this.success = d.success;
+                this.result = d.message || (d.success ? 'Saved!' : 'Failed.');
+                this.saving = false;
+                if (d.success && d.bookmark) {
+                    this.result = 'Bookmark saved! Fetching title...';
+                    // Fire title fetch in background — don't block
+                    fetch('/article/bookmarks/' + d.bookmark.id + '/fetch-title', { method: 'POST', headers }).catch(() => {});
+                    setTimeout(() => location.reload(), 1200);
+                }
+            } catch(e) { this.success = false; this.result = 'Error: ' + e.message; this.saving = false; }
         },
         editBookmark(id, data) {
             this.editingId = id;

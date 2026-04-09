@@ -3,7 +3,7 @@
 namespace hexa_app_publish\Publishing\Articles\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_app_publish\Models\PublishBookmark;
+use hexa_app_publish\Publishing\Articles\Models\PublishBookmark;
 use hexa_app_publish\Publishing\Articles\Models\PublishFailedSource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,12 +20,18 @@ class BookmarkController extends Controller
      * @param Request $request
      * @return View
      */
-    public function index(Request $request): View
+    public function index(Request $request): View|JsonResponse
     {
         $query = PublishBookmark::with('user');
 
         if ($request->filled('user_id')) {
             $query->where('user_id', $request->input('user_id'));
+        }
+
+        // Return JSON for AJAX calls (pipeline bookmarks tab)
+        if ($request->input('format') === 'json' || $request->wantsJson()) {
+            $bookmarks = $query->orderByDesc('created_at')->get();
+            return response()->json(['success' => true, 'data' => $bookmarks]);
         }
 
         $bookmarks = $query->orderByDesc('created_at')->paginate(25);
@@ -116,6 +122,41 @@ class BookmarkController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Bookmark deleted successfully.',
+        ]);
+    }
+
+    /**
+     * Fetch the page title for a bookmark URL and update it.
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function fetchTitle(int $id): JsonResponse
+    {
+        $bookmark = PublishBookmark::findOrFail($id);
+        $title = null;
+
+        try {
+            $ctx = stream_context_create([
+                'http' => ['timeout' => 8, 'user_agent' => 'Mozilla/5.0', 'follow_location' => true],
+                'ssl' => ['verify_peer' => false],
+            ]);
+            $html = @file_get_contents($bookmark->url, false, $ctx);
+            if ($html && preg_match('/<title[^>]*>([^<]+)<\/title>/i', $html, $m)) {
+                $title = trim(html_entity_decode($m[1], ENT_QUOTES, 'UTF-8'));
+            }
+        } catch (\Exception $e) {
+            // Silently fail — bookmark is already saved
+        }
+
+        if ($title) {
+            $bookmark->update(['title' => $title]);
+        }
+
+        return response()->json([
+            'success' => !empty($title),
+            'title'   => $title,
+            'message' => $title ? 'Title fetched.' : 'Could not fetch title.',
         ]);
     }
 

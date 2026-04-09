@@ -15,3 +15,6 @@ Route::post('/article/publish/photo-meta', [PipelineController::class, 'generate
 
 // User search (shared AJAX endpoint for type-ahead)
 Route::get('/api/users/search', [PipelineController::class, 'searchUsers'])->name('publish.users.search');
+
+// Profile search (for PR subject picker)
+Route::get('/api/profiles/search', [PipelineController::class, 'searchProfiles'])->name('publish.profiles.search');

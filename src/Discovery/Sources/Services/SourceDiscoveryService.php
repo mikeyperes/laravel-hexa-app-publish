@@ -169,7 +169,8 @@ class SourceDiscoveryService
     private function searchGoogleRss(string $query, int $perPage): array
     {
         $rssUrl = 'https://news.google.com/rss/search?q=' . urlencode($query) . '&hl=en-US&gl=US&ceid=US:en';
-        $xml = @simplexml_load_string(@file_get_contents($rssUrl));
+        $ctx = stream_context_create(['http' => ['timeout' => 10, 'user_agent' => 'Mozilla/5.0']]);
+        $xml = @simplexml_load_string(@file_get_contents($rssUrl, false, $ctx));
         if (!$xml || !isset($xml->channel->item)) {
             return ['success' => false, 'articles' => [], 'total' => 0, 'error' => 'Google RSS: No results'];
         }

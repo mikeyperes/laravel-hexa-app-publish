@@ -2,8 +2,8 @@
 
 namespace hexa_app_publish\Publishing\Delivery\Services;
 
-use hexa_app_publish\Models\PublishArticle;
-use hexa_app_publish\Models\PublishSite;
+use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
+use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
 use hexa_package_wptoolkit\Services\WpToolkitService;
@@ -40,6 +40,9 @@ class WordPressDeletionService
         $log = [];
         $hasWpContent = !empty($article->wp_post_id) && !empty($article->publish_site_id);
 
+        // Capture URLs before deletion for 404 verification
+        $postUrl = $article->wp_post_url;
+
         if ($hasWpContent) {
             $log[] = ['type' => 'step', 'message' => 'Deleting WordPress content...'];
 
@@ -61,10 +64,28 @@ class WordPressDeletionService
             }
         }
 
+        // Collect all deleted URLs for 404 verification
+        $deletedUrls = [];
+        if ($postUrl) {
+            $deletedUrls[] = ['label' => 'Post', 'url' => $postUrl];
+        }
+        $wpImages = $article->wp_images ?? [];
+        foreach ($wpImages as $img) {
+            $mediaUrl = $img['media_url'] ?? $img['source_url'] ?? null;
+            if ($mediaUrl) {
+                $deletedUrls[] = ['label' => 'Media: ' . ($img['filename'] ?? 'image'), 'url' => $mediaUrl];
+            }
+        }
+
         // Delete from local DB
         $log[] = ['type' => 'step', 'message' => 'Deleting local article #' . $article->id . '...'];
         $article->delete();
         $log[] = ['type' => 'success', 'message' => 'Article deleted from database.'];
+
+        // Add deleted URLs for verification
+        if (!empty($deletedUrls)) {
+            $log[] = ['type' => 'info', 'message' => 'Deleted URLs — click to verify 404:', 'urls' => $deletedUrls];
+        }
 
         hexaLog('publish', 'article_deleted', 'Article #' . $article->id . ' deleted' . ($hasWpContent ? ' (including WP content)' : ''));
 
@@ -136,13 +157,15 @@ class WordPressDeletionService
             foreach ($wpImages as $img) {
                 $mediaId = $img['media_id'] ?? null;
                 if ($mediaId) {
+                    $mediaUrl = $img['media_url'] ?? $img['source_url'] ?? '';
+                    $filename = $img['filename'] ?? '';
                     try {
                         $resp = Http::withBasicAuth($site->wp_username, $site->wp_application_password)
                             ->timeout(15)
                             ->delete($baseUrl . '/wp-json/wp/v2/media/' . $mediaId, ['force' => true]);
                         $log[] = [
                             'type' => $resp->successful() ? 'success' : 'error',
-                            'message' => 'Media #' . $mediaId . ': ' . ($resp->successful() ? 'Deleted.' : 'HTTP ' . $resp->status()),
+                            'message' => 'Media #' . $mediaId . ($filename ? ' (' . $filename . ')' : '') . ($mediaUrl ? ' — ' . $mediaUrl : '') . ': ' . ($resp->successful() ? 'Deleted.' : 'HTTP ' . $resp->status()),
                         ];
                     } catch (\Exception $e) {
                         $log[] = ['type' => 'error', 'message' => 'Media #' . $mediaId . ': ' . $e->getMessage()];
@@ -152,14 +175,15 @@ class WordPressDeletionService
         }
 
         // Delete WP post
-        $log[] = ['type' => 'step', 'message' => 'Deleting WP post #' . $article->wp_post_id . ' via REST...'];
+        $postUrl = $article->wp_post_url ?: ($baseUrl . '/?p=' . $article->wp_post_id);
+        $log[] = ['type' => 'step', 'message' => 'Deleting WP post #' . $article->wp_post_id . ' (' . $postUrl . ') via REST...'];
         try {
             $resp = Http::withBasicAuth($site->wp_username, $site->wp_application_password)
                 ->timeout(15)
                 ->delete($baseUrl . '/wp-json/wp/v2/posts/' . $article->wp_post_id, ['force' => true]);
             $log[] = [
                 'type' => $resp->successful() ? 'success' : 'error',
-                'message' => 'Post #' . $article->wp_post_id . ': ' . ($resp->successful() ? 'Deleted.' : 'HTTP ' . $resp->status()),
+                'message' => 'Post #' . $article->wp_post_id . ' (' . $postUrl . '): ' . ($resp->successful() ? 'Deleted from WordPress.' : 'HTTP ' . $resp->status()),
             ];
         } catch (\Exception $e) {
             $log[] = ['type' => 'error', 'message' => 'Post #' . $article->wp_post_id . ': ' . $e->getMessage()];

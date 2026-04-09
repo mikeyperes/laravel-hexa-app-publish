@@ -2,7 +2,7 @@
 
 namespace hexa_app_publish\Publishing\Delivery\Services;
 
-use hexa_app_publish\Models\PublishSite;
+use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
 use hexa_package_wordpress\Services\WordPressService;
@@ -75,8 +75,47 @@ class WordPressPreparationService
             $send('success', "REST API credentials verified for {$site->wp_username}");
         }
 
+        // Step 0: Clean HTML — strip editor artifacts
+        $send('info', "Cleaning HTML...");
+        $html = $this->sanitizeHtml($html);
+        $send('success', "HTML cleaned for WordPress");
+
         // Step 1: Upload images
         [$html, $wpImages] = $this->uploadImages($site, $html, $mode, $server, $installId, $options, $send);
+
+        // Step 1b: Upload featured image
+        $featuredMediaId = null;
+        $featuredWpUrl = null;
+        $featuredMeta = $options['featured_meta'] ?? null;
+        if ($featuredMeta) {
+            $send('info', "Uploading featured image...");
+            $featuredUrl = $options['featured_url'] ?? null;
+            if ($featuredUrl) {
+                $fFilename = $featuredMeta['filename'] ?? 'featured';
+                $ext = pathinfo(parse_url($featuredUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+                $fFilename = Str::endsWith($fFilename, '.' . $ext) ? $fFilename : $fFilename . '.' . $ext;
+
+                if ($mode === 'ssh') {
+                    $uploadResult = $this->wptoolkit->wpCliUploadMedia($server, $installId, $featuredUrl, $fFilename, $featuredMeta['alt_text'] ?? '', $featuredMeta['caption'] ?? '', $featuredMeta['alt_text'] ?? '');
+                } else {
+                    $uploadResult = $this->wp->uploadMedia($site->url, $site->wp_username, $site->wp_application_password, $featuredUrl, $fFilename, $featuredMeta['alt_text'] ?? '');
+                }
+
+                if ($uploadResult['success'] && !empty($uploadResult['data']['media_id'])) {
+                    $featuredMediaId = $uploadResult['data']['media_id'];
+                    $featuredWpUrl = $uploadResult['data']['media_url'] ?? null;
+                    $wpImages[] = array_merge($uploadResult['data'], ['is_featured' => true, 'source_url' => $featuredUrl, 'filename' => $fFilename]);
+                    if ($mode === 'rest') {
+                        $this->setHexaMeta($site, (int) $featuredMediaId, $options['draft_id'] ?? 0);
+                    }
+                    $send('success', "Featured image uploaded: media_id={$featuredMediaId}", ['wp_image' => $uploadResult['data']]);
+                } else {
+                    $send('error', "Featured image upload failed: " . ($uploadResult['message'] ?? 'unknown'));
+                }
+            } else {
+                $send('warning', "No featured image URL provided");
+            }
+        }
 
         // Step 2: Create categories
         $categoryIds = $this->createCategories($site, $mode, $server, $installId, $options['categories'] ?? [], $send);
@@ -90,11 +129,13 @@ class WordPressPreparationService
         $send($htmlValid ? 'success' : 'error', $htmlValid ? 'HTML valid' : 'HTML is empty after processing');
 
         return [
-            'success'      => $htmlValid,
-            'html'         => $html,
-            'category_ids' => $categoryIds,
-            'tag_ids'      => $tagIds,
-            'wp_images'    => $wpImages,
+            'success'           => $htmlValid,
+            'html'              => $html,
+            'category_ids'      => $categoryIds,
+            'tag_ids'           => $tagIds,
+            'wp_images'         => $wpImages,
+            'featured_media_id' => $featuredMediaId,
+            'featured_wp_url'   => $featuredWpUrl,
         ];
     }
 
@@ -173,8 +214,18 @@ class WordPressPreparationService
 
             if ($uploadResult['success'] && !empty($uploadResult['data']['media_url'])) {
                 $imageMap[$imgUrl] = $uploadResult['data']['media_url'];
-                $wpImg = $uploadResult['data'];
+                $wpImg = array_merge($uploadResult['data'], [
+                    'source_url'  => $imgUrl,
+                    'filename'    => $properFilename,
+                    'alt_text'    => $altText,
+                    'caption'     => $caption,
+                    'file_size'   => $uploadResult['data']['file_size'] ?? null,
+                ]);
                 $wpImages[] = $wpImg;
+                // Set hexa meta on the attachment for filtering
+                if (!empty($wpImg['media_id']) && $mode === 'rest') {
+                    $this->setHexaMeta($site, (int) $wpImg['media_id'], $options['draft_id'] ?? 0);
+                }
                 $send('success', "  Uploaded: media_id=" . ($wpImg['media_id'] ?? '?') . " | " . ($wpImg['file_size'] ? round($wpImg['file_size'] / 1024) . ' KB' : '') . " | " . Str::limit($wpImg['media_url'] ?? '', 80), ['wp_image' => $wpImg]);
             } else {
                 $send('error', "  Failed: {$properFilename} — " . ($uploadResult['message'] ?? 'unknown error'));
@@ -328,10 +379,120 @@ class WordPressPreparationService
      * @param PublishSite $site
      * @return array{server: WhmServer|null, account: HostingAccount|null}
      */
+    /**
+     * Set _hexa_upload meta on a WordPress attachment for filtering.
+     *
+     * @param PublishSite $site
+     * @param int $mediaId
+     * @param int $draftId
+     */
+    private function setHexaMeta(PublishSite $site, int $mediaId, int $draftId): void
+    {
+        try {
+            Http::withBasicAuth($site->wp_username, $site->wp_application_password)
+                ->timeout(10)
+                ->post(rtrim($site->url, '/') . '/wp-json/wp/v2/media/' . $mediaId, [
+                    'meta' => [
+                        '_hexa_upload'   => true,
+                        '_hexa_draft_id' => $draftId,
+                    ],
+                ]);
+        } catch (\Exception $e) {
+            // Non-critical — meta is for filtering only
+        }
+    }
+
     private function resolveServer(PublishSite $site): array
     {
         $account = HostingAccount::find($site->hosting_account_id);
         $server = $account ? WhmServer::find($account->whm_server_id) : null;
         return ['server' => $server, 'account' => $account];
+    }
+
+    /**
+     * Sanitize HTML for WordPress — strip editor artifacts, placeholders, and UI elements.
+     *
+     * @param string $html
+     * @return string
+     */
+    private function sanitizeHtml(string $html): string
+    {
+        // Convert photo placeholders into clean <figure> tags
+        // Match: <div class="photo-placeholder" ...> ... <img ...> ... </div>
+        $html = preg_replace_callback(
+            '/<div[^>]*class="[^"]*photo-placeholder[^"]*"[^>]*>(.*?)<\/div>/is',
+            function ($match) {
+                $inner = $match[1];
+                // Extract the <img> tag
+                $img = '';
+                if (preg_match('/<img[^>]+>/i', $inner, $imgMatch)) {
+                    $img = $imgMatch[0];
+                    // Clean inline styles from img, keep src and alt
+                    $img = preg_replace('/\s+style="[^"]*"/i', '', $img);
+                    // Extract alt from data-caption or existing alt
+                    $alt = '';
+                    if (preg_match('/data-caption="([^"]*)"/i', $match[0], $capMatch)) {
+                        $alt = html_entity_decode($capMatch[1], ENT_QUOTES, 'UTF-8');
+                    }
+                    if (!$alt && preg_match('/alt="([^"]*)"/i', $img, $altMatch)) {
+                        $alt = $altMatch[1];
+                    }
+                    // Ensure alt attribute
+                    if ($alt && !preg_match('/alt="/i', $img)) {
+                        $img = str_replace('<img ', '<img alt="' . htmlspecialchars($alt, ENT_QUOTES) . '" ', $img);
+                    } elseif ($alt) {
+                        $img = preg_replace('/alt="[^"]*"/i', 'alt="' . htmlspecialchars($alt, ENT_QUOTES) . '"', $img);
+                    }
+                }
+                // Extract caption text from data-caption or <p> tags (skip the button labels)
+                $caption = '';
+                if (preg_match('/data-caption="([^"]*)"/i', $match[0], $capMatch)) {
+                    $caption = html_entity_decode($capMatch[1], ENT_QUOTES, 'UTF-8');
+                }
+                if (!$caption) {
+                    // Get second <p> as caption (first is search term)
+                    if (preg_match_all('/<p[^>]*>([^<]+)<\/p>/i', $inner, $pMatches) && count($pMatches[1]) > 1) {
+                        $caption = trim($pMatches[1][1]);
+                    }
+                }
+
+                if (!$img) return ''; // No image found — remove entirely
+
+                $figure = '<figure>';
+                $figure .= $img;
+                if ($caption) $figure .= '<figcaption>' . htmlspecialchars($caption, ENT_QUOTES) . '</figcaption>';
+                $figure .= '</figure>';
+                return $figure;
+            },
+            $html
+        );
+
+        // Remove any remaining editor action buttons/spans
+        $html = preg_replace('/<span[^>]*class="[^"]*photo-(?:view|confirm|change|remove)[^"]*"[^>]*>.*?<\/span>/is', '', $html);
+        $html = preg_replace('/<button[^>]*>.*?<\/button>/is', '', $html);
+
+        // Remove Alpine.js directives from any remaining elements
+        $html = preg_replace('/\s+(?:x-[\w.-]+|@[\w.-]+(?:\.\w+)*|:[\w-]+)\s*=\s*"[^"]*"/i', '', $html);
+        $html = preg_replace('/\s+x-cloak/i', '', $html);
+
+        // Remove editor data-* attributes
+        $html = preg_replace('/\s+data-(?:photo|editor|placeholder|suggestion|idx|confirmed|removed|search|caption)[a-z-]*\s*=\s*"[^"]*"/i', '', $html);
+        $html = preg_replace('/\s+contenteditable="[^"]*"/i', '', $html);
+
+        // Remove inline styles from divs that were photo containers (keep content)
+        $html = preg_replace('/\s+style="[^"]*border:\s*2px\s+(?:solid|dashed)\s+#[a-f0-9]+[^"]*"/i', '', $html);
+
+        // Clean up empty wrappers
+        $html = preg_replace('/<figure[^>]*>\s*<\/figure>/is', '', $html);
+        $html = preg_replace('/<figcaption[^>]*>\s*<\/figcaption>/is', '', $html);
+
+        // Remove trailing invisible Unicode characters and empty block elements
+        $html = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]+/u', '', $html);
+        $html = preg_replace('/<(p|div|span)>\s*<\/\1>/i', '', $html);
+
+        // Clean up excessive whitespace
+        $html = preg_replace('/\n{3,}/', "\n\n", $html);
+
+        return trim($html);
     }
 }

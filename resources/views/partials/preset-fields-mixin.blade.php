@@ -27,20 +27,21 @@
         const schemaKeys = Object.keys(resolvedSchema);
         if (schemaKeys.length > 0) {
             schemaKeys.forEach(k => {
-                const val = data ? data[k] : null;
+                const val = data ? data[k] : undefined;
                 const type = resolvedSchema[k]?.type || 'text';
-                // Set appropriate default for each type
+                const hasKey = data && (k in data);
+                // Only set defaults for fields that exist in the data
+                // Skip missing fields so reactive form's own field defaults take over
                 if (val !== null && val !== undefined) {
                     defaults[k] = val;
-                } else if (type === 'checkbox' || type === 'array') {
-                    defaults[k] = [];
-                } else if (type === 'number') {
-                    defaults[k] = '';
-                } else if (type === 'boolean') {
-                    defaults[k] = false;
-                } else {
-                    defaults[k] = '';
+                } else if (hasKey) {
+                    // Field exists in data but is null — use type-appropriate empty
+                    if (type === 'checkbox' || type === 'array') defaults[k] = [];
+                    else if (type === 'number') defaults[k] = '';
+                    else if (type === 'boolean') defaults[k] = false;
+                    else defaults[k] = '';
                 }
+                // If !hasKey, field is not in template data — don't set, let form defaults apply
             });
         } else if (data) {
             // Fallback: no schema, use data keys (legacy behavior)
@@ -63,13 +64,19 @@
     }
 
     const presetFieldsMethods = {
-        loadPresetFields(prefix, data, schema) {
+        loadPresetFields(prefix, data, schema, overrides) {
             _loadPresetFields(this, prefix, data, schema || this[prefix + '_schema']);
-            // Dispatch to core reactive form component if present
+            // Merge overrides into defaults for the reactive form if provided
+            const values = overrides
+                ? { ...this[prefix + '_defaults'], ...overrides }
+                : (this[prefix + '_defaults'] || {});
+            // Dispatch to core reactive form component — delay slightly to ensure form is rendered
             const formId = prefix === 'preset' ? 'wp-preset-form' : 'article-preset-form';
-            window.dispatchEvent(new CustomEvent('hexa-form-load', {
-                detail: { component_id: formId, values: this[prefix + '_defaults'] || {} }
-            }));
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('hexa-form-load', {
+                    detail: { component_id: formId, values }
+                }));
+            }, 100);
         },
         restorePresetDefaults(prefix) {
             this[prefix + '_overrides'] = {};
