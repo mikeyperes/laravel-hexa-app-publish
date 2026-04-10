@@ -320,6 +320,43 @@ class PipelineController extends Controller
     }
 
     /**
+     * AI Article Search — use Claude with web search to find articles on a topic.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function aiSearchArticles(Request $request): JsonResponse
+    {
+        $request->validate([
+            'topic' => 'required|string|min:3|max:500',
+            'count' => 'nullable|integer|min:2|max:10',
+        ]);
+
+        if (!class_exists(\hexa_package_anthropic\Services\AnthropicService::class)) {
+            return response()->json(['success' => false, 'message' => 'Anthropic package not available.'], 400);
+        }
+
+        $anthropic = app(\hexa_package_anthropic\Services\AnthropicService::class);
+        $result = $anthropic->searchArticles($request->input('topic'), $request->input('count', 4));
+
+        // Calculate cost if successful
+        if ($result['success'] && !empty($result['data']['usage'])) {
+            $pricing = [
+                'claude-haiku-4-5-20251001' => ['input' => 0.80, 'output' => 4.0],
+                'claude-sonnet-4-20250514'  => ['input' => 3.0,  'output' => 15.0],
+            ];
+            $model = $result['data']['model'] ?? 'claude-haiku-4-5-20251001';
+            $rates = $pricing[$model] ?? ['input' => 0.80, 'output' => 4.0];
+            $usage = $result['data']['usage'];
+            $cost = ($usage['input_tokens'] * $rates['input'] / 1_000_000)
+                  + ($usage['output_tokens'] * $rates['output'] / 1_000_000);
+            $result['data']['cost'] = round($cost, 6);
+        }
+
+        return response()->json($result);
+    }
+
+    /**
      * Spin article content using AI.
      *
      * Builds a full prompt stack from master settings + preset config + prompt template + source texts,

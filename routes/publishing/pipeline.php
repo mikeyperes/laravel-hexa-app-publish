@@ -4,6 +4,7 @@ use hexa_app_publish\Publishing\Pipeline\Http\Controllers\PipelineController;
 
 Route::get('/article/publish', [PipelineController::class, 'index'])->name('publish.pipeline');
 Route::post('/article/publish/check-sources', [PipelineController::class, 'checkSources'])->name('publish.pipeline.check');
+Route::post('/article/publish/ai-search', [PipelineController::class, 'aiSearchArticles'])->name('publish.pipeline.ai-search');
 Route::post('/article/publish/spin', [PipelineController::class, 'spin'])->name('publish.pipeline.spin');
 Route::post('/article/publish/generate-metadata', [PipelineController::class, 'generateMetadata'])->name('publish.pipeline.metadata');
 Route::post('/article/publish/prepare', [PipelineController::class, 'prepareForWordpress'])->name('publish.pipeline.prepare');

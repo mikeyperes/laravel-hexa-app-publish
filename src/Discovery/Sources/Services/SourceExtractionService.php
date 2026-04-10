@@ -37,6 +37,11 @@ class SourceExtractionService
         $minWords = $options['min_words'] ?? 50;
         $autoFallback = $options['auto_fallback'] ?? true;
 
+        // AI extraction methods — delegate to Claude or GPT
+        if ($method === 'claude' || $method === 'gpt') {
+            return $this->extractWithAi($url, $method, $minWords);
+        }
+
         $extractor = $this->resolveExtractor();
         if (!$extractor) {
             return $this->fail($url, 'ArticleExtractorService not available.');
@@ -146,6 +151,118 @@ class SourceExtractionService
             'formatted_html' => '',
             'fetch_info'     => null,
         ];
+    }
+
+    /**
+     * Extract article content using Claude AI or GPT with web search.
+     *
+     * @param string $url
+     * @param string $provider 'claude' or 'gpt'
+     * @param int $minWords
+     * @return array
+     */
+    private function extractWithAi(string $url, string $provider, int $minWords = 50): array
+    {
+        $systemPrompt = "You are an article content extractor. Given a URL, use web search to fetch the full article content from that page. "
+            . "Return a JSON object with: title (the article headline), text (the full article body as plain text), html (the article body as clean HTML with paragraphs). "
+            . "Extract ONLY the article content — no navigation, ads, sidebars, or comments. "
+            . "Output ONLY the JSON object, no other text.";
+
+        $userMessage = "Extract the full article content from this URL: {$url}";
+
+        try {
+            if ($provider === 'claude') {
+                if (!class_exists(\hexa_package_anthropic\Services\AnthropicService::class)) {
+                    return $this->fail($url, 'Anthropic package not available.');
+                }
+                $ai = app(\hexa_package_anthropic\Services\AnthropicService::class);
+
+                // Use web search tool for Claude
+                $key = \hexa_core\Models\Setting::getValue('anthropic_api_key');
+                if (!$key) {
+                    return $this->fail($url, 'No Anthropic API key configured.');
+                }
+
+                $response = \Illuminate\Support\Facades\Http::withHeaders([
+                    'x-api-key' => $key,
+                    'anthropic-version' => '2023-06-01',
+                    'Content-Type' => 'application/json',
+                ])->timeout(120)->post('https://api.anthropic.com/v1/messages', [
+                    'model' => 'claude-haiku-4-5-20251001',
+                    'max_tokens' => 4096,
+                    'system' => $systemPrompt,
+                    'tools' => [['type' => 'web_search_20250305', 'name' => 'web_search', 'max_uses' => 5]],
+                    'messages' => [['role' => 'user', 'content' => $userMessage]],
+                ]);
+
+                if (!$response->successful()) {
+                    $error = $response->json();
+                    return $this->fail($url, 'Claude error: ' . ($error['error']['message'] ?? "HTTP {$response->status()}"));
+                }
+
+                $data = $response->json();
+                $textContent = '';
+                foreach (($data['content'] ?? []) as $block) {
+                    if (($block['type'] ?? '') === 'text') {
+                        $textContent .= $block['text'];
+                    }
+                }
+            } else {
+                // GPT — use chat (no native web search, but can process URL context)
+                if (!class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)) {
+                    return $this->fail($url, 'ChatGPT package not available.');
+                }
+                $ai = app(\hexa_package_chatgpt\Services\ChatGptService::class);
+                $result = $ai->chat($systemPrompt, $userMessage, 'gpt-4o', 0.3, 4096);
+
+                if (!$result['success']) {
+                    return $this->fail($url, $result['message']);
+                }
+                $textContent = $result['data']['content'] ?? '';
+            }
+
+            // Parse JSON from AI response
+            $parsed = null;
+            if (preg_match('/\{.*\}/s', $textContent, $matches)) {
+                $parsed = json_decode($matches[0], true);
+            }
+
+            if (!$parsed || empty($parsed['text'])) {
+                return $this->fail($url, 'AI could not extract article content.');
+            }
+
+            $title = $parsed['title'] ?? '';
+            $text = $parsed['text'] ?? '';
+            $html = $parsed['html'] ?? '<p>' . nl2br(e($text)) . '</p>';
+            $wordCount = str_word_count($text);
+
+            if ($wordCount < $minWords) {
+                return [
+                    'success'        => false,
+                    'message'        => "AI extracted only {$wordCount} words (minimum: {$minWords}).",
+                    'url'            => $url,
+                    'title'          => $title,
+                    'text'           => $text,
+                    'word_count'     => $wordCount,
+                    'formatted_html' => $html,
+                    'fetch_info'     => ['method' => $provider],
+                ];
+            }
+
+            return [
+                'success'        => true,
+                'message'        => "Extracted {$wordCount} words via {$provider}.",
+                'url'            => $url,
+                'title'          => $title,
+                'text'           => $text,
+                'word_count'     => $wordCount,
+                'formatted_html' => $html,
+                'fetch_info'     => ['method' => $provider],
+            ];
+        } catch (\Exception $e) {
+            Log::warning("[SourceExtraction] AI extraction failed for {$url}: " . $e->getMessage());
+            return $this->fail($url, 'AI extraction error: ' . $e->getMessage());
+        }
     }
 
     /**

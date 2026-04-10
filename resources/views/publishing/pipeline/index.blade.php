@@ -395,6 +395,7 @@
             <div x-show="!isGenerateMode">
             {{-- Tabs --}}
             <div class="flex border-b border-gray-200 mb-4">
+                <button @click="sourceTab = 'ai'" :class="sourceTab === 'ai' ? 'border-purple-500 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">Search Online</button>
                 <button @click="sourceTab = 'paste'" :class="sourceTab === 'paste' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">Paste Links</button>
                 <button @click="sourceTab = 'search'" :class="sourceTab === 'search' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">Search News</button>
                 <button @click="sourceTab = 'bookmarks'; loadBookmarks()" :class="sourceTab === 'bookmarks' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">Bookmarks</button>
@@ -526,6 +527,101 @@
                 </div>
             </div>
 
+            {{-- AI Article Finder tab --}}
+            <div x-show="sourceTab === 'ai'">
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2">
+                        <p class="text-sm text-gray-600">Find top articles on any topic using AI web search</p>
+                        <div class="relative group">
+                            <span class="w-5 h-5 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold cursor-help">?</span>
+                            <div class="absolute bottom-7 left-1/2 -translate-x-1/2 w-72 bg-gray-900 text-gray-200 text-xs rounded-lg p-3 shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                                <p class="font-semibold text-white mb-1">Search Online</p>
+                                <p>Claude AI searches the web in real-time to find recent news articles on your topic. Multiple sources on the same topic are intentionally selected — this gives the AI spinner more material to produce a unique, high-quality rewrite.</p>
+                                <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" x-model="aiSearchTopic" @keydown.enter="aiSearchArticles()" placeholder="e.g. cryptocurrency regulations 2026" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <button @click="aiSearchArticles()" :disabled="aiSearching || !aiSearchTopic.trim()" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2">
+                            <svg x-show="aiSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <span x-text="aiSearching ? 'Searching...' : 'Find Articles'"></span>
+                        </button>
+                    </div>
+
+                    {{-- Activity Log --}}
+                    <div x-show="aiLog.length > 0" x-cloak class="bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto">
+                        <template x-for="(entry, idx) in aiLog" :key="idx">
+                            <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
+                                <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
+                                <span :class="{
+                                    'text-green-400': entry.type === 'success',
+                                    'text-red-400': entry.type === 'error',
+                                    'text-blue-400': entry.type === 'info',
+                                    'text-gray-400': entry.type === 'step',
+                                }" x-text="entry.message" class="break-words"></span>
+                            </div>
+                        </template>
+                    </div>
+
+                    {{-- Cost Summary --}}
+                    <div x-show="aiSearchCost && !aiSearching" x-cloak class="bg-gray-900 rounded-lg border border-gray-700 px-4 py-3">
+                        <div class="flex flex-wrap gap-6 text-xs">
+                            <div>
+                                <span class="text-gray-500">Model</span>
+                                <p class="font-medium text-white" x-text="aiSearchCost?.model || '—'"></p>
+                            </div>
+                            <div>
+                                <span class="text-gray-500">Cost</span>
+                                <p class="font-medium text-green-400" x-text="'$' + (aiSearchCost?.cost || 0).toFixed(4)"></p>
+                            </div>
+                            <div>
+                                <span class="text-gray-500">Tokens</span>
+                                <p class="font-medium text-white" x-text="(aiSearchCost?.usage?.input_tokens || 0) + ' in / ' + (aiSearchCost?.usage?.output_tokens || 0) + ' out'"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Results --}}
+                    <div x-show="aiSearchResults.length > 0 && !aiSearching" x-cloak>
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-3 text-sm text-blue-700 flex items-start gap-2">
+                            <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Multiple sources featuring the same topic are selected for a unique quality spin.
+                        </div>
+
+                        <p class="text-xs text-gray-500 mb-2" x-text="aiSearchResults.length + ' article(s) found — click + Add to select sources'"></p>
+                        <div class="space-y-2">
+                            <template x-for="(article, idx) in aiSearchResults" :key="idx">
+                                <div class="border rounded-lg p-3" :class="sources.some(s => s.url === article.url) ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'">
+                                    <div class="flex items-start gap-3">
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-semibold text-gray-900 break-words" x-text="article.title"></p>
+                                            <a :href="article.url" target="_blank" @click.stop class="text-xs text-blue-500 hover:underline break-all mt-0.5 inline-flex items-center gap-1">
+                                                <span x-text="article.url"></span>
+                                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                            </a>
+                                            <p x-show="article.description" x-cloak class="text-xs text-gray-500 mt-1 break-words" x-text="article.description"></p>
+                                        </div>
+                                        <div class="flex-shrink-0 flex flex-col gap-1">
+                                            <span x-show="sources.some(s => s.url === article.url)" class="text-xs text-green-600 font-medium px-2 py-1">Added</span>
+                                            <button x-show="sources.some(s => s.url === article.url)" @click="removeSource(sources.findIndex(s => s.url === article.url))" class="text-red-500 hover:text-red-700 text-xs font-medium px-2 py-1">Remove</button>
+                                            <button x-show="!sources.some(s => s.url === article.url)" @click="addSource(article.url, article.title)" class="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 bg-blue-50 rounded hover:bg-blue-100">+ Add</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <button @click="aiSearchArticles()" :disabled="aiSearching" class="mt-3 text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            Search Again
+                        </button>
+                    </div>
+
+                    <div x-show="aiSearchResults.length === 0 && !aiSearching && aiHasSearched && !aiSearchError" x-cloak class="text-sm text-gray-400">No articles found for this topic. Try a different query.</div>
+                </div>
+            </div>
+
             {{-- Source list --}}
             <div x-show="sources.length > 0" x-cloak class="mt-4 border-t border-gray-200 pt-4">
                 <h4 class="text-sm font-semibold text-gray-700 mb-2" x-text="'Selected Sources (' + sources.length + ')'"></h4>
@@ -578,6 +674,8 @@
                             <option value="readability">Readability</option>
                             <option value="css">CSS Selector</option>
                             <option value="regex">Regex</option>
+                            <option value="claude">Claude AI</option>
+                            <option value="gpt">GPT</option>
                         </select>
                     </div>
                     <div>
@@ -619,6 +717,55 @@
                         <svg x-show="checking" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         <span x-text="checking ? 'Extracting...' : 'Get Articles'"></span>
                     </button>
+                </div>
+            </div>
+
+            {{-- Fetch Configuration Summary --}}
+            <div class="bg-gray-900 rounded-lg border border-gray-700 p-4 mb-4">
+                <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Fetch Configuration</div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Method</span>
+                        <span class="text-white font-medium" x-text="extractMethod === 'auto' ? 'Auto (Readability + Regex)' : extractMethod === 'readability' ? 'Readability' : extractMethod === 'css' ? 'CSS Selector' : extractMethod === 'regex' ? 'Regex' : extractMethod === 'claude' ? 'Claude AI' : extractMethod === 'gpt' ? 'GPT' : extractMethod"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">User Agent</span>
+                        <span class="text-white font-medium" x-text="checkUserAgent === 'chrome' ? 'Chrome Desktop' : checkUserAgent === 'firefox' ? 'Firefox Desktop' : checkUserAgent === 'safari' ? 'Safari macOS' : checkUserAgent === 'googlebot' ? 'Googlebot' : 'HWS Bot'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Retries</span>
+                        <span class="text-white font-medium" x-text="extractRetries + (extractRetries == 1 ? ' attempt' : ' attempts')"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Timeout</span>
+                        <span class="text-white font-medium" x-text="extractTimeout + 's per request'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Min Words</span>
+                        <span class="text-white font-medium" x-text="extractMinWords + ' words'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Auto-fallback</span>
+                        <span class="font-medium" :class="extractAutoFallback ? 'text-green-400' : 'text-red-400'" x-text="extractAutoFallback ? 'On — Googlebot retry' : 'Off'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Redirects</span>
+                        <span class="text-green-400 font-medium">Follow</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Retry Delay</span>
+                        <span class="text-white font-medium">Escalating (1s, 2s, 3s)</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Max Wait</span>
+                        <span class="text-white font-medium" x-text="(() => { let t = parseInt(extractTimeout); let r = parseInt(extractRetries); let wait = t; for(let i=1;i<=r;i++) wait += t + i; return wait + 's worst case'; })()"></span>
+                    </div>
+                </div>
+                <div class="mt-3 pt-3 border-t border-gray-700">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-gray-500">UA String</span>
+                        <span class="text-gray-500 font-mono break-all text-right" x-text="checkUserAgent === 'chrome' ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0' : checkUserAgent === 'firefox' ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Firefox/134.0' : checkUserAgent === 'safari' ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_4) Safari/605.1.15' : checkUserAgent === 'googlebot' ? 'Mozilla/5.0 (compatible; Googlebot/2.1)' : 'Mozilla/5.0 (compatible; HWSPublishBot/1.0)'"></span>
+                    </div>
                 </div>
             </div>
 
@@ -1056,7 +1203,7 @@ function publishPipeline() {
 
         // Step 4 — Sources
         sources: [],
-        sourceTab: 'paste',
+        sourceTab: 'ai',
         pasteText: '',
         newsSearch: '',
         newsSearching: false,
@@ -1068,6 +1215,14 @@ function publishPipeline() {
         newsCountry: 'us',
         bookmarks: [],
         bookmarksLoading: false,
+        aiSearchTopic: '',
+        aiSearchCount: 4,
+        aiSearching: false,
+        aiSearchResults: [],
+        aiSearchError: '',
+        aiHasSearched: false,
+        aiLog: [],
+        aiSearchCost: null,
 
         // Step 5 — Get Articles
         checking: false,
@@ -1497,6 +1652,7 @@ function publishPipeline() {
                 // Step 3 — Sources
                 'sources', 'sourceTab', 'pasteText', 'newsMode', 'newsCategory', 'newsTrendingSelected',
                 'newsSearch', 'newsResults', 'newsHasSearched',
+                'aiSearchTopic', 'aiSearchResults', 'aiHasSearched',
                 // Step 4 — Fetch
                 'checkResults', 'approvedSources', 'discardedSources', 'expandedSources',
                 // Step 5 — AI Spin
@@ -1824,6 +1980,65 @@ function publishPipeline() {
             } finally {
                 if (!signal.aborted) this.newsSearching = false;
             }
+        },
+
+        _logAi(type, message) {
+            const now = new Date();
+            const time = now.toLocaleTimeString('en-US', { hour12: false });
+            this.aiLog.push({ type, message, time });
+        },
+
+        async aiSearchArticles() {
+            if (!this.aiSearchTopic.trim()) return;
+            this.aiSearching = true;
+            this.aiSearchResults = [];
+            this.aiSearchError = '';
+            this.aiSearchCost = null;
+            this.aiHasSearched = false;
+            this.aiLog = [];
+
+            this._logAi('info', 'Starting AI article search for: ' + this.aiSearchTopic);
+            this._logAi('info', 'Requesting top 10 articles via Claude Haiku with web search...');
+
+            try {
+                const resp = await fetch('{{ route("publish.pipeline.ai-search") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({
+                        topic: this.aiSearchTopic,
+                        count: 10,
+                    }),
+                });
+                const data = await resp.json();
+                if (data.success && data.data && data.data.articles) {
+                    this._logAi('success', 'Found ' + data.data.articles.length + ' article(s)');
+                    this.aiSearchResults = data.data.articles;
+
+                    // Log each article
+                    data.data.articles.forEach((article, i) => {
+                        this._logAi('step', (i + 1) + '. ' + article.title + ' — ' + article.url.substring(0, 80));
+                    });
+
+                    this._logAi('info', data.data.articles.length + ' articles ready — select the ones you want as sources');
+
+                    // Cost info
+                    if (data.data.usage) {
+                        this.aiSearchCost = { model: data.data.model || 'claude-haiku-4-5', cost: data.data.cost || 0, usage: data.data.usage };
+                        this._logAi('info', 'Cost: $' + (data.data.cost || 0).toFixed(4) + ' | Tokens: ' + (data.data.usage.input_tokens || 0) + '+' + (data.data.usage.output_tokens || 0) + ' | Model: ' + (data.data.model || 'claude-haiku-4-5'));
+                    }
+
+                    this.showNotification('success', data.data.articles.length + ' article(s) found — select sources below.');
+                } else {
+                    this._logAi('error', data.message || 'No articles found.');
+                    this.aiSearchError = data.message || 'No articles found.';
+                }
+                this.aiHasSearched = true;
+            } catch (e) {
+                this._logAi('error', 'Search failed: ' + e.message);
+                this.aiSearchError = 'Search failed: ' + e.message;
+                this.aiHasSearched = true;
+            }
+            this.aiSearching = false;
         },
 
         async searchPrProfiles() {
