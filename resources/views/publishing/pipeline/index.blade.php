@@ -357,26 +357,91 @@
                             </div>
                         </div>
 
-                        {{-- Selected profiles --}}
-                        <div x-show="selectedPrProfiles.length > 0" x-cloak class="space-y-2">
+                        {{-- Selected profiles — full person cards --}}
+                        <div x-show="selectedPrProfiles.length > 0" x-cloak class="space-y-4">
                             <p class="text-xs text-gray-500 font-medium" x-text="selectedPrProfiles.length + ' subject(s) selected'"></p>
                             <template x-for="(profile, pidx) in selectedPrProfiles" :key="profile.id">
-                                <div class="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-                                    <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                        <img x-show="profile.photo_url" x-cloak :src="profile.photo_url" class="w-full h-full object-cover">
-                                        <svg x-show="!profile.photo_url" class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                                    {{-- Card header --}}
+                                    <div class="flex items-center gap-3 px-5 py-4 bg-gradient-to-r from-blue-50 to-white border-b border-gray-100">
+                                        <div class="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden ring-2 ring-blue-200">
+                                            <img x-show="profile.photo_url" x-cloak :src="profile.photo_url" class="w-full h-full object-cover">
+                                            <svg x-show="!profile.photo_url" class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-base font-bold text-gray-900" x-text="profile.name"></p>
+                                            <p class="text-xs text-gray-500" x-text="profile.type + (profile.description ? ' — ' + profile.description.substring(0, 80) : '')"></p>
+                                        </div>
+                                        <div class="flex items-center gap-2 flex-shrink-0">
+                                            <button @click="loadProfileData(profile)" :disabled="prSubjectData[profile.id]?.loading" class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50">
+                                                <svg x-show="prSubjectData[profile.id]?.loading" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                                <span x-text="prSubjectData[profile.id]?.loaded ? 'Refresh' : (prSubjectData[profile.id]?.loading ? 'Loading...' : 'Load Details')"></span>
+                                            </button>
+                                            <a x-show="prSubjectData[profile.id]?.notionUrl || (profile.external_source === 'notion' && profile.external_id)" x-cloak
+                                                :href="prSubjectData[profile.id]?.notionUrl || ('https://notion.so/' + (profile.external_id || '').replace(/-/g, ''))"
+                                                target="_blank" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700" title="Open in Notion">
+                                                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L18.39 2.33c-.42-.326-.98-.7-2.055-.607L3.01 2.87c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.84-.046.933-.56.933-1.167V6.354c0-.606-.233-.933-.746-.886l-15.177.887c-.56.046-.747.326-.747.933zm14.337.745c.093.42 0 .84-.42.886l-.7.14v10.264c-.607.327-1.167.514-1.634.514-.746 0-.933-.234-1.493-.933l-4.572-7.186v6.952l1.446.327s0 .84-1.167.84l-3.22.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.326 9.76c-.094-.42.14-1.026.793-1.073l3.453-.233 4.759 7.278v-6.44l-1.213-.14c-.094-.513.28-.886.746-.933zM2.778 1.474l13.728-1.027c1.68-.14 2.1.094 2.8.607l3.874 2.753c.467.374.607.7.607 1.167v16.843c0 1.027-.374 1.634-1.68 1.727L6.937 24.22c-.98.047-1.447-.093-1.96-.747l-3.08-4.012c-.56-.747-.793-1.307-.793-1.96V3.107c0-.84.373-1.54 1.68-1.633z"/></svg>
+                                                Notion
+                                            </a>
+                                            <a :href="'/profiles/' + profile.id" target="_blank" class="text-blue-500 hover:text-blue-700" title="View profile">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                            </a>
+                                            <button @click="selectedPrProfiles.splice(pidx, 1); delete prSubjectData[profile.id]; savePipelineState();" class="text-red-400 hover:text-red-600" title="Remove">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div class="flex-1 min-w-0">
-                                        <p class="text-sm font-semibold text-gray-900" x-text="profile.name"></p>
-                                        <p class="text-xs text-gray-500" x-text="profile.type"></p>
-                                        <p x-show="profile.description" x-cloak class="text-xs text-gray-400 mt-0.5 break-words" x-text="profile.description"></p>
+
+                                    {{-- Fields section --}}
+                                    <div x-show="prSubjectData[profile.id]?.fields?.length > 0" x-cloak class="px-5 py-3 border-b border-gray-100">
+                                        <h5 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Profile Fields</h5>
+                                        <div class="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                                            <template x-for="field in (prSubjectData[profile.id]?.fields || [])" :key="field.key">
+                                                <div class="flex items-start gap-2 text-sm">
+                                                    <span class="text-gray-400 flex-shrink-0 text-xs pt-0.5" x-text="field.notion_field"></span>
+                                                    <span class="text-gray-800 break-words text-xs" x-text="field.value || '—'"></span>
+                                                </div>
+                                            </template>
+                                        </div>
                                     </div>
-                                    <a :href="'/profiles/' + profile.id" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 flex-shrink-0" title="View profile">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                                    </a>
-                                    <button @click="selectedPrProfiles.splice(pidx, 1); savePipelineState();" class="text-red-400 hover:text-red-600 flex-shrink-0" title="Remove">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                    </button>
+
+                                    {{-- Photos section --}}
+                                    <div x-show="prSubjectData[profile.id]?.driveUrl" x-cloak class="px-5 py-3 border-b border-gray-100">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <h5 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Photos</h5>
+                                            <button @click="loadProfilePhotos(profile)" :disabled="prSubjectData[profile.id]?.loadingPhotos" class="text-xs text-purple-600 hover:text-purple-800 font-medium disabled:opacity-50">
+                                                <span x-text="prSubjectData[profile.id]?.loadingPhotos ? 'Fetching...' : (prSubjectData[profile.id]?.photos?.length > 0 ? 'Refresh' : 'Fetch Photos')"></span>
+                                            </button>
+                                        </div>
+                                        <div x-show="prSubjectData[profile.id]?.loadingPhotos" class="flex items-center gap-2 text-xs text-gray-500 py-2">
+                                            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                            Loading photos from Google Drive...
+                                        </div>
+                                        <div x-show="prSubjectData[profile.id]?.photos?.length > 0" x-cloak class="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+                                            <template x-for="photo in (prSubjectData[profile.id]?.photos || [])" :key="photo.id">
+                                                <a :href="photo.webViewLink || '#'" target="_blank" class="rounded-lg overflow-hidden border border-gray-200 hover:border-blue-400 aspect-square bg-gray-100">
+                                                    <img :src="photo.thumbnailLink || photo.webContentLink" :alt="photo.name" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display='none'">
+                                                </a>
+                                            </template>
+                                        </div>
+                                    </div>
+
+                                    {{-- Context textarea --}}
+                                    <div class="px-5 py-4">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Context within article</label>
+                                            <div class="relative group">
+                                                <span class="w-4 h-4 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px] font-bold cursor-help">?</span>
+                                                <div class="absolute left-6 top-1/2 -translate-y-1/2 w-72 bg-gray-900 text-gray-200 text-xs rounded-lg p-3 shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                                                    <p class="font-semibold text-white mb-1">How to use this</p>
+                                                    <p>Describe how this person should appear in the article. You can mention: what aspects of their work to highlight, their role in the story, quotes or talking points to include, and the tone to use when writing about them. This is optional — you can also specify context in the general prompt when drafting.</p>
+                                                    <div class="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <textarea x-model="profile.context" @change="savePipelineState()" rows="3" placeholder="e.g. Focus on their recent achievements in AI research. Mention their role as CTO. Use a professional tone..."
+                                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 resize-y"></textarea>
+                                    </div>
                                 </div>
                             </template>
                         </div>
@@ -1194,6 +1259,7 @@ function publishPipeline() {
         prProfileSearching: false,
         prProfileDropdownOpen: false,
         selectedPrProfiles: [],
+        prSubjectData: {},
 
         // Step 3 — Website
         sites: @json($sites ?? []),
@@ -2058,10 +2124,87 @@ function publishPipeline() {
 
         addPrProfile(profile) {
             if (this.selectedPrProfiles.some(p => p.id === profile.id)) return;
+            profile.context = '';
             this.selectedPrProfiles.push(profile);
             this.prProfileSearch = '';
             this.prProfileResults = [];
             this.savePipelineState();
+        },
+
+        async loadProfileData(profile) {
+            if (!this.prSubjectData[profile.id]) {
+                this.prSubjectData[profile.id] = { loading: false, loaded: false, fields: [], driveUrl: '', photos: [], loadingPhotos: false, notionUrl: '' };
+            }
+            this.prSubjectData[profile.id].loading = true;
+            this.prSubjectData[profile.id].fields = [];
+
+            // If profile has local fields from search, use those first
+            if (profile.fields && Object.keys(profile.fields).length > 0) {
+                for (const [key, val] of Object.entries(profile.fields)) {
+                    if (val) this.prSubjectData[profile.id].fields.push({ key, notion_field: key, value: val });
+                }
+            }
+
+            // If Notion-linked, fetch live data for richer fields + photos
+            if (profile.external_source === 'notion' && profile.external_id) {
+                this.prSubjectData[profile.id].notionUrl = 'https://notion.so/' + profile.external_id.replace(/-/g, '');
+                try {
+                    const resp = await fetch('/notion/profile/' + profile.id + '/live-data', {
+                        method: 'POST',
+                        headers: { 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/x-ndjson' },
+                    });
+                    const reader = resp.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    // Replace local fields with richer Notion data
+                    let notionFields = [];
+                    while (true) {
+                        const result = await reader.read();
+                        if (result.done) break;
+                        buffer += decoder.decode(result.value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop();
+                        for (const line of lines) {
+                            if (!line.trim()) continue;
+                            try {
+                                const data = JSON.parse(line);
+                                if (data.type === 'field') {
+                                    notionFields.push(data);
+                                } else if (data.type === 'raw_properties') {
+                                    const photos = data.data?.['Personal Photos'] || '';
+                                    if (photos && photos.includes('drive.google.com')) {
+                                        this.prSubjectData[profile.id].driveUrl = photos;
+                                    }
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                    if (notionFields.length > 0) {
+                        this.prSubjectData[profile.id].fields = notionFields;
+                    }
+                } catch (e) {}
+            }
+
+            this.prSubjectData[profile.id].loaded = true;
+            this.prSubjectData[profile.id].loading = false;
+        },
+
+        async loadProfilePhotos(profile) {
+            const data = this.prSubjectData[profile.id];
+            if (!data || !data.driveUrl) return;
+            data.loadingPhotos = true;
+            try {
+                const resp = await fetch('{{ route("notion.profile.fetch-photos") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                    body: JSON.stringify({ drive_url: data.driveUrl }),
+                });
+                const result = await resp.json();
+                if (result.success) {
+                    data.photos = result.photos || [];
+                }
+            } catch (e) {}
+            data.loadingPhotos = false;
         },
 
         async loadBookmarks() {

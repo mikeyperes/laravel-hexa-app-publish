@@ -279,14 +279,16 @@ class PipelineController extends Controller
         }
 
         return response()->json($profiles->map(fn($p) => [
-            'id'          => $p->id,
-            'name'        => $p->name,
-            'slug'        => $p->slug,
-            'description' => $p->description,
-            'photo_url'   => $p->photo_url,
-            'type'        => $p->type?->name ?? '—',
-            'type_slug'   => $p->type?->slug ?? '',
-            'fields'      => $p->customFields->pluck('field_value', 'field_key')->toArray(),
+            'id'              => $p->id,
+            'name'            => $p->name,
+            'slug'            => $p->slug,
+            'description'     => $p->description,
+            'photo_url'       => $p->photo_url,
+            'type'            => $p->type?->name ?? '—',
+            'type_slug'       => $p->type?->slug ?? '',
+            'external_source' => $p->external_source ?? null,
+            'external_id'     => $p->external_id ?? null,
+            'fields'          => $p->customFields->pluck('field_value', 'field_key')->toArray(),
         ])->values());
     }
 
