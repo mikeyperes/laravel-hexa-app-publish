@@ -68,7 +68,7 @@
     },
 
     pickPhoto(photo) {
-        {{ $onSelect }}(photo);
+        ({{ $onSelect }})(photo);
     }
 }" class="space-y-4">
 
