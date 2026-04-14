@@ -37,7 +37,7 @@
             const resp = await fetch('{{ route('publish.search.images.post') }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
-                body: JSON.stringify({ query: this.stockQuery, per_page: 6, sources: ['pexels', 'unsplash', 'pixabay'] })
+                body: JSON.stringify({ query: this.stockQuery, per_page: 5, sources: ['pexels', 'unsplash', 'pixabay'] })
             });
             const data = await resp.json();
             this.stockResults = data.data?.photos || [];
@@ -57,7 +57,7 @@
             const resp = await fetch('{{ route('publish.search.google-images') }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
-                body: JSON.stringify({ query: this.googleQuery, per_page: 8 })
+                body: JSON.stringify({ query: this.googleQuery, per_page: 6 })
             });
             const data = await resp.json();
             this.googleTiming = Date.now() - start;
@@ -87,7 +87,7 @@
         <div x-show="googleResults.length > 0" x-cloak class="grid grid-cols-3 gap-2">
             <template x-for="(photo, idx) in googleResults" :key="'g'+idx">
                 <div @click="pickPhoto(photo)" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-colors" :class="photo.copyright_flag ? 'border-red-300 hover:border-red-500' : 'border-gray-200 hover:border-blue-400'">
-                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-52 object-cover" loading="lazy">
+                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-64 object-cover" loading="lazy">
                     <div class="px-1.5 py-1 bg-white">
                         <p class="text-[9px] font-medium text-gray-700 break-words" x-text="(photo.alt || '').substring(0, 40)"></p>
                         <p class="text-[9px] text-gray-400" x-text="photo.domain + ' — ' + (photo.width || '?') + 'x' + (photo.height || '?')"></p>
@@ -113,7 +113,7 @@
         <div x-show="stockResults.length > 0" x-cloak class="grid grid-cols-3 gap-2">
             <template x-for="(photo, idx) in stockResults" :key="'s'+idx">
                 <div @click="pickPhoto(photo)" class="cursor-pointer rounded-lg overflow-hidden border-2 border-gray-200 hover:border-purple-400 transition-colors">
-                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-52 object-cover" loading="lazy">
+                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-64 object-cover" loading="lazy">
                     <div class="px-1.5 py-1 bg-white">
                         <p class="text-[9px] text-gray-500" x-text="photo.source + ' — ' + (photo.width || '?') + 'x' + (photo.height || '?')"></p>
                     </div>

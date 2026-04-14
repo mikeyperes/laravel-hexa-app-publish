@@ -204,7 +204,16 @@
                                 {{-- Change Photo / Import URL / Upload --}}
                                 <div class="mt-2" x-data="{ showFeaturedUrl: false, featuredUrlVal: '' }">
                                     <div class="flex items-center gap-1.5">
-                                        <button @click.stop="featuredExpanded = !featuredExpanded" class="text-[11px] text-blue-500 hover:text-blue-700 inline-flex items-center gap-1">
+                                        <button @click.stop="
+                                            if (!featuredExpanded) {
+                                                featuredExpanded = true;
+                                                setTimeout(() => {
+                                                    const card = $el.closest('.rounded-lg');
+                                                    const picker = card?.querySelector('[data-photo-picker]');
+                                                    if (picker) Alpine.$data(picker).loadTerm(featuredImageSearch);
+                                                }, 300);
+                                            } else { featuredExpanded = false; }
+                                        " class="text-[11px] text-blue-500 hover:text-blue-700 inline-flex items-center gap-1">
                                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
                                             Change Photo
                                         </button>
