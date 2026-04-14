@@ -75,9 +75,9 @@
     {{-- Google Images Section (TOP — primary) --}}
     <div>
         <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Google Images <span class="font-normal text-gray-400">(SerpAPI / Google CSE)</span></p>
-        <div class="flex gap-2 mb-2">
-            <input type="text" x-model="googleQuery" @keydown.enter="searchGoogle()" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search Google Images...">
-            <button type="button" @click.stop="searchGoogle()" :disabled="googleSearching || !googleQuery.trim()" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1">
+        <div class="flex items-center gap-2 mb-2">
+            <input type="text" x-model="googleQuery" @keydown.enter.prevent="searchGoogle()" class="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search Google Images...">
+            <button type="button" @click.stop="searchGoogle()" :disabled="googleSearching || !googleQuery.trim()" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1 flex-shrink-0">
                 <svg x-show="googleSearching" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 <span x-text="googleSearching ? 'Searching...' : 'Search'"></span>
             </button>
@@ -101,9 +101,9 @@
     {{-- Stock Photos Section (BOTTOM — secondary) --}}
     <div>
         <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Stock Photos <span class="font-normal text-gray-400">(Pexels, Unsplash, Pixabay)</span></p>
-        <div class="flex gap-2 mb-2">
-            <input type="text" x-model="stockQuery" @keydown.enter="searchStock()" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search stock photos...">
-            <button type="button" @click.stop="searchStock()" :disabled="stockSearching || !stockQuery.trim()" class="bg-purple-600 text-white px-4 py-1.5 rounded-lg text-xs hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1">
+        <div class="flex items-center gap-2 mb-2">
+            <input type="text" x-model="stockQuery" @keydown.enter.prevent="searchStock()" class="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search stock photos...">
+            <button type="button" @click.stop="searchStock()" :disabled="stockSearching || !stockQuery.trim()" class="bg-purple-600 text-white px-4 py-1.5 rounded-lg text-xs hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1 flex-shrink-0">
                 <svg x-show="stockSearching" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 <span x-text="stockSearching ? 'Searching...' : 'Search'"></span>
             </button>
