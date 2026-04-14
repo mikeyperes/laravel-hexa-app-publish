@@ -23,8 +23,25 @@
     googleError: '',
 
     init() {
+        // Try to inherit search term from parent scope (inline photos)
+        try {
+            const parent = this.$el.closest('[x-show*="expandedSuggestions"]');
+            if (parent) {
+                const parentData = Alpine.$data(parent.closest('[x-data]'));
+                const match = parent.getAttribute('x-show')?.match(/expandedSuggestions\.includes\((\w+)\)/);
+                if (match && parentData?.photoSuggestions) {
+                    // Can't reliably get idx from template, use the search_term from the visible photo
+                    const searchEl = parent.previousElementSibling?.querySelector('[x-text*="search_term"]');
+                    if (searchEl && searchEl.textContent) {
+                        this.stockQuery = searchEl.textContent;
+                        this.googleQuery = searchEl.textContent;
+                    }
+                }
+            }
+        } catch(e) {}
+
         @if($autoLoadStock)
-        if (this.stockQuery.trim()) this.searchStock();
+        if (this.stockQuery.trim()) this.$nextTick(() => this.searchStock());
         @endif
     },
 
