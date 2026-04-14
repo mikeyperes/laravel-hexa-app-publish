@@ -284,6 +284,11 @@
                                                 <button @click.stop="
                                                     if (!expandedSuggestions.includes(idx)) {
                                                         expandedSuggestions.push(idx);
+                                                        setTimeout(() => {
+                                                            const card = $el.closest('.rounded-lg');
+                                                            const picker = card?.querySelector('[data-photo-picker]');
+                                                            if (picker) Alpine.$data(picker).loadTerm(ps.search_term);
+                                                        }, 100);
                                                     } else {
                                                         expandedSuggestions = expandedSuggestions.filter(i => i !== idx);
                                                     }
