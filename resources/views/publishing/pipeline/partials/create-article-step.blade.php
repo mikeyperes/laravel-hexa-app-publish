@@ -285,8 +285,8 @@
                                                     if (!expandedSuggestions.includes(idx)) {
                                                         expandedSuggestions.push(idx);
                                                         $nextTick(() => {
-                                                            const pickerEl = $el.closest('.border-purple-200, .border-green-300, [class*=border]')?.querySelector('[x-data*=pickerId]');
-                                                            if (pickerEl) { Alpine.$data(pickerEl).setSearchTerm(ps.search_term); }
+                                                            const picker = $el.closest('[x-show]')?.parentElement?.querySelector('.p-3.pt-2 > div');
+                                                            if (picker) picker.dispatchEvent(new CustomEvent('photo-picker-search', { detail: { term: ps.search_term } }));
                                                         });
                                                     } else {
                                                         expandedSuggestions = expandedSuggestions.filter(i => i !== idx);

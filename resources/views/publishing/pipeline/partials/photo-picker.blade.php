@@ -22,20 +22,14 @@
     stockError: '',
     googleError: '',
 
-    setSearchTerm(term) {
-        if (term) {
-            this.stockQuery = term;
-            this.googleQuery = term;
-            this.searchStock();
-        }
-    },
-
     init() {
-        @if($autoLoadStock)
-        this.$nextTick(() => {
-            if (this.stockQuery.trim()) this.searchStock();
+        this.$el.addEventListener('photo-picker-search', (e) => {
+            if (e.detail?.term) {
+                this.stockQuery = e.detail.term;
+                this.googleQuery = e.detail.term;
+                this.searchStock();
+            }
         });
-        @endif
     },
 
     async searchStock() {
