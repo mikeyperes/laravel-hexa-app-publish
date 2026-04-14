@@ -169,6 +169,25 @@
                 </div>
             </div>
 
+            {{-- Main Search Terms — key people, places, things from the article --}}
+            <div class="mt-4 bg-white border border-gray-200 rounded-lg p-4" x-show="suggestedTags.length > 0 || photoSuggestions.length > 0" x-cloak>
+                <h5 class="text-sm font-semibold text-gray-700 mb-2">Main Search Terms</h5>
+                <p class="text-xs text-gray-400 mb-3">Click to copy — use these to search for photos</p>
+                <div class="flex flex-wrap gap-2">
+                    <template x-for="term in [...new Set([...suggestedTags, ...photoSuggestions.map(p => p.search_term)].filter(Boolean))]" :key="term">
+                        <button type="button" @click.stop="
+                            navigator.clipboard.writeText(term);
+                            $el.classList.add('bg-green-100', 'text-green-700', 'border-green-300');
+                            $el.querySelector('span').textContent = 'Copied!';
+                            setTimeout(() => { $el.classList.remove('bg-green-100', 'text-green-700', 'border-green-300'); $el.querySelector('span').textContent = term; }, 1500);
+                        " class="px-3 py-1 border border-gray-200 rounded-full text-xs text-gray-700 hover:bg-gray-100 hover:border-gray-300 transition-colors inline-flex items-center gap-1">
+                            <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10"/></svg>
+                            <span x-text="term"></span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+
             {{-- Featured Image — same card layout as inline photos --}}
             <div x-show="featuredImageSearch" x-cloak class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4" x-data="{ featuredExpanded: false }">
                 <h5 class="text-sm font-semibold text-gray-700 mb-3">Featured Image</h5>
@@ -204,16 +223,7 @@
                                 {{-- Change Photo / Import URL / Upload --}}
                                 <div class="mt-2" x-data="{ showFeaturedUrl: false, featuredUrlVal: '' }">
                                     <div class="flex items-center gap-1.5">
-                                        <button @click.stop="
-                                            if (!featuredExpanded) {
-                                                featuredExpanded = true;
-                                                setTimeout(() => {
-                                                    const card = $el.closest('.rounded-lg');
-                                                    const picker = card?.querySelector('[data-photo-picker]');
-                                                    if (picker) Alpine.$data(picker).loadTerm(featuredImageSearch);
-                                                }, 300);
-                                            } else { featuredExpanded = false; }
-                                        " class="text-[11px] text-blue-500 hover:text-blue-700 inline-flex items-center gap-1">
+                                        <button @click.stop="featuredExpanded = !featuredExpanded" class="text-[11px] text-blue-500 hover:text-blue-700 inline-flex items-center gap-1">
                                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
                                             Change Photo
                                         </button>
@@ -240,7 +250,8 @@
                         </div>
                     </div>
                     {{-- Expanded: photo picker --}}
-                    <div x-show="featuredExpanded" x-cloak class="p-3 pt-2 border-t border-gray-100">
+                    <div x-show="featuredExpanded" x-cloak class="p-3 pt-2 border-t border-gray-100"
+                         x-effect="if (featuredExpanded) { $nextTick(() => { const p = $el.querySelector('[data-photo-picker]'); if (p) Alpine.$data(p).loadTerm(featuredImageSearch); }); }">
                         @include('app-publish::publishing.pipeline.partials.photo-picker', [
                             'pickerId' => 'featured-picker',
                             'searchQuery' => '',
