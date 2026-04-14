@@ -169,6 +169,40 @@
         </div>
     </div>
 
+    {{-- ═══ Image Search Providers ═══ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" x-data="{
+        useGoogleSearch: '{{ \hexa_core\Models\Setting::getValue('use_google_image_search', '0') }}' === '1',
+        useSerpApi: '{{ \hexa_core\Models\Setting::getValue('use_serpapi_search', '0') }}' === '1',
+        googleFallbackSerp: '{{ \hexa_core\Models\Setting::getValue('google_fallback_serpapi', '1') }}' === '1',
+        saving: false
+    }">
+        <h3 class="font-semibold text-gray-800 mb-1">Image Search Providers</h3>
+        <p class="text-xs text-gray-400 mb-4">Enable Google Image Search alongside stock photo APIs. Google CSE is used first; when daily quota runs out, SerpAPI takes over.</p>
+        <div class="space-y-3">
+            <label class="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" x-model="useGoogleSearch" @change="saving=true; fetch('{{ route('publish.settings.save-setting') }}', {method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':document.querySelector('meta[name=csrf-token]')?.content},body:JSON.stringify({key:'use_google_image_search',value:useGoogleSearch?'1':'0'})}).then(()=>saving=false)" class="rounded border-gray-300 text-blue-600">
+                <div>
+                    <span class="text-sm font-medium text-gray-800">Use Google Image Search (CSE)</span>
+                    <p class="text-xs text-gray-400">100 free queries/day, then $5/1000. <a href="/google-cse/settings" class="text-blue-500 hover:underline">Configure API key</a></p>
+                </div>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" x-model="useSerpApi" @change="saving=true; fetch('{{ route('publish.settings.save-setting') }}', {method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':document.querySelector('meta[name=csrf-token]')?.content},body:JSON.stringify({key:'use_serpapi_search',value:useSerpApi?'1':'0'})}).then(()=>saving=false)" class="rounded border-gray-300 text-blue-600">
+                <div>
+                    <span class="text-sm font-medium text-gray-800">Use SerpAPI</span>
+                    <p class="text-xs text-gray-400">Google Images via SerpAPI. 100 free/month, paid plans from $50/mo. <a href="/serpapi/settings" class="text-blue-500 hover:underline">Configure API key</a></p>
+                </div>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer ml-6" x-show="useGoogleSearch && useSerpApi" x-cloak>
+                <input type="checkbox" x-model="googleFallbackSerp" @change="fetch('{{ route('publish.settings.save-setting') }}', {method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':document.querySelector('meta[name=csrf-token]')?.content},body:JSON.stringify({key:'google_fallback_serpapi',value:googleFallbackSerp?'1':'0'})})" class="rounded border-gray-300 text-green-600">
+                <div>
+                    <span class="text-sm font-medium text-gray-700">Auto-fallback to SerpAPI when Google CSE daily quota runs out</span>
+                </div>
+            </label>
+        </div>
+        <span x-show="saving" x-cloak class="text-xs text-blue-500 mt-2 inline-block">Saving...</span>
+    </div>
+
     {{-- ═══ WordPress Photo Filename Pattern ═══ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" x-data="{ pattern: '{{ \hexa_core\Models\Setting::getValue('wp_photo_filename_pattern', 'hexa_{draft_id}_{seo_name}') }}', saving: false, saved: false }">
         <h3 class="font-semibold text-gray-800 mb-1">WordPress Photo Filename Pattern</h3>
