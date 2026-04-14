@@ -11,15 +11,13 @@
                 <button @click="showPhotoOverlay = false" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </div>
             <div class="p-6">
-                <div class="flex gap-2 mb-4">
-                    <input type="text" x-model="photoSearch" @keydown.enter="searchPhotos()" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Search for photos...">
-                    <button @click="searchPhotos()" :disabled="photoSearching" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1">
-                        <svg x-show="photoSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        Search
-                    </button>
-                </div>
-                {{-- URL import + file upload for inner photos --}}
-                <div class="flex gap-2 mb-4">
+                @include('app-publish::publishing.pipeline.partials.photo-picker', [
+                    'pickerId' => 'overlay-picker',
+                    'searchQuery' => '',
+                    'onSelect' => 'function(photo) { insertingPhoto = photo; photoCaption = photo.alt || articleTitle; overlayPhotoAlt = \'Click Get Metadata to generate\'; overlayPhotoCaption = \'Click Get Metadata to generate\'; overlayPhotoFilename = \'auto\'; overlayMetaGenerated = false; }',
+                ])
+                {{-- URL import + file upload --}}
+                <div class="flex gap-2 mt-4 mb-4">
                     <input type="text" x-model="innerPhotoUrlImport" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Paste image URL...">
                     <button @click="importInnerPhotoFromUrl()" :disabled="!innerPhotoUrlImport" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">Import URL</button>
                     <label class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-700 cursor-pointer inline-flex items-center gap-1">

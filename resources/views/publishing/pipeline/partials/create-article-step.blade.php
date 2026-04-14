@@ -208,31 +208,21 @@
                         </div>
                     </div>
                 </div>
-                {{-- Search + results below --}}
+                {{-- Photo Picker (stock + Google) --}}
                 <div class="mt-3">
-                    <div class="flex gap-2 mb-2">
-                        <input type="text" x-model="featuredImageSearch" class="flex-1 border border-purple-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search for featured image...">
-                        <button @click="searchFeaturedImage()" :disabled="featuredSearching" class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1">
-                            <svg x-show="featuredSearching" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                            Search
-                        </button>
-                    </div>
+                    @include('app-publish::publishing.pipeline.partials.photo-picker', [
+                        'pickerId' => 'featured-picker',
+                        'searchQuery' => '',
+                        'onSelect' => 'function(photo) { featuredPhoto = photo; featuredAlt = photo.alt || \'\'; featuredCaption = \'\'; featuredFilename = \'auto\'; }',
+                    ])
                     {{-- URL import + file upload --}}
-                    <div class="flex gap-2 mb-2">
+                    <div class="flex gap-2 mt-3">
                         <input type="text" x-model="featuredUrlImport" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Paste image URL...">
                         <button @click="importFeaturedFromUrl()" :disabled="!featuredUrlImport" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-blue-700 disabled:opacity-50">Import URL</button>
                         <label class="bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-gray-700 cursor-pointer inline-flex items-center gap-1">
                             Upload
                             <input type="file" class="hidden" accept="image/*" @change="uploadFeaturedPhoto($event.target.files); $event.target.value = null">
                         </label>
-                    </div>
-                    <div x-show="featuredResults.length > 1" x-cloak class="grid grid-cols-4 gap-2">
-                        <template x-for="(photo, fidx) in featuredResults" :key="fidx">
-                            <div @click="featuredPhoto = photo" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-colors"
-                                 :class="featuredPhoto && featuredPhoto.url_thumb === photo.url_thumb ? 'border-purple-500' : 'border-gray-200 hover:border-purple-300'">
-                                <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-60 object-cover" loading="lazy">
-                            </div>
-                        </template>
                     </div>
                 </div>
             </div>
@@ -332,24 +322,13 @@
                                     </div>
                                 </div>
                             </div>
-                            {{-- Expanded: search + results (only for changing photo) --}}
-                            <div x-show="expandedSuggestions.includes(idx)" x-cloak class="p-3 pt-0 border-t border-gray-100">
-                                <div class="flex gap-2 mb-2">
-                                    <input type="text" :value="ps.search_term" @input="photoSuggestions[idx].search_term = $event.target.value" @keydown.enter="searchPhotosForSuggestion(idx)" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search...">
-                                    <button @click="searchPhotosForSuggestion(idx)" :disabled="ps.searching" class="bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-gray-700 disabled:opacity-50 inline-flex items-center gap-1">
-                                        <svg x-show="ps.searching" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                        <span x-text="ps.searching ? 'Searching...' : 'Search'"></span>
-                                    </button>
-                                </div>
-                                <div x-show="ps.searchResults && ps.searchResults.length > 0" x-cloak class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                    <template x-for="(photo, pidx) in (ps.searchResults || [])" :key="pidx">
-                                        <div class="cursor-pointer rounded-lg overflow-hidden border-2 hover:border-blue-400 transition-colors"
-                                             :class="ps.autoPhoto && ps.autoPhoto.url_thumb === photo.url_thumb ? 'border-purple-400' : 'border-gray-200'"
-                                             @click="selectPhotoForSuggestion(idx, photo)">
-                                            <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-44 object-cover">
-                                        </div>
-                                    </template>
-                                </div>
+                            {{-- Expanded: photo picker (stock + Google) --}}
+                            <div x-show="expandedSuggestions.includes(idx)" x-cloak class="p-3 pt-2 border-t border-gray-100">
+                                @include('app-publish::publishing.pipeline.partials.photo-picker', [
+                                    'pickerId' => 'inline-picker',
+                                    'searchQuery' => '',
+                                    'onSelect' => 'function(photo) { selectPhotoForSuggestion(idx, photo); expandedSuggestions = expandedSuggestions.filter(i => i !== idx); }',
+                                ])
                             </div>
                         </div>
                     </template>
