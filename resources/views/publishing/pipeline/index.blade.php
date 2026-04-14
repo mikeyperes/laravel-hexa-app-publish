@@ -987,6 +987,10 @@
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                         <span x-text="discardedSources.includes(idx) ? 'Discarded' : 'Discard'"></span>
                                     </button>
+                                    <button @click.stop="flagAsBroken(idx)" class="text-sm font-medium px-4 py-2 rounded-lg inline-flex items-center gap-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                        Flag as Broken
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -2580,6 +2584,23 @@ function publishPipeline() {
         discardSource(idx) {
             if (!this.discardedSources.includes(idx)) this.discardedSources.push(idx);
             this.approvedSources = this.approvedSources.filter(i => i !== idx);
+        },
+        async flagAsBroken(idx) {
+            const result = this.checkResults[idx];
+            const source = this.sources[idx];
+            if (!source) return;
+            try {
+                await fetch('/publish/scrape-activity/ban', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({
+                        domain: new URL(source.url).hostname,
+                        reason: 'Flagged as broken from pipeline — ' + (result?.message || 'user flagged'),
+                    })
+                });
+            } catch(e) {}
+            this.discardSource(idx);
+            this.showNotification('warning', 'Source flagged as broken and domain banned');
         },
         removeSource(idx) {
             this.sources.splice(idx, 1);
