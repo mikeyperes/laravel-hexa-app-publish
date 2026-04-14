@@ -3589,17 +3589,14 @@ function publishPipeline() {
         async autoFetchPhotos() {
             if (this.photoSuggestions.length === 0) return;
             this.autoFetchingPhotos = true;
-            // Sequential (not parallel) to avoid blocking single-threaded server
-            for (let idx = 0; idx < this.photoSuggestions.length; idx++) {
-                const ps = this.photoSuggestions[idx];
-                if (ps.autoPhoto) continue; // Already loaded
-                try {
-                    const resp = await fetch('{{ route("publish.search.images.post") }}', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                        body: JSON.stringify({ query: ps.search_term, per_page: 12 })
-                    });
-                    const data = await resp.json();
+            // Parallel — all photo searches fire simultaneously
+            const promises = this.photoSuggestions.map((ps, idx) => {
+                if (ps.autoPhoto) return Promise.resolve();
+                return fetch('{{ route("publish.search.images.post") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({ query: ps.search_term, per_page: 12 })
+                }).then(r => r.json()).then(data => {
                     const photos = data.data?.photos || [];
                     if (photos.length > 0) {
                         this.photoSuggestions[idx].autoPhoto = photos[0];
@@ -3609,10 +3606,11 @@ function publishPipeline() {
                     } else {
                         this.updatePlaceholderError(idx, 'No photos found');
                     }
-                } catch (e) {
+                }).catch(e => {
                     this.updatePlaceholderError(idx, 'Search failed');
-                }
-            }
+                });
+            });
+            await Promise.all(promises);
             this.autoFetchingPhotos = false;
             this.syncEditorStateFromEditor();
             this.queueAutoSaveDraft(300);
