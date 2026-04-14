@@ -197,9 +197,9 @@
                                         <span x-text="featuredRefreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
                                     </button>
                                 </div>
-                                <div x-show="featuredPhoto" x-cloak class="mt-1">
-                                    <span class="text-[10px] text-gray-400" x-text="(featuredPhoto?.source || 'unknown')"></span>
-                                    <a x-show="featuredPhoto?.source_url || featuredPhoto?.url_large" :href="featuredPhoto?.source_url || featuredPhoto?.url_large" target="_blank" class="text-[10px] text-blue-500 hover:text-blue-700 break-all" x-text="(featuredPhoto?.source_url || featuredPhoto?.url_large || '').substring(0, 80)"></a>
+                                <div x-show="featuredPhoto?.source === 'url-import'" x-cloak class="mt-1">
+                                    <span class="text-[10px] text-gray-400">Source:</span>
+                                    <a :href="featuredPhoto?.url_large" target="_blank" class="text-[10px] text-blue-500 hover:text-blue-700 break-all" x-text="featuredPhoto?.url_large"></a>
                                 </div>
                                 {{-- Change Photo / Import URL / Upload --}}
                                 <div class="mt-2" x-data="{ showFeaturedUrl: false, featuredUrlVal: '' }">
