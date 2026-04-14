@@ -186,9 +186,9 @@
                     {{-- Info + metadata --}}
                     <div class="flex-1 space-y-1.5">
                         <p x-show="featuredPhoto" x-cloak class="text-[11px] text-gray-400" x-text="(featuredPhoto?.source || '') + ' — ' + (featuredPhoto?.width || '') + 'x' + (featuredPhoto?.height || '')"></p>
-                        <div x-show="featuredPhoto" x-cloak class="space-y-0.5">
-                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Alt</label><input type="text" x-model="featuredAlt" class="flex-1 border border-purple-200 rounded px-2 py-0.5 text-xs bg-white" placeholder="Alt text..."></div>
-                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Caption</label><input type="text" x-model="featuredCaption" class="flex-1 border border-purple-200 rounded px-2 py-0.5 text-xs bg-white" placeholder="Caption..."></div>
+                        <div x-show="featuredPhoto" x-cloak class="space-y-0.5 max-w-lg">
+                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Alt</label><input type="text" x-model="featuredAlt" class="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs" placeholder="Alt text..."></div>
+                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Caption</label><input type="text" x-model="featuredCaption" class="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs" placeholder="Caption..."></div>
                             <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Filename</label><p class="text-[11px] font-mono text-gray-500" x-text="featuredFilename || 'auto'"></p></div>
                         </div>
                         <div class="flex items-center gap-3 pt-1">
