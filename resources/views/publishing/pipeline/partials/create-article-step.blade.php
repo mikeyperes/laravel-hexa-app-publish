@@ -285,11 +285,10 @@
                                                     if (!expandedSuggestions.includes(idx)) {
                                                         expandedSuggestions.push(idx);
                                                         setTimeout(() => {
-                                                            const card = $el.closest('[x-show*=removed]') || $el.closest('.rounded-lg');
+                                                            const card = $el.closest('.rounded-lg');
                                                             const picker = card?.querySelector('[data-photo-picker]');
-                                                            console.log('Change Photo: card=', !!card, 'picker=', !!picker, 'term=', ps.search_term);
-                                                            if (picker) { Alpine.$data(picker).loadTerm(ps.search_term); }
-                                                        }, 500);
+                                                            if (picker) Alpine.$data(picker).loadTerm(ps.search_term);
+                                                        }, 300);
                                                     } else {
                                                         expandedSuggestions = expandedSuggestions.filter(i => i !== idx);
                                                     }
