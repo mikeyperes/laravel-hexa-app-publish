@@ -217,16 +217,36 @@
                 </div>
             </label>
         </div>
-        <div class="flex items-center gap-2 mt-3">
-            <span x-show="saving" x-cloak class="text-xs text-blue-500 inline-flex items-center gap-1">
-                <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                Saving...
-            </span>
-            <span x-show="saved" x-cloak x-transition class="text-xs text-green-600 inline-flex items-center gap-1">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        <div class="flex items-center gap-3 mt-4">
+            <button @click="
+                async function saveAll(self) {
+                    self.saving = true; self.saved = false; self.saveError = '';
+                    const settings = [
+                        ['use_google_image_search', self.useGoogleSearch ? '1' : '0'],
+                        ['use_serpapi_search', self.useSerpApi ? '1' : '0'],
+                        ['google_fallback_serpapi', self.googleFallbackSerp ? '1' : '0'],
+                    ];
+                    for (const [key, value] of settings) {
+                        await fetch('{{ route('publish.settings.master.save-setting') }}', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
+                            body: JSON.stringify({ key, value })
+                        });
+                    }
+                    self.saving = false;
+                    self.saved = true;
+                    setTimeout(() => self.saved = false, 3000);
+                }
+                saveAll($data);
+            " :disabled="saving" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+                <svg x-show="saving" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                <span x-text="saving ? 'Saving...' : 'Save'"></span>
+            </button>
+            <span x-show="saved" x-cloak x-transition class="text-sm text-green-600 inline-flex items-center gap-1 font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                 Saved
             </span>
-            <span x-show="saveError" x-cloak class="text-xs text-red-600" x-text="saveError"></span>
+            <span x-show="saveError" x-cloak class="text-sm text-red-600" x-text="saveError"></span>
         </div>
     </div>
 
