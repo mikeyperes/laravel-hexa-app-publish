@@ -197,21 +197,21 @@
         <p class="text-xs text-gray-400 mb-4">Enable Google Image Search alongside stock photo APIs. Google CSE is used first; when daily quota runs out, SerpAPI takes over.</p>
         <div class="space-y-3">
             <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" x-model="useGoogleSearch" @change="saveSetting('use_google_image_search', useGoogleSearch ? '1' : '0')" class="rounded border-gray-300 text-blue-600">
+                <input type="checkbox" x-model="useGoogleSearch" class="rounded border-gray-300 text-blue-600">
                 <div>
                     <span class="text-sm font-medium text-gray-800">Use Google Image Search (CSE)</span>
                     <p class="text-xs text-gray-400">100 free queries/day, then $5/1000. <a href="/google-cse/settings" class="text-blue-500 hover:underline">Configure API key</a></p>
                 </div>
             </label>
             <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" x-model="useSerpApi" @change="saveSetting('use_serpapi_search', useSerpApi ? '1' : '0')" class="rounded border-gray-300 text-blue-600">
+                <input type="checkbox" x-model="useSerpApi" class="rounded border-gray-300 text-blue-600">
                 <div>
                     <span class="text-sm font-medium text-gray-800">Use SerpAPI</span>
                     <p class="text-xs text-gray-400">Google Images via SerpAPI. 100 free/month, paid plans from $50/mo. <a href="/serpapi/settings" class="text-blue-500 hover:underline">Configure API key</a></p>
                 </div>
             </label>
             <label class="flex items-center gap-3 cursor-pointer ml-6" x-show="useGoogleSearch && useSerpApi" x-cloak>
-                <input type="checkbox" x-model="googleFallbackSerp" @change="saveSetting('google_fallback_serpapi', googleFallbackSerp ? '1' : '0')" class="rounded border-gray-300 text-green-600">
+                <input type="checkbox" x-model="googleFallbackSerp" class="rounded border-gray-300 text-green-600">
                 <div>
                     <span class="text-sm font-medium text-gray-700">Auto-fallback to SerpAPI when Google CSE daily quota runs out</span>
                 </div>
@@ -219,25 +219,25 @@
         </div>
         <div class="flex items-center gap-3 mt-4">
             <button @click="
-                async function saveAll(self) {
-                    self.saving = true; self.saved = false; self.saveError = '';
-                    const settings = [
-                        ['use_google_image_search', self.useGoogleSearch ? '1' : '0'],
-                        ['use_serpapi_search', self.useSerpApi ? '1' : '0'],
-                        ['google_fallback_serpapi', self.googleFallbackSerp ? '1' : '0'],
-                    ];
-                    for (const [key, value] of settings) {
-                        await fetch('{{ route('publish.settings.master.save-setting') }}', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
-                            body: JSON.stringify({ key, value })
-                        });
-                    }
-                    self.saving = false;
-                    self.saved = true;
-                    setTimeout(() => self.saved = false, 3000);
-                }
-                saveAll($data);
+                saving = true; saved = false; saveError = '';
+                const settings = [
+                    ['use_google_image_search', useGoogleSearch ? '1' : '0'],
+                    ['use_serpapi_search', useSerpApi ? '1' : '0'],
+                    ['google_fallback_serpapi', googleFallbackSerp ? '1' : '0'],
+                ];
+                (async () => {
+                    try {
+                        for (const [k, v] of settings) {
+                            await fetch('{{ route('publish.settings.master.save-setting') }}', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
+                                body: JSON.stringify({ setting_key: k, setting_value: v })
+                            });
+                        }
+                        saved = true; setTimeout(() => saved = false, 3000);
+                    } catch (e) { saveError = 'Save failed: ' + e.message; }
+                    saving = false;
+                })();
             " :disabled="saving" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
                 <svg x-show="saving" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 <span x-text="saving ? 'Saving...' : 'Save'"></span>
