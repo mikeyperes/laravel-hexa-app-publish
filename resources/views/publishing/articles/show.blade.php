@@ -115,7 +115,13 @@
                     <p class="text-gray-500">ID: {{ $img['media_id'] ?? '—' }} @if(!empty($img['file_size']))| {{ round($img['file_size'] / 1024) }} KB @endif @if(!empty($img['is_featured']))<span class="text-green-600 font-medium ml-1">Featured</span>@endif</p>
                     @if(!empty($img['alt_text']))<p class="text-gray-500">Alt: {{ $img['alt_text'] }}</p>@endif
                     @if(!empty($img['source_url']))<p class="text-gray-400 break-all">Source: {{ \Illuminate\Support\Str::limit($img['source_url'], 80) }}</p>@endif
-                    <p class="text-green-500 text-[10px]">_hexa_upload = true</p>
+                    @if(!empty($img['file_path']))<p class="text-gray-400 break-all">Path: {{ $img['file_path'] }}</p>@endif
+                    <div class="flex items-center gap-3 mt-1">
+                        <span class="text-green-500 text-[10px]">_hexa_generated = true</span>
+                        @if(!empty($img['media_id']) && $article->publishSite)
+                            <a href="{{ rtrim($article->publishSite->url, '/') }}/wp-admin/upload.php?item={{ $img['media_id'] }}" target="_blank" class="text-[10px] text-blue-500 hover:text-blue-700 inline-flex items-center gap-0.5">WP Media Library <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>
+                        @endif
+                    </div>
                 </div>
             </div>
             @endforeach

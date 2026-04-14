@@ -59,6 +59,7 @@ class PublishCampaign extends Model
         'last_run_at',
         'next_run_at',
         'created_by',
+        'ai_instructions',
         'notes',
     ];
 

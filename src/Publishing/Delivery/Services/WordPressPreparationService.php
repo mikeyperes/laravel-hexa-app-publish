@@ -75,7 +75,27 @@ class WordPressPreparationService
             $send('success', "REST API credentials verified for {$site->wp_username}");
         }
 
-        // Step 0: Clean HTML — strip editor artifacts
+        // Step 0a: Verify author exists on WordPress
+        $author = $site->default_author;
+        if ($author && $mode === 'ssh' && $server && $installId) {
+            $send('info', "Verifying author '{$author}' exists on WordPress...");
+            $ssh = $this->wptoolkit->getConnection($server);
+            if ($ssh['success']) {
+                $eid = escapeshellarg((string) $installId);
+                $userCheck = trim($ssh['connection']->exec("wp-toolkit --wp-cli -instance-id {$eid} -- user get " . escapeshellarg($author) . " --field=ID 2>/dev/null"));
+                $wpUserId = '';
+                foreach (explode("\n", $userCheck) as $ul) { $ul = trim($ul); if (is_numeric($ul)) { $wpUserId = $ul; break; } }
+                if ($wpUserId) {
+                    $send('success', "Author verified: {$author} (WP user ID: {$wpUserId})");
+                } else {
+                    $send('warning', "Author '{$author}' NOT FOUND on WordPress — post will use default author. Set a valid author in site settings.");
+                }
+            }
+        } elseif (!$author) {
+            $send('warning', "No default author configured for {$site->name} — post will use WP default author.");
+        }
+
+        // Step 0b: Clean HTML — strip editor artifacts
         $send('info', "Cleaning HTML...");
         $html = $this->sanitizeHtml($html);
         $send('success', "HTML cleaned for WordPress");
@@ -123,13 +143,72 @@ class WordPressPreparationService
         // Step 3: Create tags
         $tagIds = $this->createTags($site, $mode, $server, $installId, $options['tags'] ?? [], $send);
 
-        // Step 4: Validate HTML
-        $send('info', "Validating HTML...");
+        // Step 4: Integrity check — validate HTML structure, photos, and cleanup
+        $send('info', "Running integrity check...");
+        $integrityIssues = [];
+
+        // Check for leftover photo placeholders
+        if (preg_match('/<div[^>]*photo-placeholder/i', $html)) {
+            $integrityIssues[] = 'Unprocessed photo placeholder div found';
+            $html = preg_replace('/<div[^>]*class="[^"]*photo-placeholder[^"]*"[^>]*>.*?<\/div>/is', '', $html);
+        }
+        if (preg_match('/Loading photo/i', $html)) {
+            $integrityIssues[] = '"Loading photo..." text found in content';
+            $html = preg_replace('/<span[^>]*>Loading photo[^<]*<\/span>/i', '', $html);
+            $html = preg_replace('/<p[^>]*>\s*<span[^>]*>Loading photo[^<]*<\/span>\s*<\/p>/i', '', $html);
+        }
+
+        // Check for broken img tags (no src or empty src)
+        if (preg_match('/<img[^>]*src\s*=\s*["\']["\'][^>]*>/i', $html)) {
+            $integrityIssues[] = 'Image with empty src found';
+            $html = preg_replace('/<img[^>]*src\s*=\s*["\']["\'][^>]*>/i', '', $html);
+        }
+
+        // Check for leftover editor artifacts
+        if (preg_match('/contenteditable/i', $html)) {
+            $integrityIssues[] = 'contenteditable attribute found';
+            $html = preg_replace('/\s+contenteditable="[^"]*"/i', '', $html);
+        }
+        if (preg_match('/x-data|x-show|x-cloak|x-model|@click/i', $html)) {
+            $integrityIssues[] = 'Alpine.js directives found in content';
+            $html = preg_replace('/\s+(?:x-[\w.-]+|@[\w.-]+(?:\.\w+)*|:[\w-]+)\s*=\s*"[^"]*"/i', '', $html);
+            $html = preg_replace('/\s+x-cloak/i', '', $html);
+        }
+
+        // Check for broken/unclosed tags
+        $openTags = preg_match_all('/<(p|div|figure|figcaption|h[1-6]|ul|ol|li|blockquote|table|tr|td|th|thead|tbody)\b[^>]*>/i', $html);
+        $closeTags = preg_match_all('/<\/(p|div|figure|figcaption|h[1-6]|ul|ol|li|blockquote|table|tr|td|th|thead|tbody)>/i', $html);
+        if ($openTags !== $closeTags) {
+            $integrityIssues[] = "Tag imbalance: {$openTags} opening vs {$closeTags} closing tags";
+        }
+
+        // Check all images have alt text
+        preg_match_all('/<img[^>]+>/i', $html, $allImgs);
+        $noAlt = 0;
+        foreach ($allImgs[0] ?? [] as $imgTag) {
+            if (!preg_match('/alt\s*=\s*"[^"]+"/i', $imgTag)) $noAlt++;
+        }
+        if ($noAlt > 0) {
+            $integrityIssues[] = "{$noAlt} image(s) missing alt text";
+        }
+
+        // Clean up empty paragraphs
+        $html = preg_replace('/<p[^>]*>\s*<\/p>/i', '', $html);
+
+        // Report
         $htmlValid = !empty(trim(strip_tags($html)));
-        $send($htmlValid ? 'success' : 'error', $htmlValid ? 'HTML valid' : 'HTML is empty after processing');
+        if (empty($integrityIssues)) {
+            $send('success', "Integrity check passed — HTML clean, all photos processed");
+        } else {
+            foreach ($integrityIssues as $issue) {
+                $send('warning', "Integrity: {$issue} (auto-fixed)");
+            }
+            $send($htmlValid ? 'success' : 'error', 'Integrity check complete — ' . count($integrityIssues) . ' issue(s) auto-fixed');
+        }
 
         return [
             'success'           => $htmlValid,
+            'integrity_issues'  => $integrityIssues,
             'html'              => $html,
             'category_ids'      => $categoryIds,
             'tag_ids'           => $tagIds,
@@ -470,6 +549,12 @@ class WordPressPreparationService
         // Remove any remaining editor action buttons/spans
         $html = preg_replace('/<span[^>]*class="[^"]*photo-(?:view|confirm|change|remove)[^"]*"[^>]*>.*?<\/span>/is', '', $html);
         $html = preg_replace('/<button[^>]*>.*?<\/button>/is', '', $html);
+
+        // Remove "Loading photo..." placeholders that escaped the div cleanup
+        $html = preg_replace('/<span[^>]*>Loading photo[^<]*<\/span>/i', '', $html);
+        $html = preg_replace('/<p[^>]*>\s*<span[^>]*>Loading photo[^<]*<\/span>\s*<\/p>/i', '', $html);
+        // Remove orphaned photo placeholder divs without the class (TinyMCE sometimes strips it)
+        $html = preg_replace('/<div[^>]*>\s*<span[^>]*>Loading photo[^<]*<\/span>\s*<\/div>/i', '', $html);
 
         // Remove Alpine.js directives from any remaining elements
         $html = preg_replace('/\s+(?:x-[\w.-]+|@[\w.-]+(?:\.\w+)*|:[\w-]+)\s*=\s*"[^"]*"/i', '', $html);

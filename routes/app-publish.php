@@ -27,6 +27,7 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
     // Discovery domain
     require __DIR__ . '/discovery/search.php';
     require __DIR__ . '/discovery/links.php';
+    require __DIR__ . '/discovery/scrape-activity.php';
 
     // Quality domain
     require __DIR__ . '/quality/detection.php';

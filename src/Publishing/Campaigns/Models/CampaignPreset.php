@@ -32,6 +32,7 @@ class CampaignPreset extends Model
     protected $fillable = [
         'user_id',
         'name',
+        'final_article_method',
         'keywords',
         'local_preference',
         'source_method',

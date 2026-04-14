@@ -120,6 +120,33 @@ class WordPressPresetForm
                     ])
                     ->contexts(['create', 'edit', 'pipeline']),
 
+                FieldDefinition::make('searching_agent', 'select', 'Searching Agent')
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::aiModelOptions())
+                    ->meta([
+                        'empty_label' => 'Default (Claude Haiku)',
+                        'section' => 'ai_agents',
+                    ])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('scraping_agent', 'select', 'Scraping Agent')
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::aiModelOptions())
+                    ->meta([
+                        'empty_label' => 'Default (Claude Haiku)',
+                        'section' => 'ai_agents',
+                    ])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('spinning_agent', 'select', 'Spinning Agent')
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::aiModelOptions())
+                    ->meta([
+                        'empty_label' => 'Default (Claude Opus)',
+                        'section' => 'ai_agents',
+                    ])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
                 FieldDefinition::make('article_format', 'select', 'Article Format')
                     ->rules(['nullable', 'string', 'max:50'])
                     ->options([
@@ -255,6 +282,37 @@ class WordPressPresetForm
     protected static function imageLayoutOptions(): array
     {
         return self::listItemOptions('image_layout_rules');
+    }
+
+    /**
+     * Build AI model options from all installed providers.
+     *
+     * @return array
+     */
+    protected static function aiModelOptions(): array
+    {
+        $options = [];
+
+        // Anthropic / Claude
+        foreach (config('anthropic.models', []) as $m) {
+            if (($m['type'] ?? '') === 'api' || ($m['type'] ?? '') === 'both') {
+                $options[$m['id']] = 'Claude — ' . $m['name'];
+            }
+        }
+
+        // OpenAI / ChatGPT
+        foreach (config('chatgpt.models', []) as $m) {
+            $options[$m['id']] = 'GPT — ' . $m['name'];
+        }
+
+        // Grok / xAI
+        if (class_exists(\hexa_package_grok\Services\GrokService::class)) {
+            foreach (app(\hexa_package_grok\Services\GrokService::class)->listModels() as $m) {
+                $options[$m['id']] = 'Grok — ' . $m['name'];
+            }
+        }
+
+        return $options;
     }
 
     /**

@@ -26,11 +26,11 @@
             </div>
             <div class="flex items-center gap-2">
                 <a href="{{ route('campaigns.create', ['id' => $campaign->id]) }}" class="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 px-3 py-1.5 rounded-lg">Edit</a>
-                <button @click="runNow('draft')" :disabled="running" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1">
+                <button @click="runNow('{{ $resolvedSettings['delivery_mode'] ?? 'draft-local' }}')" :disabled="running" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1">
                     <svg x-show="running" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    Run as Draft
+                    Run Campaign Mode
                 </button>
-                <button @click="runNow('publish')" :disabled="running" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 disabled:opacity-50 inline-flex items-center gap-1">
+                <button @click="runNow('auto-publish')" :disabled="running" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 disabled:opacity-50 inline-flex items-center gap-1">
                     Instant Publish
                 </button>
             </div>
@@ -43,6 +43,11 @@
                 </p>
             </template>
         </div>
+        @if(!empty($resolvedSettings['error']))
+            <div class="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+                Resolved settings warning: {{ $resolvedSettings['error'] }}
+            </div>
+        @endif
     </div>
 
     {{-- Details (row layout) --}}
@@ -53,6 +58,10 @@
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Campaign Preset</span><p class="text-sm text-gray-800">{{ $campaign->campaignPreset->name ?? '—' }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">AI Template</span><p class="text-sm text-gray-800">{{ $campaign->template->name ?? '—' }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">WP Preset</span><p class="text-sm text-gray-800">{{ $campaign->wpPreset->name ?? '—' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Article Type</span><p class="text-sm text-gray-800">{{ $resolvedSettings['article_type'] ? ucwords(str_replace('-', ' ', $resolvedSettings['article_type'])) : '—' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Delivery</span><p class="text-sm text-gray-800">{{ ucwords(str_replace('-', ' ', $resolvedSettings['delivery_mode'] ?? 'draft-local')) }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Discovery</span><p class="text-sm text-gray-800">{{ ucwords(str_replace('-', ' ', $resolvedSettings['source_method'] ?? 'keyword')) }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Search Terms</span><p class="text-sm text-gray-800">{{ count($resolvedSettings['search_terms'] ?? []) }} term(s)</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Author</span><p class="text-sm text-gray-800">{{ $campaign->author ?? '—' }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Post Status</span><p class="text-sm text-gray-800">{{ ucfirst($campaign->post_status ?? 'draft') }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Schedule</span><p class="text-sm text-gray-800">{{ $campaign->articles_per_interval }} post(s) / {{ $campaign->interval_unit }}{{ $campaign->run_at_time ? ' at ' . $campaign->run_at_time : '' }}</p></div>
@@ -60,6 +69,7 @@
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Last Run</span><p class="text-sm text-gray-800">{{ $campaign->last_run_at ? $campaign->last_run_at->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A T') . ' (' . $campaign->last_run_at->utc()->format('H:i') . ' UTC)' : 'Never' }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Next Run</span><p class="text-sm text-gray-800">{{ $campaign->next_run_at ? $campaign->next_run_at->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A T') . ' (' . $campaign->next_run_at->utc()->format('H:i') . ' UTC)' : '—' }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Auto-Publish</span><p class="text-sm text-gray-800">{{ $campaign->auto_publish ? 'Yes — fully automated' : 'No — manual review' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">AI Instructions</span><p class="text-sm text-gray-800 whitespace-pre-line">{{ $campaign->ai_instructions ?? $campaign->notes ?? '—' }}</p></div>
         <div class="flex items-start gap-3 py-1.5"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Created</span><p class="text-sm text-gray-800">{{ $campaign->created_at ? $campaign->created_at->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A T') : '—' }} by {{ $campaign->creator->name ?? '—' }}</p></div>
     </div>
 

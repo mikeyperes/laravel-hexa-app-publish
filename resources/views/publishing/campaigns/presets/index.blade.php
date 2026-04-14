@@ -35,10 +35,20 @@
                 <input type="text" x-model="form.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Tech News Daily">
             </div>
 
-            {{-- Keywords --}}
+            {{-- Final Article Method --}}
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Keywords <span class="text-gray-400">(comma separated)</span></label>
-                <input type="text" x-model="keywordsText" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. AI, machine learning, GPT">
+                <label class="block text-xs text-gray-500 mb-1">Final Article Method</label>
+                <select x-model="form.final_article_method" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+                    @foreach($finalArticleMethods as $method)
+                        <option value="{{ $method }}">{{ ucwords(str_replace('-', ' ', $method)) }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            {{-- Search terms --}}
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Search Terms / Prompts <span class="text-gray-400">(one per line, one is chosen at random per run)</span></label>
+                <textarea x-model="keywordsText" rows="5" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Find breaking news in entertainment&#10;Latest AI startup funding news&#10;Trending local education stories"></textarea>
             </div>
 
             {{-- Local preference --}}
@@ -51,9 +61,12 @@
             <div>
                 <label class="block text-xs text-gray-500 mb-2">Default Source Method</label>
                 <div class="flex gap-4">
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="form.source_method" value="trending" class="text-blue-600"><span class="text-sm">Trending</span></label>
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="form.source_method" value="genre" class="text-blue-600"><span class="text-sm">Genre</span></label>
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="form.source_method" value="local" class="text-blue-600"><span class="text-sm">Local</span></label>
+                    @foreach($discoveryModes as $mode)
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" x-model="form.source_method" value="{{ $mode }}" class="text-blue-600">
+                            <span class="text-sm">{{ ucwords(str_replace('-', ' ', $mode)) }}</span>
+                        </label>
+                    @endforeach
                 </div>
             </div>
 
@@ -127,7 +140,8 @@
             <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-gray-800 break-words">{{ $preset->name }}</p>
                 <p class="text-xs text-gray-500 mt-0.5">
-                    Method: <span class="font-medium">{{ ucfirst($preset->source_method) }}</span>
+                    Method: <span class="font-medium">{{ ucfirst(str_replace('-', ' ', $preset->source_method)) }}</span>
+                    @if($preset->final_article_method) &middot; Output: {{ ucwords(str_replace('-', ' ', $preset->final_article_method)) }} @endif
                     @if($preset->genre) &middot; Genre: {{ ucfirst($preset->genre) }} @endif
                     @if($preset->local_preference) &middot; Local: {{ $preset->local_preference }} @endif
                     @if($preset->user) &middot; User: {{ $preset->user->name }} @endif
@@ -166,7 +180,7 @@ function campaignPresets() {
         editId: null,
         saving: false, saveResult: '', saveSuccess: false,
         keywordsText: '',
-        form: { user_id: null, name: '', keywords: [], local_preference: '', source_method: 'trending', genre: '', trending_categories: [], auto_select_sources: false, ai_instructions: '' },
+        form: { user_id: null, name: '', final_article_method: 'news-search', keywords: [], local_preference: '', source_method: 'keyword', genre: '', trending_categories: [], auto_select_sources: false, ai_instructions: '' },
 
         init() {
             @if(isset($editPreset) && $editPreset)
@@ -181,7 +195,7 @@ function campaignPresets() {
         },
 
         resetFormFields() {
-            this.form = { user_id: null, name: '', keywords: [], local_preference: '', source_method: 'trending', genre: '', trending_categories: [], auto_select_sources: false, ai_instructions: '' };
+            this.form = { user_id: null, name: '', final_article_method: 'news-search', keywords: [], local_preference: '', source_method: 'keyword', genre: '', trending_categories: [], auto_select_sources: false, ai_instructions: '' };
             this.keywordsText = '';
             this.saveResult = '';
         },
@@ -193,21 +207,22 @@ function campaignPresets() {
             this.form = {
                 user_id: preset.user_id,
                 name: preset.name,
+                final_article_method: preset.final_article_method || 'news-search',
                 keywords: preset.keywords || [],
                 local_preference: preset.local_preference || '',
-                source_method: preset.source_method || 'trending',
+                source_method: preset.source_method || 'keyword',
                 genre: preset.genre || '',
                 trending_categories: preset.trending_categories || [],
                 auto_select_sources: preset.auto_select_sources || false,
                 ai_instructions: preset.ai_instructions || '',
             };
-            this.keywordsText = (preset.keywords || []).join(', ');
+            this.keywordsText = (preset.keywords || []).join('\n');
             this.showForm = true;
         },
 
         async savePreset() {
             this.saving = true; this.saveResult = '';
-            this.form.keywords = this.keywordsText.split(',').map(k => k.trim()).filter(k => k);
+            this.form.keywords = this.keywordsText.split('\n').map(k => k.trim()).filter(k => k);
             const url = this.editId ? '/campaigns/presets/' + this.editId : '{{ route("campaigns.presets.store") }}';
             const method = this.editId ? 'PUT' : 'POST';
             try {

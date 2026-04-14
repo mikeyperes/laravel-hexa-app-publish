@@ -85,7 +85,9 @@ class WordPressDeliveryService
             $status,
             $options['category_ids'] ?? [],
             $options['tag_ids'] ?? [],
-            $date
+            $date,
+            $options['author'] ?? $site->default_author ?? null,
+            isset($options['featured_media_id']) ? (int) $options['featured_media_id'] : null
         );
 
         if (!$result['success']) {
@@ -159,6 +161,19 @@ class WordPressDeliveryService
 
         if ($status === 'future' && !empty($options['date'])) {
             $postData['date'] = $options['date'];
+        }
+
+        if (!empty($options['featured_media_id'])) {
+            $postData['featured_media'] = (int) $options['featured_media_id'];
+        }
+
+        if (!empty($options['author'])) {
+            // WP REST expects integer author ID — if numeric, use directly
+            if (is_numeric($options['author'])) {
+                $postData['author'] = (int) $options['author'];
+            }
+            // If string username, WP won't accept it in the author field —
+            // it must be resolved to an ID during prepare/connection
         }
 
         return $postData;

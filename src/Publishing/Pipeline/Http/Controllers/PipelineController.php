@@ -8,10 +8,13 @@ use hexa_core\Models\User;
 use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
+use hexa_app_publish\Publishing\Campaigns\Services\NewsDiscoveryOptionsService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
 use hexa_app_publish\Publishing\Articles\Services\MetadataGenerationService;
 use hexa_app_publish\Publishing\Articles\Services\ArticlePersistenceService;
 use hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService;
+use hexa_app_publish\Publishing\Pipeline\Services\PipelineStateService;
+use hexa_app_publish\Publishing\Pipeline\Services\PipelineWorkflowRegistry;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\CheckSourcesRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\DetectAiRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\GenerateMetadataRequest;
@@ -35,13 +38,24 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class PipelineController extends Controller
 {
     protected SourceExtractionService $sourceExtraction;
+    protected NewsDiscoveryOptionsService $newsOptions;
+    protected PipelineStateService $pipelineState;
+    protected PipelineWorkflowRegistry $workflowRegistry;
 
     /**
      * @param SourceExtractionService $sourceExtraction
      */
-    public function __construct(SourceExtractionService $sourceExtraction)
+    public function __construct(
+        SourceExtractionService $sourceExtraction,
+        NewsDiscoveryOptionsService $newsOptions,
+        PipelineStateService $pipelineState,
+        PipelineWorkflowRegistry $workflowRegistry
+    )
     {
         $this->sourceExtraction = $sourceExtraction;
+        $this->newsOptions = $newsOptions;
+        $this->pipelineState = $pipelineState;
+        $this->workflowRegistry = $workflowRegistry;
     }
 
     public function index(Request $request)
@@ -74,21 +88,30 @@ class PipelineController extends Controller
 
         // Load existing draft
         $draftId = (int) $request->input('id');
-        $draft = PublishArticle::find($draftId);
+        $draft = PublishArticle::with(['pipelineState', 'site', 'creator'])->find($draftId);
         if (!$draft) {
             return redirect()->route('publish.pipeline');
         }
 
-        $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
-        $draftSite = $draft->publish_site_id ? PublishSite::find($draft->publish_site_id) : null;
+        $sites = PublishSite::where('status', 'connected')
+            ->orderBy('name')
+            ->get(['id', 'name', 'url', 'status', 'default_author', 'is_press_release_source', 'last_connected_at', 'wp_username', 'connection_type']);
+        $prSourceSites = $sites->where('is_press_release_source', true)->values();
+        $draftSite = $draft->site;
         if ($draftSite && !$sites->contains('id', $draftSite->id)) {
             $sites->push($draftSite);
             $sites = $sites->sortBy('name')->values();
         }
-        $newsCategories = \DB::table('lists')->where('list_key', 'news_categories')->where('is_active', true)->orderBy('sort_order')->pluck('list_value');
+        $newsCategories = $this->newsOptions->newsCategories();
 
         $draftUserId = $draft->user_id ?: $draft->created_by;
-        $draftUser = $draftUserId ? \hexa_core\Models\User::find($draftUserId) : null;
+        $draftUser = null;
+        if ($draftUserId) {
+            $draftUser = $draft->creator && (int) $draft->creator->id === (int) $draftUserId
+                ? $draft->creator
+                : User::find($draftUserId);
+        }
+        $pipelinePayload = $this->pipelineState->payload($draft);
         $draftState = [
             'selectedUser' => $draftUser ? [
                 'id' => $draftUser->id,
@@ -153,6 +176,7 @@ class PipelineController extends Controller
 
         return view('app-publish::publishing.pipeline.index', [
             'sites'             => $sites,
+            'prSourceSites'     => $prSourceSites,
             'draftId'           => $draft->id,
             'newsCategories'    => $newsCategories,
             'draftUser'         => $draftUser,
@@ -163,6 +187,10 @@ class PipelineController extends Controller
             'wpPresetForm'      => $wpPresetForm,
             'filenamePattern'   => \hexa_core\Models\Setting::getValue('wp_photo_filename_pattern', 'hexa_{draft_id}_{seo_name}'),
             'aiDetectors'       => $aiDetectors,
+            'grokModels'        => class_exists(\hexa_package_grok\Services\GrokService::class) ? app(\hexa_package_grok\Services\GrokService::class)->listModels() : [],
+            'pipelinePayload'   => $pipelinePayload,
+            'workflowDefinitions' => $this->workflowRegistry->definitions(),
+            'pressReleaseDefaultState' => app(\hexa_app_publish\Publishing\Pipeline\Services\PressReleaseWorkflowService::class)->defaultState(),
         ]);
     }
 
@@ -216,12 +244,19 @@ class PipelineController extends Controller
             $validated['preset_id'] ?? null,
             $validated['custom_prompt'] ?? null,
             null,
-            true
+            null,
+            true,
+            $validated['prompt_slug'] ?? null
         );
+
+        $prompt = $result['prompt'];
+        if ($request->boolean('web_research', false)) {
+            $prompt .= "\n\nWEB RESEARCH: Before writing, search the web for current data, statistics, expert opinions, and recent developments related to this topic. Incorporate real, verifiable facts and supporting points from your research into the article. Cite specific sources where possible.";
+        }
 
         return response()->json([
             'success' => true,
-            'prompt'  => $result['prompt'],
+            'prompt'  => $prompt,
             'log'     => $result['log'],
         ]);
     }
@@ -332,14 +367,54 @@ class PipelineController extends Controller
         $request->validate([
             'topic' => 'required|string|min:3|max:500',
             'count' => 'nullable|integer|min:2|max:10',
+            'model' => 'nullable|string|max:100',
         ]);
 
-        if (!class_exists(\hexa_package_anthropic\Services\AnthropicService::class)) {
-            return response()->json(['success' => false, 'message' => 'Anthropic package not available.'], 400);
-        }
+        $model = $request->input('model', '');
+        $topic = $request->input('topic');
+        $count = $request->input('count', 4);
+        $isGrok = str_starts_with($model, 'grok-');
+        $isOpenAI = str_starts_with($model, 'gpt-');
 
-        $anthropic = app(\hexa_package_anthropic\Services\AnthropicService::class);
-        $result = $anthropic->searchArticles($request->input('topic'), $request->input('count', 4));
+        $searchPrompt = "Search the web for {$count} recent news articles about: {$topic}. "
+            . "Find real, published articles from different reputable news sources. "
+            . "For each article return the exact URL, the article title, and a 1-2 sentence description. "
+            . "Return ONLY a JSON array of objects with keys: url, title, description. No other text.";
+
+        if ($isGrok) {
+            if (!class_exists(\hexa_package_grok\Services\GrokService::class)) {
+                return response()->json(['success' => false, 'message' => 'Grok package not available.'], 400);
+            }
+            $grok = app(\hexa_package_grok\Services\GrokService::class);
+            $raw = $grok->chat(
+                "You are a research assistant with web access. Find real, recent news articles. Output ONLY valid JSON.",
+                $searchPrompt,
+                $model,
+                0.3,
+                2048
+            );
+            $result = $this->parseSearchResult($raw, $model);
+        } elseif ($isOpenAI) {
+            if (!class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)) {
+                return response()->json(['success' => false, 'message' => 'ChatGPT package not available.'], 400);
+            }
+            $chatgpt = app(\hexa_package_chatgpt\Services\ChatGptService::class);
+            $raw = $chatgpt->chat(
+                "You are a research assistant with web access. Find real, recent news articles. Output ONLY valid JSON.",
+                $searchPrompt,
+                $model,
+                0.3,
+                2048
+            );
+            $result = $this->parseSearchResult($raw, $model);
+        } else {
+            // Claude — use web search tool
+            if (!class_exists(\hexa_package_anthropic\Services\AnthropicService::class)) {
+                return response()->json(['success' => false, 'message' => 'Anthropic package not available.'], 400);
+            }
+            $anthropic = app(\hexa_package_anthropic\Services\AnthropicService::class);
+            $result = $anthropic->searchArticles($topic, $count, $model ?: null);
+        }
 
         // Calculate cost if successful
         if ($result['success'] && !empty($result['data']['usage'])) {
@@ -347,8 +422,8 @@ class PipelineController extends Controller
                 'claude-haiku-4-5-20251001' => ['input' => 0.80, 'output' => 4.0],
                 'claude-sonnet-4-20250514'  => ['input' => 3.0,  'output' => 15.0],
             ];
-            $model = $result['data']['model'] ?? 'claude-haiku-4-5-20251001';
-            $rates = $pricing[$model] ?? ['input' => 0.80, 'output' => 4.0];
+            $usedModel = $result['data']['model'] ?? $model;
+            $rates = $pricing[$usedModel] ?? ['input' => 1.0, 'output' => 5.0];
             $usage = $result['data']['usage'];
             $cost = ($usage['input_tokens'] * $rates['input'] / 1_000_000)
                   + ($usage['output_tokens'] * $rates['output'] / 1_000_000);
@@ -356,6 +431,35 @@ class PipelineController extends Controller
         }
 
         return response()->json($result);
+    }
+
+    /**
+     * Parse a raw chat response into the article search result format.
+     */
+    private function parseSearchResult(array $raw, string $model): array
+    {
+        if (!$raw['success']) {
+            return ['success' => false, 'message' => $raw['message'] ?? 'AI call failed', 'data' => null];
+        }
+
+        $content = $raw['data']['content'] ?? '';
+        // Strip markdown code fences if present
+        $content = preg_replace('/^```(?:json)?\s*/i', '', trim($content));
+        $content = preg_replace('/\s*```$/', '', $content);
+
+        $articles = json_decode($content, true);
+        if (!is_array($articles)) {
+            return ['success' => false, 'message' => 'Could not parse article results from AI response.', 'data' => null];
+        }
+
+        return [
+            'success' => true,
+            'data' => [
+                'articles' => $articles,
+                'model' => $raw['data']['model'] ?? $model,
+                'usage' => $raw['data']['usage'] ?? [],
+            ],
+        ];
     }
 
     /**
@@ -374,12 +478,15 @@ class PipelineController extends Controller
         $result = app(ArticleGenerationService::class)->generate(
             $validated['source_texts'],
             [
-                'model'          => $validated['model'],
-                'template_id'    => $validated['template_id'] ?? null,
-                'preset_id'      => $validated['preset_id'] ?? null,
-                'custom_prompt'  => $validated['custom_prompt'] ?? null,
-                'change_request' => $validated['change_request'] ?? null,
-                'agent'          => !empty($validated['change_request']) ? 'pipeline-revise' : 'pipeline-spin',
+                'model'              => $validated['model'],
+                'template_id'        => $validated['template_id'] ?? null,
+                'preset_id'          => $validated['preset_id'] ?? null,
+                'prompt_slug'        => $validated['prompt_slug'] ?? null,
+                'custom_prompt'      => $validated['custom_prompt'] ?? null,
+                'change_request'     => $validated['change_request'] ?? null,
+                'pr_subject_context' => $validated['pr_subject_context'] ?? null,
+                'web_research'       => $request->boolean('web_research', false),
+                'agent'              => !empty($validated['change_request']) ? 'pipeline-revise' : 'pipeline-spin',
             ]
         );
 
@@ -503,6 +610,7 @@ class PipelineController extends Controller
                 'publish_site_id'     => $site->id,
                 'publish_template_id' => $validated['template_id'] ?? null,
                 'preset_id'           => $validated['preset_id'] ?? null,
+                'article_type'        => $validated['article_type'] ?? null,
                 'title'               => $validated['title'],
                 'body'                => $validated['html'],
                 'word_count'          => $validated['word_count'] ?? str_word_count(strip_tags($validated['html'])),
@@ -566,6 +674,93 @@ class PipelineController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
+    /**
+     * Upload a source document (DOCX/DOC/PDF) and extract text.
+     */
+    public function uploadSourceDocument(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:doc,docx,pdf|max:20480',
+            'draft_id' => 'nullable|integer',
+        ]);
+
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        $text = '';
+
+        try {
+            if ($ext === 'pdf') {
+                // Use pdftotext if available, otherwise basic extraction
+                $tmpPath = $file->getPathname();
+                $output = shell_exec("pdftotext " . escapeshellarg($tmpPath) . " - 2>/dev/null");
+                $text = $output ?: '';
+                if (empty(trim($text))) {
+                    // Fallback: try php-based extraction
+                    $text = file_get_contents($tmpPath);
+                    $text = preg_replace('/[^\x20-\x7E\n\r\t]/', ' ', $text);
+                    $text = preg_replace('/\s+/', ' ', $text);
+                }
+            } elseif (in_array($ext, ['doc', 'docx'])) {
+                $tmpPath = $file->getPathname();
+                // Try antiword for .doc, or unzip for .docx
+                if ($ext === 'docx') {
+                    $zip = new \ZipArchive();
+                    if ($zip->open($tmpPath) === true) {
+                        $xml = $zip->getFromName('word/document.xml');
+                        $zip->close();
+                        if ($xml) {
+                            $text = strip_tags(str_replace('<', ' <', $xml));
+                            $text = preg_replace('/\s+/', ' ', $text);
+                        }
+                    }
+                } else {
+                    $output = shell_exec("antiword " . escapeshellarg($tmpPath) . " 2>/dev/null");
+                    $text = $output ?: file_get_contents($tmpPath);
+                    $text = preg_replace('/[^\x20-\x7E\n\r\t]/', ' ', $text);
+                }
+            }
+
+            $text = trim($text);
+            if (empty($text)) {
+                return response()->json(['success' => false, 'message' => 'Could not extract text from this document.']);
+            }
+
+            $wordCount = str_word_count($text);
+            return response()->json(['success' => true, 'text' => $text, 'word_count' => $wordCount]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Error processing document: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Upload a photo for use in the pipeline (featured or inner).
+     */
+    public function uploadPhoto(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|file|image|max:20480',
+            'draft_id' => 'nullable|integer',
+            'type' => 'nullable|string|in:featured,inner',
+        ]);
+
+        $file = $request->file('file');
+        $draftId = $request->input('draft_id', 0);
+        $dir = "pipeline-uploads/{$draftId}";
+        $path = $file->store($dir, 'public');
+
+        $dimensions = @getimagesize($file->getPathname());
+
+        return response()->json([
+            'success' => true,
+            'url' => asset('storage/' . $path),
+            'path' => $path,
+            'width' => $dimensions[0] ?? 0,
+            'height' => $dimensions[1] ?? 0,
+            'size' => $file->getSize(),
+            'filename' => $file->getClientOriginalName(),
+        ]);
+    }
+
     public function saveDraft(SaveDraftRequest $request): JsonResponse
     {
         $validated = $request->validated();
@@ -574,6 +769,7 @@ class PipelineController extends Controller
             'title'            => $validated['title'] ?? 'Untitled Pipeline Draft',
             'body'             => $validated['body'] ?? null,
             'excerpt'          => $validated['excerpt'] ?? null,
+            'article_type'     => $validated['article_type'] ?? null,
             'status'           => 'drafting',
             'user_id'          => $validated['user_id'] ?? auth()->id(),
             'created_by'       => $validated['user_id'] ?? auth()->id(),

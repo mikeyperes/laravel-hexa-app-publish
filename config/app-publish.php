@@ -2,7 +2,7 @@
 
 return [
 
-    'version' => '18.2.0',
+    'version' => '18.3.0',
 
     /*
     |--------------------------------------------------------------------------
@@ -57,6 +57,68 @@ return [
         'review',
         'notify',
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Campaign-Supported Delivery Modes
+    |--------------------------------------------------------------------------
+    |
+    | Campaigns are intentionally narrower than the full publishing system.
+    |
+    */
+    'campaign_supported_modes' => [
+        'draft-local',
+        'draft-wordpress',
+        'auto-publish',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Campaign-Supported Article Types
+    |--------------------------------------------------------------------------
+    |
+    | Campaign automation is news-focused. Promotional types are excluded.
+    |
+    */
+    'campaign_supported_article_types' => [
+        'news-report',
+        'local-news',
+        'editorial',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Campaign Discovery Modes
+    |--------------------------------------------------------------------------
+    |
+    | Shared discovery modes used by campaign presets and execution.
+    |
+    */
+    'campaign_discovery_modes' => [
+        'keyword',
+        'local',
+        'trending',
+        'genre',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Campaign Final Article Methods
+    |--------------------------------------------------------------------------
+    |
+    | Keep campaigns focused on search-driven news generation for now.
+    |
+    */
+    'campaign_final_article_methods' => [
+        'news-search',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Campaign Cron
+    |--------------------------------------------------------------------------
+    */
+    'campaign_cron_schedule' => '* * * * *',
 
     /*
     |--------------------------------------------------------------------------

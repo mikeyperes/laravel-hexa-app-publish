@@ -114,7 +114,16 @@ class AccountController extends Controller
         })->values();
 
         $sitesJson = $sites->map(function ($s) {
-            return ['id' => $s->id, 'name' => $s->name, 'url' => $s->url, 'default_author' => $s->default_author];
+            return [
+                'id' => $s->id,
+                'name' => $s->name,
+                'url' => $s->url,
+                'default_author' => $s->default_author,
+                'status' => $s->status,
+                'connection_type' => $s->connection_type,
+                'wp_username' => $s->wp_username,
+                'last_connected_at' => $s->last_connected_at?->toISOString(),
+            ];
         })->values();
 
         return view('app-publish::publishing.accounts.show', [

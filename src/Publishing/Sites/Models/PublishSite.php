@@ -37,6 +37,7 @@ class PublishSite extends Model
         'wp_username',
         'wp_application_password',
         'status',
+        'is_press_release_source',
         'default_author',
         'last_error',
         'last_connected_at',
@@ -45,6 +46,7 @@ class PublishSite extends Model
 
     protected $casts = [
         'last_connected_at' => 'datetime',
+        'is_press_release_source' => 'boolean',
     ];
 
     protected $hidden = [

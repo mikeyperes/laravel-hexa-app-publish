@@ -9,6 +9,7 @@ use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
 use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
+use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineState;
 use hexa_app_publish\Publishing\Prompts\Models\PublishPrompt;
 use hexa_app_publish\Publishing\Settings\Models\PublishMasterSetting;
 use hexa_app_publish\Discovery\Sources\Models\PublishUsedSource;
@@ -21,6 +22,7 @@ use hexa_app_publish\Quality\SmartEdits\Models\AiSmartEditTemplate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use hexa_core\Models\User;
 
 class PublishArticle extends Model
@@ -132,6 +134,11 @@ class PublishArticle extends Model
     public function template(): BelongsTo
     {
         return $this->belongsTo(PublishTemplate::class, 'publish_template_id');
+    }
+
+    public function pipelineState(): HasOne
+    {
+        return $this->hasOne(PublishPipelineState::class, 'publish_article_id');
     }
 
     /**

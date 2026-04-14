@@ -89,6 +89,33 @@
                 </div>
             </div>
 
+            {{-- Press Release Syndication Categories (hexaprwire only) --}}
+            <div x-show="currentArticleType === 'press-release' && selectedSite?.is_press_release_source" x-cloak class="mt-3">
+                <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h5 class="text-sm font-semibold text-purple-800">Syndication Categories</h5>
+                        <button x-show="!syndicationCategories.length && !loadingSyndicationCats" @click="loadSyndicationCategories()" class="text-xs text-purple-600 hover:text-purple-800 inline-flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            Load from WordPress
+                        </button>
+                        <span x-show="loadingSyndicationCats" x-cloak class="text-xs text-purple-500 inline-flex items-center gap-1">
+                            <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            Loading...
+                        </span>
+                    </div>
+                    <p class="text-xs text-purple-600 mb-3">Select categories to determine where this press release will be syndicated.</p>
+                    <div x-show="syndicationCategories.length > 0" class="grid grid-cols-2 md:grid-cols-3 gap-1">
+                        <template x-for="cat in syndicationCategories" :key="cat.id">
+                            <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700 py-1">
+                                <input type="checkbox" :value="cat.id" :checked="selectedSyndicationCats.includes(cat.id)" @click="toggleSyndicationCat(cat.id)" class="rounded border-gray-300 text-purple-600">
+                                <span x-text="cat.name"></span>
+                            </label>
+                        </template>
+                    </div>
+                    <p x-show="!syndicationCategories.length && !loadingSyndicationCats" class="text-xs text-gray-400">Click "Load from WordPress" to fetch available syndication categories.</p>
+                </div>
+            </div>
+
             {{-- Article Links --}}
             <div x-show="suggestedUrls.length > 0" x-cloak class="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <h5 class="text-sm font-semibold text-gray-700 mb-2">Article Links <span class="font-normal text-gray-400" x-text="'(' + suggestedUrls.length + ')'"></span></h5>
@@ -103,7 +130,7 @@
                                 </a>
                             </div>
                             <button @click="link.nofollow = !link.nofollow" class="text-xs px-2 py-1 rounded flex-shrink-0" :class="link.nofollow ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'" x-text="link.nofollow ? 'nofollow' : 'follow'"></button>
-                            <button @click="suggestedUrls.splice(idx, 1)" class="text-red-400 hover:text-red-600 flex-shrink-0">
+                            <button @click="removeArticleLink(idx)" class="text-red-400 hover:text-red-600 flex-shrink-0">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
                         </div>
@@ -115,6 +142,31 @@
             <div x-show="metadataLoading" x-cloak class="mt-3 flex items-center gap-2 text-sm text-gray-500">
                 <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 Generating titles, categories & tags...
+            </div>
+
+            <div x-show="currentArticleType === 'press-release' && pressReleasePhotoAssets.length > 0" x-cloak class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h5 class="text-sm font-semibold text-blue-800">Press Release Photo Assets</h5>
+                    <span class="text-xs text-blue-600" x-text="pressReleasePhotoAssets.length + ' asset(s)'"></span>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <template x-for="asset in pressReleasePhotoAssets" :key="asset.key">
+                        <div class="rounded-lg overflow-hidden border border-blue-100 bg-white">
+                            <img :src="asset.thumbnail_url || asset.url" class="w-full h-36 object-cover" loading="lazy">
+                            <div class="p-3 space-y-2">
+                                <div>
+                                    <p class="text-xs font-medium text-gray-800 break-words" x-text="asset.label"></p>
+                                    <p class="text-[11px] text-gray-400 break-words" x-text="asset.source_label"></p>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <button @click="setPressReleaseFeaturedPhoto(asset)" type="button" class="text-[11px] text-blue-700 hover:text-blue-900">Set Featured</button>
+                                    <button @click="insertPressReleaseAssetIntoEditor(asset)" type="button" class="text-[11px] text-green-700 hover:text-green-900">Insert</button>
+                                    <a :href="asset.url" target="_blank" class="text-[11px] text-gray-500 hover:text-gray-700">Open</a>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
             </div>
 
             {{-- Featured Image — photo + metadata in one card --}}
@@ -156,6 +208,15 @@
                             <svg x-show="featuredSearching" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             Search
                         </button>
+                    </div>
+                    {{-- URL import + file upload --}}
+                    <div class="flex gap-2 mb-2">
+                        <input type="text" x-model="featuredUrlImport" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Paste image URL...">
+                        <button @click="importFeaturedFromUrl()" :disabled="!featuredUrlImport" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-blue-700 disabled:opacity-50">Import URL</button>
+                        <label class="bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-gray-700 cursor-pointer inline-flex items-center gap-1">
+                            Upload
+                            <input type="file" class="hidden" accept="image/*" @change="uploadFeaturedPhoto($event.target.files); $event.target.value = null">
+                        </label>
                     </div>
                     <div x-show="featuredResults.length > 1" x-cloak class="grid grid-cols-4 gap-2">
                         <template x-for="(photo, fidx) in featuredResults" :key="fidx">
@@ -200,15 +261,15 @@
                                         <p class="text-sm font-medium text-purple-700 break-words" x-text="ps.search_term"></p>
                                         <p x-show="ps.autoPhoto" x-cloak class="text-[11px] text-gray-400" x-text="(ps.autoPhoto?.source || '') + ' — ' + (ps.autoPhoto?.width || '') + 'x' + (ps.autoPhoto?.height || '')"></p>
                                         {{-- Metadata fields --}}
-                                        <div x-show="ps.autoPhoto" x-cloak class="space-y-1">
+                                        <div x-show="ps.autoPhoto || ps.alt_text || ps.caption" x-cloak class="space-y-1">
                                             <div><label class="text-[10px] text-gray-400 uppercase">Alt Text</label><input type="text" x-model="photoSuggestions[idx].alt_text" class="w-full border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Alt text..."></div>
                                             <div><label class="text-[10px] text-gray-400 uppercase">Caption</label><input type="text" x-model="photoSuggestions[idx].caption" class="w-full border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Caption..."></div>
                                             <div><label class="text-[10px] text-gray-400 uppercase">WordPress Filename</label><p class="text-xs font-mono text-gray-600 bg-gray-50 rounded px-2 py-1" x-text="photoSuggestions[idx].suggestedFilename || 'auto'"></p></div>
-                                            <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50 mt-0.5">
-                                                <svg class="w-3 h-3" :class="ps.refreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                                <span x-text="ps.refreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
-                                            </button>
                                         </div>
+                                        <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50 mt-1">
+                                            <svg class="w-3 h-3" :class="ps.refreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                            <span x-text="ps.refreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
+                                        </button>
                                     </div>
                                     {{-- Action buttons --}}
                                     <div class="flex items-center gap-1 flex-shrink-0">

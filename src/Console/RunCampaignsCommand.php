@@ -5,6 +5,7 @@ namespace hexa_app_publish\Console;
 use Illuminate\Console\Command;
 use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
 use hexa_app_publish\Publishing\Campaigns\Services\CampaignExecutionService;
+use hexa_app_publish\Publishing\Campaigns\Services\CampaignModeResolver;
 
 /**
  * RunCampaignsCommand — processes all due campaigns via cron.
@@ -40,24 +41,16 @@ class RunCampaignsCommand extends Command
         $this->info("Processing {$dueCampaigns->count()} campaign(s)...");
 
         $runService = app(CampaignExecutionService::class);
+        $modeResolver = app(CampaignModeResolver::class);
 
         foreach ($dueCampaigns as $campaign) {
             $this->line("  Campaign: {$campaign->name} ({$campaign->campaign_id})");
 
             $count = $campaign->articles_per_interval;
             $dripMinutes = $campaign->drip_interval_minutes ?? 60;
+            $deliveryMode = $modeResolver->normalizeDeliveryMode($campaign->delivery_mode);
 
             for ($i = 0; $i < $count; $i++) {
-                // Map delivery_mode to run mode
-                $publishMode = match ($campaign->delivery_mode) {
-                    'auto-publish' => 'publish',
-                    'draft-wordpress' => 'wp-draft',
-                    'draft-local' => 'draft',
-                    'review' => 'draft',
-                    'notify' => 'draft',
-                    default => 'draft',
-                };
-
                 // Drip: set scheduled_for on articles after the first
                 // No sleep() — articles are created with staggered timestamps
                 $scheduledFor = null;
@@ -66,7 +59,7 @@ class RunCampaignsCommand extends Command
                     $this->line("    Article {$i} scheduled for: {$scheduledFor->format('H:i')}");
                 }
 
-                $result = $runService->run($campaign, $publishMode, $scheduledFor);
+                $result = $runService->run($campaign, $deliveryMode, $scheduledFor);
 
                 foreach ($result['log'] as $entry) {
                     $prefix = match ($entry['type']) {

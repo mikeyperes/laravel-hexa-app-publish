@@ -40,11 +40,12 @@
             <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
                 <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Author</span>
                 <div class="text-sm text-gray-800 inline-flex items-center gap-1">
-                    <span x-text="publishAuthor || 'Default'"></span>
+                    <span x-text="publishAuthor || 'Not set'" :class="!publishAuthor ? 'text-orange-500' : ''"></span>
                     <a x-show="publishAuthor && selectedSite" x-cloak :href="(selectedSite?.url || '').replace(/\/$/, '') + '/author/' + publishAuthor + '/'" target="_blank" class="text-blue-500 hover:text-blue-700">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                     </a>
-                    <span x-show="publishAuthorSource === 'profile'" x-cloak class="text-[10px] text-gray-400">(from profile)</span>
+                    <span x-show="publishAuthorSource === 'profile'" x-cloak class="text-[10px] text-gray-400">(from site profile)</span>
+                    <a x-show="!publishAuthor && selectedSite" x-cloak :href="'/publish/sites/' + selectedSite.id" target="_blank" class="text-xs text-orange-500 hover:text-orange-700">Set in site settings</a>
                 </div>
             </div>
             <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Publish Action</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? 'Publish immediately' : (publishAction === 'draft_wp' ? 'WordPress draft' : (publishAction === 'future' ? 'Scheduled' : 'Local draft'))"></p></div>
@@ -104,12 +105,20 @@
             </div>
 
             {{-- Sources --}}
-            <div class="flex items-start gap-3 py-1.5">
+            <div x-show="currentArticleType !== 'press-release'" class="flex items-start gap-3 py-1.5">
                 <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Sources</span>
                 <div class="space-y-0.5">
                     <template x-for="(s, idx) in sources" :key="idx">
                         <p class="text-xs text-gray-600 break-all" x-text="s.title || s.url"></p>
                     </template>
+                </div>
+            </div>
+            <div x-show="currentArticleType === 'press-release'" x-cloak class="flex items-start gap-3 py-1.5">
+                <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Source</span>
+                <div class="space-y-1">
+                    <p class="text-xs text-gray-600" x-text="pressRelease.resolved_source_label || pressRelease.submit_method"></p>
+                    <p x-show="pressRelease.public_url" class="text-xs text-gray-500 break-all" x-text="pressRelease.public_url"></p>
+                    <p x-show="pressRelease.document_files.length > 0" class="text-xs text-gray-500" x-text="pressRelease.document_files.length + ' uploaded document(s)'"></p>
                 </div>
             </div>
         </div>
@@ -127,7 +136,7 @@
         </div>
 
         {{-- ═══ Prepare for WordPress (only for WP actions) ═══ --}}
-        <div x-show="publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future'" x-cloak class="border border-gray-200 rounded-xl p-5 mb-4">
+        <div x-show="!publishResult && (publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future')" x-cloak class="border border-gray-200 rounded-xl p-5 mb-4">
             <h5 class="text-sm font-semibold text-gray-700 mb-3">Prepare for WordPress</h5>
 
             <button @click="prepareForWp()" :disabled="preparing || prepareComplete" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 mb-4">
@@ -175,7 +184,7 @@
         </div>
 
         {{-- ═══ Publish Action ═══ --}}
-        <div class="border border-gray-200 rounded-xl p-5 mb-4">
+        <div x-show="!publishResult" x-cloak class="border border-gray-200 rounded-xl p-5 mb-4">
             <h5 class="text-sm font-semibold text-gray-700 mb-3">Publish</h5>
 
             <div class="max-w-md space-y-3 mb-4">
@@ -192,7 +201,7 @@
             </div>
 
             <div class="flex gap-3">
-                <button @click="publishArticle()" :disabled="publishing" class="bg-green-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
+                <button @click="publishArticle()" :disabled="publishing || ((publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future') && !prepareComplete)" class="bg-green-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                     <svg x-show="publishing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     <span x-text="publishing ? 'Publishing...' : 'Publish'"></span>
                 </button>
@@ -218,7 +227,8 @@
             {{-- Post details (row layout) --}}
             <div class="space-y-2 mb-4">
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Title</span><p class="text-sm font-medium text-gray-800 break-words" x-text="articleTitle || 'Untitled'"></p></div>
-                <div x-show="publishResult?.post_url" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Post URL</span><a :href="publishResult?.post_url" target="_blank" class="text-sm text-blue-600 hover:underline break-all inline-flex items-center gap-1" x-text="publishResult?.post_url"></a></div>
+                <div x-show="publishResult?.post_url" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Permalink</span><a :href="publishResult?.post_url" target="_blank" class="text-sm text-blue-600 hover:underline break-all inline-flex items-center gap-1" x-text="publishResult?.post_url"><svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></div>
+                <div x-show="publishResult?.post_id && selectedSite?.url" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Edit URL</span><a :href="selectedSite?.url + '/?p=' + publishResult?.post_id" target="_blank" class="text-sm text-blue-600 hover:underline break-all inline-flex items-center gap-1" x-text="selectedSite?.url + '/?p=' + publishResult?.post_id"><svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></div>
                 <div x-show="publishResult?.post_id" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">WP Post ID</span><p class="text-sm font-mono text-gray-800" x-text="publishResult?.post_id"></p></div>
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Post Type</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? 'Published' : (publishAction === 'draft_wp' ? 'WP Draft' : (publishAction === 'future' ? 'Scheduled' : 'Local Draft'))"></p></div>
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Author</span><p class="text-sm text-gray-800" x-text="publishAuthor || 'Default'"></p></div>
@@ -229,7 +239,41 @@
                 <div x-show="featuredPhoto?.url_large" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Featured Image</span><a :href="featuredPhoto?.url_large" target="_blank" class="text-sm text-blue-600 hover:underline break-all" x-text="featuredPhoto?.url_large"></a></div>
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Date Created</span><p class="text-sm text-gray-800" x-text="new Date().toLocaleString()"></p></div>
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Categories</span><p class="text-sm text-gray-800 break-words" x-text="suggestedCategories.length ? suggestedCategories.join(', ') : 'None'"></p></div>
-                <div class="flex items-start gap-3 py-1"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Tags</span><p class="text-sm text-gray-800 break-words" x-text="suggestedTags.length ? suggestedTags.join(', ') : 'None'"></p></div>
+                <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Tags</span><p class="text-sm text-gray-800 break-words" x-text="suggestedTags.length ? suggestedTags.join(', ') : 'None'"></p></div>
+                {{-- Integrity check results --}}
+                <div class="flex items-start gap-3 py-1">
+                    <span class="text-xs text-gray-500 w-24 flex-shrink-0">Integrity</span>
+                    <div class="text-sm">
+                        <template x-if="!prepareIntegrityIssues || prepareIntegrityIssues.length === 0">
+                            <span class="text-green-600 inline-flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                All checks passed
+                            </span>
+                        </template>
+                        <template x-if="prepareIntegrityIssues && prepareIntegrityIssues.length > 0">
+                            <div>
+                                <span class="text-orange-600 font-medium" x-text="prepareIntegrityIssues.length + ' issue(s) auto-fixed'"></span>
+                                <ul class="mt-1 space-y-0.5">
+                                    <template x-for="issue in prepareIntegrityIssues" :key="issue">
+                                        <li class="text-xs text-orange-500" x-text="'• ' + issue"></li>
+                                    </template>
+                                </ul>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Quick access buttons --}}
+            <div x-show="selectedSite?.url" class="flex flex-wrap gap-2 mb-4">
+                <a :href="publishResult?.post_url || (selectedSite?.url + '/?p=' + publishResult?.post_id)" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    View Post
+                </a>
+                <a :href="selectedSite?.url + '/wp-admin/post.php?post=' + publishResult?.post_id + '&action=edit'" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-700 text-white text-xs font-medium rounded-lg hover:bg-gray-800">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    WP Admin Edit
+                </a>
             </div>
 
             {{-- Uploaded photos full report --}}

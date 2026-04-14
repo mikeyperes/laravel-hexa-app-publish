@@ -18,6 +18,15 @@
                         Search
                     </button>
                 </div>
+                {{-- URL import + file upload for inner photos --}}
+                <div class="flex gap-2 mb-4">
+                    <input type="text" x-model="innerPhotoUrlImport" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Paste image URL...">
+                    <button @click="importInnerPhotoFromUrl()" :disabled="!innerPhotoUrlImport" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">Import URL</button>
+                    <label class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-700 cursor-pointer inline-flex items-center gap-1">
+                        Upload
+                        <input type="file" class="hidden" accept="image/*" @change="uploadInnerPhoto($event.target.files); $event.target.value = null">
+                    </label>
+                </div>
                 <div x-show="photoResults.length > 0" class="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <template x-for="(photo, pidx) in photoResults" :key="pidx">
                         <div class="cursor-pointer rounded-lg overflow-hidden border-2 hover:border-purple-400 transition-colors" :class="insertingPhoto === photo ? 'border-purple-500 ring-2 ring-purple-200' : 'border-gray-200'" @click="insertingPhoto = photo; photoCaption = photo.alt || articleTitle; overlayPhotoAlt = 'Click Get Metadata to generate'; overlayPhotoCaption = 'Click Get Metadata to generate'; overlayPhotoFilename = 'auto'; overlayMetaGenerated = false;">

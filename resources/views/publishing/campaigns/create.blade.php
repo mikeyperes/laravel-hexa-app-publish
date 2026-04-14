@@ -3,19 +3,17 @@
 @section('header', isset($editCampaign) && $editCampaign->name !== 'Untitled Campaign' ? $editCampaign->name : 'Create Campaign')
 
 @section('content')
-<div class="max-w-3xl mx-auto space-y-6" x-data="campaignCreate()">
+<div class="max-w-4xl mx-auto space-y-6" x-data="campaignCreate()">
 
-    {{-- Campaign Name --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <label class="block text-xs text-gray-500 mb-1">Campaign Name</label>
-        <input type="text" x-model="form.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Daily Tech News for HerForward">
+        <input type="text" x-model="form.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Daily Entertainment News">
     </div>
 
-    {{-- User --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 class="font-semibold text-gray-800 mb-3">Select User</h3>
         <div class="max-w-md"
-             @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-user') { form.user_id = $event.detail.item.id; loadUserPresets($event.detail.item.id); }"
+             @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-user') { form.user_id = $event.detail.item.id; loadUserDefaults($event.detail.item.id); }"
              @hexa-search-cleared.window="if ($event.detail.component_id === 'campaign-user') form.user_id = null">
             @php
                 $selectedUser = (isset($editCampaign) && $editCampaign->user) ? ['id' => $editCampaign->user->id, 'name' => $editCampaign->user->name, 'email' => $editCampaign->user->email] : null;
@@ -25,102 +23,117 @@
         </div>
     </div>
 
-    {{-- ═══ Campaign Preset ═══ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-3">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
         <div class="flex items-center justify-between">
             <h3 class="font-semibold text-gray-800">Campaign Preset</h3>
-            <div class="flex items-center gap-3">
-                <button x-show="form.campaign_preset_id" @click="restoreCampaignPreset()" class="text-xs text-gray-400 hover:text-blue-600">Restore Defaults</button>
-                <a href="{{ route('campaigns.presets.index') }}" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
-            </div>
+            <a href="{{ route('campaigns.presets.index') }}" class="text-xs text-blue-600 hover:text-blue-800">Manage Presets</a>
         </div>
-        <select x-model="form.campaign_preset_id" @change="loadPreset()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+        <select x-model="form.campaign_preset_id" @change="applyPresetDefaults()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
             <option value="">-- No preset --</option>
             @foreach($campaignPresets as $cp)
-                <option value="{{ $cp->id }}">{{ $cp->name }} ({{ ucfirst($cp->source_method) }}{{ $cp->genre ? ' — ' . ucfirst($cp->genre) : '' }})</option>
+                <option value="{{ $cp->id }}">{{ $cp->name }}</option>
             @endforeach
         </select>
-        <div x-show="form.campaign_preset_id" x-cloak class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-            <div><label class="block text-xs text-gray-400 mb-1">Source Method</label><select x-model="form.source_method" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"><option value="trending">Trending</option><option value="genre">Genre</option><option value="local">Local</option></select></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Genre</label><input type="text" x-model="form.genre" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="e.g. technology"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Local Preference</label><input type="text" x-model="form.local_preference" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="City or state"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Keywords (comma sep)</label><input type="text" x-model="form.keywords_text" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="AI, tech, business"></div>
-            <div class="md:col-span-2"><label class="block text-xs text-gray-400 mb-1">Trending Categories (comma sep)</label><input type="text" x-model="form.trending_categories_text" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="technology, business, education"></div>
-            <div class="md:col-span-2"><label class="block text-xs text-gray-400 mb-1">AI Instructions</label><textarea x-model="form.cp_ai_instructions" rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Custom AI instructions for this campaign..."></textarea></div>
-            <div class="md:col-span-2"><label class="block text-xs text-gray-400 mb-1">Auto-publish</label>
-                <div class="flex items-center gap-2"><button @click="form.auto_publish = !form.auto_publish" type="button" class="relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200" :class="form.auto_publish ? 'bg-green-500' : 'bg-gray-300'" role="switch"><span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200" :class="form.auto_publish ? 'translate-x-5' : 'translate-x-0'"></span></button><span class="text-xs text-gray-500" x-text="form.auto_publish ? 'System handles everything' : 'Manual review'"></span></div>
+
+        <div x-show="selectedPreset()" x-cloak class="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 space-y-2">
+            <div class="flex flex-wrap gap-4">
+                <p><span class="text-blue-600">Output:</span> <span x-text="formatLabel(selectedPreset()?.final_article_method)"></span></p>
+                <p><span class="text-blue-600">Discovery:</span> <span x-text="formatLabel(selectedPreset()?.source_method)"></span></p>
+                <p><span class="text-blue-600">Search Terms:</span> <span x-text="(selectedPreset()?.keywords || []).length"></span></p>
+            </div>
+            <p x-show="selectedPreset()?.genre"><span class="text-blue-600">Genre:</span> <span x-text="selectedPreset()?.genre"></span></p>
+            <p x-show="selectedPreset()?.local_preference"><span class="text-blue-600">Local Preference:</span> <span x-text="selectedPreset()?.local_preference"></span></p>
+            <p x-show="selectedPreset()?.ai_instructions"><span class="text-blue-600">Preset AI Instructions:</span> <span x-text="selectedPreset()?.ai_instructions"></span></p>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+        <h3 class="font-semibold text-gray-800">Discovery</h3>
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Search Terms / Prompts <span class="text-gray-400">(one per line, one is chosen at random per run)</span></label>
+            <textarea x-model="termsText" rows="6" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Find breaking news in entertainment&#10;Latest local education policy updates&#10;Breaking startup funding news"></textarea>
+            <p class="text-xs text-gray-400 mt-1">Leave blank to use the selected campaign preset's search terms.</p>
+        </div>
+
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Fallback Topic / Query</label>
+            <input type="text" x-model="form.topic" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Used when no search terms are available">
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Article Type</label>
+                <select x-model="form.article_type" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">-- Template Default --</option>
+                    @foreach($articleTypes as $type)
+                        <option value="{{ $type }}">{{ ucwords(str_replace('-', ' ', $type)) }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Article Sources</label>
+                <div class="flex flex-wrap gap-2 pt-2">
+                    @foreach(config('hws-publish.article_sources', []) as $source)
+                        <label class="inline-flex items-center gap-2 text-xs text-gray-600">
+                            <input type="checkbox" :checked="form.article_sources.includes('{{ $source }}')" @change="toggleArray(form.article_sources, '{{ $source }}')" class="rounded border-gray-300 text-blue-600">
+                            {{ ucwords(str_replace(['-', '_'], ' ', $source)) }}
+                        </label>
+                    @endforeach
+                </div>
             </div>
         </div>
     </div>
 
-    {{-- ═══ AI Template ═══ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-3">
-        <div class="flex items-center justify-between">
-            <h3 class="font-semibold text-gray-800 inline-flex items-center gap-2">AI Template <svg x-show="loadingPresets" x-cloak class="w-3 h-3 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></h3>
-            <div class="flex items-center gap-3">
-                <button x-show="form.publish_template_id" @click="restoreAiTemplate()" class="text-xs text-gray-400 hover:text-blue-600">Restore Defaults</button>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-gray-800">AI Template</h3>
                 <a href="{{ route('publish.templates.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
             </div>
-        </div>
-        <select x-model="form.publish_template_id" @change="loadAiTemplate()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-            <option value="">-- Default --</option>
-            @foreach($aiTemplates as $t)
-                <option value="{{ $t->id }}">{{ $t->name }}</option>
-            @endforeach
-        </select>
-        <div x-show="form.publish_template_id" x-cloak class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-            <div><label class="block text-xs text-gray-400 mb-1">AI Engine</label><input type="text" x-model="form.ai_engine" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="claude-sonnet-4-6"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Article Type</label><input type="text" x-model="form.override_article_type" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="editorial, listicle, press-release"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Tone</label><input type="text" x-model="form.override_tone" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Professional, Conversational"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Word Count Range</label><div class="flex gap-2"><input type="number" x-model="form.override_word_min" class="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Min"><span class="text-gray-400">—</span><input type="number" x-model="form.override_word_max" class="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" placeholder="Max"></div></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Photos per Article</label><input type="number" x-model="form.override_photos_per_article" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" min="0" max="20" placeholder="3"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Photo Sources (comma sep)</label><input type="text" x-model="form.override_photo_sources_text" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="unsplash, pexels, pixabay"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Max Links</label><input type="number" x-model="form.override_max_links" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" min="0" max="50" placeholder="5"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Description</label><input type="text" x-model="form.override_ai_description" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Template description"></div>
-            <div class="md:col-span-2"><label class="block text-xs text-gray-400 mb-1">AI Prompt</label><textarea x-model="form.override_ai_prompt" rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Custom AI prompt override..."></textarea></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Structure</label><input type="text" x-model="form.override_structure" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="intro, body, conclusion"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Rules</label><input type="text" x-model="form.override_rules" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Custom rules"></div>
-        </div>
-    </div>
-
-    {{-- ═══ WordPress Preset ═══ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-3">
-        <div class="flex items-center justify-between">
-            <h3 class="font-semibold text-gray-800 inline-flex items-center gap-2">WordPress Preset <svg x-show="loadingPresets" x-cloak class="w-3 h-3 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></h3>
-            <div class="flex items-center gap-3">
-                <button x-show="form.preset_id" @click="restoreWpPreset()" class="text-xs text-gray-400 hover:text-blue-600">Restore Defaults</button>
-                <a href="{{ route('publish.presets.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
+            <select x-model="form.publish_template_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">-- Default Template --</option>
+                @foreach($aiTemplates as $template)
+                    <option value="{{ $template->id }}">{{ $template->name }}</option>
+                @endforeach
+            </select>
+            <div x-show="selectedTemplate()" x-cloak class="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs text-gray-700">
+                <p x-show="selectedTemplate()?.article_type"><span class="text-gray-500">Type:</span> <span x-text="formatLabel(selectedTemplate()?.article_type)"></span></p>
+                <p x-show="selectedTemplate()?.ai_engine"><span class="text-gray-500">AI Model:</span> <span x-text="selectedTemplate()?.ai_engine"></span></p>
+                <p x-show="selectedTemplate()?.word_count_min || selectedTemplate()?.word_count_max"><span class="text-gray-500">Word Count:</span> <span x-text="(selectedTemplate()?.word_count_min || '—') + ' - ' + (selectedTemplate()?.word_count_max || '—')"></span></p>
             </div>
         </div>
-        <select x-model="form.preset_id" @change="loadWpPreset()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-            <option value="">-- Default --</option>
-            @foreach($wpPresets as $p)
-                <option value="{{ $p->id }}">{{ $p->name }}</option>
-            @endforeach
-        </select>
-        <div x-show="form.preset_id" x-cloak class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-            <div><label class="block text-xs text-gray-400 mb-1">Publish Action</label><select x-model="form.delivery_mode" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"><option value="auto-publish">Publish Immediately</option><option value="draft-local">Save as Local Draft</option><option value="draft-wordpress">Save as WordPress Draft</option><option value="review">Schedule for Later</option></select></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Follow Links</label><select x-model="form.override_follow_links" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"><option value="">Default</option><option value="follow">Follow</option><option value="nofollow">Nofollow</option></select></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Article Format</label><input type="text" x-model="form.override_wp_article_format" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Editorial"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Tone</label><input type="text" x-model="form.override_wp_tone" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Authoritative"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Image Preference</label><input type="text" x-model="form.override_image_preference" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="Abstract/Conceptual"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Image Layout</label><input type="text" x-model="form.override_image_layout" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" placeholder="5 Photos Randomly Placed"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Category Count</label><input type="number" x-model="form.override_category_count" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" min="0" max="30" placeholder="3"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Tag Count</label><input type="number" x-model="form.override_tag_count" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" min="0" max="30" placeholder="5"></div>
-            <div><label class="block text-xs text-gray-400 mb-1">Default Site</label><select x-model="form.override_default_site_id" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm"><option value="">From campaign</option>@foreach($sites as $s)<option value="{{ $s->id }}">{{ $s->name }}</option>@endforeach</select></div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-gray-800">WordPress Preset</h3>
+                <a href="{{ route('publish.presets.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
+            </div>
+            <select x-model="form.preset_id" @change="applyWpPresetDefaults()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">-- Default Preset --</option>
+                @foreach($wpPresets as $preset)
+                    <option value="{{ $preset->id }}">{{ $preset->name }}</option>
+                @endforeach
+            </select>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Delivery Mode</label>
+                <select x-model="form.delivery_mode" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    @foreach($deliveryModes as $mode)
+                        <option value="{{ $mode }}">{{ ucwords(str_replace('-', ' ', $mode)) }}</option>
+                    @endforeach
+                </select>
+            </div>
         </div>
     </div>
 
-    {{-- WordPress Site --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 class="font-semibold text-gray-800 mb-3">WordPress Site</h3>
         <select x-model="form.publish_site_id" @change="doTestSite()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
             <option value="">-- Select site --</option>
-            @foreach($sites as $s)
-                <option value="{{ $s->id }}">{{ $s->name }} ({{ $s->url }})</option>
+            @foreach($sites as $site)
+                <option value="{{ $site->id }}">{{ $site->name }} ({{ $site->url }})</option>
             @endforeach
         </select>
-        {{-- Connection status --}}
+
         <div x-show="form.publish_site_id" x-cloak class="mt-3">
             <div class="flex items-center gap-2 rounded-lg px-3 py-2" :class="siteConn.status === true ? 'bg-green-50' : (siteConn.status === false ? 'bg-red-50' : 'bg-gray-50')">
                 <template x-if="siteConn.testing"><svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
@@ -130,52 +143,34 @@
                 <span class="text-sm" :class="siteConn.status === true ? 'text-green-800' : (siteConn.status === false ? 'text-red-800' : 'text-gray-600')" x-text="siteConn.message || 'Site selected — click Test to verify connection'"></span>
                 <button x-show="!siteConn.testing" @click="doTestSite()" class="text-xs text-blue-600 hover:text-blue-800 ml-2" x-text="siteConn.status === true ? 'Retest' : 'Test'"></button>
             </div>
-            {{-- Connection log --}}
-            <div x-show="siteConn.log.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
-                <template x-for="(entry, idx) in siteConn.log" :key="idx">
-                    <div class="flex items-start gap-2 py-0.5 text-xs font-mono">
-                        <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
-                        <span :class="{'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info'}" x-text="entry.message" class="break-words"></span>
-                    </div>
-                </template>
-            </div>
         </div>
 
-        {{-- Author (always visible when site selected) --}}
         <div x-show="form.publish_site_id" class="mt-4">
             <label class="block text-xs text-gray-500 mb-1">Author</label>
             <div x-show="siteConn.authors.length > 0">
                 <select x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
                     <option value="">-- Default author --</option>
-                    <template x-for="a in siteConn.authors" :key="a.user_login">
-                        <option :value="a.user_login" x-text="(a.display_name || a.user_login) + ' (' + a.user_login + ')'"></option>
+                    <template x-for="author in siteConn.authors" :key="author.user_login">
+                        <option :value="author.user_login" x-text="(author.display_name || author.user_login) + ' (' + author.user_login + ')'"></option>
                     </template>
                 </select>
             </div>
             <div x-show="siteConn.authors.length === 0">
-                <div class="flex items-center gap-2">
-                    <input type="text" x-model="form.author" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md" placeholder="WordPress author username">
-                    <span x-show="siteConn.testing" class="text-xs text-blue-500 flex items-center gap-1">
-                        <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        Loading authors...
-                    </span>
-                </div>
+                <input type="text" x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md" placeholder="WordPress author username">
             </div>
         </div>
     </div>
 
-    {{-- Scheduling --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
         <h3 class="font-semibold text-gray-800">Scheduling</h3>
-
-        <div class="flex flex-wrap gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Posts per batch</label>
-                <input type="number" x-model="form.articles_per_interval" min="1" max="50" class="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <label class="block text-xs text-gray-500 mb-1">Posts per Batch</label>
+                <input type="number" x-model="form.articles_per_interval" min="1" max="50" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div>
                 <label class="block text-xs text-gray-500 mb-1">Frequency</label>
-                <select x-model="form.interval_unit" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <select x-model="form.interval_unit" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="hourly">Hourly</option>
                     <option value="daily">Daily</option>
                     <option value="weekly">Weekly</option>
@@ -183,41 +178,29 @@
                 </select>
             </div>
             <div>
-                <label class="block text-xs text-gray-500 mb-1">First post at</label>
-                <input type="time" x-model="form.run_at_time" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <label class="block text-xs text-gray-500 mb-1">Run At</label>
+                <input type="time" x-model="form.run_at_time" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Drip interval (minutes between posts)</label>
-                <input type="number" x-model="form.drip_interval_minutes" min="1" max="1440" class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <label class="block text-xs text-gray-500 mb-1">Drip Minutes</label>
+                <input type="number" x-model="form.drip_interval_minutes" min="1" max="1440" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
         </div>
-
-        {{-- Preview schedule --}}
-        <div x-show="form.articles_per_interval > 1" x-cloak class="bg-gray-50 rounded-lg p-3 text-xs text-gray-600">
-            <p class="font-medium text-gray-700 mb-1">Post Schedule Preview:</p>
-            <template x-for="i in Math.min(parseInt(form.articles_per_interval) || 1, 10)" :key="i">
-                <p x-text="'Post ' + i + ': ' + calculatePostTime(i - 1)"></p>
-            </template>
-        </div>
-
         <div>
             <label class="block text-xs text-gray-500 mb-1">Timezone</label>
             <select x-model="form.timezone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
                 @foreach($timezones as $tz)
-                    <option value="{{ $tz }}" {{ $tz === 'America/New_York' ? 'selected' : '' }}>{{ $tz }}</option>
+                    <option value="{{ $tz }}">{{ $tz }}</option>
                 @endforeach
             </select>
-            <p class="text-xs text-gray-400 mt-1">Current UTC: <span x-text="new Date().toISOString().substring(11, 16)"></span> UTC</p>
         </div>
     </div>
 
-    {{-- AI Instructions --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <label class="block text-xs text-gray-500 mb-1">AI Instructions</label>
-        <textarea x-model="form.notes" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Custom instructions fed to AI when this campaign generates articles. e.g. Write in first person, focus on women in business, include expert quotes..."></textarea>
+        <label class="block text-xs text-gray-500 mb-1">Campaign AI Instructions</label>
+        <textarea x-model="form.ai_instructions" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Extra instructions for the AI when this campaign runs."></textarea>
     </div>
 
-    {{-- Actions --}}
     <div class="flex gap-3">
         <button @click="saveCampaign()" :disabled="saving" class="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
             <svg x-show="saving" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -230,9 +213,10 @@
         <a href="{{ route('campaigns.index') }}" class="text-gray-500 hover:text-gray-700 px-4 py-2.5 text-sm">Cancel</a>
     </div>
 
-    <div x-show="saveResult" x-cloak class="p-3 rounded-lg text-sm border" :class="saveSuccess ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'" x-text="saveResult"></div>
+    <div x-show="saveResult" x-cloak class="p-3 rounded-lg text-sm border" :class="saveSuccess ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'">
+        <span x-html="saveResult"></span>
+    </div>
 
-    {{-- Links --}}
     <div class="flex gap-4 text-xs text-gray-400">
         <a href="{{ route('campaigns.presets.index') }}" class="hover:text-blue-600">Campaign Presets</a>
         @if(Route::has('publish.schedule.index'))
@@ -261,52 +245,63 @@ function campaignCreate() {
                 'publish_site_id' => $editCampaign->publish_site_id ?? '',
                 'name' => $editCampaign->name ?? '',
                 'description' => $editCampaign->description ?? '',
+                'ai_instructions' => $editCampaign->ai_instructions ?? $editCampaign->notes ?? '',
                 'topic' => $editCampaign->topic ?? '',
                 'keywords' => $editCampaign->keywords ?? [],
-                'auto_publish' => $editCampaign->auto_publish ?? false,
-                'author' => $editCampaign->author ?? '',
-                'post_status' => $editCampaign->post_status ?? 'draft',
+                'article_type' => $editCampaign->article_type ?? '',
                 'delivery_mode' => $editCampaign->delivery_mode ?? 'draft-local',
+                'author' => $editCampaign->author ?? '',
                 'articles_per_interval' => $editCampaign->articles_per_interval ?? 1,
                 'interval_unit' => $editCampaign->interval_unit ?? 'daily',
                 'timezone' => $editCampaign->timezone ?? 'America/New_York',
                 'run_at_time' => $editCampaign->run_at_time ?? '09:00',
                 'drip_interval_minutes' => $editCampaign->drip_interval_minutes ?? 60,
-                'notes' => $editCampaign->notes ?? '',
+                'article_sources' => $editCampaign->article_sources ?? [],
             ];
         @endphp
         const initialForm = {!! json_encode($editData) !!};
     @else
         const initialForm = {
-            user_id: null, campaign_preset_id: '', publish_template_id: '', preset_id: '', publish_site_id: '',
-            name: '', description: '', topic: '', keywords: [], auto_publish: false,
-            author: '', post_status: 'draft', delivery_mode: 'draft-local',
-            source_method: 'trending', genre: '', local_preference: '', keywords_text: '', trending_categories_text: '', cp_ai_instructions: '', auto_publish: false,
-            ai_engine: '', override_article_type: '', override_tone: '', override_word_min: '', override_word_max: '',
-            override_photos_per_article: '', override_photo_sources_text: '', override_max_links: '', override_ai_description: '', override_ai_prompt: '', override_structure: '', override_rules: '',
-            override_follow_links: '', override_wp_article_format: '', override_wp_tone: '', override_image_preference: '', override_image_layout: '', override_category_count: '', override_tag_count: '', override_default_site_id: '',
-            articles_per_interval: 1, interval_unit: 'daily',
-            timezone: 'America/New_York', run_at_time: '09:00', drip_interval_minutes: 60, notes: ''
+            user_id: null,
+            campaign_preset_id: '',
+            publish_template_id: '',
+            preset_id: '',
+            publish_site_id: '',
+            name: '',
+            description: '',
+            ai_instructions: '',
+            topic: '',
+            keywords: [],
+            article_type: '',
+            delivery_mode: 'draft-local',
+            author: '',
+            articles_per_interval: 1,
+            interval_unit: 'daily',
+            timezone: 'America/New_York',
+            run_at_time: '09:00',
+            drip_interval_minutes: 60,
+            article_sources: [],
         };
     @endif
 
     return {
         ...siteConnectionMixin(),
-
         editId: {{ isset($editCampaign) && $editCampaign ? $editCampaign->id : 'null' }},
-        saving: false, saveResult: '', saveSuccess: false,
+        saving: false,
+        saveResult: '',
+        saveSuccess: false,
         runningNow: false,
-        presetInfo: '',
-        form: initialForm,
-
         loadingPresets: false,
-
+        form: initialForm,
+        termsText: (initialForm.keywords || []).join('\n'),
         _saveTimer: null,
-
         _skipCount: 0,
 
         init() {
-            // Auto-save on any form change — skip first 2 triggers (initial hydration)
+            this.$watch('termsText', value => {
+                this.form.keywords = this.parseTerms(value);
+            });
+
             this.$watch('form', () => {
                 this._skipCount++;
                 if (this._skipCount <= 2) return;
@@ -314,31 +309,83 @@ function campaignCreate() {
                 this._saveTimer = setTimeout(() => this.autoSave(), 500);
             }, { deep: true });
 
-            // Auto-select default presets if not already set
             const defaultPreset = presets.find(p => p.is_default);
             if (defaultPreset && !this.form.campaign_preset_id) {
                 this.form.campaign_preset_id = String(defaultPreset.id);
-                this.loadPreset();
+                this.applyPresetDefaults();
             }
 
-            // Populate override fields from already-selected presets
-            if (this.form.campaign_preset_id) this.loadPreset();
-            if (this.form.publish_template_id) this.loadAiTemplate();
-            if (this.form.preset_id) this.loadWpPreset();
+            if (this.form.preset_id) {
+                this.applyWpPresetDefaults();
+            }
 
-            // If site is selected, restore cached connection or show prompt
             if (this.form.publish_site_id) {
-                const cacheKey = 'campaignSiteConnection_' + this.editId;
+                const cacheKey = 'campaignSiteConnection_' + (this.editId || 'new');
                 const restored = this.restoreSiteConnection(this.form.publish_site_id, cacheKey);
-                if (restored) {
-                    // Re-sync author dropdown
-                    const savedAuthor = this.form.author;
-                    if (savedAuthor) {
-                        setTimeout(() => { this.form.author = ''; setTimeout(() => { this.form.author = savedAuthor; }, 50); }, 200);
-                    }
-                } else {
-                    this.siteConn.message = 'Click "Test Connection" to verify site access.';
+                if (!restored) {
+                    this.siteConn.message = 'Click "Test" to verify site access.';
                 }
+            }
+        },
+
+        parseTerms(value) {
+            return (value || '')
+                .split('\n')
+                .map(item => item.trim())
+                .filter(Boolean);
+        },
+
+        formatLabel(value) {
+            return (value || '').replace(/[-_]/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+        },
+
+        selectedPreset() {
+            return presets.find(item => String(item.id) === String(this.form.campaign_preset_id)) || null;
+        },
+
+        selectedTemplate() {
+            return aiTemplates.find(item => String(item.id) === String(this.form.publish_template_id)) || null;
+        },
+
+        selectedWpPreset() {
+            return wpPresets.find(item => String(item.id) === String(this.form.preset_id)) || null;
+        },
+
+        toggleArray(arr, value) {
+            const index = arr.indexOf(value);
+            if (index === -1) arr.push(value);
+            else arr.splice(index, 1);
+        },
+
+        applyPresetDefaults() {
+            const preset = this.selectedPreset();
+            if (!preset) return;
+
+            if (!this.termsText.trim() && Array.isArray(preset.keywords) && preset.keywords.length > 0) {
+                this.termsText = preset.keywords.join('\n');
+            }
+
+            if (!this.form.ai_instructions && preset.ai_instructions) {
+                this.form.ai_instructions = preset.ai_instructions;
+            }
+
+            if (!this.form.topic && preset.local_preference && preset.source_method === 'local') {
+                this.form.topic = preset.local_preference + ' local news';
+            }
+        },
+
+        applyWpPresetDefaults() {
+            const preset = this.selectedWpPreset();
+            if (!preset) return;
+
+            if (preset.default_publish_action) {
+                const actionMap = {
+                    publish_immediate: 'auto-publish',
+                    draft_wordpress: 'draft-wordpress',
+                    draft_local: 'draft-local',
+                    schedule: 'draft-local',
+                };
+                this.form.delivery_mode = actionMap[preset.default_publish_action] || 'draft-local';
             }
         },
 
@@ -346,153 +393,85 @@ function campaignCreate() {
             if (!this.editId) return;
             try {
                 await fetch('/campaigns/' + this.editId, {
-                    method: 'PUT', headers,
-                    body: JSON.stringify(this.form)
+                    method: 'PUT',
+                    headers,
+                    body: JSON.stringify(this.form),
                 });
-            } catch(e) { /* silent auto-save */ }
+            } catch (e) {}
         },
 
-        async loadUserPresets(userId) {
+        async loadUserDefaults(userId) {
             if (!userId) return;
             this.loadingPresets = true;
             try {
-                // Load WP presets for this user and auto-select default
-                const presetsResp = await fetch('{{ route("publish.presets.index") }}?user_id=' + userId + '&format=json', { headers: { 'Accept': 'application/json' } });
+                const presetsResp = await fetch('{{ route("publish.presets.index") }}?user_id=' + userId + '&format=json', { headers: { Accept: 'application/json' } });
                 const presetsData = await presetsResp.json();
                 const userPresets = presetsData.data || presetsData || [];
-                const defaultWp = userPresets.find(p => p.is_default);
+                const defaultWp = userPresets.find(item => item.is_default);
                 if (defaultWp && !this.form.preset_id) {
                     this.form.preset_id = String(defaultWp.id);
+                    this.applyWpPresetDefaults();
                 }
 
-                // Load AI templates for this user and auto-select default
-                const templatesResp = await fetch('{{ route("publish.templates.index") }}?user_id=' + userId + '&format=json', { headers: { 'Accept': 'application/json' } });
+                const templatesResp = await fetch('{{ route("publish.templates.index") }}?user_id=' + userId + '&format=json', { headers: { Accept: 'application/json' } });
                 const templatesData = await templatesResp.json();
                 const userTemplates = templatesData.data || templatesData || [];
-                const defaultAi = userTemplates.find(t => t.is_default);
-                if (defaultAi && !this.form.publish_template_id) {
-                    this.form.publish_template_id = String(defaultAi.id);
+                const defaultTemplate = userTemplates.find(item => item.is_default);
+                if (defaultTemplate && !this.form.publish_template_id) {
+                    this.form.publish_template_id = String(defaultTemplate.id);
                 }
-                // Populate fields from selected presets
-                if (this.form.preset_id) this.loadWpPreset();
-                if (this.form.publish_template_id) this.loadAiTemplate();
-            } catch(e) { /* silent */ }
+            } catch (e) {}
             this.loadingPresets = false;
-        },
-
-        calculatePostTime(index) {
-            if (!this.form.run_at_time) return 'TBD';
-            const [h, m] = this.form.run_at_time.split(':').map(Number);
-            const totalMinutes = h * 60 + m + (index * (parseInt(this.form.drip_interval_minutes) || 60));
-            const hours = Math.floor(totalMinutes / 60) % 24;
-            const mins = totalMinutes % 60;
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            const h12 = hours % 12 || 12;
-            return h12 + ':' + String(mins).padStart(2, '0') + ' ' + ampm + ' ' + (this.form.timezone || 'ET');
         },
 
         async doTestSite() {
             await this.testSiteConnection(this.form.publish_site_id, csrf, {
-                cacheKey: 'campaignSiteConnection_' + this.editId,
-                onAuthorsLoaded(authors) {
-                    const saved = this.form.author;
-                    if (saved) {
-                        setTimeout(() => { this.form.author = ''; setTimeout(() => { this.form.author = saved; }, 50); }, 200);
-                    }
-                },
+                cacheKey: 'campaignSiteConnection_' + (this.editId || 'new'),
                 onSuccess(d) {
                     if (d.default_author && !this.form.author) this.form.author = d.default_author;
                 },
             });
         },
 
-        loadPreset() {
-            const p = presets.find(x => x.id == this.form.campaign_preset_id);
-            if (p) {
-                this.form.source_method = p.source_method || 'trending';
-                this.form.genre = p.genre || '';
-                this.form.local_preference = p.local_preference || '';
-                this.form.keywords_text = (p.keywords || []).join(', ');
-                this.form.keywords = p.keywords || [];
-                this.form.trending_categories_text = (p.trending_categories || []).join(', ');
-                this.form.auto_publish = p.auto_select_sources || false;
-                this.form.cp_ai_instructions = p.ai_instructions || '';
-                if (p.ai_instructions) this.form.notes = p.ai_instructions;
-            }
-        },
-        restoreCampaignPreset() { this.loadPreset(); },
-
-        loadAiTemplate() {
-            const t = aiTemplates.find(x => x.id == this.form.publish_template_id);
-            if (t) {
-                this.form.ai_engine = t.ai_engine || '';
-                this.form.override_article_type = t.article_type || '';
-                this.form.override_tone = Array.isArray(t.tone) ? t.tone.join(', ') : (t.tone || '');
-                this.form.override_word_min = t.word_count_min || '';
-                this.form.override_word_max = t.word_count_max || '';
-                this.form.override_photos_per_article = t.photos_per_article || '';
-                this.form.override_photo_sources_text = (t.photo_sources || []).join(', ');
-                this.form.override_max_links = t.max_links || '';
-                this.form.override_ai_description = t.description || '';
-                this.form.override_ai_prompt = t.ai_prompt || '';
-                this.form.override_structure = t.structure || '';
-                this.form.override_rules = t.rules || '';
-            }
-        },
-        restoreAiTemplate() { this.loadAiTemplate(); },
-
-        loadWpPreset() {
-            const p = wpPresets.find(x => x.id == this.form.preset_id);
-            if (p) {
-                this.form.delivery_mode = p.default_publish_action || 'draft-local';
-                this.form.override_follow_links = p.follow_links || '';
-                this.form.override_wp_article_format = p.article_format || '';
-                this.form.override_wp_tone = p.tone || '';
-                this.form.override_image_preference = p.image_preference || '';
-                this.form.override_image_layout = p.image_layout || '';
-                this.form.override_category_count = p.default_category_count || '';
-                this.form.override_tag_count = p.default_tag_count || '';
-                this.form.override_default_site_id = p.default_site_id || '';
-            }
-        },
-        restoreWpPreset() { this.loadWpPreset(); },
-
         async saveCampaign() {
-            this.saving = true; this.saveResult = '';
+            this.form.keywords = this.parseTerms(this.termsText);
+            this.saving = true;
+            this.saveResult = '';
             const url = this.editId ? '/campaigns/' + this.editId : '{{ route("campaigns.store") }}';
             const method = this.editId ? 'PUT' : 'POST';
             try {
-                const r = await fetch(url, { method, headers, body: JSON.stringify(this.form) });
-                const d = await r.json();
-                this.saveSuccess = d.success;
-                this.saveResult = d.message || (d.success ? 'Saved.' : 'Error.');
-                if (d.success && d.campaign?.id) {
-                    this.editId = d.campaign.id;
-                    history.replaceState(null, '', '{{ route("campaigns.create") }}?id=' + d.campaign.id);
-                    // Campaign is DB-backed, no localStorage needed
+                const response = await fetch(url, { method, headers, body: JSON.stringify(this.form) });
+                const data = await response.json();
+                this.saveSuccess = data.success;
+                this.saveResult = data.message || (data.success ? 'Saved.' : 'Error.');
+                if (data.success && data.campaign?.id) {
+                    this.editId = data.campaign.id;
+                    history.replaceState(null, '', '{{ route("campaigns.create") }}?id=' + data.campaign.id);
                 }
-            } catch(e) { this.saveSuccess = false; this.saveResult = 'Error: ' + e.message; }
+            } catch (e) {
+                this.saveSuccess = false;
+                this.saveResult = 'Error: ' + e.message;
+            }
             this.saving = false;
         },
 
         async runNow() {
             if (!this.editId) return;
             this.runningNow = true;
-            this.saveSuccess = null;
             this.saveResult = '';
             try {
-                const r = await fetch('/campaigns/' + this.editId + '/run-now', {
+                const response = await fetch('/campaigns/' + this.editId + '/run-now', {
                     method: 'POST',
                     headers,
-                    body: JSON.stringify({ mode: this.form.delivery_mode || 'draft' }),
+                    body: JSON.stringify({ mode: this.form.delivery_mode || 'draft-local' }),
                 });
-                const d = await r.json();
-                this.saveSuccess = d.success;
-                this.saveResult = d.message || (d.success ? 'Campaign executed.' : 'Run failed.');
-                if (d.article_url) {
-                    this.saveResult += ' <a href="' + d.article_url + '" target="_blank" class="underline">View Article</a>';
+                const data = await response.json();
+                this.saveSuccess = data.success;
+                this.saveResult = data.message || (data.success ? 'Campaign executed.' : 'Run failed.');
+                if (data.article_url) {
+                    this.saveResult += ' <a href="' + data.article_url + '" target="_blank" class="underline">View Article</a>';
                 }
-            } catch(e) {
+            } catch (e) {
                 this.saveSuccess = false;
                 this.saveResult = 'Error: ' + e.message;
             }

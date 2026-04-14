@@ -2,6 +2,7 @@
 
 namespace hexa_app_publish\Discovery\Sources\Services;
 
+use hexa_app_publish\Discovery\Sources\Models\ScrapeLog;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 
@@ -37,8 +38,8 @@ class SourceExtractionService
         $minWords = $options['min_words'] ?? 50;
         $autoFallback = $options['auto_fallback'] ?? true;
 
-        // AI extraction methods — delegate to Claude or GPT
-        if ($method === 'claude' || $method === 'gpt') {
+        // AI extraction methods — delegate to Claude, GPT, or Grok
+        if ($method === 'claude' || $method === 'gpt' || $method === 'grok') {
             return $this->extractWithAi($url, $method, $minWords);
         }
 
@@ -68,7 +69,10 @@ class SourceExtractionService
                 }
             }
 
-            return [
+            $fetchInfo = $extraction['fetch_info'] ?? [];
+            $fallbackUsed = !$extraction['success'] ? null : (str_contains($extraction['message'] ?? '', 'fallback') ? 'googlebot' : null);
+
+            $result = [
                 'success'        => $extraction['success'],
                 'message'        => $extraction['message'] ?? '',
                 'url'            => $url,
@@ -76,11 +80,20 @@ class SourceExtractionService
                 'text'           => $extraction['data']['content_text'] ?? '',
                 'word_count'     => $extraction['data']['word_count'] ?? 0,
                 'formatted_html' => $extraction['data']['content_formatted'] ?? '',
-                'fetch_info'     => $extraction['fetch_info'] ?? null,
+                'fetch_info'     => $fetchInfo,
+                'method_used'    => $fetchInfo['method'] ?? $method,
+                'response_time'  => $fetchInfo['response_time_ms'] ?? null,
+                'http_status'    => $fetchInfo['http_status'] ?? null,
+                'fallback_tried' => $fallbackUsed,
             ];
+
+            $this->logScrape($url, $method, $userAgent, $timeout, $retries, $result);
+            return $result;
         } catch (\Exception $e) {
             Log::warning("[SourceExtraction] Failed for {$url}: " . $e->getMessage());
-            return $this->fail($url, $e->getMessage());
+            $fail = $this->fail($url, $e->getMessage());
+            $this->logScrape($url, $method, $userAgent, $timeout, $retries, $fail);
+            return $fail;
         }
     }
 
@@ -154,6 +167,34 @@ class SourceExtractionService
     }
 
     /**
+     * Log a scrape to the activity table.
+     */
+    private function logScrape(string $url, string $method, string $userAgent, int $timeout, int $retries, array $result): void
+    {
+        try {
+            $domain = parse_url($url, PHP_URL_HOST) ?: 'unknown';
+            ScrapeLog::create([
+                'user_id'          => auth()->id(),
+                'url'              => Str::limit($url, 2048),
+                'domain'           => $domain,
+                'method'           => $result['method_used'] ?? $method,
+                'user_agent'       => $userAgent,
+                'timeout'          => $timeout,
+                'retries'          => $retries,
+                'http_status'      => $result['http_status'] ?? null,
+                'response_time_ms' => $result['response_time'] ?? null,
+                'word_count'       => $result['word_count'] ?? null,
+                'success'          => $result['success'],
+                'error_message'    => $result['success'] ? null : Str::limit($result['message'] ?? '', 1000),
+                'fallback_used'    => $result['fallback_tried'] ?? null,
+                'source'           => 'pipeline',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('[ScrapeLog] Failed to log: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Extract article content using Claude AI or GPT with web search.
      *
      * @param string $url
@@ -207,6 +248,18 @@ class SourceExtractionService
                         $textContent .= $block['text'];
                     }
                 }
+            } elseif ($provider === 'grok') {
+                // Grok — use chat via xAI API
+                if (!class_exists(\hexa_package_grok\Services\GrokService::class)) {
+                    return $this->fail($url, 'Grok package not available.');
+                }
+                $ai = app(\hexa_package_grok\Services\GrokService::class);
+                $result = $ai->chat($systemPrompt, $userMessage, 'grok-3-mini', 0.3, 4096);
+
+                if (!$result['success']) {
+                    return $this->fail($url, $result['message']);
+                }
+                $textContent = $result['data']['content'] ?? '';
             } else {
                 // GPT — use chat (no native web search, but can process URL context)
                 if (!class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)) {

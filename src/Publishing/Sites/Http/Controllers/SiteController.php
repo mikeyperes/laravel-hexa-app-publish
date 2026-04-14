@@ -80,11 +80,49 @@ class SiteController extends Controller
     public function create(Request $request): View
     {
         $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
+        $hostingAccounts = HostingAccount::orderBy('domain')->get(['id', 'username', 'domain', 'whm_server_id']);
 
         return view('app-publish::publishing.sites.create', [
             'accounts' => $accounts,
+            'hostingAccounts' => $hostingAccounts,
             'preselected_account_id' => $request->input('account_id'),
         ]);
+    }
+
+    /**
+     * AJAX: Scan a cPanel account for WordPress installs via WP Toolkit.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function scanInstalls(Request $request): JsonResponse
+    {
+        $request->validate(['hosting_account_id' => 'required|integer']);
+
+        $account = HostingAccount::with('whmServer')->findOrFail($request->input('hosting_account_id'));
+
+        if (!$account->whmServer) {
+            return response()->json(['success' => false, 'message' => 'No WHM server linked to this account.', 'installs' => []]);
+        }
+
+        try {
+            $result = $this->wptoolkit->getInstallsForAccount($account->whmServer, $account->username);
+
+            if ($result['success'] && !empty($result['installs'])) {
+                $installs = array_map(function ($install) use ($account) {
+                    $install['hosting_account_id'] = $account->id;
+                    $install['cpanel_user'] = $account->username;
+                    $install['cpanel_domain'] = $account->domain;
+                    return $install;
+                }, $result['installs']);
+
+                return response()->json(['success' => true, 'message' => count($installs) . ' install(s) found.', 'installs' => $installs]);
+            }
+
+            return response()->json(['success' => true, 'message' => 'No WordPress installs found.', 'installs' => []]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'installs' => []]);
+        }
     }
 
     /**
@@ -335,6 +373,47 @@ class SiteController extends Controller
             'authors' => $authors,
             'default_author' => $site->default_author,
         ]);
+    }
+
+    /**
+     * Get WordPress categories for a site via wp-cli.
+     */
+    public function getCategories(int $id): JsonResponse
+    {
+        $site = PublishSite::findOrFail($id);
+        $resolved = $this->resolveServer($site);
+        if (!$resolved['server'] || !$site->wordpress_install_id) {
+            return response()->json(['success' => false, 'categories' => [], 'message' => 'Server not configured.']);
+        }
+
+        $ssh = $this->wptoolkit->getConnection($resolved['server']);
+        if (!$ssh['success']) {
+            return response()->json(['success' => false, 'categories' => [], 'message' => $ssh['error'] ?? 'SSH failed']);
+        }
+
+        $escapedId = escapeshellarg((string) $site->wordpress_install_id);
+        $cmd = "wp-toolkit --wp-cli -instance-id {$escapedId} -- term list category --fields=term_id,name,slug,count --format=json 2>/dev/null";
+        $output = trim($ssh['connection']->exec($cmd));
+
+        $jsonLine = '';
+        foreach (explode("\n", $output) as $line) {
+            $line = trim($line);
+            if (str_starts_with($line, '[')) { $jsonLine = $line; break; }
+        }
+
+        $categories = json_decode($jsonLine, true);
+        if (!is_array($categories)) {
+            return response()->json(['success' => false, 'categories' => [], 'message' => 'Failed to parse categories.']);
+        }
+
+        $result = array_map(fn ($c) => [
+            'id' => (int) ($c['term_id'] ?? 0),
+            'name' => $c['name'] ?? '',
+            'slug' => $c['slug'] ?? '',
+            'count' => (int) ($c['count'] ?? 0),
+        ], $categories);
+
+        return response()->json(['success' => true, 'categories' => $result]);
     }
 
     /**

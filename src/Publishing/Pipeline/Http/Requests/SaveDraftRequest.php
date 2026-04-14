@@ -15,6 +15,7 @@ class SaveDraftRequest extends PipelineRequest
             'site_id' => 'nullable|integer|exists:publish_sites,id',
             'preset_id' => 'nullable|integer',
             'prompt_id' => 'nullable|integer',
+            'article_type' => 'nullable|string|max:100',
             'ai_model' => 'nullable|string|max:100',
             'author' => 'nullable|string|max:255',
             'sources' => 'nullable|array',

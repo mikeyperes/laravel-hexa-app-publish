@@ -57,59 +57,44 @@ class SearchController extends Controller
         $allPhotos = [];
         $errors = [];
         $totals = [];
+        $timings = [];
 
-        // Pexels
-        if (in_array('pexels', $selectedSources)) {
+        $serviceMap = [
+            'pexels'   => PexelsService::class,
+            'unsplash' => UnsplashService::class,
+            'pixabay'  => PixabayService::class,
+        ];
+
+        foreach ($selectedSources as $source) {
+            if (!isset($serviceMap[$source])) continue;
+            $start = microtime(true);
             try {
-                $result = app(PexelsService::class)->searchPhotos($query, $perPage);
+                $result = app($serviceMap[$source])->searchPhotos($query, $perPage);
+                $elapsed = round((microtime(true) - $start) * 1000);
+                $timings[$source] = $elapsed;
                 if ($result['success'] && !empty($result['data']['photos'])) {
                     $allPhotos = array_merge($allPhotos, $result['data']['photos']);
-                    $totals['pexels'] = $result['data']['total'] ?? 0;
+                    $totals[$source] = $result['data']['total'] ?? 0;
                 } elseif (!$result['success']) {
-                    $errors[] = 'Pexels: ' . ($result['message'] ?? 'Failed');
+                    $errors[] = ucfirst($source) . ': ' . ($result['message'] ?? 'Failed') . " ({$elapsed}ms)";
                 }
             } catch (\Exception $e) {
-                $errors[] = 'Pexels: ' . $e->getMessage();
+                $elapsed = round((microtime(true) - $start) * 1000);
+                $timings[$source] = $elapsed;
+                $errors[] = ucfirst($source) . ': ' . $e->getMessage() . " ({$elapsed}ms)";
             }
         }
 
-        // Unsplash
-        if (in_array('unsplash', $selectedSources)) {
-            try {
-                $result = app(UnsplashService::class)->searchPhotos($query, $perPage);
-                if ($result['success'] && !empty($result['data']['photos'])) {
-                    $allPhotos = array_merge($allPhotos, $result['data']['photos']);
-                    $totals['unsplash'] = $result['data']['total'] ?? 0;
-                } elseif (!$result['success']) {
-                    $errors[] = 'Unsplash: ' . ($result['message'] ?? 'Failed');
-                }
-            } catch (\Exception $e) {
-                $errors[] = 'Unsplash: ' . $e->getMessage();
-            }
-        }
-
-        // Pixabay
-        if (in_array('pixabay', $selectedSources)) {
-            try {
-                $result = app(PixabayService::class)->searchPhotos($query, $perPage);
-                if ($result['success'] && !empty($result['data']['photos'])) {
-                    $allPhotos = array_merge($allPhotos, $result['data']['photos']);
-                    $totals['pixabay'] = $result['data']['total'] ?? 0;
-                } elseif (!$result['success']) {
-                    $errors[] = 'Pixabay: ' . ($result['message'] ?? 'Failed');
-                }
-            } catch (\Exception $e) {
-                $errors[] = 'Pixabay: ' . $e->getMessage();
-            }
-        }
+        $totalTime = array_sum($timings);
 
         return response()->json([
             'success' => count($allPhotos) > 0,
-            'message' => count($allPhotos) . ' photos found across ' . count($totals) . ' source(s).',
+            'message' => count($allPhotos) . ' photos in ' . $totalTime . 'ms (' . implode(', ', array_map(fn ($k, $v) => $k . ':' . $v . 'ms', array_keys($timings), $timings)) . ')',
             'data'    => [
-                'photos' => $allPhotos,
-                'totals' => $totals,
-                'errors' => $errors,
+                'photos'  => $allPhotos,
+                'totals'  => $totals,
+                'errors'  => $errors,
+                'timings' => $timings,
             ],
         ]);
     }

@@ -11,5 +11,8 @@ Route::delete('/publishing/settings/{id}', [MasterSettingController::class, 'des
 Route::post('/publishing/settings/save-prompt', [MasterSettingController::class, 'savePrompt'])->name('publish.settings.master.save-prompt');
 Route::post('/publishing/settings/save-setting', [MasterSettingController::class, 'saveSetting'])->name('publish.settings.master.save-setting');
 
+// Press release sources
+Route::post('/publishing/settings/toggle-pr-source/{site}', [MasterSettingController::class, 'togglePressReleaseSource'])->name('publish.settings.toggle-pr-source');
+
 // Integration tests
 Route::post('/settings/test-integration', [SettingsController::class, 'testIntegration'])->name('settings.test-integration');

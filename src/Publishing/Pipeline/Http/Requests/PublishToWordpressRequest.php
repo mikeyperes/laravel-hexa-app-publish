@@ -32,6 +32,7 @@ class PublishToWordpressRequest extends PipelineRequest
             'template_id' => 'nullable|integer',
             'preset_id' => 'nullable|integer',
             'user_id' => 'nullable|integer',
+            'article_type' => 'nullable|string|max:100',
             'draft_id' => 'nullable|integer|exists:publish_articles,id',
         ];
     }

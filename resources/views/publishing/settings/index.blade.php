@@ -91,6 +91,66 @@
         @endif
     </div>
 
+    {{-- ═══ Press Release Sources ═══ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-5 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="font-semibold text-gray-800">Press Release Sources</h3>
+                    <p class="text-sm text-gray-500 mt-1">Select which connected WordPress sites are used as press release publishing destinations.</p>
+                </div>
+                <a href="{{ route('publish.sites.create') }}" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    Add Site
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                </a>
+            </div>
+        </div>
+        <div class="p-5">
+            <div class="bg-gray-50 rounded-lg border border-gray-200 p-4 mb-4 text-sm text-gray-600">
+                <h4 class="font-semibold text-gray-700 mb-2">How it works</h4>
+                <ol class="space-y-1.5 text-xs">
+                    <li>1. <a href="{{ route('publish.sites.index') }}" class="text-blue-600 hover:underline">Connect WordPress sites</a> with a cPanel account and WordPress application password.</li>
+                    <li>2. Toggle sites below to mark them as press release publishing destinations.</li>
+                    <li>3. When creating a press release in the <a href="{{ route('publish.pipeline') }}" class="text-blue-600 hover:underline">pipeline</a>, active sources will be available as target sites.</li>
+                </ol>
+            </div>
+            @if($allSites->isEmpty())
+                <p class="text-sm text-gray-400 italic">No connected sites yet. <a href="{{ route('publish.sites.create') }}" target="_blank" class="text-blue-600 hover:underline font-medium">Add your first site</a> to get started.</p>
+            @else
+                <div x-data="{ prSiteSearch: '' }" class="space-y-3">
+                    @if($allSites->count() > 3)
+                    <input type="text" x-model="prSiteSearch" placeholder="Filter sites..." class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400">
+                    @endif
+                <div class="space-y-2">
+                    @foreach($allSites as $site)
+                    <div class="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50" x-data="{ toggling: false, isSource: {{ $site->is_press_release_source ? 'true' : 'false' }} }" x-show="!prSiteSearch || '{{ strtolower($site->name) }} {{ strtolower($site->url) }}'.includes(prSiteSearch.toLowerCase())">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" :class="isSource ? 'bg-green-100' : 'bg-gray-100'">
+                                <svg class="w-4 h-4" :class="isSource ? 'text-green-600' : 'text-gray-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium text-gray-800 break-words">{{ $site->name }}</p>
+                                <p class="text-xs text-gray-400 break-all">{{ $site->url }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 flex-shrink-0 ml-3">
+                            <span class="text-xs font-medium" :class="isSource ? 'text-green-600' : 'text-gray-400'" x-text="isSource ? 'Active' : 'Inactive'"></span>
+                            <button @click="toggling = true; fetch('{{ route('publish.settings.toggle-pr-source', $site->id) }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content, 'Accept': 'application/json' } }).then(r => r.json()).then(d => { isSource = d.is_press_release_source; toggling = false; }).catch(() => { toggling = false; })"
+                                :disabled="toggling"
+                                class="relative w-10 h-5 rounded-full transition-colors cursor-pointer"
+                                :class="isSource ? 'bg-green-500' : 'bg-gray-300'">
+                                <span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform" :class="isSource ? 'translate-x-5' : ''"></span>
+                            </button>
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+                </div>
+            @endif
+        </div>
+    </div>
+
     {{-- ═══ AI Detection Threshold ═══ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" x-data="{ threshold: {{ \hexa_core\Models\Setting::getValue('ai_detection_threshold', 10) }}, saving: false, saved: false }">
         <h3 class="font-semibold text-gray-800 mb-1">AI Detection Threshold</h3>

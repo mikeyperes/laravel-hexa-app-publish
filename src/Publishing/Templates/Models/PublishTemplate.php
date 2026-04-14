@@ -44,6 +44,9 @@ class PublishTemplate extends Model
         'max_links',
         'structure',
         'rules',
+        'searching_agent',
+        'scraping_agent',
+        'spinning_agent',
     ];
 
     protected $casts = [

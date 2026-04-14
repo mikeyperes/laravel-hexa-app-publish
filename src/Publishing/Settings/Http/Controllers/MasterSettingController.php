@@ -34,10 +34,38 @@ class MasterSettingController extends Controller
             'ai_change_instruction', 'ai_metadata_prompt',
         ])->orderBy('sort_order')->get();
 
+        $pressReleaseSources = \hexa_app_publish\Publishing\Sites\Models\PublishSite::where('is_press_release_source', true)
+            ->orderBy('name')
+            ->get();
+        $allSites = \hexa_app_publish\Publishing\Sites\Models\PublishSite::where('status', 'connected')
+            ->orderBy('name')
+            ->get();
+
         return view('app-publish::publishing.settings.index', [
-            'wordpressGuidelines' => $wordpressGuidelines,
-            'spinningGuidelines'  => $spinningGuidelines,
-            'aiPrompts'           => $aiPrompts,
+            'wordpressGuidelines'  => $wordpressGuidelines,
+            'spinningGuidelines'   => $spinningGuidelines,
+            'aiPrompts'            => $aiPrompts,
+            'pressReleaseSources'  => $pressReleaseSources,
+            'allSites'             => $allSites,
+        ]);
+    }
+
+    /**
+     * Toggle a site's press release source flag.
+     *
+     * @param int $site
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function togglePressReleaseSource(int $site): \Illuminate\Http\JsonResponse
+    {
+        $site = \hexa_app_publish\Publishing\Sites\Models\PublishSite::findOrFail($site);
+        $site->is_press_release_source = !$site->is_press_release_source;
+        $site->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => $site->is_press_release_source ? 'Added as press release source.' : 'Removed as press release source.',
+            'is_press_release_source' => $site->is_press_release_source,
         ]);
     }
 

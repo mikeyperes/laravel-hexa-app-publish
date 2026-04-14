@@ -205,6 +205,25 @@ class ArticlePresetForm
                     ->meta(['empty_label' => 'Select layout...', 'section' => 'wordpress'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
+                // ── AI Agent fields ──
+                FieldDefinition::make('searching_agent', 'select', 'Searching Agent')
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::allProviderModelOptions())
+                    ->meta(['empty_label' => 'Default (Claude Haiku)', 'section' => 'ai_agents'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('scraping_agent', 'select', 'Scraping Agent')
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::allProviderModelOptions())
+                    ->meta(['empty_label' => 'Default (Claude Haiku)', 'section' => 'ai_agents'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('spinning_agent', 'select', 'Spinning Agent')
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::allProviderModelOptions())
+                    ->meta(['empty_label' => 'Default (Claude Opus)', 'section' => 'ai_agents'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
                 FieldDefinition::make('is_default', 'boolean', 'Set as default template')
                     ->default(false)
                     ->rules(['nullable', 'boolean'])
@@ -403,6 +422,29 @@ class ArticlePresetForm
         }
 
         return array_values((array) config('hws-publish.photo_sources', []));
+    }
+
+    protected static function allProviderModelOptions(): array
+    {
+        $options = [];
+
+        foreach (config('anthropic.models', []) as $m) {
+            if (($m['type'] ?? '') === 'api' || ($m['type'] ?? '') === 'both') {
+                $options[$m['id']] = 'Claude — ' . $m['name'];
+            }
+        }
+
+        foreach (config('chatgpt.models', []) as $m) {
+            $options[$m['id']] = 'GPT — ' . $m['name'];
+        }
+
+        if (class_exists(\hexa_package_grok\Services\GrokService::class)) {
+            foreach (app(\hexa_package_grok\Services\GrokService::class)->listModels() as $m) {
+                $options[$m['id']] = 'Grok — ' . $m['name'];
+            }
+        }
+
+        return $options;
     }
 
     protected static function listItemOptions(string $category): array

@@ -34,6 +34,9 @@ class ArticleGenerationService
         'gpt-4-turbo'                  => ['input' => 10.0, 'output' => 30.0],
         'gpt-4'                        => ['input' => 30.0, 'output' => 60.0],
         'gpt-3.5-turbo'                => ['input' => 0.50, 'output' => 1.50],
+        'grok-3'                       => ['input' => 3.0,  'output' => 15.0],
+        'grok-3-mini'                  => ['input' => 0.30, 'output' => 0.50],
+        'grok-2'                       => ['input' => 2.0,  'output' => 10.0],
     ];
 
     /**
@@ -64,16 +67,36 @@ class ArticleGenerationService
         $model = $options['model'] ?? 'claude-sonnet-4-6';
         $templateId = $options['template_id'] ?? null;
         $presetId = $options['preset_id'] ?? null;
+        $promptSlug = $options['prompt_slug'] ?? null;
         $customPrompt = $options['custom_prompt'] ?? null;
         $changeRequest = $options['change_request'] ?? null;
+        $prSubjectContext = $options['pr_subject_context'] ?? null;
         $agent = $options['agent'] ?? 'spin';
 
         // Build the system prompt
-        $systemPrompt = $this->buildPrompt($sourceTexts, $templateId, $presetId, $customPrompt, $changeRequest);
+        $systemPrompt = $this->buildPrompt(
+            $sourceTexts,
+            $templateId,
+            $presetId,
+            $customPrompt,
+            $changeRequest,
+            $prSubjectContext,
+            false,
+            $promptSlug
+        );
+
+        // Inject web research instruction if requested
+        if (!empty($options['web_research'])) {
+            $systemPrompt .= "\n\nWEB RESEARCH: Before writing, search the web for current data, statistics, expert opinions, and recent developments related to this topic. Incorporate real, verifiable facts and supporting points from your research into the article. Cite specific sources where possible.";
+        }
 
         // Call AI — route to correct provider
         $isOpenAI = str_starts_with($model, 'gpt-');
-        if ($isOpenAI) {
+        $isGrok = str_starts_with($model, 'grok-');
+        if ($isGrok) {
+            $grok = app(\hexa_package_grok\Services\GrokService::class);
+            $result = $grok->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
+        } elseif ($isOpenAI) {
             $chatgpt = app(\hexa_package_chatgpt\Services\ChatGptService::class);
             $result = $chatgpt->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
         } else {
@@ -120,7 +143,7 @@ class ArticleGenerationService
             'usage'            => $usage,
             'model'            => $result['data']['model'] ?? $model,
             'cost'             => round($cost, 6),
-            'provider'         => $isOpenAI ? 'openai' : 'anthropic',
+            'provider'         => $isGrok ? 'grok' : ($isOpenAI ? 'openai' : 'anthropic'),
             'photo_suggestions' => $photoSuggestions['photos'],
             'featured_image'   => $featuredImage['search'],
             'featured_meta'    => $featuredImage['featured_meta'] ?? null,
@@ -137,10 +160,21 @@ class ArticleGenerationService
      * @param int|null $presetId
      * @param string|null $customPrompt
      * @param string|null $changeRequest
+     * @param string|null $prSubjectContext
      * @param bool $withLog Whether to return resolution log alongside the prompt
+     * @param string|null $promptSlug
      * @return string|array Returns string normally, or ['prompt' => ..., 'log' => [...]] when $withLog is true
      */
-    public function buildPrompt(array $sourceTexts, ?int $templateId, ?int $presetId, ?string $customPrompt, ?string $changeRequest, bool $withLog = false): string|array
+    public function buildPrompt(
+        array $sourceTexts,
+        ?int $templateId,
+        ?int $presetId,
+        ?string $customPrompt,
+        ?string $changeRequest,
+        ?string $prSubjectContext = null,
+        bool $withLog = false,
+        ?string $promptSlug = null
+    ): string|array
     {
         $log = [];
 
@@ -160,10 +194,15 @@ class ArticleGenerationService
         if (class_exists(\hexa_package_prompt_center\Prompts\Categories\Services\PromptService::class)) {
             try {
                 $promptService = app(\hexa_package_prompt_center\Prompts\Categories\Services\PromptService::class);
-                $default = $promptService->getDefault('general-article-spin');
-                if ($default && !empty($default->body)) {
-                    $masterPrompt = $default->body;
-                    $log[0] = ['shortcode' => '(master prompt)', 'source' => 'Prompt Center: ' . $default->name, 'value' => '(from Prompt Center template)'];
+                $promptTemplate = $promptSlug
+                    ? $promptService->getByTemplateSlug($promptSlug)
+                    : $promptService->getDefault('general-article-spin');
+                if ($promptTemplate && !empty($promptTemplate->body)) {
+                    $masterPrompt = $promptTemplate->body;
+                    $sourceLabel = $promptSlug
+                        ? 'Prompt Center slug: ' . $promptTemplate->slug
+                        : 'Prompt Center: ' . $promptTemplate->name;
+                    $log[0] = ['shortcode' => '(master prompt)', 'source' => $sourceLabel, 'value' => '(from Prompt Center template)'];
                 }
             } catch (\Throwable $e) {}
         }
@@ -275,6 +314,10 @@ class ArticleGenerationService
             '{featured_image_preference}' => [
                 'value' => $imagePreference,
                 'source' => $imagePreference ? "Preset: {$preset->name} → image_preference" : 'Empty',
+            ],
+            '{pr_subject_context}' => [
+                'value' => $prSubjectContext ? "=== PR SUBJECT CONTEXT ===\nThe following is background data about the article subject(s). Use relevant information to enrich the article. Focus on data that supports the article's angle and instruction. Not all data needs to be used — prioritize what's relevant.\n\n{$prSubjectContext}" : '',
+                'source' => $prSubjectContext ? 'Pipeline: PR subject data (' . strlen($prSubjectContext) . ' chars)' : 'Empty (no PR subjects)',
             ],
         ];
 
@@ -500,11 +543,14 @@ class ArticleGenerationService
     private function logActivity(string $model, string $agent, string $systemPrompt, string $content, array $usage): void
     {
         $isOpenAI = str_starts_with($model, 'gpt-');
-        $apiKey = $isOpenAI
-            ? \hexa_core\Models\Setting::getValue('chatgpt_api_key', '')
-            : \hexa_core\Models\Setting::getValue('anthropic_api_key', '');
+        $isGrok = str_starts_with($model, 'grok-');
+        $apiKey = $isGrok
+            ? ''
+            : ($isOpenAI
+                ? \hexa_core\Models\Setting::getValue('chatgpt_api_key', '')
+                : \hexa_core\Models\Setting::getValue('anthropic_api_key', ''));
         AiActivityLog::logCall([
-            'provider'          => $isOpenAI ? 'openai' : 'anthropic',
+            'provider'          => $isGrok ? 'grok' : ($isOpenAI ? 'openai' : 'anthropic'),
             'model'             => $model,
             'agent'             => $agent,
             'prompt_tokens'     => $usage['input_tokens'] ?? 0,

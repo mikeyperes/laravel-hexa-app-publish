@@ -26,7 +26,7 @@
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div class="flex flex-wrap items-center gap-1">
             <template x-for="(step, idx) in stepLabels" :key="idx">
-                <div class="flex items-center gap-1">
+                <div class="flex items-center gap-1" x-show="!(currentArticleType === 'press-release' && idx === 3)">
                     <button @click="goToStep(idx + 1)"
                             :class="{
                                 'bg-green-500 border-green-500 text-white': completedSteps.includes(idx + 1),
@@ -114,14 +114,16 @@
         </button>
         <div x-show="openSteps.includes(2)" x-cloak x-collapse class="px-4 pb-4 space-y-4">
 
-            {{-- Article Type (standalone, not inside preset) --}}
+            {{-- Article Type --}}
             <div>
                 <label class="block text-xs text-gray-500 mb-1">Article Type</label>
                 <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-blue-500 py-2">
                     <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     Loading...
                 </div>
-                <select x-show="!templatesLoading" id="article-type-select" x-model="template_overrides.article_type" @change="$data.template_dirty.article_type = true" class="w-full md:w-1/3 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <select x-show="!templatesLoading" id="article-type-select" x-model="template_overrides.article_type"
+                    @change="$data.template_dirty.article_type = true; autoSelectPrSource()"
+                    class="w-full md:w-1/2 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">— Select article type —</option>
                     @foreach(config('hws-publish.article_types', []) as $type)
                         <option value="{{ $type }}">{{ ucwords(str_replace('-', ' ', $type)) }}</option>
@@ -129,38 +131,33 @@
                 </select>
             </div>
 
-            {{-- Website selection --}}
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">WordPress Site</label>
-                <div x-show="templatesLoading" class="flex items-center gap-2 text-sm text-blue-500 py-2">
-                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    Loading...
-                </div>
-                <select x-show="!templatesLoading" x-model="selectedSiteId" @change="selectSite()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-                    <option value="">-- Select a site --</option>
+            {{-- Publishing Site --}}
+            <div x-show="currentArticleType && currentArticleType !== 'press-release'" x-cloak>
+                <label class="block text-xs text-gray-500 mb-1">Publishing Site</label>
+                <select x-model="selectedSiteId" @change="selectSite()" class="w-full md:w-1/2 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">— Select a site —</option>
                     <template x-for="s in sites" :key="s.id">
                         <option :value="String(s.id)" :selected="String(s.id) === selectedSiteId" x-text="s.name + ' (' + s.url + ')'"></option>
                     </template>
                 </select>
+                @include('app-publish::publishing.pipeline.partials.site-connection-status')
             </div>
 
-            {{-- Connection status --}}
-            <div x-show="selectedSite" x-cloak>
-                <div class="flex items-center gap-2 rounded-lg px-3 py-2" :class="siteConn.status === true ? 'bg-green-50' : (siteConn.status === false ? 'bg-red-50' : 'bg-gray-50')">
-                    <template x-if="siteConn.testing"><svg class="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
-                    <template x-if="!siteConn.testing && siteConn.status === true"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
-                    <template x-if="!siteConn.testing && siteConn.status === false"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
-                    <template x-if="!siteConn.testing && siteConn.status === null"><svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
-                    <span class="text-sm" :class="siteConn.status === true ? 'text-green-800' : (siteConn.status === false ? 'text-red-800' : 'text-gray-600')" x-text="selectedSite ? selectedSite.name + ' — ' + selectedSite.url : ''"></span>
+            {{-- Press Release Destination --}}
+            <div x-show="currentArticleType === 'press-release' && !templatesLoading" x-cloak>
+                <label class="block text-xs text-gray-500 mb-1">Press Release Destination</label>
+                <template x-if="prSourceSites.length > 0">
+                    <select x-model="selectedSiteId" @change="selectSite()" class="w-full md:w-1/2 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">— Select press release site —</option>
+                        <template x-for="s in prSourceSites" :key="s.id">
+                            <option :value="String(s.id)" :selected="String(s.id) === selectedSiteId" x-text="s.name + ' (' + s.url + ')'"></option>
+                        </template>
+                    </select>
+                </template>
+                <div x-show="prSourceSites.length === 0" x-cloak class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+                    No press release destinations configured. <a href="{{ route('publish.settings.master') }}" target="_blank" class="text-blue-600 hover:underline font-medium">Set up in Publishing Settings</a>.
                 </div>
-                <div x-show="siteConn.log.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
-                    <template x-for="(entry, idx) in siteConn.log" :key="idx">
-                        <div class="flex items-start gap-2 py-0.5 text-xs font-mono">
-                            <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
-                            <span :class="{ 'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info' }" x-text="entry.message" class="break-words"></span>
-                        </div>
-                    </template>
-                </div>
+                @include('app-publish::publishing.pipeline.partials.site-connection-status')
             </div>
 
             {{-- Article Preset (includes WordPress publishing fields) --}}
@@ -234,7 +231,7 @@
                     <template x-if="completedSteps.includes(3)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(3)"><span>3</span></template>
                 </span>
-                <span class="font-semibold text-gray-800" x-text="isGenerateMode ? 'Generate Content' : 'Find Articles'"></span>
+                <span class="font-semibold text-gray-800" x-text="stepLabels[2] || (isGenerateMode ? 'Generate Content' : 'Find Articles')"></span>
                 <span x-show="sources.length > 0" x-cloak class="text-sm text-green-600" x-text="sources.length + ' source(s)'"></span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(3) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -244,52 +241,7 @@
             {{-- ═══ Generate Content mode ═══ --}}
             <div x-show="isGenerateMode" x-cloak>
 
-                {{-- Press Release --}}
-                <div x-show="currentArticleType === 'press-release'" class="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-                    <div class="flex items-center gap-3 mb-2">
-                        <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
-                        </div>
-                        <div>
-                            <h4 class="text-base font-semibold text-gray-800">Press Release</h4>
-                            <p class="text-xs text-gray-400">Provide press release details for AI-generated content</p>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Press Release Date <span class="text-red-500">*</span></label>
-                            <input type="date" x-model="pressReleaseDate" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                            <p class="text-xs text-gray-400 mt-1">e.g. January 1, 2023 or March 2, 2023</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Press Release Location <span class="text-red-500">*</span></label>
-                            <input type="text" x-model="pressReleaseLocation" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Miami, Florida">
-                            <p class="text-xs text-gray-400 mt-1">e.g. Miami, Florida / New York, New York / Montreal, Quebec</p>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Contact Name & Details</label>
-                            <input type="text" x-model="pressReleaseContact" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Sarah Smith, Instagram - @sarasmith">
-                            <p class="text-xs text-gray-400 mt-1">e.g. Sarah Smith, email - sarasmith@gmail.com</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Contact URL</label>
-                            <input type="url" x-model="pressReleaseContactUrl" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. https://instagram.com/sarasmith">
-                            <p class="text-xs text-gray-400 mt-1">e.g. https://instagram.com/sarasmith or mailto:sarasmith@gmail.com</p>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Content Dump</label>
-                        <textarea x-model="pressReleaseContent" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm leading-relaxed" style="min-height: 200px; resize: vertical;" placeholder="Paste your press release content, notes, key points, quotes, or any raw material here..."></textarea>
-                        <p class="text-xs text-gray-400 mt-1">Paste any raw content, key points, quotes, or notes that should be included in the press release</p>
-                    </div>
-
-                    <button @click="completeStep(3); completeStep(4); openStep(5)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to AI & Spin &rarr;</button>
-                </div>
+                @include('app-publish::publishing.pipeline.partials.press-release-submit-step')
 
                 {{-- Listicle --}}
                 <div x-show="currentArticleType === 'listicle'" class="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
@@ -392,36 +344,94 @@
                                         </div>
                                     </div>
 
+                                    {{-- Loading indicator --}}
+                                    <div x-show="prSubjectData[profile.id]?.loading" x-cloak class="px-5 py-4 flex items-center gap-2 text-sm text-gray-500">
+                                        <svg class="w-4 h-4 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                        Loading Notion data...
+                                    </div>
+
                                     {{-- Fields section --}}
                                     <div x-show="prSubjectData[profile.id]?.fields?.length > 0" x-cloak class="px-5 py-3 border-b border-gray-100">
-                                        <h5 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Profile Fields</h5>
-                                        <div class="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                                        <h5 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Profile Data</h5>
+                                        <div class="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100 overflow-hidden">
                                             <template x-for="field in (prSubjectData[profile.id]?.fields || [])" :key="field.key">
-                                                <div class="flex items-start gap-2 text-sm">
-                                                    <span class="text-gray-400 flex-shrink-0 text-xs pt-0.5" x-text="field.notion_field"></span>
-                                                    <span class="text-gray-800 break-words text-xs" x-text="field.value || '—'"></span>
+                                                <div class="flex items-start px-3 py-2 text-xs">
+                                                    <span class="text-gray-500 font-medium w-36 flex-shrink-0 pt-0.5" x-text="field.notion_field"></span>
+                                                    <span class="text-gray-800 break-words flex-1" x-text="field.display_value || field.value || '—'"></span>
                                                 </div>
                                             </template>
                                         </div>
                                     </div>
 
-                                    {{-- Photos section --}}
-                                    <div x-show="prSubjectData[profile.id]?.driveUrl" x-cloak class="px-5 py-3 border-b border-gray-100">
+                                    {{-- Photos section with checkboxes --}}
+                                    <div x-show="prSubjectData[profile.id]?.photos?.length > 0" x-cloak class="px-5 py-3 border-b border-gray-100">
                                         <div class="flex items-center justify-between mb-2">
-                                            <h5 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Photos</h5>
-                                            <button @click="loadProfilePhotos(profile)" :disabled="prSubjectData[profile.id]?.loadingPhotos" class="text-xs text-purple-600 hover:text-purple-800 font-medium disabled:opacity-50">
-                                                <span x-text="prSubjectData[profile.id]?.loadingPhotos ? 'Fetching...' : (prSubjectData[profile.id]?.photos?.length > 0 ? 'Refresh' : 'Fetch Photos')"></span>
-                                            </button>
+                                            <h5 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                                Photos
+                                                <span class="text-gray-300 font-normal ml-1" x-text="'(' + (prSubjectData[profile.id]?.photos?.length || 0) + ')'"></span>
+                                            </h5>
+                                            <span class="text-[10px] text-gray-400">Check photos to include in article</span>
                                         </div>
-                                        <div x-show="prSubjectData[profile.id]?.loadingPhotos" class="flex items-center gap-2 text-xs text-gray-500 py-2">
-                                            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                            Loading photos from Google Drive...
-                                        </div>
-                                        <div x-show="prSubjectData[profile.id]?.photos?.length > 0" x-cloak class="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+                                        <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
                                             <template x-for="photo in (prSubjectData[profile.id]?.photos || [])" :key="photo.id">
-                                                <a :href="photo.webViewLink || '#'" target="_blank" class="rounded-lg overflow-hidden border border-gray-200 hover:border-blue-400 aspect-square bg-gray-100">
+                                                <label class="relative rounded-lg overflow-hidden border-2 aspect-square bg-gray-100 cursor-pointer transition-all"
+                                                    :class="prSubjectData[profile.id]?.selectedPhotos?.[photo.id] ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-gray-200 hover:border-gray-300'">
+                                                    <input type="checkbox" class="sr-only" @change="togglePrPhotoSelect(profile.id, photo.id)" :checked="prSubjectData[profile.id]?.selectedPhotos?.[photo.id]">
                                                     <img :src="photo.thumbnailLink || photo.webContentLink" :alt="photo.name" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display='none'">
-                                                </a>
+                                                    <div x-show="prSubjectData[profile.id]?.selectedPhotos?.[photo.id]" class="absolute top-1 right-1 w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center">
+                                                        <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                                                    </div>
+                                                    <div class="absolute inset-x-0 bottom-0 bg-black/50 px-1.5 py-1">
+                                                        <p class="text-[9px] text-white truncate" x-text="photo.name"></p>
+                                                    </div>
+                                                </label>
+                                            </template>
+                                        </div>
+                                    </div>
+                                    <div x-show="prSubjectData[profile.id]?.loadingPhotos" x-cloak class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 text-xs text-gray-500">
+                                        <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                        Loading photos...
+                                    </div>
+
+                                    {{-- Related Notion Content with checkboxes --}}
+                                    <div x-show="prSubjectData[profile.id]?.relations?.length > 0" x-cloak class="px-5 py-3 border-b border-gray-100">
+                                        <h5 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Related Content</h5>
+                                        <div class="space-y-2">
+                                            <template x-for="rel in (prSubjectData[profile.id]?.relations || [])" :key="rel.slug">
+                                                <div class="rounded-lg border border-gray-200 overflow-hidden">
+                                                    <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 text-xs font-semibold text-gray-700">
+                                                        <span x-text="rel.label"></span>
+                                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-gray-200 text-gray-600" x-text="rel.count || 0"></span>
+                                                        <svg x-show="rel.loading" class="w-3 h-3 animate-spin ml-auto text-indigo-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                                    </div>
+                                                    <div x-show="rel.entries?.length > 0" class="divide-y divide-gray-100">
+                                                        <template x-for="entry in (rel.entries || [])" :key="entry.id">
+                                                            <div>
+                                                                <div class="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 transition-colors">
+                                                                    <input type="checkbox" class="rounded border-gray-300 text-indigo-600 w-3.5 h-3.5" @change="togglePrEntrySelect(profile.id, entry.id)" :checked="prSubjectData[profile.id]?.selectedEntries?.[entry.id]">
+                                                                    <button type="button" @click="togglePrEntry(profile.id, rel.slug, entry.id)" class="flex-1 text-left text-xs text-gray-800 hover:text-indigo-600 break-words" x-text="entry.title"></button>
+                                                                    <svg class="w-3 h-3 text-gray-300 flex-shrink-0 transition-transform" :class="entry.open ? 'rotate-90 text-indigo-400' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                                                                </div>
+                                                                <div x-show="entry.open" x-cloak class="mx-3 mb-2 p-3 rounded-lg border border-indigo-200 bg-indigo-50/30 text-xs">
+                                                                    <div x-show="entry.loading" class="flex items-center gap-2 text-gray-500 py-1">
+                                                                        <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                                                        Loading...
+                                                                    </div>
+                                                                    <template x-if="entry.detail">
+                                                                        <div class="space-y-1">
+                                                                            <template x-for="[k,v] in Object.entries(entry.detail.properties || {}).slice(0, 10)" :key="k">
+                                                                                <div class="flex gap-2">
+                                                                                    <span class="text-gray-500 w-28 flex-shrink-0" x-text="k"></span>
+                                                                                    <span class="text-gray-800 break-words" x-text="typeof v === 'object' ? JSON.stringify(v) : v"></span>
+                                                                                </div>
+                                                                            </template>
+                                                                        </div>
+                                                                    </template>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </div>
                                             </template>
                                         </div>
                                     </div>
@@ -461,9 +471,63 @@
             {{-- Tabs --}}
             <div class="flex border-b border-gray-200 mb-4">
                 <button @click="sourceTab = 'ai'" :class="sourceTab === 'ai' ? 'border-purple-500 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">Search Online</button>
+                <button @click="sourceTab = 'upload'" :class="sourceTab === 'upload' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">Upload</button>
                 <button @click="sourceTab = 'paste'" :class="sourceTab === 'paste' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">Paste Links</button>
                 <button @click="sourceTab = 'search'" :class="sourceTab === 'search' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">Search News</button>
                 <button @click="sourceTab = 'bookmarks'; loadBookmarks()" :class="sourceTab === 'bookmarks' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">Bookmarks</button>
+            </div>
+
+            {{-- Upload tab --}}
+            <div x-show="sourceTab === 'upload'">
+                <p class="text-sm text-gray-600 mb-3">Upload a document or paste content directly. Supported formats: <strong>.doc, .docx, .pdf</strong></p>
+
+                {{-- File upload --}}
+                <div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-5 mb-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-semibold text-gray-800">Upload Document</p>
+                            <p class="text-xs text-gray-500 mt-1">Accepted: .doc, .docx, .pdf — content will be extracted as source text</p>
+                        </div>
+                        <label class="inline-flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 cursor-pointer">
+                            <svg x-show="uploadingSourceDoc" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <span x-text="uploadingSourceDoc ? 'Uploading...' : 'Choose File'"></span>
+                            <input type="file" class="hidden" accept=".doc,.docx,.pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf" @change="uploadSourceDocument($event.target.files); $event.target.value = null">
+                        </label>
+                    </div>
+                </div>
+
+                {{-- Uploaded file display --}}
+                <div x-show="uploadedSourceDoc" x-cloak class="bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-4">
+                    <div class="flex items-center justify-between">
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-green-800 break-words" x-text="uploadedSourceDoc?.name || ''"></p>
+                            <p class="text-xs text-green-600 mt-0.5" x-text="(uploadedSourceDoc?.word_count || 0) + ' words extracted'"></p>
+                        </div>
+                        <button @click="uploadedSourceDoc = null; uploadedSourceText = ''" class="text-xs text-red-500 hover:text-red-700 flex-shrink-0">Remove</button>
+                    </div>
+                </div>
+
+                {{-- OR separator --}}
+                <div class="flex items-center gap-3 my-4">
+                    <div class="flex-1 border-t border-gray-200"></div>
+                    <span class="text-xs text-gray-400 font-medium">OR PASTE CONTENT DIRECTLY</span>
+                    <div class="flex-1 border-t border-gray-200"></div>
+                </div>
+
+                {{-- Paste content area --}}
+                <textarea x-model="uploadedSourceText" rows="8" placeholder="Paste your article content, press release text, or any raw content here..." class="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm leading-relaxed" style="min-height: 150px; resize: vertical;"></textarea>
+                <p class="text-xs text-gray-400 mt-1" x-show="uploadedSourceText" x-cloak x-text="uploadedSourceText.split(/\s+/).filter(Boolean).length + ' words'"></p>
+
+                {{-- Action buttons --}}
+                <div class="flex flex-wrap gap-3 mt-4">
+                    <button @click="useUploadedContent()" :disabled="!uploadedSourceText && !uploadedSourceDoc" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+                        Use as Source &amp; Continue to Spin
+                    </button>
+                    <button @click="skipSpinPublishAsIs()" :disabled="!uploadedSourceText && !uploadedSourceDoc" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 inline-flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+                        Skip Spinning — Clean Up &amp; Publish As Is
+                    </button>
+                </div>
             </div>
 
             {{-- Paste Links tab --}}
@@ -608,6 +672,29 @@
                     </div>
                     <div class="flex gap-2">
                         <input type="text" x-model="aiSearchTopic" @keydown.enter="aiSearchArticles()" placeholder="e.g. cryptocurrency regulations 2026" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <select x-model="aiSearchModel" class="border border-gray-300 rounded-lg px-2 py-2 text-xs w-auto">
+                            <optgroup label="Claude">
+                                @foreach(config('anthropic.models', []) as $m)
+                                    @if(($m['type'] ?? '') === 'api' || ($m['type'] ?? '') === 'both')
+                                        <option value="{{ $m['id'] }}">{{ $m['name'] }}</option>
+                                    @endif
+                                @endforeach
+                            </optgroup>
+                            @if(config('chatgpt.models'))
+                            <optgroup label="GPT">
+                                @foreach(config('chatgpt.models', []) as $m)
+                                    <option value="{{ $m['id'] }}">{{ $m['name'] }}</option>
+                                @endforeach
+                            </optgroup>
+                            @endif
+                            @if(!empty($grokModels))
+                            <optgroup label="Grok">
+                                @foreach($grokModels as $m)
+                                    <option value="{{ $m['id'] }}">{{ $m['name'] }}</option>
+                                @endforeach
+                            </optgroup>
+                            @endif
+                        </select>
                         <button @click="aiSearchArticles()" :disabled="aiSearching || !aiSearchTopic.trim()" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2">
                             <svg x-show="aiSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             <span x-text="aiSearching ? 'Searching...' : 'Find Articles'"></span>
@@ -683,6 +770,7 @@
                         </button>
                     </div>
 
+                    <div x-show="aiSearchError" x-cloak class="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700 break-words" x-text="aiSearchError"></div>
                     <div x-show="aiSearchResults.length === 0 && !aiSearching && aiHasSearched && !aiSearchError" x-cloak class="text-sm text-gray-400">No articles found for this topic. Try a different query.</div>
                 </div>
             </div>
@@ -714,7 +802,8 @@
     {{-- ══════════════════════════════════════════════════════════════
          Step 4: Fetch Articles from Source
          ══════════════════════════════════════════════════════════════ --}}
-    <div x-show="currentArticleType !== 'press-release'" class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 4, 'opacity-50': !isStepAccessible(4) }">
+    <template x-if="currentArticleType !== 'press-release'">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 4, 'opacity-50': !isStepAccessible(4) }">
         <button @click="toggleStep(4)" :disabled="!isStepAccessible(4)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
@@ -722,13 +811,15 @@
                     <template x-if="completedSteps.includes(4)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(4)"><span>4</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">Fetch Articles from Source</span>
-                <span x-show="checkResults.length > 0" x-cloak class="text-sm" :class="checkPassCount === sources.length ? 'text-green-600' : 'text-yellow-600'"
+                <span class="font-semibold text-gray-800" x-text="stepLabels[3] || 'Fetch Articles from Source'"></span>
+                <span x-show="currentArticleType !== 'press-release' && checkResults.length > 0" x-cloak class="text-sm" :class="checkPassCount === sources.length ? 'text-green-600' : 'text-yellow-600'"
                       x-text="checkPassCount + '/' + sources.length + ' extracted'"></span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(4) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <div x-show="openSteps.includes(4)" x-cloak x-collapse class="px-4 pb-4">
+            @include('app-publish::publishing.pipeline.partials.press-release-validate-step')
+            <div x-show="currentArticleType !== 'press-release'" x-cloak>
             {{-- Extraction Options --}}
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
                 <div class="flex flex-wrap items-end gap-3">
@@ -741,6 +832,7 @@
                             <option value="regex">Regex</option>
                             <option value="claude">Claude AI</option>
                             <option value="gpt">GPT</option>
+                            <option value="grok">Grok</option>
                         </select>
                     </div>
                     <div>
@@ -778,7 +870,7 @@
                         <input type="checkbox" x-model="extractAutoFallback" class="rounded border-gray-300 text-blue-600">
                         Auto-fallback (Googlebot)
                     </label>
-                    <button @click="checkAllSources()" :disabled="checking" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+                    <button @click.stop="checkAllSources()" :disabled="checking" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
                         <svg x-show="checking" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         <span x-text="checking ? 'Extracting...' : 'Get Articles'"></span>
                     </button>
@@ -791,7 +883,7 @@
                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
                     <div class="flex justify-between">
                         <span class="text-gray-400">Method</span>
-                        <span class="text-white font-medium" x-text="extractMethod === 'auto' ? 'Auto (Readability + Regex)' : extractMethod === 'readability' ? 'Readability' : extractMethod === 'css' ? 'CSS Selector' : extractMethod === 'regex' ? 'Regex' : extractMethod === 'claude' ? 'Claude AI' : extractMethod === 'gpt' ? 'GPT' : extractMethod"></span>
+                        <span class="text-white font-medium" x-text="extractMethod === 'auto' ? 'Auto (Readability + Regex)' : extractMethod === 'readability' ? 'Readability' : extractMethod === 'css' ? 'CSS Selector' : extractMethod === 'regex' ? 'Regex' : extractMethod === 'claude' ? 'Claude AI' : extractMethod === 'gpt' ? 'GPT' : extractMethod === 'grok' ? 'Grok' : extractMethod"></span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-gray-400">User Agent</span>
@@ -905,8 +997,10 @@
             <div class="mt-3" x-show="checkResults.length > 0 && checkPassCount > 0" x-cloak>
                 <button @click="completeStep(4); openStep(5)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to AI & Spin &rarr;</button>
             </div>
+            </div>
         </div>
     </div>
+    </template>
 
     {{-- ══════════════════════════════════════════════════════════════
          Step 5: AI & Spin
@@ -919,7 +1013,7 @@
                     <template x-if="completedSteps.includes(5)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
                     <template x-if="!completedSteps.includes(5)"><span>5</span></template>
                 </span>
-                <span class="font-semibold text-gray-800">AI & Spin</span>
+                <span class="font-semibold text-gray-800" x-text="stepLabels[4] || 'AI & Spin'"></span>
                 <span x-show="selectedTemplate" x-cloak class="text-sm text-green-600" x-text="selectedTemplate?.name || ''"></span>
                 <span x-show="spunContent" x-cloak class="text-sm text-green-600" x-text="spunWordCount + ' words'"></span>
             </div>
@@ -946,11 +1040,18 @@
                             @endforeach
                         </optgroup>
                         @endif
+                        @if(!empty($grokModels))
+                        <optgroup label="Grok">
+                            @foreach($grokModels as $model)
+                                <option value="{{ $model['id'] }}">Grok — {{ $model['name'] }}</option>
+                            @endforeach
+                        </optgroup>
+                        @endif
                     </select>
                 </div>
                 <button @click="spinArticle()" :disabled="spinning" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2">
                     <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="spinning ? 'Spinning...' : (spunContent ? 'Re-spin' : 'Spin Article')"></span>
+                    <span x-text="spinning ? (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Polishing...' : 'Spinning...') : (spunContent ? (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Re-polish' : 'Re-spin') : (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Polish Content' : 'Spin Article'))"></span>
                 </button>
                 <p x-show="spunContent && !spinning" x-cloak class="text-sm text-green-600 mt-1 inline-flex items-center gap-1">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
@@ -961,7 +1062,16 @@
             {{-- Custom prompt input — live-updates resolved prompt --}}
             <div class="mb-4">
                 <label class="block text-xs text-gray-500 mb-1">Custom Instructions <span class="text-gray-400">(takes precedence over template/preset)</span></label>
-                <textarea x-model="customPrompt" @input.debounce.500ms="refreshPromptPreview()" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Write in first person, focus on the financial impact, include expert quotes..."></textarea>
+                <textarea x-model.debounce.300ms="customPrompt" @input.debounce.300ms="refreshPromptPreview()" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Write in first person, focus on the financial impact, include expert quotes..."></textarea>
+            </div>
+
+            {{-- Web research toggle --}}
+            <div class="mb-4">
+                <label class="inline-flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" x-model="spinWebResearch" @change="refreshPromptPreview()" class="rounded border-gray-300 text-purple-600">
+                    <span class="text-sm text-gray-700">Search online for additional supporting points</span>
+                </label>
+                <p x-show="spinWebResearch" x-cloak class="text-xs text-gray-400 mt-1 ml-6">The AI will search the web for real-time data, statistics, and expert opinions to strengthen the article.</p>
             </div>
 
             {{-- Resolved Prompt — always visible, live-updating --}}
@@ -1217,15 +1327,21 @@
 
     @include('app-publish::publishing.pipeline.partials.create-article-step')
 
-    @include('app-publish::publishing.pipeline.partials.review-publish-step')
+@include('app-publish::publishing.pipeline.partials.review-publish-step')
 
-    @include('app-publish::publishing.pipeline.partials.overlays')
+@include('app-publish::publishing.pipeline.partials.overlays')
 
 @include('app-publish::partials.site-connection-mixin')
 @include('app-publish::partials.preset-fields-mixin')
+@include('app-publish::publishing.pipeline.partials.press-release-workflow-script')
 <script>
 function publishPipeline() {
     return {
+        ...pressReleaseWorkflowMixin({
+            workflowDefinitions: @json($workflowDefinitions ?? []),
+            pipelinePayload: @json($pipelinePayload ?? []),
+            pressReleaseDefaultState: @json($pressReleaseDefaultState ?? []),
+        }),
         // Step tracking
         currentStep: 1,
         openSteps: [1],
@@ -1240,7 +1356,7 @@ function publishPipeline() {
             return this.template_overrides?.article_type ?? this.selectedTemplate?.article_type ?? null;
         },
         get stepLabels() {
-            return ['User', 'Article Configuration', this.isGenerateMode ? 'Generate Content' : 'Find Articles', 'Fetch Articles from Source', 'AI & Spin', 'Create Article', 'Review & Publish'];
+            return this.currentStepLabels();
         },
 
         // Step 1 — User
@@ -1258,11 +1374,13 @@ function publishPipeline() {
         prProfileResults: [],
         prProfileSearching: false,
         prProfileDropdownOpen: false,
+        prSubmitCard: 'content',
         selectedPrProfiles: [],
         prSubjectData: {},
 
         // Step 3 — Website
         sites: @json($sites ?? []),
+        prSourceSites: @json($prSourceSites ?? []),
         draftState: @json($draftState ?? []),
         selectedSiteId: '',
         selectedSite: null,
@@ -1281,7 +1399,11 @@ function publishPipeline() {
         newsCountry: 'us',
         bookmarks: [],
         bookmarksLoading: false,
+        uploadingSourceDoc: false,
+        uploadedSourceDoc: null,
+        uploadedSourceText: '',
         aiSearchTopic: '',
+        aiSearchModel: 'claude-haiku-4-5-20251001',
         aiSearchCount: 4,
         aiSearching: false,
         aiSearchResults: [],
@@ -1318,6 +1440,7 @@ function publishPipeline() {
 
         // Step 7 — Spin
         spinning: false,
+        spinWebResearch: false,
         spunContent: '',
         spunWordCount: 0,
         spinChangeRequest: '',
@@ -1339,11 +1462,6 @@ function publishPipeline() {
         showPhotoPanel: false,
         showPhotoOverlay: false,
         showUploadPortal: false,
-        pressReleaseDate: '',
-        pressReleaseLocation: '',
-        pressReleaseContact: '',
-        pressReleaseContactUrl: '',
-        pressReleaseContent: '',
         insertingPhoto: null,
         photoCaption: '',
         overlayPhotoAlt: '',
@@ -1360,12 +1478,17 @@ function publishPipeline() {
         spinError: '',
 
         // Step 8 — Publish (combined)
+        syndicationCategories: [],
+        selectedSyndicationCats: [],
+        loadingSyndicationCats: false,
+        _previousSiteId: null,
         articleTitle: '',
         editorContent: '',
         preparing: false,
         prepareChecklist: [],
         prepareLog: [],
         prepareComplete: false,
+        prepareIntegrityIssues: [],
         preparedHtml: '',
         preparedCategoryIds: [],
         preparedTagIds: [],
@@ -1389,6 +1512,8 @@ function publishPipeline() {
         featuredPhoto: null,
         featuredResults: [],
         featuredSearching: false,
+        featuredUrlImport: '',
+        innerPhotoUrlImport: '',
         featuredAlt: '',
         featuredCaption: '',
         featuredFilename: '',
@@ -1437,14 +1562,21 @@ function publishPipeline() {
 
         // ── State Persistence ────────────────────────────
         _stateVersion: 3,
+        shouldWarmPromptPreview() {
+            return this.completedSteps.includes(2) || this.currentStep >= 5 || this.promptLogOpen || !!this.spunContent || !!this.editorContent;
+        },
 
         init() {
             const draftState = this.draftState || {};
+            const serverState = this.pipelinePayload && Object.keys(this.pipelinePayload).length > 0
+                ? { ...this.pipelinePayload, draftId: this.draftId, _v: this.pipelinePayload._v || this._stateVersion }
+                : null;
             const saved = localStorage.getItem(this.pipelineStateKey);
             const legacySaved = !saved && !draftState.body ? localStorage.getItem('publishPipelineState') : null;
             const savedState = saved || legacySaved;
             let state = null;
             let shouldPersistRestoredDraftState = false;
+            let restoredFromLocalState = false;
 
             this._restoring = true;
 
@@ -1462,6 +1594,11 @@ function publishPipeline() {
                 } catch (e) {
                     state = null;
                 }
+                restoredFromLocalState = !!state;
+            }
+
+            if (!state && serverState) {
+                state = serverState;
             }
 
             if (state) {
@@ -1476,11 +1613,11 @@ function publishPipeline() {
                 // Arrays that may serialize as objects in Alpine proxy
                 if (state.openSteps) this.openSteps = Array.isArray(state.openSteps) ? state.openSteps : Object.values(state.openSteps);
                 if (state.completedSteps) this.completedSteps = Array.isArray(state.completedSteps) ? state.completedSteps : Object.values(state.completedSteps);
+                this.pressRelease = this.restorePressReleaseStateFromLegacy(state);
 
                 // Site connection (nested object)
                 if (state.selectedSiteId) {
                     this.selectedSiteId = String(state.selectedSiteId);
-                    this.authorsLoading = true;
                     this.siteConn.status = state.siteConnStatus ?? null;
                     this.siteConn.message = state.siteConnMessage || '';
                     if (state.siteConnLog) this.siteConn.log = state.siteConnLog;
@@ -1534,12 +1671,23 @@ function publishPipeline() {
                 );
             }
 
+            if (serverState && restoredFromLocalState) {
+                if (!this.pressRelease || Object.keys(this.pressRelease).length === 0) {
+                    this.pressRelease = this.restorePressReleaseStateFromLegacy(serverState);
+                }
+                if (!Array.isArray(this.pressRelease.photo_files) || this.pressRelease.photo_files.length === 0) {
+                    this.pressRelease.photo_files = this.normalizePressReleaseState(serverState.pressRelease || {}).photo_files || [];
+                }
+                if (!Array.isArray(this.pressRelease.document_files) || this.pressRelease.document_files.length === 0) {
+                    this.pressRelease.document_files = this.normalizePressReleaseState(serverState.pressRelease || {}).document_files || [];
+                }
+            }
+
             // Database-backed draft state is authoritative for site/user/template/preset restore.
             if (draftState.selectedUser) this.selectedUser = draftState.selectedUser;
             if (draftState.selectedSiteId) {
                 this.selectedSiteId = String(draftState.selectedSiteId);
                 this.selectedSite = this.sites.find(s => s.id == draftState.selectedSiteId) || draftState.selectedSite || null;
-                this.authorsLoading = true;
                 this.siteConn.status = draftState.siteConnStatus ?? this.siteConn.status;
                 if (draftState.siteConnStatus === true) {
                     this.siteConn.message = 'Loaded from saved draft.';
@@ -1570,31 +1718,20 @@ function publishPipeline() {
             // Auto-complete steps based on restored data
             if (this.selectedUser && !this.completedSteps.includes(1)) this.completedSteps.push(1);
             if (this.selectedSiteId && !this.completedSteps.includes(2)) this.completedSteps.push(2);
-            if (this.sources.length > 0 && !this.completedSteps.includes(3)) this.completedSteps.push(3);
-            if (this.checkResults.length > 0 && !this.completedSteps.includes(4)) this.completedSteps.push(4);
+            if ((this.currentArticleType === 'press-release' ? this.hasPressReleaseSubmittedContent() : this.sources.length > 0) && !this.completedSteps.includes(3)) this.completedSteps.push(3);
+            if ((this.currentArticleType === 'press-release' ? this.hasPressReleaseValidationData() : this.checkResults.length > 0) && !this.completedSteps.includes(4)) this.completedSteps.push(4);
             if (this.spunContent && !this.completedSteps.includes(5)) this.completedSteps.push(5);
             if (this.spunContent && !this.completedSteps.includes(6)) this.completedSteps.push(6);
 
             const finishRestore = () => {
                 this._restoring = false;
                 if (shouldPersistRestoredDraftState) this.autoSaveDraft();
-                // Auto-load authors and default author for selected site
-                if (this.selectedSiteId) {
-                    this.authorsLoading = true;
-                    fetch('/publish/sites/' + this.selectedSiteId + '/authors', {
-                        headers: { 'Accept': 'application/json' }
-                    }).then(r => r.json()).then(d => {
-                        if (d.authors) this.siteConn.authors = d.authors;
-                        if (d.default_author && this.publishAuthorSource !== 'manual') {
-                            this.publishAuthor = d.default_author;
-                            this.publishAuthorSource = 'profile';
-                        }
-                        this.authorsLoading = false;
-                    }).catch(() => { this.authorsLoading = false; });
+                // Auto-select PR source if press-release type and only one source
+                this.autoSelectPrSource();
+                if (this.shouldWarmPromptPreview()) {
+                    this.refreshPromptPreview();
                 }
-                // Always load prompt preview — default prompt exists even without template/preset
-                this.refreshPromptPreview();
-                if (this.featuredImageSearch && !this.featuredPhoto) {
+                if (this.currentStep >= 6 && this.featuredImageSearch && !this.featuredPhoto) {
                     this.searchFeaturedImage();
                 }
                 // If there's already spun content, ensure Create Article is accessible
@@ -1625,8 +1762,6 @@ function publishPipeline() {
                 const restoredTemplateId = draftState.selectedTemplateId || state?.selectedTemplateId || '';
                 const restoredTemplate = state?.selectedTemplate || null;
 
-                // Load bookmarks in background (non-blocking)
-                this.loadBookmarks();
                 Promise.all([this.loadUserPresets(), this.loadUserTemplates()]).then(() => {
                     // Restore saved preset or auto-select default
                     if (restoredPresetId) {
@@ -1698,9 +1833,23 @@ function publishPipeline() {
             this.$watch('siteConn.status', () => this.savePipelineState());
             this.$watch('siteConn.authors', () => this.savePipelineState());
             // Prompt preview refresh
-            this.$watch('selectedTemplateId', () => { if (!this._restoring) this._queuePromptRefresh(); });
-            this.$watch('selectedPresetId', () => { if (!this._restoring) this._queuePromptRefresh(); });
-            this.$watch('customPrompt', () => { if (!this._restoring) this._queuePromptRefresh(); });
+            this.$watch('selectedTemplateId', () => { if (!this._restoring && this.shouldWarmPromptPreview()) this.refreshPromptPreview(); });
+            this.$watch('selectedPresetId', () => { if (!this._restoring && this.shouldWarmPromptPreview()) this.refreshPromptPreview(); });
+            // customPrompt refresh handled by @input.debounce on the textarea
+            this.$watch('currentStep', step => {
+                if (this._restoring) return;
+                if (step >= 5 && !this.promptLoading && !this.resolvedPrompt) {
+                    this._queuePromptRefresh();
+                }
+                if (step >= 6 && this.featuredImageSearch && !this.featuredPhoto && !this.featuredSearching && this.featuredResults.length === 0) {
+                    this.searchFeaturedImage();
+                }
+            });
+            this.$watch('promptLogOpen', open => {
+                if (!this._restoring && open && !this.promptLoading && !this.resolvedPrompt) {
+                    this._queuePromptRefresh();
+                }
+            });
         },
 
         // ── Declarative persistent fields ─────────────────────
@@ -1733,29 +1882,20 @@ function publishPipeline() {
                 'publishAction', 'publishAuthor', 'publishAuthorSource',
                 // AI Detection
                 'aiDetectionResults', 'aiDetectionRan', 'aiDetectionAllPass',
-                // Press Release fields
-                'pressReleaseDate', 'pressReleaseLocation', 'pressReleaseContact',
-                'pressReleaseContactUrl', 'pressReleaseContent',
+                // Press Release workflow state
+                'pressRelease',
                 // PR Full Feature — profile subjects
                 'selectedPrProfiles',
             ];
         },
 
         savePipelineState() {
-            const state = { _v: this._stateVersion, draftId: this.draftId };
-            // Site connection (nested object — save flat)
-            state.siteConnStatus = this.siteConn.status;
-            state.siteConnMessage = this.siteConn.message;
-            state.siteConnLog = this.siteConn.log;
-            state.siteConnAuthors = this.siteConn.authors;
-            // Deep-clone helper — strips Alpine proxy wrappers so JSON.stringify works
-            const clone = (v) => { try { return JSON.parse(JSON.stringify(v)); } catch { return v; } };
-            // All declared persistent fields
-            for (const key of this.persistentFields) {
-                state[key] = clone(this[key]);
-            }
+            const state = this.buildPipelineStateSnapshot();
             localStorage.setItem(this.pipelineStateKey, JSON.stringify(state));
             localStorage.removeItem('publishPipelineState');
+            if (!this._restoring) {
+                this.queueServerPipelineStateSave();
+            }
         },
 
         clearPipeline() {
@@ -1785,6 +1925,7 @@ function publishPipeline() {
             this.photoSuggestions = [];
             this.featuredImageSearch = '';
             this.featuredPhoto = null;
+            this.pressRelease = this.normalizePressReleaseState({});
             this.selectedPrProfiles = [];
         },
 
@@ -1931,22 +2072,23 @@ function publishPipeline() {
         // ── Step 3: Website ───────────────────────────────
         selectSite() {
             if (this.selectedSiteId) {
-                this.selectedSite = this.sites.find(s => s.id == this.selectedSiteId) || null;
+                this.selectedSite = this.sites.find(s => s.id == this.selectedSiteId) || this.prSourceSites.find(s => s.id == this.selectedSiteId) || null;
                 if (this.selectedSite) {
+                    // Use cached connection status from DB instead of live-testing
+                    this.siteConn.log = [];
+                    this.siteConn.testing = false;
+                    // Always reset author to this site's default (or clear it)
+                    this.publishAuthor = this.selectedSite.default_author || '';
+                    this.publishAuthorSource = this.selectedSite.default_author ? 'profile' : '';
+                    if (this.selectedSite.status === 'connected') {
+                        this.siteConn.status = true;
+                        this.siteConn.message = 'Connected';
+                        this.completeStep(2);
+                    } else {
+                        this.siteConn.status = false;
+                        this.siteConn.message = this.selectedSite.status === 'error' ? 'Connection error' : 'Not connected';
+                    }
                     if (!this._restoring) this.autoSaveDraft();
-                    if (this._restoring) return;
-
-                    this.testSiteConnection(this.selectedSiteId, this.csrfToken, {
-                        onAuthorsLoaded: (authors) => {
-                            // Authors loaded
-                        },
-                        onSuccess: (d) => {
-                            if (d.default_author) { this.publishAuthor = d.default_author; this.publishAuthorSource = 'profile'; }
-                            this.completeStep(2);
-                            this.autoSaveDraft();
-                            // Don't auto-advance — user should review preset settings
-                        },
-                    });
                 }
             } else {
                 this.selectedSite = null;
@@ -1958,7 +2100,97 @@ function publishPipeline() {
             }
         },
 
+        refreshSiteConnection() {
+            if (!this.selectedSiteId) return;
+            this.testSiteConnection(this.selectedSiteId, this.csrfToken, {
+                onSuccess: (d) => {
+                    if (d.default_author) { this.publishAuthor = d.default_author; this.publishAuthorSource = 'profile'; }
+                    this.completeStep(2);
+                    this.autoSaveDraft();
+                },
+            });
+        },
+
+        autoSelectPrSource() {
+            if (this.template_overrides?.article_type === 'press-release') {
+                if (this.prSourceSites.length === 0) return;
+                // Save current non-PR site before switching
+                const currentInPr = this.prSourceSites.find(s => String(s.id) === this.selectedSiteId);
+                if (!currentInPr) {
+                    if (this.selectedSiteId) this._previousSiteId = this.selectedSiteId;
+                    this.selectedSiteId = String(this.prSourceSites[0].id);
+                    this.selectSite();
+                }
+            } else {
+                // Switching away from press-release — restore previous site if it was swapped
+                if (this._previousSiteId) {
+                    const prevSite = this.sites.find(s => String(s.id) === this._previousSiteId);
+                    if (prevSite) {
+                        this.selectedSiteId = this._previousSiteId;
+                        this.selectSite();
+                    }
+                    this._previousSiteId = null;
+                }
+            }
+        },
+
         // ── Step 3: Sources ───────────────────────────────
+        async uploadSourceDocument(files) {
+            if (!files || !files.length) return;
+            this.uploadingSourceDoc = true;
+            const formData = new FormData();
+            formData.append('file', files[0]);
+            formData.append('draft_id', this.draftId);
+            try {
+                const resp = await fetch('{{ route("publish.pipeline.upload-source-doc") }}', {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: formData,
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    this.uploadedSourceDoc = { name: files[0].name, word_count: data.word_count };
+                    this.uploadedSourceText = data.text;
+                    this.showNotification('success', 'Document uploaded — ' + data.word_count + ' words extracted');
+                } else {
+                    this.showNotification('error', data.message || 'Upload failed');
+                }
+            } catch (e) {
+                this.showNotification('error', 'Upload error: ' + e.message);
+            }
+            this.uploadingSourceDoc = false;
+        },
+
+        useUploadedContent() {
+            const text = this.uploadedSourceText.trim();
+            if (!text) return;
+            // Add as a virtual source
+            this.sources.push({ url: 'upload://' + (this.uploadedSourceDoc?.name || 'pasted-content'), title: this.uploadedSourceDoc?.name || 'Uploaded Content', status: 'ready', wordCount: text.split(/\s+/).filter(Boolean).length });
+            // Store the text so the spin step can use it
+            this.checkResults.push({ url: 'upload://', success: true, text: text, word_count: text.split(/\s+/).filter(Boolean).length, formatted_html: '<p>' + text.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>' });
+            this.approvedSources.push(this.checkResults.length - 1);
+            this.completeStep(3);
+            this.completeStep(4);
+            this.openStep(5);
+            this.showNotification('success', 'Content added as source — proceed to AI & Spin');
+        },
+
+        skipSpinPublishAsIs() {
+            const text = this.uploadedSourceText.trim();
+            if (!text) return;
+            // Set as editor content directly, skip spinning
+            const html = '<p>' + text.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+            this.editorContent = html;
+            this.spunContent = html;
+            this.spunWordCount = text.split(/\s+/).filter(Boolean).length;
+            this.articleTitle = this.uploadedSourceDoc?.name?.replace(/\.(docx?|pdf)$/i, '') || 'Untitled';
+            this.completeStep(3);
+            this.completeStep(4);
+            this.completeStep(5);
+            this.openStep(6);
+            this.showNotification('success', 'Content loaded — skipped spinning, go to Create Article');
+        },
+
         addPastedUrls() {
             const urls = this.pasteText.split('\n').map(u => u.trim()).filter(u => u && u.startsWith('http'));
             urls.forEach(url => {
@@ -2064,7 +2296,7 @@ function publishPipeline() {
             this.aiLog = [];
 
             this._logAi('info', 'Starting AI article search for: ' + this.aiSearchTopic);
-            this._logAi('info', 'Requesting top 10 articles via Claude Haiku with web search...');
+            this._logAi('info', 'Requesting top 10 articles via ' + this.aiSearchModel + ' with web search...');
 
             try {
                 const resp = await fetch('{{ route("publish.pipeline.ai-search") }}', {
@@ -2073,6 +2305,7 @@ function publishPipeline() {
                     body: JSON.stringify({
                         topic: this.aiSearchTopic,
                         count: 10,
+                        model: this.aiSearchModel,
                     }),
                 });
                 const data = await resp.json();
@@ -2089,8 +2322,8 @@ function publishPipeline() {
 
                     // Cost info
                     if (data.data.usage) {
-                        this.aiSearchCost = { model: data.data.model || 'claude-haiku-4-5', cost: data.data.cost || 0, usage: data.data.usage };
-                        this._logAi('info', 'Cost: $' + (data.data.cost || 0).toFixed(4) + ' | Tokens: ' + (data.data.usage.input_tokens || 0) + '+' + (data.data.usage.output_tokens || 0) + ' | Model: ' + (data.data.model || 'claude-haiku-4-5'));
+                        this.aiSearchCost = { model: data.data.model || 'claude-haiku-4-5-20251001', cost: data.data.cost || 0, usage: data.data.usage };
+                        this._logAi('info', 'Cost: $' + (data.data.cost || 0).toFixed(4) + ' | Tokens: ' + (data.data.usage.input_tokens || 0) + '+' + (data.data.usage.output_tokens || 0) + ' | Model: ' + (data.data.model || 'claude-haiku-4-5-20251001'));
                     }
 
                     this.showNotification('success', data.data.articles.length + ' article(s) found — select sources below.');
@@ -2129,64 +2362,178 @@ function publishPipeline() {
             this.prProfileSearch = '';
             this.prProfileResults = [];
             this.savePipelineState();
+            // Auto-load Notion data + relations + photos
+            this.loadProfileData(profile);
         },
 
         async loadProfileData(profile) {
             if (!this.prSubjectData[profile.id]) {
-                this.prSubjectData[profile.id] = { loading: false, loaded: false, fields: [], driveUrl: '', photos: [], loadingPhotos: false, notionUrl: '' };
+                this.prSubjectData[profile.id] = {
+                    loading: false, loaded: false,
+                    fields: [], driveUrl: '', photos: [], loadingPhotos: false,
+                    notionUrl: '', relations: [], selectedEntries: {}, selectedPhotos: {},
+                };
             }
-            this.prSubjectData[profile.id].loading = true;
-            this.prSubjectData[profile.id].fields = [];
+            const pd = this.prSubjectData[profile.id];
+            pd.loading = true;
+            pd.fields = [];
+            pd.relations = [];
 
-            // If profile has local fields from search, use those first
+            // Local fields fallback
             if (profile.fields && Object.keys(profile.fields).length > 0) {
                 for (const [key, val] of Object.entries(profile.fields)) {
-                    if (val) this.prSubjectData[profile.id].fields.push({ key, notion_field: key, value: val });
+                    if (val) pd.fields.push({ key, notion_field: key, value: val, display_value: val });
                 }
             }
 
-            // If Notion-linked, fetch live data for richer fields + photos
+            // Notion-linked: use context endpoint for fields + relations
             if (profile.external_source === 'notion' && profile.external_id) {
-                this.prSubjectData[profile.id].notionUrl = 'https://notion.so/' + profile.external_id.replace(/-/g, '');
+                pd.notionUrl = 'https://notion.so/' + profile.external_id.replace(/-/g, '');
                 try {
-                    const resp = await fetch('/notion/profile/' + profile.id + '/live-data', {
+                    const resp = await fetch('/notion/profile/' + profile.id + '/context', {
                         method: 'POST',
-                        headers: { 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/x-ndjson' },
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                        body: JSON.stringify({ fresh: false }),
                     });
-                    const reader = resp.body.getReader();
-                    const decoder = new TextDecoder();
-                    let buffer = '';
-                    // Replace local fields with richer Notion data
-                    let notionFields = [];
-                    while (true) {
-                        const result = await reader.read();
-                        if (result.done) break;
-                        buffer += decoder.decode(result.value, { stream: true });
-                        const lines = buffer.split('\n');
-                        buffer = lines.pop();
-                        for (const line of lines) {
-                            if (!line.trim()) continue;
-                            try {
-                                const data = JSON.parse(line);
-                                if (data.type === 'field') {
-                                    notionFields.push(data);
-                                } else if (data.type === 'raw_properties') {
-                                    const photos = data.data?.['Personal Photos'] || '';
-                                    if (photos && photos.includes('drive.google.com')) {
-                                        this.prSubjectData[profile.id].driveUrl = photos;
-                                    }
-                                }
-                            } catch (e) {}
+                    const data = await resp.json();
+                    if (data.success) {
+                        if (data.fields?.length) pd.fields = data.fields;
+                        pd.driveUrl = data.profile?.drive_url || '';
+                        pd.notionUrl = data.profile?.notion_url || pd.notionUrl;
+                        pd.relations = (data.relations || []).map(r => ({
+                            ...r, open: true, loading: false, loaded: false, entries: [],
+                        }));
+                        // Auto-load all relation entries
+                        for (const rel of pd.relations) {
+                            this.loadPrRelation(profile.id, rel.slug);
                         }
-                    }
-                    if (notionFields.length > 0) {
-                        this.prSubjectData[profile.id].fields = notionFields;
+                        // Auto-load photos
+                        if (pd.driveUrl) this.loadProfilePhotos(profile);
                     }
                 } catch (e) {}
             }
+            pd.loaded = true;
+            pd.loading = false;
+        },
 
-            this.prSubjectData[profile.id].loaded = true;
-            this.prSubjectData[profile.id].loading = false;
+        async loadPrRelation(profileId, slug) {
+            const pd = this.prSubjectData[profileId];
+            if (!pd) return;
+            const rel = pd.relations.find(r => r.slug === slug);
+            if (!rel) return;
+            rel.loading = true;
+            try {
+                const resp = await fetch('/notion/profile/' + profileId + '/relations/' + slug, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                    body: JSON.stringify({ fresh: false }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    rel.entries = (data.entries || []).map(e => ({ ...e, open: false, loading: false, detail: null }));
+                    rel.count = data.total || rel.entries.length;
+                    rel.loaded = true;
+                }
+            } catch (e) {}
+            rel.loading = false;
+        },
+
+        async loadPrEntryDetail(profileId, slug, entryId) {
+            const pd = this.prSubjectData[profileId];
+            if (!pd) return;
+            const rel = pd.relations.find(r => r.slug === slug);
+            if (!rel) return;
+            const entry = rel.entries.find(e => e.id === entryId);
+            if (!entry) return;
+            if (entry.detail) { entry.open = !entry.open; return; }
+            entry.open = true;
+            entry.loading = true;
+            try {
+                const resp = await fetch('/notion/page/' + entryId + '/detail', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                    body: JSON.stringify({ fresh: false }),
+                });
+                const data = await resp.json();
+                if (data.success) entry.detail = data.page || null;
+            } catch (e) {}
+            entry.loading = false;
+        },
+
+        togglePrEntry(profileId, slug, entryId) {
+            const pd = this.prSubjectData[profileId];
+            if (!pd) return;
+            const rel = pd.relations.find(r => r.slug === slug);
+            if (!rel) return;
+            const entry = rel.entries.find(e => e.id === entryId);
+            if (!entry) return;
+            if (!entry.detail) { this.loadPrEntryDetail(profileId, slug, entryId); return; }
+            entry.open = !entry.open;
+        },
+
+        togglePrEntrySelect(profileId, entryId) {
+            const pd = this.prSubjectData[profileId];
+            if (!pd) return;
+            if (!pd.selectedEntries) pd.selectedEntries = {};
+            pd.selectedEntries[entryId] = !pd.selectedEntries[entryId];
+        },
+
+        togglePrPhotoSelect(profileId, photoId) {
+            const pd = this.prSubjectData[profileId];
+            if (!pd) return;
+            if (!pd.selectedPhotos) pd.selectedPhotos = {};
+            pd.selectedPhotos[photoId] = !pd.selectedPhotos[photoId];
+        },
+
+        buildPrSubjectContext() {
+            if (!this.selectedPrProfiles?.length) return null;
+            const parts = [];
+            for (const profile of this.selectedPrProfiles) {
+                const pd = this.prSubjectData[profile.id];
+                if (!pd?.loaded) continue;
+                let section = '--- SUBJECT: ' + profile.name + ' ---\n';
+                // User instructions
+                if (profile.context) section += 'INSTRUCTIONS: ' + profile.context + '\n\n';
+                // Profile fields
+                if (pd.fields?.length) {
+                    section += 'PROFILE DATA:\n';
+                    for (const f of pd.fields) {
+                        if (f.display_value || f.value) section += '- ' + f.notion_field + ': ' + (f.display_value || f.value) + '\n';
+                    }
+                    section += '\n';
+                }
+                // Selected relation entries
+                const selectedIds = Object.keys(pd.selectedEntries || {}).filter(id => pd.selectedEntries[id]);
+                if (selectedIds.length > 0 && pd.relations?.length) {
+                    for (const rel of pd.relations) {
+                        const selected = (rel.entries || []).filter(e => selectedIds.includes(e.id));
+                        if (selected.length === 0) continue;
+                        section += rel.label.toUpperCase() + ':\n';
+                        for (const entry of selected) {
+                            section += '  - ' + entry.title + '\n';
+                            if (entry.detail?.properties) {
+                                for (const [k, v] of Object.entries(entry.detail.properties)) {
+                                    if (v && typeof v === 'string' && v.length > 0) section += '    ' + k + ': ' + v + '\n';
+                                }
+                            }
+                        }
+                        section += '\n';
+                    }
+                }
+                // Selected photos
+                const selectedPhotoIds = Object.keys(pd.selectedPhotos || {}).filter(id => pd.selectedPhotos[id]);
+                if (selectedPhotoIds.length > 0) {
+                    section += 'SELECTED PHOTOS (' + selectedPhotoIds.length + '):\n';
+                    for (const photo of (pd.photos || [])) {
+                        if (selectedPhotoIds.includes(photo.id)) {
+                            section += '- ' + photo.name + ' [URL: ' + (photo.webViewLink || photo.webContentLink || '') + ']\n';
+                        }
+                    }
+                    section += 'Use [PHOTO: filename] markers in the article body where each selected photo should be placed.\n\n';
+                }
+                parts.push(section);
+            }
+            return parts.length ? parts.join('\n') : null;
         },
 
         async loadProfilePhotos(profile) {
@@ -2246,20 +2593,41 @@ function publishPipeline() {
             const result = this.checkResults[idx];
             const source = this.sources[idx];
             if (!source) return;
+
+            // Extract keywords from URL for search
+            const url = source.url || '';
+            const title = source.title || '';
+            let keywords = title;
+            if (!keywords) {
+                // Parse URL path into keywords: /world/2024/04/05/taiwan-president-lai-female-vice -> taiwan president lai female vice
+                try {
+                    const path = new URL(url).pathname;
+                    keywords = path.split('/').pop().replace(/[-_]/g, ' ').replace(/\.(html?|php|aspx?)$/i, '').replace(/\d{4,}/g, '').trim();
+                } catch(e) { keywords = ''; }
+            }
+
             try {
                 await fetch('{{ route("publish.failed-sources.store") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
                     body: JSON.stringify({
                         url: source.url,
-                        title: source.title || result?.title || '',
+                        title: title,
                         error_message: result?.message || 'Extraction failed',
                         source_api: result?.source_api || '',
                     })
                 });
             } catch(e) {}
             this.removeSource(idx);
-            this.showNotification('success', 'Saved to failed list and removed.');
+
+            // Switch to Search Online tab with extracted keywords
+            if (keywords) {
+                this.sourceTab = 'ai';
+                this.aiSearchTopic = keywords;
+                this.showNotification('info', 'Searching for alternative sources: ' + keywords);
+            } else {
+                this.showNotification('success', 'Saved to failed list and removed.');
+            }
         },
 
         _logCheck(type, message) {
@@ -2277,10 +2645,17 @@ function publishPipeline() {
             this.approvedSources = [];
             this.discardedSources = [];
             this.checkPassCount = 0;
+            // Keep step 4 open during extraction
+            if (!this.openSteps.includes(4)) this.openSteps.push(4);
 
+            const methodNames = { auto: 'Auto (Readability + Regex fallback)', readability: 'Readability (structured)', regex: 'Regex (raw HTML parsing)', trafilatura: 'Trafilatura (Python)', jina: 'Jina Reader API' };
+            const uaNames = { chrome: 'Chrome Desktop', googlebot: 'Googlebot', bingbot: 'Bingbot', mobile: 'Mobile Chrome', curl: 'cURL' };
             this._logCheck('info', 'Starting article extraction for ' + this.sources.length + ' source(s)...');
             this.sources.forEach((s, i) => this._logCheck('step', (i + 1) + '. ' + s.url));
-            this._logCheck('info', 'Method: ' + this.extractMethod + ' | UA: ' + this.checkUserAgent + ' | Timeout: ' + this.extractTimeout + 's | Min words: ' + this.extractMinWords);
+            this._logCheck('info', 'Method: ' + (methodNames[this.extractMethod] || this.extractMethod));
+            this._logCheck('info', 'User Agent: ' + (uaNames[this.checkUserAgent] || this.checkUserAgent));
+            this._logCheck('info', 'Timeout: ' + this.extractTimeout + 's per request | Retries: ' + this.extractRetries + ' | Min words: ' + this.extractMinWords);
+            this._logCheck('info', 'Auto-fallback (Googlebot): ' + (this.extractAutoFallback ? 'On' : 'Off'));
             this._logCheck('info', 'Sending extraction request...');
 
             try {
@@ -2312,12 +2687,19 @@ function publishPipeline() {
                             this.sources[i].title = r.title;
                         }
                     }
-                    const icon = r.success ? 'success' : 'error';
                     const url = this.sources[i]?.url || 'unknown';
-                    const detail = r.success
-                        ? r.word_count + ' words extracted' + (r.title ? ' — "' + r.title.substring(0, 60) + '"' : '')
-                        : (r.message || 'Extraction failed');
-                    this._logCheck(icon, url.substring(0, 80) + ' — ' + detail);
+                    const domain = url.replace(/^https?:\/\//, '').split('/')[0];
+                    if (r.success) {
+                        this._logCheck('success', domain + ' — ' + r.word_count + ' words' + (r.title ? ' — "' + r.title.substring(0, 60) + '"' : ''));
+                        if (r.method_used) this._logCheck('step', '  Method: ' + (methodNames[r.method_used] || r.method_used));
+                        if (r.response_time) this._logCheck('step', '  Response time: ' + r.response_time + 'ms');
+                        if (r.http_status) this._logCheck('step', '  HTTP: ' + r.http_status);
+                    } else {
+                        this._logCheck('error', domain + ' — ' + (r.message || 'Extraction failed'));
+                        if (r.http_status) this._logCheck('step', '  HTTP: ' + r.http_status);
+                        if (r.method_used) this._logCheck('step', '  Method tried: ' + (methodNames[r.method_used] || r.method_used));
+                        if (r.fallback_tried) this._logCheck('step', '  Fallback attempted: ' + r.fallback_tried);
+                    }
                 });
 
                 this._logCheck('success', 'Done. ' + this.checkPassCount + '/' + this.checkResults.length + ' sources extracted successfully.');
@@ -2497,9 +2879,13 @@ function publishPipeline() {
         async refreshPromptPreview() {
             this.promptLoading = true;
             try {
-                const sourceTexts = this.approvedSources.length > 0
-                    ? this.approvedSources.map(i => this.checkResults[i]?.text || '').filter(Boolean)
-                    : ['[Source articles will be inserted here]'];
+                const sourceTexts = this.currentArticleType === 'press-release'
+                    ? [this.buildPressReleaseSourceText(true)]
+                    : (
+                        this.approvedSources.length > 0
+                            ? this.approvedSources.map(i => this.checkResults[i]?.text || '').filter(Boolean)
+                            : ['[Source articles will be inserted here]']
+                    );
                 const resp = await fetch('{{ route("publish.pipeline.preview-prompt") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
@@ -2507,7 +2893,9 @@ function publishPipeline() {
                         source_texts: sourceTexts,
                         template_id: this.selectedTemplateId || null,
                         preset_id: this.selectedPresetId || null,
+                        prompt_slug: this.currentPressReleasePromptSlug(),
                         custom_prompt: this.customPrompt || null,
+                        web_research: this.spinWebResearch,
                     })
                 });
                 const data = await resp.json();
@@ -2525,18 +2913,24 @@ function publishPipeline() {
             this.spinLog = [];
             this._logSpin('info', 'Starting article spin...');
             this._logSpin('step', 'Model: ' + this.aiModel);
-            this._logSpin('step', 'Sources: ' + this.checkResults.filter(r => r.success).length);
+            this._logSpin('step', this.currentArticleType === 'press-release'
+                ? 'Press release source: ' + (this.pressRelease.resolved_source_label || this.pressRelease.submit_method)
+                : 'Sources: ' + this.checkResults.filter(r => r.success).length);
             if (this.customPrompt) this._logSpin('step', 'Custom instructions: ' + this.customPrompt.substring(0, 100));
             if (this.selectedTemplate) this._logSpin('step', 'Template: ' + this.selectedTemplate.name);
             if (this.selectedPreset) this._logSpin('step', 'Preset: ' + this.selectedPreset.name);
 
             // Collect verified source texts
-            const sourceTexts = this.checkResults
-                .filter(r => r.success && r.text)
-                .map(r => r.text);
+            const sourceTexts = this.currentArticleType === 'press-release'
+                ? [this.buildPressReleaseSourceText(false)].filter(Boolean)
+                : this.checkResults
+                    .filter(r => r.success && r.text)
+                    .map(r => r.text);
 
             if (sourceTexts.length === 0) {
-                this.spinError = 'No verified source texts available. Please check sources first.';
+                this.spinError = this.currentArticleType === 'press-release'
+                    ? 'No submitted press release source text is available yet. Detect fields or provide content first.'
+                    : 'No verified source texts available. Please check sources first.';
                 this.spinning = false;
                 return;
             }
@@ -2549,8 +2943,11 @@ function publishPipeline() {
                         source_texts: sourceTexts,
                         template_id: this.selectedTemplateId || null,
                         preset_id: this.selectedPresetId || null,
+                        prompt_slug: this.currentPressReleasePromptSlug(),
                         model: this.aiModel,
                         custom_prompt: this.customPrompt || null,
+                        pr_subject_context: this.buildPrSubjectContext(),
+                        web_research: this.spinWebResearch,
                     })
                 });
                 const data = await resp.json();
@@ -2595,7 +2992,7 @@ function publishPipeline() {
                     if (data.resolved_prompt) this.resolvedPrompt = data.resolved_prompt;
 
                     if (data.photo_suggestions) {
-                        this.photoSuggestions = data.photo_suggestions.map(ps => ({...ps, autoPhoto: null, confirmed: false, removed: false, searchResults: []}));
+                        this.photoSuggestions = data.photo_suggestions.map(ps => ({...ps, autoPhoto: null, confirmed: false, removed: false, refreshingMeta: false, searchResults: []}));
                     }
 
                     this.queueAutoSaveDraft(300);
@@ -2939,6 +3336,59 @@ function publishPipeline() {
             })).filter(l => l.url && l.url.startsWith('http'));
         },
 
+        async loadSyndicationCategories() {
+            if (!this.selectedSite?.id) return;
+            this.loadingSyndicationCats = true;
+            try {
+                const resp = await fetch('/publish/sites/' + this.selectedSite.id + '/categories', {
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                });
+                const data = await resp.json();
+                if (data.success && data.categories) {
+                    this.syndicationCategories = data.categories;
+                    // Auto-select all by default
+                    this.selectedSyndicationCats = data.categories.map(c => c.id);
+                } else {
+                    this.showNotification('error', data.message || 'Failed to load categories');
+                }
+            } catch (e) {
+                this.showNotification('error', 'Error loading categories: ' + e.message);
+            }
+            this.loadingSyndicationCats = false;
+        },
+
+        toggleSyndicationCat(id) {
+            const idx = this.selectedSyndicationCats.indexOf(id);
+            if (idx > -1) this.selectedSyndicationCats.splice(idx, 1);
+            else this.selectedSyndicationCats.push(id);
+        },
+
+        removeArticleLink(idx) {
+            const link = this.suggestedUrls[idx];
+            if (!link) return;
+
+            // Remove from the TinyMCE editor content
+            const editor = typeof tinymce !== 'undefined' ? tinymce.activeEditor : null;
+            if (editor) {
+                let html = editor.getContent();
+                // Find and remove <a> tags matching this URL — replace with just the link text
+                const tmp = document.createElement('div');
+                tmp.innerHTML = html;
+                const anchors = tmp.querySelectorAll('a[href]');
+                for (const a of anchors) {
+                    if (a.getAttribute('href') === link.url) {
+                        a.replaceWith(document.createTextNode(a.textContent));
+                    }
+                }
+                editor.setContent(tmp.innerHTML);
+                this.editorContent = tmp.innerHTML;
+                this.spunContent = tmp.innerHTML;
+            }
+
+            // Remove from the array
+            this.suggestedUrls.splice(idx, 1);
+        },
+
         async searchPhotos() {
             if (!this.photoSearch.trim()) return;
             this.photoSearching = true;
@@ -2971,6 +3421,87 @@ function publishPipeline() {
                 if (photos.length > 0 && !this.featuredPhoto) this.featuredPhoto = photos[0];
             } catch (e) {}
             this.featuredSearching = false;
+        },
+
+        importFeaturedFromUrl() {
+            const url = this.featuredUrlImport.trim();
+            if (!url) return;
+            this.featuredPhoto = { url_large: url, url_thumb: url, url: url, source: 'url-import', alt: '', width: 0, height: 0 };
+            this.featuredUrlImport = '';
+            this.showNotification('success', 'Featured image set from URL');
+        },
+
+        async uploadFeaturedPhoto(files) {
+            if (!files || !files.length) return;
+            const file = files[0];
+            const url = URL.createObjectURL(file);
+            // Upload to server temp storage
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('draft_id', this.draftId);
+            formData.append('type', 'featured');
+            try {
+                const resp = await fetch('{{ route("publish.pipeline.upload-photo") }}', {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: formData,
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    this.featuredPhoto = { url_large: data.url, url_thumb: data.url, url: data.url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: data.width || 0, height: data.height || 0 };
+                    this.showNotification('success', 'Featured image uploaded');
+                } else {
+                    this.showNotification('error', data.message || 'Upload failed');
+                }
+            } catch (e) {
+                // Fallback: use local blob URL
+                this.featuredPhoto = { url_large: url, url_thumb: url, url: url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: 0, height: 0 };
+                this.showNotification('info', 'Using local preview — will upload during prepare');
+            }
+        },
+
+        importInnerPhotoFromUrl() {
+            const url = this.innerPhotoUrlImport.trim();
+            if (!url) return;
+            this.insertingPhoto = { url_large: url, url_thumb: url, url: url, source: 'url-import', alt: '', width: 0, height: 0 };
+            this.overlayPhotoAlt = 'Click Get Metadata to generate';
+            this.overlayPhotoCaption = 'Click Get Metadata to generate';
+            this.overlayPhotoFilename = 'auto';
+            this.overlayMetaGenerated = false;
+            this.innerPhotoUrlImport = '';
+        },
+
+        async uploadInnerPhoto(files) {
+            if (!files || !files.length) return;
+            const file = files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('draft_id', this.draftId);
+            formData.append('type', 'inner');
+            try {
+                const resp = await fetch('{{ route("publish.pipeline.upload-photo") }}', {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: formData,
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    this.insertingPhoto = { url_large: data.url, url_thumb: data.url, url: data.url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: data.width || 0, height: data.height || 0 };
+                    this.overlayPhotoAlt = file.name.replace(/\.[^.]+$/, '');
+                    this.overlayPhotoCaption = '';
+                    this.overlayPhotoFilename = file.name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                    this.overlayMetaGenerated = false;
+                } else {
+                    this.showNotification('error', data.message || 'Upload failed');
+                }
+            } catch (e) {
+                const url = URL.createObjectURL(file);
+                this.insertingPhoto = { url_large: url, url_thumb: url, url: url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: 0, height: 0 };
+                this.overlayPhotoAlt = file.name.replace(/\.[^.]+$/, '');
+                this.overlayPhotoCaption = '';
+                this.overlayPhotoFilename = 'auto';
+                this.overlayMetaGenerated = false;
+            }
         },
 
         insertPhotoIntoEditor() {
@@ -3307,6 +3838,7 @@ function publishPipeline() {
                                         if (event.wp_images) {
                                             event.wp_images.forEach(img => { this.uploadedImages[img.source_url] = img; });
                                         }
+                                        this.prepareIntegrityIssues = event.integrity_issues || [];
                                         this.prepareComplete = true;
                                         this.showNotification('success', 'Content prepared for WordPress');
                                     } else {
@@ -3383,6 +3915,7 @@ function publishPipeline() {
                         template_id: this.selectedTemplateId || null,
                         preset_id: this.selectedPresetId || null,
                         user_id: this.selectedUser?.id || null,
+                        article_type: this.currentArticleType || null,
                     })
                 });
 
@@ -3444,10 +3977,12 @@ function publishPipeline() {
                         draft_id: this.draftId,
                         title: this.articleTitle || 'Untitled Pipeline Draft',
                         body: this.editorContent,
+                        excerpt: this.articleDescription || null,
                         user_id: this.selectedUser?.id || null,
                         site_id: this.selectedSite?.id || null,
                         preset_id: this.selectedPresetId || null,
                         template_id: this.selectedTemplateId || null,
+                        article_type: this.currentArticleType || null,
                         ai_model: this.aiModel,
                         author: this.publishAuthor || null,
                         sources: this.sources.map(s => ({ url: s.url, title: s.title })),

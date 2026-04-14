@@ -8,6 +8,7 @@ use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
 use hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm;
 use hexa_app_publish\Support\PublishListCatalog;
 use hexa_app_publish\Services\PublishService;
+use hexa_core\CronManager\Services\CronManagerService;
 use hexa_core\Forms\Services\FormRegistryService;
 use hexa_core\ListRegistry\Services\ListService;
 use hexa_core\Services\PackageRegistryService;
@@ -44,6 +45,8 @@ class AppPublishServiceProvider extends ServiceProvider
 
         $this->registerForms();
 
+        $this->registerCrons();
+
         if ($this->app->runningInConsole()) {
             $this->commands([RunCampaignsCommand::class, CleanupOrphanUploadsCommand::class]);
         }
@@ -64,7 +67,7 @@ class AppPublishServiceProvider extends ServiceProvider
             // Article (12)
             $registry->registerSidebarLink('publish.pipeline', 'Publish Article', 'M13 5l7 7-7 7M5 5l7 7-7 7', 'Article', 'app-publish', 12);
             $registry->registerSidebarLink('publish.editor', 'Editor', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', 'Article', 'app-publish', 13);
-            $registry->registerSidebarLink('publish.drafts.index', 'Articles', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', 'Article', 'app-publish', 14);
+            $registry->registerSidebarLink('publish.drafts.index', 'Drafts', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', 'Article', 'app-publish', 14);
             $registry->registerSidebarLink('publish.bookmarks.index', 'Bookmarked Articles', 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z', 'Article', 'app-publish', 14);
             $registry->registerSidebarLink('publish.templates.index', 'Article Templates', 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z', 'Article', 'app-publish', 15);
             $registry->registerSidebarLink('prompt-center.index', 'Prompt Center', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', 'Prompts', 'app-publish', 15);
@@ -147,6 +150,20 @@ class AppPublishServiceProvider extends ServiceProvider
         app(FormRegistryService::class)->register(
             WordPressPresetForm::FORM_KEY,
             fn (array $context = []) => WordPressPresetForm::make($context)
+        );
+    }
+
+    private function registerCrons(): void
+    {
+        if (!class_exists(CronManagerService::class)) {
+            return;
+        }
+
+        app(CronManagerService::class)->register(
+            'app-publish',
+            'publish:run-campaigns',
+            (string) config('hws-publish.campaign_cron_schedule', '* * * * *'),
+            'Process due publishing campaigns and generate scheduled news articles.'
         );
     }
 

@@ -6,27 +6,48 @@ use hexa_core\Http\Controllers\Controller;
 use hexa_core\Services\GenericService;
 use hexa_app_publish\Publishing\Accounts\Models\PublishAccount;
 use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
+use hexa_app_publish\Publishing\Campaigns\Services\CampaignEligibilityService;
+use hexa_app_publish\Publishing\Campaigns\Services\CampaignModeResolver;
+use hexa_app_publish\Publishing\Campaigns\Services\CampaignScheduleService;
+use hexa_app_publish\Publishing\Campaigns\Services\CampaignSettingsResolver;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
 use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Services\PublishService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class CampaignController extends Controller
 {
     protected GenericService $generic;
     protected PublishService $publishService;
+    protected CampaignEligibilityService $eligibility;
+    protected CampaignModeResolver $modeResolver;
+    protected CampaignScheduleService $scheduleService;
+    protected CampaignSettingsResolver $settingsResolver;
 
     /**
      * @param GenericService $generic
      * @param PublishService $publishService
      */
-    public function __construct(GenericService $generic, PublishService $publishService)
+    public function __construct(
+        GenericService $generic,
+        PublishService $publishService,
+        CampaignEligibilityService $eligibility,
+        CampaignModeResolver $modeResolver,
+        CampaignScheduleService $scheduleService,
+        CampaignSettingsResolver $settingsResolver
+    )
     {
         $this->generic = $generic;
         $this->publishService = $publishService;
+        $this->eligibility = $eligibility;
+        $this->modeResolver = $modeResolver;
+        $this->scheduleService = $scheduleService;
+        $this->settingsResolver = $settingsResolver;
     }
 
     /**
@@ -93,8 +114,12 @@ class CampaignController extends Controller
                     'publish_account_id' => $site ? ($site->publish_account_id ?: null) : null,
                     'publish_site_id' => $site ? $site->id : null,
                     'status' => 'draft',
+                    'delivery_mode' => 'draft-local',
                     'articles_per_interval' => 1,
                     'interval_unit' => 'daily',
+                    'timezone' => 'America/New_York',
+                    'run_at_time' => '09:00',
+                    'drip_interval_minutes' => 60,
                     'created_by' => auth()->id(),
                 ]);
             }
@@ -107,6 +132,13 @@ class CampaignController extends Controller
         $aiTemplates = PublishTemplate::orderBy('name')->get();
         $wpPresets = PublishPreset::orderBy('name')->get();
         $editCampaign = PublishCampaign::with('user')->find($request->input('id'));
+        if ($editCampaign) {
+            $editCampaign->delivery_mode = $this->modeResolver->normalizeDeliveryMode($editCampaign->delivery_mode);
+            $editCampaign->article_sources = collect((array) $editCampaign->article_sources)
+                ->map(fn ($source) => $source === 'currents_news' ? 'currents' : $source)
+                ->values()
+                ->all();
+        }
         $timezones = \DateTimeZone::listIdentifiers(\DateTimeZone::ALL);
 
         return view('app-publish::publishing.campaigns.create', [
@@ -116,6 +148,8 @@ class CampaignController extends Controller
             'wpPresets' => $wpPresets,
             'editCampaign' => $editCampaign,
             'timezones' => $timezones,
+            'deliveryModes' => $this->eligibility->supportedDeliveryModes(),
+            'articleTypes' => $this->eligibility->supportedArticleTypes(),
         ]);
     }
 
@@ -127,6 +161,8 @@ class CampaignController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $this->normalizeNullableFields($request);
+
         $validated = $request->validate([
             'user_id' => 'nullable|integer|exists:users,id',
             'publish_site_id' => 'required|exists:publish_sites,id',
@@ -135,24 +171,29 @@ class CampaignController extends Controller
             'preset_id' => 'nullable|integer',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
+            'ai_instructions' => 'nullable|string',
             'topic' => 'nullable|string|max:1000',
             'keywords' => 'nullable|array',
-            'auto_publish' => 'nullable|boolean',
+            'article_type' => ['nullable', 'string', Rule::in($this->eligibility->supportedArticleTypes())],
+            'ai_engine' => 'nullable|string|max:100',
+            'article_sources' => 'nullable|array',
+            'photo_sources' => 'nullable|array',
+            'max_links_per_article' => 'nullable|integer|min:0|max:50',
             'author' => 'nullable|string|max:255',
             'post_status' => 'nullable|in:publish,draft,pending',
-            'delivery_mode' => 'nullable|in:draft-local,draft-wordpress,auto-publish,review,notify',
+            'delivery_mode' => ['nullable', 'string', Rule::in($this->eligibility->supportedDeliveryModes())],
             'articles_per_interval' => 'required|integer|min:1|max:50',
             'interval_unit' => 'required|in:hourly,daily,weekly,monthly',
             'timezone' => 'nullable|string|max:50',
             'run_at_time' => 'nullable|string|max:10',
             'drip_interval_minutes' => 'nullable|integer|min:1|max:1440',
-            'notes' => 'nullable|string',
         ]);
 
         $validated['campaign_id'] = PublishCampaign::generateCampaignId();
         $validated['status'] = 'draft';
         $validated['created_by'] = auth()->id();
-        $validated['auto_publish'] = $validated['auto_publish'] ?? false;
+        $validated['auto_publish'] = ($validated['delivery_mode'] ?? 'draft-local') === 'auto-publish';
+        $validated['delivery_mode'] = $this->modeResolver->normalizeDeliveryMode($validated['delivery_mode'] ?? 'draft-local');
         $validated['drip_interval_minutes'] = $validated['drip_interval_minutes'] ?? 60;
 
         // Get publish_account_id from site (nullable FK — never set to 0)
@@ -192,9 +233,22 @@ class CampaignController extends Controller
             ->limit(50)
             ->get();
 
+        try {
+            $resolvedSettings = $this->settingsResolver->resolve($campaign);
+        } catch (\Throwable $e) {
+            $resolvedSettings = [
+                'article_type' => $campaign->article_type,
+                'delivery_mode' => $this->modeResolver->normalizeDeliveryMode($campaign->delivery_mode),
+                'source_method' => $campaign->campaignPreset?->source_method,
+                'search_terms' => (array) ($campaign->keywords ?? $campaign->campaignPreset?->keywords ?? []),
+                'error' => $e->getMessage(),
+            ];
+        }
+
         return view('app-publish::publishing.campaigns.show', [
             'campaign' => $campaign,
             'runLogs' => $runLogs,
+            'resolvedSettings' => $resolvedSettings,
         ]);
     }
 
@@ -208,7 +262,7 @@ class CampaignController extends Controller
     public function runNow(int $id, Request $request): JsonResponse
     {
         $campaign = PublishCampaign::findOrFail($id);
-        $mode = $request->input('mode', 'draft');
+        $mode = $this->modeResolver->normalizeDeliveryMode($request->input('mode', $campaign->delivery_mode ?: 'draft-local'));
 
         $runService = app(\hexa_app_publish\Publishing\Campaigns\Services\CampaignExecutionService::class);
         $result = $runService->run($campaign, $mode);
@@ -247,25 +301,11 @@ class CampaignController extends Controller
      * @param int $id
      * @return View
      */
-    public function edit(int $id): View
+    public function edit(int $id): RedirectResponse
     {
-        $campaign = PublishCampaign::with(['account', 'site', 'template'])->findOrFail($id);
-        $accounts = PublishAccount::where('status', 'active')->orderBy('name')->get();
-        $sites = PublishSite::where('publish_account_id', $campaign->publish_account_id)->orderBy('name')->get();
-        $templates = PublishTemplate::where('publish_account_id', $campaign->publish_account_id)->orderBy('name')->get();
+        PublishCampaign::findOrFail($id);
 
-        return view('app-publish::publishing.campaigns.edit', [
-            'campaign' => $campaign,
-            'accounts' => $accounts,
-            'sites' => $sites,
-            'templates' => $templates,
-            'deliveryModes' => config('hws-publish.campaign_modes', []),
-            'intervalUnits' => config('hws-publish.campaign_intervals', []),
-            'articleTypes' => config('hws-publish.article_types', []),
-            'aiEngines' => config('hws-publish.ai_engines', []),
-            'articleSources' => config('hws-publish.article_sources', []),
-            'photoSources' => config('hws-publish.photo_sources', []),
-        ]);
+        return redirect()->route('campaigns.create', ['id' => $id]);
     }
 
     /**
@@ -278,6 +318,7 @@ class CampaignController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $campaign = PublishCampaign::findOrFail($id);
+        $this->normalizeNullableFields($request);
 
         $validated = $request->validate([
             'user_id' => 'nullable|integer',
@@ -285,26 +326,35 @@ class CampaignController extends Controller
             'publish_template_id' => 'nullable|integer',
             'campaign_preset_id' => 'nullable|integer',
             'preset_id' => 'nullable|integer',
-            'name' => 'nullable|string|max:255',
+            'name' => 'required|string|max:255',
             'description' => 'nullable|string',
+            'ai_instructions' => 'nullable|string',
             'topic' => 'nullable|string|max:1000',
             'keywords' => 'nullable|array',
-            'auto_publish' => 'nullable|boolean',
+            'article_type' => ['nullable', 'string', Rule::in($this->eligibility->supportedArticleTypes())],
+            'ai_engine' => 'nullable|string|max:100',
+            'article_sources' => 'nullable|array',
+            'photo_sources' => 'nullable|array',
+            'max_links_per_article' => 'nullable|integer|min:0|max:50',
             'author' => 'nullable|string|max:255',
             'post_status' => 'nullable|in:publish,draft,pending',
-            'delivery_mode' => 'nullable|in:draft-local,draft-wordpress,auto-publish,review,notify',
+            'delivery_mode' => ['nullable', 'string', Rule::in($this->eligibility->supportedDeliveryModes())],
             'articles_per_interval' => 'nullable|integer|min:1|max:50',
             'interval_unit' => 'nullable|in:hourly,daily,weekly,monthly',
             'timezone' => 'nullable|string|max:50',
             'run_at_time' => 'nullable|string|max:10',
             'drip_interval_minutes' => 'nullable|integer|min:1|max:1440',
-            'notes' => 'nullable|string',
         ]);
 
         // Resolve account from site
         if (!empty($validated['publish_site_id'])) {
             $site = PublishSite::find($validated['publish_site_id']);
             $validated['publish_account_id'] = $site ? ($site->publish_account_id ?: null) : null;
+        }
+
+        if (array_key_exists('delivery_mode', $validated)) {
+            $validated['delivery_mode'] = $this->modeResolver->normalizeDeliveryMode($validated['delivery_mode']);
+            $validated['auto_publish'] = $validated['delivery_mode'] === 'auto-publish';
         }
 
         $campaign->update(array_filter($validated, fn($v) => $v !== null));
@@ -329,7 +379,7 @@ class CampaignController extends Controller
 
         $campaign->update([
             'status' => 'active',
-            'next_run_at' => now(),
+            'next_run_at' => $this->scheduleService->initialRunAt($campaign),
         ]);
 
         hexaLog('publish', 'campaign_activated', "Campaign activated: {$campaign->name} ({$campaign->campaign_id})");
@@ -398,5 +448,30 @@ class CampaignController extends Controller
             'message' => "Campaign duplicated successfully.",
             'redirect' => route('campaigns.show', $duplicate->id),
         ]);
+    }
+
+    private function normalizeNullableFields(Request $request): void
+    {
+        foreach ([
+            'user_id',
+            'publish_site_id',
+            'publish_template_id',
+            'campaign_preset_id',
+            'preset_id',
+            'description',
+            'ai_instructions',
+            'topic',
+            'article_type',
+            'ai_engine',
+            'author',
+            'post_status',
+            'delivery_mode',
+            'timezone',
+            'run_at_time',
+        ] as $field) {
+            if ($request->exists($field) && $request->input($field) === '') {
+                $request->merge([$field => null]);
+            }
+        }
     }
 }

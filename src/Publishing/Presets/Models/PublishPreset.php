@@ -61,6 +61,9 @@ class PublishPreset extends Model
         'default_category_count',
         'default_tag_count',
         'image_layout',
+        'searching_agent',
+        'scraping_agent',
+        'spinning_agent',
     ];
 
     protected $casts = [

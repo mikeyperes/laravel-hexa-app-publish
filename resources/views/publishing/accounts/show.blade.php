@@ -142,22 +142,7 @@
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" @site-log.window="siteLog.push({ type: $event.detail.type, message: $event.detail.message, time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) })">
         <h3 class="font-semibold text-gray-800 text-lg mb-4">WordPress Sites</h3>
 
-        {{-- Default Website --}}
-        <div class="mb-6 pb-4 border-b border-gray-200">
-            <h4 class="text-sm font-semibold text-gray-700 mb-2">Default Website</h4>
-            <div class="flex items-center gap-3 max-w-md">
-                <select x-model="defaultSiteId" @change="saveDefaultSite()" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">-- No default --</option>
-                    @foreach($sites as $s)
-                        <option value="{{ $s->id }}">{{ $s->name }} ({{ $s->url }})</option>
-                    @endforeach
-                </select>
-                <span x-show="defaultSiteSaved" x-cloak x-transition class="text-xs text-green-600 font-medium">Saved</span>
-                <span x-show="defaultSiteError" x-cloak class="text-xs text-red-600" x-text="defaultSiteError"></span>
-            </div>
-        </div>
-
-        {{-- Sub-section 1: Enabled Sites --}}
+        {{-- Sub-section 1: Enabled Sites + Default Website --}}
         <div class="mb-6">
             <h4 class="text-sm font-semibold text-gray-700 mb-3">Enabled Sites (<span x-text="enabledSites.length"></span>)</h4>
 
@@ -172,6 +157,16 @@
                                         <span x-text="site.url"></span>
                                         <svg class="w-3 h-3 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                                     </a>
+                                    {{-- Connection state --}}
+                                    <div class="flex flex-wrap items-center gap-2 mt-1 text-[11px]">
+                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded" :class="site.status === 'connected' ? 'bg-green-100 text-green-700' : (site.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500')">
+                                            <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4"/></svg>
+                                            <span x-text="site.status || 'unknown'"></span>
+                                        </span>
+                                        <span x-show="site.connection_type" class="text-gray-400" x-text="site.connection_type === 'wptoolkit' ? 'SSH/WP Toolkit' : 'REST API'"></span>
+                                        <span x-show="site.wp_username" class="text-gray-400" x-text="'User: ' + site.wp_username"></span>
+                                        <span x-show="site.last_connected_at" class="text-gray-400" x-text="'Last connected: ' + (site.last_connected_at ? new Date(site.last_connected_at).toLocaleDateString() : 'never')"></span>
+                                    </div>
                                 </div>
                                 <div class="flex items-center gap-2 flex-shrink-0 ml-3">
                                     <button @click="
@@ -230,6 +225,21 @@
                 </div>
             </template>
             <p x-show="enabledSites.length === 0" class="text-sm text-gray-400">No WordPress sites enabled yet. Scan for sites below.</p>
+
+            {{-- Default Website — only show when there are enabled sites --}}
+            <div x-show="enabledSites.length > 0" x-cloak class="mt-4 pt-4 border-t border-gray-200">
+                <div class="flex items-center gap-3 max-w-md">
+                    <label class="text-xs text-gray-500 flex-shrink-0">Default Website</label>
+                    <select x-model="defaultSiteId" @change="saveDefaultSite()" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">-- No default --</option>
+                        <template x-for="site in enabledSites" :key="site.id">
+                            <option :value="site.id" x-text="site.name + ' (' + site.url + ')'"></option>
+                        </template>
+                    </select>
+                    <span x-show="defaultSiteSaved" x-cloak x-transition class="text-xs text-green-600 font-medium">Saved</span>
+                    <span x-show="defaultSiteError" x-cloak class="text-xs text-red-600" x-text="defaultSiteError"></span>
+                </div>
+            </div>
         </div>
 
         {{-- Sub-section 2: Scan for WordPress Sites --}}

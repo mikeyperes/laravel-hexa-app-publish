@@ -7,10 +7,8 @@ use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
 use hexa_app_publish\Publishing\Articles\Services\ArticlePersistenceService;
 use hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService;
-use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Log;
 
 /**
  * CampaignRunService — executes a campaign's full pipeline programmatically.
@@ -21,10 +19,13 @@ use Illuminate\Support\Facades\Log;
 class CampaignExecutionService
 {
     protected WordPressDeliveryService $delivery;
-    protected SourceDiscoveryService $sourceDiscovery;
     protected SourceExtractionService $sourceExtraction;
     protected ArticleGenerationService $articleGeneration;
     protected ArticlePersistenceService $persistence;
+    protected CampaignSettingsResolver $settingsResolver;
+    protected CampaignDiscoveryService $discoveryService;
+    protected CampaignScheduleService $scheduleService;
+    protected CampaignModeResolver $modeResolver;
 
     /**
      * @param WordPressDeliveryService $delivery
@@ -33,13 +34,25 @@ class CampaignExecutionService
      * @param ArticleGenerationService $articleGeneration
      * @param ArticlePersistenceService $persistence
      */
-    public function __construct(WordPressDeliveryService $delivery, SourceDiscoveryService $sourceDiscovery, SourceExtractionService $sourceExtraction, ArticleGenerationService $articleGeneration, ArticlePersistenceService $persistence)
+    public function __construct(
+        WordPressDeliveryService $delivery,
+        SourceExtractionService $sourceExtraction,
+        ArticleGenerationService $articleGeneration,
+        ArticlePersistenceService $persistence,
+        CampaignSettingsResolver $settingsResolver,
+        CampaignDiscoveryService $discoveryService,
+        CampaignScheduleService $scheduleService,
+        CampaignModeResolver $modeResolver
+    )
     {
         $this->delivery = $delivery;
-        $this->sourceDiscovery = $sourceDiscovery;
         $this->sourceExtraction = $sourceExtraction;
         $this->articleGeneration = $articleGeneration;
         $this->persistence = $persistence;
+        $this->settingsResolver = $settingsResolver;
+        $this->discoveryService = $discoveryService;
+        $this->scheduleService = $scheduleService;
+        $this->modeResolver = $modeResolver;
     }
 
     /**
@@ -53,7 +66,22 @@ class CampaignExecutionService
     public function run(PublishCampaign $campaign, string $mode = 'draft', ?\Carbon\Carbon $scheduledFor = null): array
     {
         $log = [];
-        $log[] = $this->entry('info', "Starting campaign: {$campaign->name} (mode: {$mode})");
+        $resolvedMode = $this->modeResolver->normalizeDeliveryMode($mode);
+        $executionMode = $this->modeResolver->toExecutionMode($resolvedMode);
+        $log[] = $this->entry('info', "Starting campaign: {$campaign->name} (mode: {$resolvedMode})");
+
+        try {
+            $resolved = $this->settingsResolver->resolve($campaign);
+            $resolved['delivery_mode'] = $resolvedMode;
+            $resolved['execution_mode'] = $executionMode;
+            $resolved['post_status'] = $this->resolveRequestedPostStatus(
+                $resolvedMode,
+                $resolved['post_status'] ?? null
+            );
+        } catch (\Throwable $e) {
+            $log[] = $this->entry('error', $e->getMessage());
+            return ['success' => false, 'log' => $log, 'article' => null];
+        }
 
         // 1. Resolve site + server
         $site = PublishSite::find($campaign->publish_site_id);
@@ -62,10 +90,19 @@ class CampaignExecutionService
             return ['success' => false, 'log' => $log, 'article' => null];
         }
         $log[] = $this->entry('step', "Site: {$site->name} ({$site->url})");
+        $log[] = $this->entry('info', 'Article type: ' . ($resolved['article_type'] ?? 'news-report'));
 
         // 2. Find source articles (from campaign preset keywords/genre)
         $log[] = $this->entry('step', 'Finding source articles...');
-        $sourceUrls = $this->findSources($campaign);
+        $discovery = $this->discoveryService->discoverUrls($campaign, $resolved);
+        $sourceUrls = $discovery['urls'];
+        $log[] = $this->entry('info', 'Discovery query: ' . ($discovery['context']['query'] ?: 'latest news'));
+        if (!empty($discovery['context']['selected_term'])) {
+            $log[] = $this->entry('info', 'Selected search term: ' . $discovery['context']['selected_term']);
+        }
+        if (!empty($discovery['context']['category'])) {
+            $log[] = $this->entry('info', 'Discovery category: ' . $discovery['context']['category']);
+        }
         if (empty($sourceUrls)) {
             $log[] = $this->entry('error', 'No source articles found for campaign keywords/settings.');
             return ['success' => false, 'log' => $log, 'article' => null];
@@ -95,13 +132,14 @@ class CampaignExecutionService
             'publish_site_id' => $site->id,
             'publish_account_id' => $site->publish_account_id ?: null,
             'publish_campaign_id' => $campaign->id,
-            'publish_template_id' => $campaign->publish_template_id,
-            'preset_id' => $campaign->preset_id,
+            'publish_template_id' => $resolved['publish_template_id'],
+            'preset_id' => $resolved['preset_id'],
             'user_id' => $campaign->user_id,
             'created_by' => $campaign->created_by,
             'source_articles' => $sourceTexts,
-            'ai_engine_used' => $campaign->ai_engine ?? 'claude-sonnet-4-6',
-            'author' => $campaign->author,
+            'ai_engine_used' => $resolved['ai_engine'],
+            'author' => $resolved['author'],
+            'article_type' => $resolved['article_type'],
             'user_ip' => '0.0.0.0',
             'scheduled_for' => $scheduledFor,
         ]);
@@ -110,7 +148,7 @@ class CampaignExecutionService
         // 5. Spin with AI
         $log[] = $this->entry('step', 'Spinning article with AI...');
         try {
-            $spinResult = $this->spinArticle($campaign, $sourceTexts);
+            $spinResult = $this->spinArticle($resolved, $sourceTexts);
             if ($spinResult['success']) {
                 $article->update([
                     'title' => $spinResult['title'] ?? 'Untitled',
@@ -138,12 +176,12 @@ class CampaignExecutionService
         }
 
         // 6. Publish or save as draft via shared WordPressDeliveryService
-        $isWpAction = in_array($mode, ['publish', 'wp-draft']);
+        $isWpAction = in_array($executionMode, ['publish', 'wp-draft'], true);
 
         if ($isWpAction) {
             $log[] = $this->entry('step', 'Publishing to WordPress...');
             try {
-                $postStatus = $mode === 'wp-draft' ? 'draft' : ($campaign->post_status ?? 'draft');
+                $postStatus = $executionMode === 'wp-draft' ? 'draft' : ($resolved['post_status'] ?? 'draft');
                 $deliveryOptions = [];
 
                 // Drip scheduling: use WordPress 'future' status with scheduled date
@@ -174,15 +212,15 @@ class CampaignExecutionService
         // Update campaign run times
         $campaign->update([
             'last_run_at' => now(),
-            'next_run_at' => $this->calculateNextRun($campaign),
+            'next_run_at' => $this->scheduleService->nextRunAt($campaign),
         ]);
 
         $log[] = $this->entry('success', "Campaign run complete. Article: {$article->article_id}");
 
-        hexaLog('campaigns', 'campaign_run', "Campaign '{$campaign->name}' ran (mode: {$mode}), article: {$article->article_id}", [
+        hexaLog('campaigns', 'campaign_run', "Campaign '{$campaign->name}' ran (mode: {$resolvedMode}), article: {$article->article_id}", [
             'campaign_id' => $campaign->id,
             'article_id' => $article->id,
-            'mode' => $mode,
+            'mode' => $resolvedMode,
         ]);
 
         return ['success' => true, 'log' => $log, 'article' => $article];
@@ -194,36 +232,15 @@ class CampaignExecutionService
      * @param PublishCampaign $campaign
      * @return array
      */
-    private function findSources(PublishCampaign $campaign): array
+    private function spinArticle(array $resolved, array $sourceTexts): array
     {
-        $preset = $campaign->campaignPreset;
-        $keywords = $campaign->keywords ?? ($preset ? $preset->keywords : []);
-        $genre = $preset->genre ?? null;
-        $method = $preset->source_method ?? 'trending';
-        $searchQuery = implode(' ', $keywords ?: ['latest news']);
-
-        return $this->sourceDiscovery->discoverUrls($searchQuery, [
-            'mode'   => $method,
-            'genre'  => $genre,
-        ], 3);
-    }
-
-    /**
-     * Spin article content using AI.
-     *
-     * @param PublishCampaign $campaign
-     * @param array $sourceTexts
-     * @return array
-     */
-    private function spinArticle(PublishCampaign $campaign, array $sourceTexts): array
-    {
-        $preset = $campaign->campaignPreset;
-        $model = $campaign->ai_engine ?? 'claude-sonnet-4-6';
+        $model = $resolved['ai_engine'] ?? 'claude-sonnet-4-6';
 
         $result = $this->articleGeneration->generate($sourceTexts, [
             'model'          => $model,
-            'template_id'    => $campaign->publish_template_id,
-            'custom_prompt'  => $preset && $preset->ai_instructions ? $preset->ai_instructions : null,
+            'template_id'    => $resolved['publish_template_id'] ?? null,
+            'preset_id'      => $resolved['preset_id'] ?? null,
+            'custom_prompt'  => $resolved['ai_instructions'] ?? null,
             'agent'          => 'campaign-spin',
         ]);
 
@@ -244,23 +261,12 @@ class CampaignExecutionService
         ];
     }
 
-    /**
-     * Calculate the next run time based on campaign schedule.
-     *
-     * @param PublishCampaign $campaign
-     * @return \Carbon\Carbon
-     */
-    private function calculateNextRun(PublishCampaign $campaign): \Carbon\Carbon
+    private function resolveRequestedPostStatus(string $deliveryMode, ?string $postStatus): string
     {
-        $tz = $campaign->timezone ?? 'America/New_York';
-        $now = now()->setTimezone($tz);
-
-        return match ($campaign->interval_unit) {
-            'hourly' => $now->addHour(),
-            'daily' => $now->addDay()->setTimeFromTimeString($campaign->run_at_time ?? '09:00'),
-            'weekly' => $now->addWeek()->setTimeFromTimeString($campaign->run_at_time ?? '09:00'),
-            'monthly' => $now->addMonth()->setTimeFromTimeString($campaign->run_at_time ?? '09:00'),
-            default => $now->addDay(),
+        return match ($deliveryMode) {
+            'auto-publish' => 'publish',
+            'draft-wordpress' => 'draft',
+            default => $postStatus ?: 'draft',
         };
     }
 
