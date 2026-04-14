@@ -186,10 +186,10 @@
                     {{-- Info + metadata --}}
                     <div class="flex-1 space-y-1.5">
                         <p x-show="featuredPhoto" x-cloak class="text-[11px] text-gray-400" x-text="(featuredPhoto?.source || '') + ' — ' + (featuredPhoto?.width || '') + 'x' + (featuredPhoto?.height || '')"></p>
-                        <div x-show="featuredPhoto" x-cloak class="space-y-1">
-                            <div><label class="text-[10px] text-gray-400 uppercase">Alt Text</label><input type="text" x-model="featuredAlt" class="w-full border border-purple-200 rounded px-2 py-1 text-xs bg-white" placeholder="Alt text..."></div>
-                            <div><label class="text-[10px] text-gray-400 uppercase">Caption</label><input type="text" x-model="featuredCaption" class="w-full border border-purple-200 rounded px-2 py-1 text-xs bg-white" placeholder="Caption..."></div>
-                            <div><label class="text-[10px] text-gray-400 uppercase">WordPress Filename</label><p class="text-xs font-mono text-gray-600 bg-white rounded px-2 py-1 border border-purple-100" x-text="featuredFilename || 'auto'"></p></div>
+                        <div x-show="featuredPhoto" x-cloak class="space-y-0.5">
+                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Alt</label><input type="text" x-model="featuredAlt" class="flex-1 border border-purple-200 rounded px-2 py-0.5 text-xs bg-white" placeholder="Alt text..."></div>
+                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Caption</label><input type="text" x-model="featuredCaption" class="flex-1 border border-purple-200 rounded px-2 py-0.5 text-xs bg-white" placeholder="Caption..."></div>
+                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Filename</label><p class="text-[11px] font-mono text-gray-500" x-text="featuredFilename || 'auto'"></p></div>
                         </div>
                         <div class="flex items-center gap-3 pt-1">
                             <button x-show="featuredPhoto" x-cloak @click.stop="refreshFeaturedMeta()" :disabled="featuredRefreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50">
@@ -259,10 +259,10 @@
                                         <p class="text-sm font-medium text-purple-700 break-words" x-text="ps.search_term"></p>
                                         <p x-show="ps.autoPhoto" x-cloak class="text-[11px] text-gray-400" x-text="(ps.autoPhoto?.source || '') + ' — ' + (ps.autoPhoto?.width || '') + 'x' + (ps.autoPhoto?.height || '')"></p>
                                         {{-- Metadata fields --}}
-                                        <div x-show="ps.autoPhoto || ps.alt_text || ps.caption" x-cloak class="space-y-1">
-                                            <div><label class="text-[10px] text-gray-400 uppercase">Alt Text</label><input type="text" x-model="photoSuggestions[idx].alt_text" class="w-full border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Alt text..."></div>
-                                            <div><label class="text-[10px] text-gray-400 uppercase">Caption</label><input type="text" x-model="photoSuggestions[idx].caption" class="w-full border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Caption..."></div>
-                                            <div><label class="text-[10px] text-gray-400 uppercase">WordPress Filename</label><p class="text-xs font-mono text-gray-600 bg-gray-50 rounded px-2 py-1" x-text="photoSuggestions[idx].suggestedFilename || 'auto'"></p></div>
+                                        <div x-show="ps.autoPhoto || ps.alt_text || ps.caption" x-cloak class="space-y-0.5 max-w-lg">
+                                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Alt</label><input type="text" x-model="photoSuggestions[idx].alt_text" class="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs" placeholder="Alt text..."></div>
+                                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Caption</label><input type="text" x-model="photoSuggestions[idx].caption" class="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs" placeholder="Caption..."></div>
+                                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Filename</label><p class="text-[11px] font-mono text-gray-500" x-text="photoSuggestions[idx].suggestedFilename || 'auto'"></p></div>
                                         </div>
                                         <div class="flex items-center gap-2 mt-1">
                                             <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50">
