@@ -209,7 +209,7 @@
                     </div>
                 </div>
                 {{-- Photo Picker (stock + Google) --}}
-                <div class="mt-3">
+                <div class="mt-3" :data-search-term="featuredImageSearch">
                     @include('app-publish::publishing.pipeline.partials.photo-picker', [
                         'pickerId' => 'featured-picker',
                         'searchQuery' => '',
@@ -323,7 +323,7 @@
                                 </div>
                             </div>
                             {{-- Expanded: photo picker (stock + Google) --}}
-                            <div x-show="expandedSuggestions.includes(idx)" x-cloak class="p-3 pt-2 border-t border-gray-100">
+                            <div x-show="expandedSuggestions.includes(idx)" x-cloak class="p-3 pt-2 border-t border-gray-100" :data-search-term="ps.search_term">
                                 @include('app-publish::publishing.pipeline.partials.photo-picker', [
                                     'pickerId' => 'inline-picker',
                                     'searchQuery' => '',
