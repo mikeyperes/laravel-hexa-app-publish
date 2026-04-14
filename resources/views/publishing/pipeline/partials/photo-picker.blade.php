@@ -22,16 +22,17 @@
     stockError: '',
     googleError: '',
 
+    setSearchTerm(term) {
+        if (term) {
+            this.stockQuery = term;
+            this.googleQuery = term;
+            this.searchStock();
+        }
+    },
+
     init() {
         @if($autoLoadStock)
         this.$nextTick(() => {
-            if (!this.stockQuery) {
-                const term = this.$el.parentElement?.getAttribute('data-search-term') || this.$el.closest('[data-search-term]')?.getAttribute('data-search-term') || '';
-                if (term) {
-                    this.stockQuery = term;
-                    this.googleQuery = term;
-                }
-            }
             if (this.stockQuery.trim()) this.searchStock();
         });
         @endif
