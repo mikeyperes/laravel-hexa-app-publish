@@ -284,9 +284,9 @@
                                                 <button @click.stop="
                                                     if (!expandedSuggestions.includes(idx)) {
                                                         expandedSuggestions.push(idx);
-                                                        $nextTick(() => {
+                                                        setTimeout(() => {
                                                             window.dispatchEvent(new CustomEvent('photo-picker-search', { detail: { term: ps.search_term } }));
-                                                        });
+                                                        }, 300);
                                                     } else {
                                                         expandedSuggestions = expandedSuggestions.filter(i => i !== idx);
                                                     }
