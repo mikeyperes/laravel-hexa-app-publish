@@ -4,7 +4,7 @@
 @section('header', 'Publish Article — #' . $draftId)
 
 @section('content')
-<div class="max-w-6xl mx-auto space-y-4" x-data="publishPipeline()"
+<div class="space-y-4" x-data="publishPipeline()"
      @hexa-form-changed.window="
         if ($event.detail.component_id === 'article-preset-form') { $data.template_overrides[$event.detail.field] = $event.detail.value; $data.template_dirty[$event.detail.field] = true; $data.savePipelineState(); }
      ">

@@ -232,7 +232,7 @@
             {{-- Photo Suggestions Panel --}}
             <div class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4" data-photo-section>
                 <div class="flex items-center justify-between mb-3">
-                    <h5 class="text-sm font-semibold text-gray-700">Photos</h5>
+                    <h5 class="text-sm font-semibold text-gray-700">Inline Article Photos</h5>
                     <span x-show="autoFetchingPhotos" x-cloak class="text-xs text-purple-600 flex items-center gap-1">
                         <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         Auto-loading photos...
