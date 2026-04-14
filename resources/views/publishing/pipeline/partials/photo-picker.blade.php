@@ -57,7 +57,7 @@
             const resp = await fetch('{{ route('publish.search.google-images') }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
-                body: JSON.stringify({ query: this.googleQuery, per_page: 6 })
+                body: JSON.stringify({ query: this.googleQuery, per_page: 12 })
             });
             const data = await resp.json();
             this.googleTiming = Date.now() - start;

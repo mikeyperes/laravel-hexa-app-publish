@@ -244,7 +244,7 @@
                         @include('app-publish::publishing.pipeline.partials.photo-picker', [
                             'pickerId' => 'featured-picker',
                             'searchQuery' => '',
-                            'onSelect' => 'function(photo) { featuredPhoto = photo; featuredAlt = photo.alt || \'\'; featuredCaption = \'\'; featuredFilename = \'auto\'; featuredExpanded = false; }',
+                            'onSelect' => 'function(photo) { featuredPhoto = photo; featuredAlt = photo.alt || \'\'; featuredCaption = \'\'; featuredFilename = \'auto\'; }',
                         ])
                     </div>
                 </div>
