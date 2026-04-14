@@ -100,6 +100,78 @@ class SearchController extends Controller
     }
 
     /**
+     * Search Google Images (CSE first, SerpAPI fallback).
+     */
+    public function searchGoogleImages(Request $request): JsonResponse
+    {
+        $request->validate([
+            'query'    => 'required|string|max:255',
+            'per_page' => 'integer|min:1|max:20',
+        ]);
+
+        $query = $request->input('query');
+        $perPage = (int) $request->input('per_page', 10);
+        $result = null;
+        $provider = null;
+        $timing = 0;
+
+        $useGoogle = \hexa_core\Models\Setting::getValue('use_google_image_search', '0') === '1';
+        $useSerp = \hexa_core\Models\Setting::getValue('use_serpapi_search', '0') === '1';
+        $fallback = \hexa_core\Models\Setting::getValue('google_fallback_serpapi', '1') === '1';
+
+        // Try Google CSE first
+        if ($useGoogle && class_exists(\hexa_package_google_cse\Services\GoogleCseService::class)) {
+            $cse = app(\hexa_package_google_cse\Services\GoogleCseService::class);
+            if (!$cse->isQuotaExhausted()) {
+                $start = microtime(true);
+                $result = $cse->searchImages($query, $perPage);
+                $timing = round((microtime(true) - $start) * 1000);
+                $provider = 'google-cse';
+
+                if ($result['success']) {
+                    $result['data']['provider'] = 'google-cse';
+                    $result['data']['timing_ms'] = $timing;
+                    $result['message'] .= " ({$timing}ms via Google CSE)";
+                    return response()->json($result);
+                }
+
+                // Quota exhausted during this request
+                if (!empty($result['quota_exhausted']) && $fallback && $useSerp) {
+                    $result = null; // fall through to SerpAPI
+                }
+            } elseif ($fallback && $useSerp) {
+                // Already exhausted, fall through
+            } else {
+                return response()->json(['success' => false, 'message' => 'Google CSE daily quota exhausted. Enable SerpAPI fallback in settings.', 'data' => null]);
+            }
+        }
+
+        // SerpAPI (primary or fallback)
+        if (!$result && $useSerp && class_exists(\hexa_package_serpapi\Services\SerpApiService::class)) {
+            $serp = app(\hexa_package_serpapi\Services\SerpApiService::class);
+            $start = microtime(true);
+            $result = $serp->searchImages($query, $perPage);
+            $timing = round((microtime(true) - $start) * 1000);
+            $provider = 'serpapi';
+
+            if ($result['success']) {
+                $result['data']['provider'] = 'serpapi';
+                $result['data']['timing_ms'] = $timing;
+                $result['message'] .= " ({$timing}ms via SerpAPI)";
+                return response()->json($result);
+            }
+        }
+
+        if (!$result) {
+            $msg = 'No Google image search provider configured.';
+            if (!$useGoogle && !$useSerp) $msg .= ' Enable Google CSE or SerpAPI in Publishing Settings.';
+            return response()->json(['success' => false, 'message' => $msg, 'data' => null]);
+        }
+
+        return response()->json($result);
+    }
+
+    /**
      * Show the article search page.
      *
      * @return \Illuminate\View\View
