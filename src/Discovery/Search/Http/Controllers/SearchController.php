@@ -135,9 +135,9 @@ class SearchController extends Controller
                     return response()->json($result);
                 }
 
-                // Quota exhausted during this request
-                if (!empty($result['quota_exhausted']) && $fallback && $useSerp) {
-                    $result = null; // fall through to SerpAPI
+                // CSE failed — fall through to SerpAPI if enabled
+                if ($fallback && $useSerp) {
+                    $result = null;
                 }
             } elseif ($fallback && $useSerp) {
                 // Already exhausted, fall through
