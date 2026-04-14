@@ -1927,15 +1927,41 @@ function publishPipeline() {
             this.checkResults = [];
             this.aiModel = 'claude-opus-4-6';
             this.spunContent = '';
+            this.spunWordCount = 0;
             this.articleTitle = '';
             this.editorContent = '';
+            this.articleDescription = '';
+            this.customPrompt = '';
+            this.resolvedPrompt = '';
+            this.promptLog = [];
+            this.spinWebResearch = false;
             this.publishAction = 'draft_local';
+            this.publishAuthor = '';
+            this.publishAuthorSource = '';
             this.publishResult = null;
+            this.publishError = '';
+            this.preparing = false;
+            this.prepareComplete = false;
+            this.prepareChecklist = [];
+            this.prepareLog = [];
+            this.prepareIntegrityIssues = [];
+            this.uploadedImages = {};
             this.photoSuggestions = [];
             this.featuredImageSearch = '';
             this.featuredPhoto = null;
+            this.featuredAlt = '';
+            this.featuredCaption = '';
+            this.featuredFilename = '';
+            this.suggestedTitles = [];
+            this.suggestedCategories = [];
+            this.suggestedTags = [];
+            this.suggestedUrls = [];
+            this.template_overrides = {};
+            this.template_dirty = {};
+            this.siteConn = { testing: false, status: null, message: '', authors: [], log: [], defaultAuthor: null };
             this.pressRelease = this.normalizePressReleaseState({});
             this.selectedPrProfiles = [];
+            this._previousSiteId = null;
         },
 
         // ── Navigation ────────────────────────────────────
