@@ -169,60 +169,74 @@
                 </div>
             </div>
 
-            {{-- Featured Image — photo + metadata in one card --}}
-            <div x-show="featuredImageSearch" x-cloak class="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <h5 class="text-sm font-semibold text-purple-800 mb-3">Featured Image</h5>
-                <div class="flex items-start gap-4">
-                    {{-- Thumbnail --}}
-                    <div class="w-48 h-36 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
-                        <img x-show="featuredPhoto" x-cloak :src="featuredPhoto?.url_large || featuredPhoto?.url_thumb" class="w-full h-full object-cover">
-                        <div x-show="!featuredPhoto && featuredSearching" x-cloak class="w-full h-full flex items-center justify-center bg-purple-100">
-                            <svg class="w-6 h-6 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        </div>
-                        <div x-show="!featuredPhoto && !featuredSearching" class="w-full h-full flex items-center justify-center text-gray-300">
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            {{-- Featured Image — same card layout as inline photos --}}
+            <div x-show="featuredImageSearch" x-cloak class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4" x-data="{ featuredExpanded: false }">
+                <h5 class="text-sm font-semibold text-gray-700 mb-3">Featured Image</h5>
+                <div class="border rounded-lg overflow-hidden" :class="featuredPhoto ? 'border-green-300 bg-green-50' : 'border-purple-200 bg-white'">
+                    <div class="p-3">
+                        <div class="flex items-start gap-3">
+                            {{-- Thumbnail --}}
+                            <div class="w-40 h-28 flex-shrink-0 rounded overflow-hidden bg-gray-100">
+                                <img x-show="featuredPhoto" x-cloak :src="featuredPhoto?.url_large || featuredPhoto?.url_thumb" class="w-full h-full object-cover">
+                                <div x-show="!featuredPhoto" class="w-full h-full flex items-center justify-center text-gray-300">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                </div>
+                            </div>
+                            {{-- Info + metadata --}}
+                            <div class="flex-1 min-w-0 space-y-1.5">
+                                <p class="text-sm font-medium text-purple-700 break-words" x-text="featuredImageSearch"></p>
+                                <p x-show="featuredPhoto" x-cloak class="text-[11px] text-gray-400" x-text="(featuredPhoto?.source || '') + ' — ' + (featuredPhoto?.width || '') + 'x' + (featuredPhoto?.height || '')"></p>
+                                <div x-show="featuredPhoto" x-cloak class="space-y-0.5 max-w-lg">
+                                    <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Alt</label><input type="text" x-model="featuredAlt" class="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs" placeholder="Alt text..."></div>
+                                    <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Caption</label><input type="text" x-model="featuredCaption" class="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs" placeholder="Caption..."></div>
+                                    <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Filename</label><p class="text-[11px] font-mono text-gray-500" x-text="featuredFilename || 'auto'"></p></div>
+                                </div>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <button @click.stop="refreshFeaturedMeta()" :disabled="featuredRefreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50">
+                                        <svg class="w-3 h-3" :class="featuredRefreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                        <span x-text="featuredRefreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
+                                    </button>
+                                </div>
+                                <div x-show="featuredPhoto?.source === 'url-import'" x-cloak class="mt-1">
+                                    <span class="text-[10px] text-gray-400">Source:</span>
+                                    <a :href="featuredPhoto?.url_large" target="_blank" class="text-[10px] text-blue-500 hover:text-blue-700 break-all" x-text="featuredPhoto?.url_large"></a>
+                                </div>
+                                {{-- Change Photo / Import URL / Upload --}}
+                                <div class="mt-2" x-data="{ showFeaturedUrl: false, featuredUrlVal: '' }">
+                                    <div class="flex items-center gap-1.5">
+                                        <button @click.stop="featuredExpanded = !featuredExpanded" class="text-[11px] text-blue-500 hover:text-blue-700 inline-flex items-center gap-1">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
+                                            Change Photo
+                                        </button>
+                                        <span class="text-gray-300">|</span>
+                                        <button @click.stop="showFeaturedUrl = !showFeaturedUrl" class="text-[11px] text-blue-500 hover:text-blue-700">Import URL</button>
+                                        <span class="text-gray-300">|</span>
+                                        <label class="text-[11px] text-gray-500 hover:text-gray-700 cursor-pointer">
+                                            Upload
+                                            <input type="file" class="hidden" accept="image/*" @change="uploadFeaturedPhoto($event.target.files); $event.target.value = null">
+                                        </label>
+                                        <span class="text-gray-300">|</span>
+                                        <button x-show="featuredPhoto" x-cloak @click="featuredPhoto = null; featuredAlt = ''; featuredCaption = ''; featuredFilename = ''" class="text-[11px] text-red-500 hover:text-red-700">Remove</button>
+                                    </div>
+                                    <div x-show="showFeaturedUrl" x-cloak class="flex gap-1.5 mt-1.5">
+                                        <input type="text" x-model="featuredUrlVal" class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Paste image URL...">
+                                        <button @click.stop="if(featuredUrlVal.trim()){featuredPhoto={url_large:featuredUrlVal.trim(),url_thumb:featuredUrlVal.trim(),source:'url-import',alt:'',width:0,height:0};featuredAlt='';featuredCaption='';featuredFilename='auto';featuredUrlVal='';showFeaturedUrl=false;}" class="text-[11px] bg-blue-600 text-white px-2 py-1 rounded">Import</button>
+                                    </div>
+                                </div>
+                            </div>
+                            {{-- Action buttons --}}
+                            <div class="flex items-center gap-1 flex-shrink-0">
+                                <span x-show="featuredPhoto" x-cloak class="text-xs text-green-600 font-medium px-1">Featured</span>
+                            </div>
                         </div>
                     </div>
-                    {{-- Info + metadata --}}
-                    <div class="flex-1 space-y-1.5">
-                        <p x-show="featuredPhoto" x-cloak class="text-[11px] text-gray-400" x-text="(featuredPhoto?.source || '') + ' — ' + (featuredPhoto?.width || '') + 'x' + (featuredPhoto?.height || '')"></p>
-                        <div x-show="featuredPhoto" x-cloak class="space-y-0.5 max-w-lg">
-                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Alt</label><input type="text" x-model="featuredAlt" class="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs" placeholder="Alt text..."></div>
-                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Caption</label><input type="text" x-model="featuredCaption" class="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs" placeholder="Caption..."></div>
-                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Filename</label><p class="text-[11px] font-mono text-gray-500" x-text="featuredFilename || 'auto'"></p></div>
-                        </div>
-                        <div class="flex items-center gap-3 pt-1">
-                            <button x-show="featuredPhoto" x-cloak @click.stop="refreshFeaturedMeta()" :disabled="featuredRefreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50">
-                                <svg class="w-3 h-3" :class="featuredRefreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                <span x-text="featuredRefreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
-                            </button>
-                            <button x-show="featuredPhoto" x-cloak @click="featuredPhoto = null; featuredAlt = ''; featuredCaption = ''; featuredFilename = ''" class="text-[11px] text-red-500 hover:text-red-700">Remove</button>
-                        </div>
-                        {{-- Source URL display --}}
-                        <div x-show="featuredPhoto?.source === 'url-import'" x-cloak class="mt-1">
-                            <span class="text-[10px] text-gray-400">Source:</span>
-                            <a :href="featuredPhoto?.url_large" target="_blank" class="text-[10px] text-blue-500 hover:text-blue-700 break-all inline-flex items-center gap-0.5">
-                                <span x-text="(featuredPhoto?.url_large || '').substring(0, 100)"></span>
-                                <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-                {{-- Photo Picker (stock + Google) --}}
-                <div class="mt-3" :data-search-term="featuredImageSearch">
-                    @include('app-publish::publishing.pipeline.partials.photo-picker', [
-                        'pickerId' => 'featured-picker',
-                        'searchQuery' => '',
-                        'onSelect' => 'function(photo) { featuredPhoto = photo; featuredAlt = photo.alt || \'\'; featuredCaption = \'\'; featuredFilename = \'auto\'; }',
-                    ])
-                    {{-- URL import + file upload --}}
-                    <div class="flex gap-2 mt-3">
-                        <input type="text" x-model="featuredUrlImport" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Paste image URL...">
-                        <button @click="importFeaturedFromUrl()" :disabled="!featuredUrlImport" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-blue-700 disabled:opacity-50">Import URL</button>
-                        <label class="bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-gray-700 cursor-pointer inline-flex items-center gap-1">
-                            Upload
-                            <input type="file" class="hidden" accept="image/*" @change="uploadFeaturedPhoto($event.target.files); $event.target.value = null">
-                        </label>
+                    {{-- Expanded: photo picker --}}
+                    <div x-show="featuredExpanded" x-cloak class="p-3 pt-2 border-t border-gray-100">
+                        @include('app-publish::publishing.pipeline.partials.photo-picker', [
+                            'pickerId' => 'featured-picker',
+                            'searchQuery' => '',
+                            'onSelect' => 'function(photo) { featuredPhoto = photo; featuredAlt = photo.alt || \'\'; featuredCaption = \'\'; featuredFilename = \'auto\'; featuredExpanded = false; }',
+                        ])
                     </div>
                 </div>
             </div>
