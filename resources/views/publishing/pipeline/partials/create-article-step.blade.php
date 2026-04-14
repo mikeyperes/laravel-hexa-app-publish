@@ -327,6 +327,7 @@
                                 @include('app-publish::publishing.pipeline.partials.photo-picker', [
                                     'pickerId' => 'inline-picker',
                                     'searchQuery' => '',
+                                    'autoLoadStock' => false,
                                     'onSelect' => 'function(photo) { selectPhotoForSuggestion(idx, photo); expandedSuggestions = expandedSuggestions.filter(i => i !== idx); }',
                                 ])
                             </div>

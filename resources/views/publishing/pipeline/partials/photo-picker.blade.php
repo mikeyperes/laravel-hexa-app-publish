@@ -1,22 +1,12 @@
 {{--
-    Reusable Photo Picker — used for both featured image and inline photo selection.
-
-    Usage:
-        @include('app-publish::publishing.pipeline.partials.photo-picker', [
-            'pickerId' => 'featured',       // unique ID
-            'searchQuery' => '',             // initial search term
-            'onSelect' => 'selectPhoto',     // JS callback: function(photo) {}
-        ])
-
-    The parent Alpine scope must define:
-        - A callback matching $onSelect that receives { url, url_thumb, url_large, width, height, alt, source, domain, copyright_flag }
-        - Stock search route: publish.search.images.post
-        - Google search route: serpapi.search (or publish.search.google-images)
+    Reusable Photo Picker — stock + Google Images in one component.
+    Used for featured image, inline photo change, and overlay.
 --}}
 @php
     $pickerId = $pickerId ?? 'photo-picker-' . uniqid();
     $searchQuery = $searchQuery ?? '';
     $onSelect = $onSelect ?? 'null';
+    $autoLoadStock = $autoLoadStock ?? false;
 @endphp
 
 <div x-data="{
@@ -31,6 +21,12 @@
     googleTiming: 0,
     stockError: '',
     googleError: '',
+
+    init() {
+        @if($autoLoadStock)
+        if (this.stockQuery.trim()) this.searchStock();
+        @endif
+    },
 
     async searchStock() {
         if (!this.stockQuery.trim()) return;
@@ -76,42 +72,18 @@
     }
 }" class="space-y-4">
 
-    {{-- Stock Photos Section --}}
-    <div>
-        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Stock Photos <span class="font-normal text-gray-400">(Pexels, Unsplash, Pixabay)</span></p>
-        <div class="flex gap-2 mb-2">
-            <input type="text" x-model="stockQuery" @keydown.enter="searchStock()" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search stock photos...">
-            <button @click="searchStock()" :disabled="stockSearching || !stockQuery.trim()" class="bg-purple-600 text-white px-4 py-1.5 rounded-lg text-xs hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1">
-                <svg x-show="stockSearching" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                <span x-text="stockSearching ? 'Searching...' : 'Search'"></span>
-            </button>
-        </div>
-        <div x-show="stockError" x-cloak class="text-xs text-red-600 mb-2" x-text="stockError"></div>
-        <div x-show="Object.keys(stockTimings).length > 0" x-cloak class="text-[10px] text-gray-400 mb-1" x-text="stockResults.length + ' photos (' + Object.entries(stockTimings).map(([k,v]) => k + ':' + v + 'ms').join(', ') + ')'"></div>
-        <div x-show="stockResults.length > 0" x-cloak class="grid grid-cols-3 gap-2">
-            <template x-for="(photo, idx) in stockResults" :key="idx">
-                <div @click="pickPhoto(photo)" class="cursor-pointer rounded-lg overflow-hidden border-2 border-gray-200 hover:border-purple-400 transition-colors">
-                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-32 object-cover" loading="lazy">
-                    <div class="px-1.5 py-1 bg-white">
-                        <p class="text-[9px] text-gray-500" x-text="photo.source + ' — ' + (photo.width || '?') + 'x' + (photo.height || '?')"></p>
-                    </div>
-                </div>
-            </template>
-        </div>
-    </div>
-
-    {{-- Google Images Section --}}
+    {{-- Google Images Section (TOP — primary) --}}
     <div>
         <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Google Images <span class="font-normal text-gray-400">(SerpAPI / Google CSE)</span></p>
         <div class="flex gap-2 mb-2">
             <input type="text" x-model="googleQuery" @keydown.enter="searchGoogle()" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search Google Images...">
-            <button @click="searchGoogle()" :disabled="googleSearching || !googleQuery.trim()" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1">
+            <button type="button" @click.stop="searchGoogle()" :disabled="googleSearching || !googleQuery.trim()" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1">
                 <svg x-show="googleSearching" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 <span x-text="googleSearching ? 'Searching...' : 'Search'"></span>
             </button>
         </div>
         <div x-show="googleError" x-cloak class="text-xs text-red-600 mb-2" x-text="googleError"></div>
-        <div x-show="googleTiming > 0" x-cloak class="text-[10px] text-gray-400 mb-1" x-text="googleResults.length + ' photos in ' + googleTiming + 'ms'"></div>
+        <div x-show="googleTiming > 0 && googleResults.length > 0" x-cloak class="text-[10px] text-gray-400 mb-1" x-text="googleResults.length + ' photos in ' + googleTiming + 'ms'"></div>
         <div x-show="googleResults.length > 0" x-cloak class="grid grid-cols-3 gap-2">
             <template x-for="(photo, idx) in googleResults" :key="'g'+idx">
                 <div @click="pickPhoto(photo)" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-colors" :class="photo.copyright_flag ? 'border-red-300 hover:border-red-500' : 'border-gray-200 hover:border-blue-400'">
@@ -119,7 +91,31 @@
                     <div class="px-1.5 py-1 bg-white">
                         <p class="text-[9px] font-medium text-gray-700 break-words" x-text="(photo.alt || '').substring(0, 40)"></p>
                         <p class="text-[9px] text-gray-400" x-text="photo.domain + ' — ' + (photo.width || '?') + 'x' + (photo.height || '?')"></p>
-                        <div x-show="photo.copyright_flag" x-cloak class="text-[8px] text-red-500 mt-0.5" x-text="photo.copyright_reason"></div>
+                        <div x-show="photo.copyright_flag" x-cloak class="text-[8px] text-red-500" x-text="photo.copyright_reason"></div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    {{-- Stock Photos Section (BOTTOM — secondary) --}}
+    <div>
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Stock Photos <span class="font-normal text-gray-400">(Pexels, Unsplash, Pixabay)</span></p>
+        <div class="flex gap-2 mb-2">
+            <input type="text" x-model="stockQuery" @keydown.enter="searchStock()" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Search stock photos...">
+            <button type="button" @click.stop="searchStock()" :disabled="stockSearching || !stockQuery.trim()" class="bg-purple-600 text-white px-4 py-1.5 rounded-lg text-xs hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-1">
+                <svg x-show="stockSearching" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                <span x-text="stockSearching ? 'Searching...' : 'Search'"></span>
+            </button>
+        </div>
+        <div x-show="stockError" x-cloak class="text-xs text-red-600 mb-2" x-text="stockError"></div>
+        <div x-show="Object.keys(stockTimings).length > 0 && stockResults.length > 0" x-cloak class="text-[10px] text-gray-400 mb-1" x-text="stockResults.length + ' photos (' + Object.entries(stockTimings).map(([k,v]) => k + ':' + v + 'ms').join(', ') + ')'"></div>
+        <div x-show="stockResults.length > 0" x-cloak class="grid grid-cols-3 gap-2">
+            <template x-for="(photo, idx) in stockResults" :key="'s'+idx">
+                <div @click="pickPhoto(photo)" class="cursor-pointer rounded-lg overflow-hidden border-2 border-gray-200 hover:border-purple-400 transition-colors">
+                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-32 object-cover" loading="lazy">
+                    <div class="px-1.5 py-1 bg-white">
+                        <p class="text-[9px] text-gray-500" x-text="photo.source + ' — ' + (photo.width || '?') + 'x' + (photo.height || '?')"></p>
                     </div>
                 </div>
             </template>
