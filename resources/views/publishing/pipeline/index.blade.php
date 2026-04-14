@@ -3796,7 +3796,25 @@ function publishPipeline() {
             this.preparing = true;
             this.prepareLog = [];
             this.prepareComplete = false;
-            this.prepareChecklist = [];
+            this.prepareIntegrityIssues = [];
+
+            // Show master checklist immediately
+            const imgCount = (this.editorContent.match(/<img[^>]+src/gi) || []).length;
+            this.prepareChecklist = [
+                { label: 'Verify author on WordPress', status: 'running', detail: this.publishAuthor || 'default' },
+                { label: 'Clean HTML for WordPress', status: 'pending', detail: '' },
+                { label: 'Upload ' + imgCount + ' image(s) to WordPress', status: 'pending', detail: '' },
+                { label: 'Upload featured image', status: 'pending', detail: this.featuredPhoto ? 'yes' : 'none' },
+                { label: 'Create categories', status: 'pending', detail: this.suggestedCategories.length + ' category(s)' },
+                { label: 'Create tags', status: 'pending', detail: this.suggestedTags.length + ' tag(s)' },
+                { label: 'Integrity check', status: 'pending', detail: '' },
+            ];
+            this._logPrepare('info', 'Starting WordPress preparation for ' + this.selectedSite.name + '...');
+            this._logPrepare('info', 'Site: ' + this.selectedSite.url + ' | Connection: ' + (this.selectedSite.connection_type === 'wptoolkit' ? 'SSH' : 'REST API'));
+            if (this.publishAuthor) this._logPrepare('info', 'Author: ' + this.publishAuthor);
+            this._logPrepare('info', 'Images: ' + imgCount + ' inner + ' + (this.featuredPhoto ? '1 featured' : 'no featured'));
+            this._logPrepare('info', 'Categories: ' + this.suggestedCategories.join(', '));
+            this._logPrepare('info', 'Tags: ' + this.suggestedTags.join(', '));
 
             try {
                 const resp = await fetch('{{ route('publish.pipeline.prepare') }}', {
@@ -3843,6 +3861,39 @@ function publishPipeline() {
                                 // Add to activity log
                                 this._logPrepare(event.type, event.message);
 
+                                // Update master checklist status based on SSE messages
+                                const msg = event.message?.toLowerCase() || '';
+                                if (msg.includes('author verified') || msg.includes('author not found') || msg.includes('no default author')) {
+                                    this.prepareChecklist[0].status = event.type === 'success' ? 'done' : (event.type === 'warning' ? 'skipped' : 'failed');
+                                    this.prepareChecklist[0].detail = event.message;
+                                }
+                                if (msg.includes('html clean') || msg.includes('html valid')) {
+                                    this.prepareChecklist[1].status = 'done';
+                                    if (this.prepareChecklist[2].status === 'pending') this.prepareChecklist[2].status = 'running';
+                                }
+                                if (msg.includes('uploading photo') || msg.includes('uploading') && msg.includes('image')) {
+                                    this.prepareChecklist[2].status = 'running';
+                                }
+                                if (msg.includes('featured image uploaded')) {
+                                    this.prepareChecklist[3].status = 'done';
+                                    this.prepareChecklist[3].detail = event.message;
+                                }
+                                if (msg.includes('featured image upload failed') || msg.includes('no featured image')) {
+                                    this.prepareChecklist[3].status = event.type === 'warning' ? 'skipped' : 'failed';
+                                }
+                                if (msg.includes('categor') && (event.type === 'success' || event.type === 'info')) {
+                                    this.prepareChecklist[4].status = event.type === 'success' ? 'done' : 'running';
+                                    if (event.type === 'success') this.prepareChecklist[4].detail = event.message;
+                                }
+                                if (msg.includes('tag') && (event.type === 'success' || event.type === 'info') && !msg.includes('categor')) {
+                                    this.prepareChecklist[5].status = event.type === 'success' ? 'done' : 'running';
+                                    if (event.type === 'success') this.prepareChecklist[5].detail = event.message;
+                                }
+                                if (msg.includes('integrity')) {
+                                    this.prepareChecklist[6].status = event.type === 'success' ? 'done' : (event.type === 'warning' ? 'done' : 'failed');
+                                    this.prepareChecklist[6].detail = event.message;
+                                }
+
                                 // Track uploaded images for duplicate prevention
                                 if (event.wp_image) {
                                     this.uploadedImages[event.wp_image.source_url] = event.wp_image;
@@ -3860,6 +3911,8 @@ function publishPipeline() {
                                             event.wp_images.forEach(img => { this.uploadedImages[img.source_url] = img; });
                                         }
                                         this.prepareIntegrityIssues = event.integrity_issues || [];
+                                        // Mark all remaining checklist items as done
+                                        this.prepareChecklist.forEach(c => { if (c.status === 'pending' || c.status === 'running') c.status = 'done'; });
                                         this.prepareComplete = true;
                                         this.showNotification('success', 'Content prepared for WordPress');
                                     } else {
