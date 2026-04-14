@@ -71,7 +71,7 @@
         </button>
         <div x-show="openSteps.includes(1)" x-cloak x-collapse class="px-4 pb-4">
             <div class="max-w-md"
-                 @hexa-search-selected.window="if ($event.detail.component_id === 'pipeline-user') selectUser($event.detail.item)"
+                 @hexa-search-selected.window="if ($event.detail.component_id === 'pipeline-user' && !_restoring) selectUser($event.detail.item)"
                  @hexa-search-cleared.window="if ($event.detail.component_id === 'pipeline-user') clearUser()">
                 @php
                     $pipelineSelectedUser = isset($draftUser) && $draftUser ? ['id' => $draftUser->id, 'name' => $draftUser->name, 'email' => $draftUser->email] : null;
@@ -1688,7 +1688,12 @@ function publishPipeline() {
             }
 
             // Database-backed draft state is authoritative for site/user/template/preset restore.
-            if (draftState.selectedUser) this.selectedUser = draftState.selectedUser;
+            // But localStorage (pipeline state) takes precedence if user changed it this session.
+            if (state?.selectedUser) {
+                this.selectedUser = state.selectedUser;
+            } else if (draftState.selectedUser) {
+                this.selectedUser = draftState.selectedUser;
+            }
             if (draftState.selectedSiteId) {
                 this.selectedSiteId = String(draftState.selectedSiteId);
                 this.selectedSite = this.sites.find(s => s.id == draftState.selectedSiteId) || draftState.selectedSite || null;
