@@ -198,6 +198,14 @@
                             </button>
                             <button x-show="featuredPhoto" x-cloak @click="featuredPhoto = null; featuredAlt = ''; featuredCaption = ''; featuredFilename = ''" class="text-[11px] text-red-500 hover:text-red-700">Remove</button>
                         </div>
+                        {{-- Source URL display --}}
+                        <div x-show="featuredPhoto?.source === 'url-import'" x-cloak class="mt-1">
+                            <span class="text-[10px] text-gray-400">Source:</span>
+                            <a :href="featuredPhoto?.url_large" target="_blank" class="text-[10px] text-blue-500 hover:text-blue-700 break-all inline-flex items-center gap-0.5">
+                                <span x-text="(featuredPhoto?.url_large || '').substring(0, 100)"></span>
+                                <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                            </a>
+                        </div>
                     </div>
                 </div>
                 {{-- Search + results below --}}
@@ -272,30 +280,46 @@
                                                 <span x-text="ps.refreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
                                             </button>
                                         </div>
-                                        {{-- Import URL / Upload for this photo --}}
-                                        <div class="flex items-center gap-1.5 mt-2" x-data="{ showUrlInput: false, urlVal: '' }">
-                                            <button @click.stop="expandedSuggestions.includes(idx) ? expandedSuggestions = expandedSuggestions.filter(i => i !== idx) : expandedSuggestions.push(idx)" class="text-[11px] text-blue-500 hover:text-blue-700 inline-flex items-center gap-1">
-                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
-                                                Change Photo
-                                            </button>
-                                            <span class="text-gray-300">|</span>
-                                            <button @click.stop="showUrlInput = !showUrlInput" class="text-[11px] text-blue-500 hover:text-blue-700">Import URL</button>
-                                            <span class="text-gray-300">|</span>
-                                            <label class="text-[11px] text-gray-500 hover:text-gray-700 cursor-pointer">
-                                                Upload
-                                                <input type="file" class="hidden" accept="image/*" @change="
-                                                    const file = $event.target.files[0];
-                                                    if (!file) return;
-                                                    const url = URL.createObjectURL(file);
-                                                    $data.photoSuggestions[idx].autoPhoto = { url_large: url, url_thumb: url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: 0, height: 0 };
-                                                    $data.photoSuggestions[idx].confirmed = false;
-                                                    $event.target.value = null;
-                                                ">
-                                            </label>
+                                        {{-- Source URL display (when imported from URL) --}}
+                                        <div x-show="ps.autoPhoto?.source === 'url-import'" x-cloak class="mt-1">
+                                            <span class="text-[10px] text-gray-400">Source:</span>
+                                            <a :href="ps.autoPhoto?.url_large" target="_blank" class="text-[10px] text-blue-500 hover:text-blue-700 break-all inline-flex items-center gap-0.5">
+                                                <span x-text="(ps.autoPhoto?.url_large || '').substring(0, 80)"></span>
+                                                <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                            </a>
                                         </div>
-                                        <div x-show="showUrlInput" x-cloak class="flex gap-1.5 mt-1.5">
-                                            <input type="text" x-model="urlVal" class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Paste image URL...">
-                                            <button @click.stop="if(urlVal.trim()){$data.photoSuggestions[idx].autoPhoto={url_large:urlVal.trim(),url_thumb:urlVal.trim(),source:'url-import',alt:'',width:0,height:0};$data.photoSuggestions[idx].confirmed=false;urlVal='';showUrlInput=false;}" class="text-[11px] bg-blue-600 text-white px-2 py-1 rounded">Import</button>
+                                        {{-- Import URL / Upload for this photo --}}
+                                        <div class="mt-2" x-data="{ showUrlInput: false, photoUrlVal: '' }">
+                                            <div class="flex items-center gap-1.5">
+                                                <button @click.stop="expandedSuggestions.includes(idx) ? expandedSuggestions = expandedSuggestions.filter(i => i !== idx) : expandedSuggestions.push(idx)" class="text-[11px] text-blue-500 hover:text-blue-700 inline-flex items-center gap-1">
+                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
+                                                    Change Photo
+                                                </button>
+                                                <span class="text-gray-300">|</span>
+                                                <button @click.stop="showUrlInput = !showUrlInput" class="text-[11px] text-blue-500 hover:text-blue-700">Import URL</button>
+                                                <span class="text-gray-300">|</span>
+                                                <label class="text-[11px] text-gray-500 hover:text-gray-700 cursor-pointer">
+                                                    Upload
+                                                    <input type="file" class="hidden" accept="image/*" @change.stop="
+                                                        const file = $event.target.files[0]; if (!file) return;
+                                                        const url = URL.createObjectURL(file);
+                                                        photoSuggestions[idx].autoPhoto = { url_large: url, url_thumb: url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: 0, height: 0 };
+                                                        photoSuggestions[idx].confirmed = false;
+                                                        $event.target.value = null;
+                                                    ">
+                                                </label>
+                                            </div>
+                                            <div x-show="showUrlInput" x-cloak class="flex gap-1.5 mt-1.5">
+                                                <input type="text" x-model="photoUrlVal" class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Paste image URL...">
+                                                <button @click.stop="
+                                                    if (photoUrlVal.trim()) {
+                                                        photoSuggestions[idx].autoPhoto = { url_large: photoUrlVal.trim(), url_thumb: photoUrlVal.trim(), source: 'url-import', alt: '', width: 0, height: 0 };
+                                                        photoSuggestions[idx].confirmed = false;
+                                                        photoUrlVal = '';
+                                                        showUrlInput = false;
+                                                    }
+                                                " class="text-[11px] bg-blue-600 text-white px-2 py-1 rounded">Import</button>
+                                            </div>
                                         </div>
                                     </div>
                                     {{-- Action buttons --}}
