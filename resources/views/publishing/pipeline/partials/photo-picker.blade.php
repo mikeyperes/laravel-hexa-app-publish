@@ -26,10 +26,11 @@
         @if($autoLoadStock)
         this.$nextTick(() => {
             if (!this.stockQuery) {
-                const card = this.$el.closest('.border');
-                if (card) {
-                    const termEl = card.querySelector('.text-purple-700');
-                    if (termEl) {
+                const wrapper = this.$el.parentElement;
+                if (wrapper) {
+                    const card = wrapper.closest('.border-purple-200, .border-green-300, .rounded-lg');
+                    const termEl = card ? card.querySelector('.text-purple-700') : null;
+                    if (termEl && termEl.textContent.trim()) {
                         this.stockQuery = termEl.textContent.trim();
                         this.googleQuery = termEl.textContent.trim();
                     }
