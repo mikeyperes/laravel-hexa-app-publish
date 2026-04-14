@@ -285,8 +285,7 @@
                                                     if (!expandedSuggestions.includes(idx)) {
                                                         expandedSuggestions.push(idx);
                                                         $nextTick(() => {
-                                                            const picker = $el.closest('[x-show]')?.parentElement?.querySelector('.p-3.pt-2 > div');
-                                                            if (picker) picker.dispatchEvent(new CustomEvent('photo-picker-search', { detail: { term: ps.search_term } }));
+                                                            window.dispatchEvent(new CustomEvent('photo-picker-search', { detail: { term: ps.search_term } }));
                                                         });
                                                     } else {
                                                         expandedSuggestions = expandedSuggestions.filter(i => i !== idx);
@@ -333,7 +332,7 @@
                                 </div>
                             </div>
                             {{-- Expanded: photo picker (stock + Google) --}}
-                            <div x-show="expandedSuggestions.includes(idx)" x-cloak class="p-3 pt-2 border-t border-gray-100" :data-search-term="ps.search_term">
+                            <div x-show="expandedSuggestions.includes(idx)" x-cloak class="p-3 pt-2 border-t border-gray-100">
                                 @include('app-publish::publishing.pipeline.partials.photo-picker', [
                                     'pickerId' => 'inline-picker',
                                     'searchQuery' => '',

@@ -11,8 +11,8 @@
 
 <div x-data="{
     pickerId: '{{ $pickerId }}',
-    stockQuery: '{{ $searchQuery }}',
-    googleQuery: '{{ $searchQuery }}',
+    stockQuery: '',
+    googleQuery: '',
     stockResults: [],
     googleResults: [],
     stockSearching: false,
@@ -23,7 +23,7 @@
     googleError: '',
 
     init() {
-        this.$el.addEventListener('photo-picker-search', (e) => {
+        window.addEventListener('photo-picker-search', (e) => {
             if (e.detail?.term) {
                 this.stockQuery = e.detail.term;
                 this.googleQuery = e.detail.term;
