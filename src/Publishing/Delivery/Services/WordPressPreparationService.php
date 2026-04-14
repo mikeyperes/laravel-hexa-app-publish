@@ -108,9 +108,18 @@ class WordPressPreparationService
         $featuredWpUrl = null;
         $featuredMeta = $options['featured_meta'] ?? null;
         if ($featuredMeta) {
-            $send('info', "Uploading featured image...");
             $featuredUrl = $options['featured_url'] ?? null;
             if ($featuredUrl) {
+                $fDomain = parse_url($featuredUrl, PHP_URL_HOST) ?: 'unknown';
+                $fSource = match(true) {
+                    str_contains($fDomain, 'pexels') => 'Pexels',
+                    str_contains($fDomain, 'unsplash') => 'Unsplash',
+                    str_contains($fDomain, 'pixabay') => 'Pixabay',
+                    str_contains($fDomain, 'cdn.') => 'CDN/External',
+                    default => 'External URL',
+                };
+                $send('info', "Uploading featured image — Source: {$fSource} ({$fDomain})");
+                $send('info', "  URL: " . Str::limit($featuredUrl, 120));
                 $fFilename = $featuredMeta['filename'] ?? 'featured';
                 $ext = pathinfo(parse_url($featuredUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
                 $fFilename = Str::endsWith($fFilename, '.' . $ext) ? $fFilename : $fFilename . '.' . $ext;
@@ -280,8 +289,18 @@ class WordPressPreparationService
             ) . '.' . $ext;
             $imgIndex++;
 
+            $sourceDomain = parse_url($imgUrl, PHP_URL_HOST) ?: 'unknown';
+            $sourceType = match(true) {
+                str_contains($sourceDomain, 'pexels') => 'Pexels',
+                str_contains($sourceDomain, 'unsplash') => 'Unsplash',
+                str_contains($sourceDomain, 'pixabay') => 'Pixabay',
+                str_contains($sourceDomain, 'apollo') || str_contains($sourceDomain, 'cdn.') => 'CDN/External',
+                str_contains($imgUrl, 'blob:') => 'Local Upload',
+                default => 'External URL',
+            };
             $send('step', "Uploading photo {$imgIndex}/" . count($imageUrls) . ": {$properFilename}");
-            $send('info', "  Source: " . Str::limit($imgUrl, 100));
+            $send('info', "  Source: {$sourceType} ({$sourceDomain})");
+            $send('info', "  URL: " . Str::limit($imgUrl, 120));
             if ($altText) $send('info', "  Alt: {$altText}");
             if ($caption) $send('info', "  Caption: " . Str::limit($caption, 100));
 
