@@ -145,15 +145,102 @@
             </button>
 
             {{-- Checklist --}}
-            <div x-show="prepareChecklist.length > 0" x-cloak class="space-y-2 mb-4">
-                <template x-for="(item, idx) in prepareChecklist" :key="idx">
-                    <div class="flex items-center gap-3 text-sm">
-                        <template x-if="item.status === 'running'"><svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
-                        <template x-if="item.status === 'done'"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></template>
-                        <template x-if="item.status === 'failed'"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></template>
-                        <template x-if="item.status === 'skipped'"><svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg></template>
-                        <span :class="{'text-blue-700': item.status === 'running', 'text-green-700': item.status === 'done', 'text-red-700': item.status === 'failed', 'text-gray-500': item.status === 'skipped'}" x-text="item.label"></span>
-                        <span x-show="item.detail" class="text-xs text-gray-400" x-text="item.detail"></span>
+            <div x-show="prepareChecklist.length > 0" x-cloak class="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h6 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Preparation Checklist</h6>
+                    <span class="text-xs text-gray-400" x-text="prepareChecklist.filter(c => c.status === 'done').length + '/' + prepareChecklist.length + ' complete'"></span>
+                </div>
+
+                {{-- Connection & Auth --}}
+                <div class="mb-3">
+                    <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Connection & Auth</p>
+                    <template x-for="(item, idx) in prepareChecklist.filter(c => c.label.includes('author') || c.label.includes('Verify'))" :key="item.label">
+                        <div class="flex items-center gap-2.5 py-1.5 px-2 rounded-lg" :class="item.status === 'done' ? 'bg-green-50' : (item.status === 'failed' ? 'bg-red-50' : '')">
+                            <template x-if="item.status === 'pending'"><div class="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0"></div></template>
+                            <template x-if="item.status === 'running'"><svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
+                            <template x-if="item.status === 'done'"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></template>
+                            <template x-if="item.status === 'failed'"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></template>
+                            <template x-if="item.status === 'skipped'"><svg class="w-5 h-5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></template>
+                            <div class="flex-1 min-w-0">
+                                <span class="text-sm font-medium" :class="{'text-gray-800': item.status === 'done', 'text-blue-700': item.status === 'running', 'text-red-700': item.status === 'failed', 'text-gray-400': item.status === 'pending', 'text-yellow-700': item.status === 'skipped'}" x-text="item.label"></span>
+                                <p x-show="item.detail" class="text-xs text-gray-400 break-words" x-text="item.detail"></p>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                {{-- Content Processing --}}
+                <div class="mb-3">
+                    <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Content Processing</p>
+                    <template x-for="(item, idx) in prepareChecklist.filter(c => c.label.includes('Clean') || c.label.includes('Integrity'))" :key="item.label">
+                        <div class="flex items-center gap-2.5 py-1.5 px-2 rounded-lg" :class="item.status === 'done' ? 'bg-green-50' : (item.status === 'failed' ? 'bg-red-50' : '')">
+                            <template x-if="item.status === 'pending'"><div class="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0"></div></template>
+                            <template x-if="item.status === 'running'"><svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
+                            <template x-if="item.status === 'done'"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></template>
+                            <template x-if="item.status === 'failed'"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></template>
+                            <template x-if="item.status === 'skipped'"><svg class="w-5 h-5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></template>
+                            <div class="flex-1 min-w-0">
+                                <span class="text-sm font-medium" :class="{'text-gray-800': item.status === 'done', 'text-blue-700': item.status === 'running', 'text-red-700': item.status === 'failed', 'text-gray-400': item.status === 'pending', 'text-yellow-700': item.status === 'skipped'}" x-text="item.label"></span>
+                                <p x-show="item.detail" class="text-xs text-gray-400 break-words" x-text="item.detail"></p>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                {{-- Media --}}
+                <div class="mb-3">
+                    <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Media Upload</p>
+                    <template x-for="(item, idx) in prepareChecklist.filter(c => c.label.includes('Upload') || c.label.includes('image'))" :key="item.label">
+                        <div class="flex items-center gap-2.5 py-1.5 px-2 rounded-lg" :class="item.status === 'done' ? 'bg-green-50' : (item.status === 'failed' ? 'bg-red-50' : '')">
+                            <template x-if="item.status === 'pending'"><div class="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0"></div></template>
+                            <template x-if="item.status === 'running'"><svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
+                            <template x-if="item.status === 'done'"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></template>
+                            <template x-if="item.status === 'failed'"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></template>
+                            <template x-if="item.status === 'skipped'"><svg class="w-5 h-5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></template>
+                            <div class="flex-1 min-w-0">
+                                <span class="text-sm font-medium" :class="{'text-gray-800': item.status === 'done', 'text-blue-700': item.status === 'running', 'text-red-700': item.status === 'failed', 'text-gray-400': item.status === 'pending', 'text-yellow-700': item.status === 'skipped'}" x-text="item.label"></span>
+                                <p x-show="item.detail" class="text-xs text-gray-400 break-words" x-text="item.detail"></p>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                {{-- Taxonomy --}}
+                <div>
+                    <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Taxonomy</p>
+                    <template x-for="(item, idx) in prepareChecklist.filter(c => c.label.includes('categor') || c.label.includes('tag'))" :key="item.label">
+                        <div class="flex items-center gap-2.5 py-1.5 px-2 rounded-lg" :class="item.status === 'done' ? 'bg-green-50' : (item.status === 'failed' ? 'bg-red-50' : '')">
+                            <template x-if="item.status === 'pending'"><div class="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0"></div></template>
+                            <template x-if="item.status === 'running'"><svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
+                            <template x-if="item.status === 'done'"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></template>
+                            <template x-if="item.status === 'failed'"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></template>
+                            <template x-if="item.status === 'skipped'"><svg class="w-5 h-5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></template>
+                            <div class="flex-1 min-w-0">
+                                <span class="text-sm font-medium" :class="{'text-gray-800': item.status === 'done', 'text-blue-700': item.status === 'running', 'text-red-700': item.status === 'failed', 'text-gray-400': item.status === 'pending', 'text-yellow-700': item.status === 'skipped'}" x-text="item.label"></span>
+                                <p x-show="item.detail" class="text-xs text-gray-400 break-words" x-text="item.detail"></p>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                {{-- Progress bar --}}
+                <div class="mt-3 pt-3 border-t border-gray-200">
+                    <div class="w-full bg-gray-200 rounded-full h-1.5">
+                        <div class="bg-green-500 h-1.5 rounded-full transition-all duration-300" :style="'width: ' + Math.round((prepareChecklist.filter(c => c.status === 'done').length / prepareChecklist.length) * 100) + '%'"></div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Prepare Activity Log --}}
+            <div x-show="prepareLog.length > 0" x-cloak class="bg-gray-900 rounded-xl border border-gray-700 p-4 mb-4 max-h-64 overflow-y-auto" x-ref="prepareLogContainer">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide">Activity Log</p>
+                    <span class="text-[10px] text-gray-500" x-text="prepareLog.length + ' entries'"></span>
+                </div>
+                <template x-for="(entry, idx) in prepareLog" :key="idx">
+                    <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
+                        <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
+                        <span :class="{'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info', 'text-yellow-400': entry.type === 'warning', 'text-gray-400': entry.type === 'step'}" x-text="entry.message" class="break-words"></span>
                     </div>
                 </template>
             </div>
