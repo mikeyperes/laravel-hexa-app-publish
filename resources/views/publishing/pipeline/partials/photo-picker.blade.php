@@ -23,6 +23,7 @@
     googleError: '',
 
     loadTerm(term) {
+        if (this.stockQuery === term && this.stockResults.length > 0) return;
         this.stockQuery = term;
         this.googleQuery = term;
         this.searchStock();
