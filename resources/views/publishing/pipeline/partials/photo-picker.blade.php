@@ -22,14 +22,32 @@
     stockError: '',
     googleError: '',
 
+    _loaded: false,
     init() {
-        window.addEventListener('photo-picker-search', (e) => {
-            if (e.detail?.term) {
-                this.stockQuery = e.detail.term;
-                this.googleQuery = e.detail.term;
-                this.searchStock();
+        // Watch for visibility — when this picker becomes visible, load the search term
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && !this._loaded) {
+                this._loaded = true;
+                const root = Alpine.$data(this.$root);
+                // For inline photos
+                if (root?.photoSuggestions && root?.expandedSuggestions?.length) {
+                    const idx = root.expandedSuggestions[root.expandedSuggestions.length - 1];
+                    const ps = root.photoSuggestions[idx];
+                    if (ps?.search_term) {
+                        this.stockQuery = ps.search_term;
+                        this.googleQuery = ps.search_term;
+                        this.searchStock();
+                    }
+                }
+                // For featured image
+                if (!this.stockQuery && root?.featuredImageSearch) {
+                    this.stockQuery = root.featuredImageSearch;
+                    this.googleQuery = root.featuredImageSearch;
+                }
+                observer.disconnect();
             }
         });
+        observer.observe(this.$el);
     },
 
     async searchStock() {
