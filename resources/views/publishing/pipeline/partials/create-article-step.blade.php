@@ -266,10 +266,37 @@
                                             <div><label class="text-[10px] text-gray-400 uppercase">Caption</label><input type="text" x-model="photoSuggestions[idx].caption" class="w-full border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Caption..."></div>
                                             <div><label class="text-[10px] text-gray-400 uppercase">WordPress Filename</label><p class="text-xs font-mono text-gray-600 bg-gray-50 rounded px-2 py-1" x-text="photoSuggestions[idx].suggestedFilename || 'auto'"></p></div>
                                         </div>
-                                        <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50 mt-1">
-                                            <svg class="w-3 h-3" :class="ps.refreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                            <span x-text="ps.refreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
-                                        </button>
+                                        <div class="flex items-center gap-2 mt-1">
+                                            <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50">
+                                                <svg class="w-3 h-3" :class="ps.refreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                                <span x-text="ps.refreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
+                                            </button>
+                                        </div>
+                                        {{-- Import URL / Upload for this photo --}}
+                                        <div class="flex items-center gap-1.5 mt-2" x-data="{ showUrlInput: false, urlVal: '' }">
+                                            <button @click.stop="expandedSuggestions.includes(idx) ? expandedSuggestions = expandedSuggestions.filter(i => i !== idx) : expandedSuggestions.push(idx)" class="text-[11px] text-blue-500 hover:text-blue-700 inline-flex items-center gap-1">
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
+                                                Change Photo
+                                            </button>
+                                            <span class="text-gray-300">|</span>
+                                            <button @click.stop="showUrlInput = !showUrlInput" class="text-[11px] text-blue-500 hover:text-blue-700">Import URL</button>
+                                            <span class="text-gray-300">|</span>
+                                            <label class="text-[11px] text-gray-500 hover:text-gray-700 cursor-pointer">
+                                                Upload
+                                                <input type="file" class="hidden" accept="image/*" @change="
+                                                    const file = $event.target.files[0];
+                                                    if (!file) return;
+                                                    const url = URL.createObjectURL(file);
+                                                    $data.photoSuggestions[idx].autoPhoto = { url_large: url, url_thumb: url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: 0, height: 0 };
+                                                    $data.photoSuggestions[idx].confirmed = false;
+                                                    $event.target.value = null;
+                                                ">
+                                            </label>
+                                        </div>
+                                        <div x-show="showUrlInput" x-cloak class="flex gap-1.5 mt-1.5">
+                                            <input type="text" x-model="urlVal" class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Paste image URL...">
+                                            <button @click.stop="if(urlVal.trim()){$data.photoSuggestions[idx].autoPhoto={url_large:urlVal.trim(),url_thumb:urlVal.trim(),source:'url-import',alt:'',width:0,height:0};$data.photoSuggestions[idx].confirmed=false;urlVal='';showUrlInput=false;}" class="text-[11px] bg-blue-600 text-white px-2 py-1 rounded">Import</button>
+                                        </div>
                                     </div>
                                     {{-- Action buttons --}}
                                     <div class="flex items-center gap-1 flex-shrink-0">
