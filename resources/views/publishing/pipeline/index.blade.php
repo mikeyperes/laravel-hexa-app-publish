@@ -1679,6 +1679,7 @@ function publishPipeline() {
         _spinEditorConfigured: false,
         _spinEditorConfiguring: false,
         _pendingSpinEditorContent: '',
+        _pipelineOperationsRestored: false,
         _pageUnloading: false,
 
         // Flag to suppress step auto-navigation during state restore

@@ -914,8 +914,23 @@
             } catch (error) {}
         },
 
-        async _restorePipelineOperations() {
-            if (!this.draftId) return;
+        shouldRestorePipelineOperations(force = false) {
+            if (!this.draftId) return false;
+            if (force) return true;
+
+            return this.currentStep === 7
+                || (Array.isArray(this.openSteps) && this.openSteps.includes(7))
+                || ['queued', 'running'].includes(this.prepareOperationStatus)
+                || ['queued', 'running'].includes(this.publishOperationStatus)
+                || !!this.preparing
+                || !!this.publishing;
+        },
+
+        async _restorePipelineOperations(force = false) {
+            if (!this.shouldRestorePipelineOperations(force)) return;
+            if (this._pipelineOperationsRestored && !force) return;
+
+            this._pipelineOperationsRestored = true;
             await this._restoreLatestPipelineOperation('prepare');
             await this._restoreLatestPipelineOperation('publish');
         },

@@ -21,6 +21,9 @@
                 if (step === 5 || this.openSteps.includes(5)) {
                     this._queuePromptRefresh('go_to_step');
                 }
+                if (step === 7 || this.openSteps.includes(7)) {
+                    this.$nextTick(() => this._restorePipelineOperations());
+                }
                 this._syncStepToUrl();
                 this._logActivity('ui', 'step', 'Navigated to step ' + step, {
                     stage: 'navigation',
@@ -42,6 +45,9 @@
             if (step === 5 && this.openSteps.includes(5)) {
                 this._queuePromptRefresh('toggle_step');
             }
+            if (step === 7 && this.openSteps.includes(7)) {
+                this.$nextTick(() => this._restorePipelineOperations());
+            }
             this._syncStepToUrl();
             this._logDebug('ui', 'Toggled step ' + step, {
                 stage: 'navigation',
@@ -55,6 +61,9 @@
             this.openSteps = [step];
             if (step === 5 || this.openSteps.includes(5)) {
                 this._queuePromptRefresh('open_step');
+            }
+            if (step === 7 || this.openSteps.includes(7)) {
+                this.$nextTick(() => this._restorePipelineOperations());
             }
             if (!this._restoring) this._syncStepToUrl();
             this._logDebug('ui', 'Opened step ' + step, {
@@ -895,4 +904,3 @@
                 this.showNotification('error', 'Retry failed');
             }
         },
-
