@@ -25,24 +25,23 @@
     googleError: '',
     stockPage: 1,
     googlePage: 1,
+    selectedPhotoKey: null,
 
     loadTerm(term) {
-        if (this.stockQuery === term && this.stockResults.length > 0) return;
         this.stockQuery = term;
         this.googleQuery = term;
-        this.searchStock();
     },
 
     async searchStock(loadMore = false) {
         if (!this.stockQuery.trim()) return;
         if (loadMore) { this.stockLoadingMore = true; this.stockPage++; }
-        else { this.stockSearching = true; this.stockResults = []; this.stockPage = 1; }
+        else { this.stockSearching = true; this.stockResults = []; this.stockPage = 1; this.selectedPhotoKey = null; }
         this.stockError = '';
         try {
             const resp = await fetch('{{ route('publish.search.images.post') }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
-                body: JSON.stringify({ query: this.stockQuery, per_page: 3, page: this.stockPage, sources: ['pexels', 'unsplash', 'pixabay'] })
+                body: JSON.stringify({ query: this.stockQuery, per_page: 4, page: this.stockPage, sources: ['pexels', 'unsplash', 'pixabay'] })
             });
             const data = await resp.json();
             const photos = data.data?.photos || [];
@@ -58,14 +57,14 @@
     async searchGoogle(loadMore = false) {
         if (!this.googleQuery.trim()) return;
         if (loadMore) { this.googleLoadingMore = true; this.googlePage++; }
-        else { this.googleSearching = true; this.googleResults = []; this.googlePage = 1; }
+        else { this.googleSearching = true; this.googleResults = []; this.googlePage = 1; this.selectedPhotoKey = null; }
         this.googleError = '';
         const start = Date.now();
         try {
             const resp = await fetch('{{ route('publish.search.google-images') }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
-                body: JSON.stringify({ query: this.googleQuery, per_page: 9, start: (this.googlePage - 1) * 9 })
+                body: JSON.stringify({ query: this.googleQuery, per_page: 12, start: (this.googlePage - 1) * 12 })
             });
             const data = await resp.json();
             this.googleTiming = Date.now() - start;
@@ -78,7 +77,8 @@
         this.googleLoadingMore = false;
     },
 
-    pickPhoto(photo) {
+    pickPhoto(photo, key) {
+        this.selectedPhotoKey = key;
         ({{ $onSelect }})(photo);
     }
 }" class="space-y-4">
@@ -95,10 +95,15 @@
         </div>
         <div x-show="googleError" x-cloak class="text-xs text-red-600 mb-2" x-text="googleError"></div>
         <div x-show="googleTiming > 0 && googleResults.length > 0" x-cloak class="text-[10px] text-gray-400 mb-1" x-text="googleResults.length + ' photos in ' + googleTiming + 'ms'"></div>
-        <div x-show="googleResults.length > 0" x-cloak class="grid grid-cols-3 gap-2">
+        <div x-show="googleResults.length > 0" x-cloak class="grid grid-cols-4 gap-2">
             <template x-for="(photo, idx) in googleResults" :key="'g'+idx">
-                <div @click="pickPhoto(photo)" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-colors" :class="photo.copyright_flag ? 'border-red-300 hover:border-red-500' : 'border-gray-200 hover:border-blue-400'">
-                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-64 object-cover" loading="lazy">
+                <div @click="pickPhoto(photo, 'g'+idx)" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-all relative" :class="selectedPhotoKey === 'g'+idx ? 'border-green-500 ring-2 ring-green-300' : (photo.copyright_flag ? 'border-red-300 hover:border-red-500' : 'border-gray-200 hover:border-blue-400')">
+                    <div class="relative">
+                        <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-64 object-cover" loading="lazy">
+                        <div x-show="selectedPhotoKey === 'g'+idx" x-cloak class="absolute top-1.5 right-1.5 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow">
+                            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                    </div>
                     <div class="px-1.5 py-1 bg-white space-y-0.5">
                         <p class="text-[9px] font-medium text-gray-700 break-words" x-text="(photo.alt || '').substring(0, 40)"></p>
                         <div class="flex items-center gap-1 flex-wrap">
@@ -113,7 +118,7 @@
                 </div>
             </template>
         </div>
-        <div x-show="googleResults.length > 0 && googleResults.length >= 9 * googlePage" x-cloak class="mt-2 text-center">
+        <div x-show="googleResults.length > 0" x-cloak class="mt-2 text-center">
             <button type="button" @click.stop="searchGoogle(true)" :disabled="googleLoadingMore" class="text-xs text-blue-600 hover:text-blue-800 px-4 py-1.5 border border-blue-200 rounded-lg hover:bg-blue-50 inline-flex items-center gap-1 disabled:opacity-50">
                 <svg x-show="googleLoadingMore" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 <span x-text="googleLoadingMore ? 'Loading...' : 'Load More Google Images'"></span>
@@ -133,10 +138,15 @@
         </div>
         <div x-show="stockError" x-cloak class="text-xs text-red-600 mb-2" x-text="stockError"></div>
         <div x-show="Object.keys(stockTimings).length > 0 && stockResults.length > 0" x-cloak class="text-[10px] text-gray-400 mb-1" x-text="stockResults.length + ' photos (' + Object.entries(stockTimings).map(([k,v]) => k + ':' + v + 'ms').join(', ') + ')'"></div>
-        <div x-show="stockResults.length > 0" x-cloak class="grid grid-cols-3 gap-2">
+        <div x-show="stockResults.length > 0" x-cloak class="grid grid-cols-4 gap-2">
             <template x-for="(photo, idx) in stockResults" :key="'s'+idx">
-                <div @click="pickPhoto(photo)" class="cursor-pointer rounded-lg overflow-hidden border-2 border-gray-200 hover:border-purple-400 transition-colors">
-                    <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-64 object-cover" loading="lazy">
+                <div @click="pickPhoto(photo, 's'+idx)" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-all relative" :class="selectedPhotoKey === 's'+idx ? 'border-green-500 ring-2 ring-green-300' : 'border-gray-200 hover:border-purple-400'">
+                    <div class="relative">
+                        <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-64 object-cover" loading="lazy">
+                        <div x-show="selectedPhotoKey === 's'+idx" x-cloak class="absolute top-1.5 right-1.5 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow">
+                            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                    </div>
                     <div class="px-1.5 py-1 bg-white space-y-0.5">
                         <div class="flex items-center gap-1 flex-wrap">
                             <span class="text-[9px] text-gray-500" x-text="photo.source + ' — ' + (photo.width || '?') + 'x' + (photo.height || '?')"></span>

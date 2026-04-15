@@ -172,7 +172,7 @@
                 {{-- Content Processing --}}
                 <div class="mb-3">
                     <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Content Processing</p>
-                    <template x-for="item in prepareChecklist.filter(c => c.type === 'html' || c.type === 'integrity')" :key="item.label">
+                    <template x-for="item in prepareChecklist.filter(c => c.type === 'html')" :key="item.label">
                         @include('app-publish::publishing.pipeline.partials.checklist-item')
                     </template>
                 </div>
@@ -231,6 +231,14 @@
                 <div x-show="prepareChecklist.some(c => c.type === 'tag')" x-cloak>
                     <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Tags</p>
                     <template x-for="item in prepareChecklist.filter(c => c.type === 'tag')" :key="item.label">
+                        @include('app-publish::publishing.pipeline.partials.checklist-item')
+                    </template>
+                </div>
+
+                {{-- Integrity Check (always last) --}}
+                <div class="mt-3" x-show="prepareChecklist.some(c => c.type === 'integrity')" x-cloak>
+                    <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Verification</p>
+                    <template x-for="item in prepareChecklist.filter(c => c.type === 'integrity')" :key="item.label">
                         @include('app-publish::publishing.pipeline.partials.checklist-item')
                     </template>
                 </div>

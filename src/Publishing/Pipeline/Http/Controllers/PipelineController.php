@@ -105,7 +105,7 @@ class PipelineController extends Controller
 
         $sites = PublishSite::where('status', 'connected')
             ->orderBy('name')
-            ->get(['id', 'name', 'url', 'status', 'default_author', 'is_press_release_source', 'last_connected_at', 'wp_username', 'connection_type']);
+            ->get(['id', 'name', 'url', 'status', 'default_author', 'is_press_release_source', 'last_connected_at', 'wp_username', 'connection_type', 'user_id']);
         $prSourceSites = $sites->where('is_press_release_source', true)->values();
         $draftSite = $draft->site;
         if ($draftSite && !$sites->contains('id', $draftSite->id)) {

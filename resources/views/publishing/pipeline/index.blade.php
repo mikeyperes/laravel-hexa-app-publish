@@ -169,7 +169,7 @@
                 <label class="block text-xs text-gray-500 mb-1">Publishing Site</label>
                 <select x-model="selectedSiteId" @change="selectSite()" class="w-full md:w-1/2 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">— Select a site —</option>
-                    <template x-for="s in sites" :key="s.id">
+                    <template x-for="s in (selectedUser ? sites.filter(st => !st.user_id || st.user_id === selectedUser.id) : sites)" :key="s.id">
                         <option :value="String(s.id)" :selected="String(s.id) === selectedSiteId" x-text="s.name + ' (' + s.url + ')'"></option>
                     </template>
                 </select>
