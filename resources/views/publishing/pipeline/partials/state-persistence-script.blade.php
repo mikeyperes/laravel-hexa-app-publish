@@ -139,6 +139,19 @@
             };
         },
 
+        supportingUrlTypeOptions() {
+            return @json(config('hws-publish.supporting_url_types', []));
+        },
+
+        supportingUrlTypeLabel() {
+            return this.supportingUrlTypeOptions()?.[this.supportingUrlType]?.label || 'Matching Content Type';
+        },
+
+        supportingUrlTypeDescription() {
+            return this.supportingUrlTypeOptions()?.[this.supportingUrlType]?.description
+                || 'Prefer supporting URLs that match the article’s actual content category and editorial style.';
+        },
+
         resolvePhotoThumbUrl(photo) {
             return photo?.url_thumb || photo?.url_large || photo?.url_full || photo?.url || '';
         },
@@ -312,6 +325,7 @@
                 prompt_slug: this.currentPressReleasePromptSlug(),
                 custom_prompt: this.customPrompt || null,
                 web_research: this.spinWebResearch,
+                supporting_url_type: this.supportingUrlType || 'matching_content_type',
             };
         },
 
@@ -747,7 +761,7 @@
                 // Step 4 — Fetch
                 'checkResults', 'approvedSources', 'discardedSources', 'expandedSources',
                 // Step 5 — AI Spin
-                'aiModel', 'customPrompt', 'spinWebResearch', 'spunContent', 'spunWordCount', 'suggestedTitles',
+                'aiModel', 'customPrompt', 'supportingUrlType', 'spinWebResearch', 'spunContent', 'spunWordCount', 'suggestedTitles',
                 'suggestedCategories', 'suggestedTags', 'selectedCategories', 'selectedTags',
                 'selectedTitleIdx', 'tokenUsage',
                 // Step 6 — Create Article
@@ -848,18 +862,19 @@
             this.selectedSite = null;
             this.sources = [];
             this.checkResults = [];
-            this.aiModel = 'claude-opus-4-6';
+            this.aiModel = 'grok-3';
             this.spunContent = '';
             this.spunWordCount = 0;
             this.articleTitle = '';
             this.editorContent = '';
             this.articleDescription = '';
             this.customPrompt = '';
+            this.supportingUrlType = 'matching_content_type';
             this.resolvedPrompt = '';
             this.promptLog = [];
             this.promptPreviewDirty = true;
             this._lastPromptPreviewSignature = '';
-            this.spinWebResearch = false;
+            this.spinWebResearch = true;
             this.publishAction = 'draft_local';
             this.publishAuthor = '';
             this.publishAuthorSource = '';

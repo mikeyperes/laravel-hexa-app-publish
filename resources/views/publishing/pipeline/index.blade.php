@@ -1086,13 +1086,22 @@
                         @endif
                     </select>
                 </div>
+                <div class="min-w-[220px]">
+                    <label class="block text-xs text-gray-500 mb-1">Supporting URL Type</label>
+                    <select x-model="supportingUrlType" @change="invalidatePromptPreview('supporting_url_type', { fetch: true })" class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full">
+                        @foreach(config('hws-publish.supporting_url_types', []) as $optionKey => $option)
+                            <option value="{{ $optionKey }}">{{ $option['label'] }}</option>
+                        @endforeach
+                    </select>
+                    <p class="text-xs text-gray-400 mt-1" x-text="supportingUrlTypeDescription()"></p>
+                </div>
                 <button @click="spinArticle()" :disabled="spinning" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2">
                     <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     <span x-text="spinning ? (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Polishing...' : 'Spinning...') : (spunContent ? (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Re-polish' : 'Re-spin') : (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Polish Content' : 'Spin Article'))"></span>
                 </button>
                 <p x-show="spunContent && !spinning" x-cloak class="text-sm text-green-600 mt-1 inline-flex items-center gap-1">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                    Article spun successfully — <span x-text="spunWordCount + ' words'"></span>
+                    Article spun successfully<span x-show="Number(spunWordCount || 0) > 0"> — <span x-text="spunWordCount + ' words'"></span></span>
                 </p>
             </div>
 
@@ -1109,6 +1118,9 @@
                     <span class="text-sm text-gray-700">Search online for additional supporting points</span>
                 </label>
                 <p x-show="spinWebResearch" x-cloak class="text-xs text-gray-400 mt-1 ml-6">The AI will search the web for real-time data, statistics, and expert opinions to strengthen the article.</p>
+                <p x-show="spinWebResearch && supportingUrlType" x-cloak class="text-xs text-gray-400 mt-1 ml-6">
+                    Supporting URL filter: <span class="font-medium text-gray-500" x-text="supportingUrlTypeLabel()"></span>
+                </p>
             </div>
 
             {{-- Resolved Prompt — always visible, live-updating --}}
@@ -1493,12 +1505,13 @@ function publishPipeline() {
         editingTemplate: false,
 
         // Step 7 — Model
-        aiModel: 'claude-opus-4-6',
+        aiModel: 'grok-3',
         customPrompt: '',
+        supportingUrlType: 'matching_content_type',
 
         // Step 7 — Spin
         spinning: false,
-        spinWebResearch: false,
+        spinWebResearch: true,
         spunContent: '',
         spunWordCount: 0,
         spinChangeRequest: '',

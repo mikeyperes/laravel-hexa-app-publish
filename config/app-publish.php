@@ -2,7 +2,7 @@
 
 return [
 
-    'version' => '18.10.7',
+    'version' => '18.10.8',
 
     /*
     |--------------------------------------------------------------------------
@@ -70,6 +70,37 @@ return [
         'draft-local',
         'draft-wordpress',
         'auto-publish',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Supporting URL Types
+    |--------------------------------------------------------------------------
+    |
+    | Guidance options for web research / supporting source selection in AI Spin.
+    |
+    */
+    'supporting_url_types' => [
+        'matching_content_type' => [
+            'label' => 'Matching Content Type',
+            'description' => 'Prefer supporting URLs that match the article’s actual content category and editorial style.',
+        ],
+        'news' => [
+            'label' => 'News Sources',
+            'description' => 'Favor journalistic reporting, trade coverage, and current news articles over research papers.',
+        ],
+        'academic_research' => [
+            'label' => 'Academic / Research',
+            'description' => 'Favor studies, journals, university research, and formal research publications.',
+        ],
+        'official_primary' => [
+            'label' => 'Official / Primary',
+            'description' => 'Favor government, company, regulator, nonprofit, and other primary-source URLs.',
+        ],
+        'passive_background' => [
+            'label' => 'Passive / Background',
+            'description' => 'Favor broad background and reference material for context, not heavy evidence gathering.',
+        ],
     ],
 
     /*

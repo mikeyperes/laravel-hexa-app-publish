@@ -69,6 +69,7 @@ class ArticleGenerationService
         $presetId = $options['preset_id'] ?? null;
         $promptSlug = $options['prompt_slug'] ?? null;
         $customPrompt = $options['custom_prompt'] ?? null;
+        $supportingUrlType = $options['supporting_url_type'] ?? 'matching_content_type';
         $changeRequest = $options['change_request'] ?? null;
         $prSubjectContext = $options['pr_subject_context'] ?? null;
         $agent = $options['agent'] ?? 'spin';
@@ -88,6 +89,11 @@ class ArticleGenerationService
         // Inject web research instruction if requested
         if (!empty($options['web_research'])) {
             $systemPrompt .= "\n\nWEB RESEARCH: Before writing, search the web for current data, statistics, expert opinions, and recent developments related to this topic. Incorporate real, verifiable facts and supporting points from your research into the article. Cite specific sources where possible.";
+        }
+
+        $supportingUrlInstruction = $this->supportingUrlTypeInstruction($supportingUrlType);
+        if ($supportingUrlInstruction !== '') {
+            $systemPrompt .= "\n\n" . $supportingUrlInstruction;
         }
 
         // Call AI — route to correct provider
@@ -150,6 +156,19 @@ class ArticleGenerationService
             'metadata'         => $metadata['data'],
             'resolved_prompt'  => $systemPrompt,
         ];
+    }
+
+    public function supportingUrlTypeInstruction(?string $type): string
+    {
+        $type = is_string($type) && $type !== '' ? $type : 'matching_content_type';
+
+        return match ($type) {
+            'news' => 'SUPPORTING URL TYPE: Favor current news reporting, trade coverage, and journalistic sources. Avoid leaning on academic papers unless they are directly relevant to a factual claim.',
+            'academic_research' => 'SUPPORTING URL TYPE: Favor academic papers, peer-reviewed studies, university research, and formal research institutions. Use these as the primary supporting URLs when web research is enabled.',
+            'official_primary' => 'SUPPORTING URL TYPE: Favor official and primary-source URLs such as company sites, government agencies, regulators, nonprofits, court documents, and official statements.',
+            'passive_background' => 'SUPPORTING URL TYPE: Favor broad background and context URLs. Use supporting URLs lightly, prioritize general explanatory context, and avoid overloading the article with dense research citations.',
+            default => 'SUPPORTING URL TYPE: Match the supporting URLs to the article’s actual content type and editorial angle. For tabloids, entertainment, or trending news, prefer news and culture coverage over academic sources. For research-heavy or technical topics, prefer research or primary sources only when they fit the content type.',
+        };
     }
 
     /**

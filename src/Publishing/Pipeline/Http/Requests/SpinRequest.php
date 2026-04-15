@@ -15,6 +15,7 @@ class SpinRequest extends PipelineRequest
             'model' => 'required|string|max:100',
             'change_request' => 'nullable|string|max:2000',
             'custom_prompt' => 'nullable|string|max:5000',
+            'supporting_url_type' => 'nullable|string|max:100',
             'master_setting_ids' => 'nullable|array',
             'master_setting_ids.*' => 'integer|exists:publish_master_settings,id',
             'pr_subject_context' => 'nullable|string|max:50000',

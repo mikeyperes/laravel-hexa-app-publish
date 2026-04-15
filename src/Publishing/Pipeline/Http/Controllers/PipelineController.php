@@ -295,6 +295,17 @@ class PipelineController extends Controller
         if ($request->boolean('web_research', false)) {
             $prompt .= "\n\nWEB RESEARCH: Before writing, search the web for current data, statistics, expert opinions, and recent developments related to this topic. Incorporate real, verifiable facts and supporting points from your research into the article. Cite specific sources where possible.";
         }
+        $supportingUrlInstruction = app(ArticleGenerationService::class)->supportingUrlTypeInstruction(
+            $validated['supporting_url_type'] ?? 'matching_content_type'
+        );
+        if ($supportingUrlInstruction !== '') {
+            $prompt .= "\n\n" . $supportingUrlInstruction;
+            $result['log'][] = [
+                'shortcode' => '(supporting url type)',
+                'source' => 'Pipeline setting',
+                'value' => $validated['supporting_url_type'] ?? 'matching_content_type',
+            ];
+        }
 
         return response()->json([
             'success' => true,
@@ -525,6 +536,7 @@ class PipelineController extends Controller
                 'preset_id'          => $validated['preset_id'] ?? null,
                 'prompt_slug'        => $validated['prompt_slug'] ?? null,
                 'custom_prompt'      => $validated['custom_prompt'] ?? null,
+                'supporting_url_type'=> $validated['supporting_url_type'] ?? 'matching_content_type',
                 'change_request'     => $validated['change_request'] ?? null,
                 'pr_subject_context' => $validated['pr_subject_context'] ?? null,
                 'web_research'       => $request->boolean('web_research', false),

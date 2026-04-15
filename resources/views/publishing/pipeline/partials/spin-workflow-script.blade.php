@@ -220,6 +220,7 @@
                         prompt_slug: this.currentPressReleasePromptSlug(),
                         model: this.aiModel,
                         custom_prompt: this.customPrompt || null,
+                        supporting_url_type: this.supportingUrlType || 'matching_content_type',
                         pr_subject_context: this.buildPrSubjectContext(),
                         web_research: this.spinWebResearch,
                     })
