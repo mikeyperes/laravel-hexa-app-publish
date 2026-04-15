@@ -3,6 +3,8 @@
 namespace hexa_app_publish\Publishing\Settings\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
+use hexa_core\Models\Setting;
+use hexa_core\Services\ImageCopyrightBlacklistService;
 use hexa_package_pexels\Services\PexelsService;
 use hexa_package_unsplash\Services\UnsplashService;
 use hexa_package_pixabay\Services\PixabayService;
@@ -17,6 +19,28 @@ use Illuminate\Http\Request;
 
 class SettingsController extends Controller
 {
+    public function saveImageCopyrightBlacklist(Request $request, ImageCopyrightBlacklistService $blacklist): JsonResponse
+    {
+        $validated = $request->validate([
+            'keywords' => 'nullable|string|max:5000',
+        ]);
+
+        $raw = trim((string) ($validated['keywords'] ?? ''));
+        Setting::setValue(
+            'image_copyright_blacklist',
+            $raw !== '' ? $raw : ImageCopyrightBlacklistService::DEFAULT_RAW,
+            'integrations'
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Image copyright blacklist saved.',
+            'keywords' => $blacklist->keywords(),
+            'count' => $blacklist->keywordCount(),
+            'raw' => $blacklist->raw(),
+        ]);
+    }
+
     /**
      * Test an integration API key.
      *

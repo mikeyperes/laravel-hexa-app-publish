@@ -67,6 +67,78 @@
     </template>
 </div>
 
+{{-- ═══ Shared Image Copyright Blacklist ═══ --}}
+@php
+    $imageCopyrightBlacklist = app(\hexa_core\Services\ImageCopyrightBlacklistService::class);
+    $imageCopyrightBlacklistRaw = $imageCopyrightBlacklist->raw();
+    $imageCopyrightKeywords = $imageCopyrightBlacklist->keywords();
+@endphp
+<div id="image-copyright-blacklist"
+     data-integration-section="image-copyright-blacklist"
+     class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6"
+     x-data="{
+         keywords: @js($imageCopyrightBlacklistRaw),
+         saving: false,
+         resultMessage: '',
+         resultSuccess: false,
+         count: {{ count($imageCopyrightKeywords) }},
+         async saveBlacklist() {
+             this.saving = true;
+             this.resultMessage = '';
+             try {
+                 const res = await fetch('{{ route('settings.image-copyright-blacklist.save') }}', {
+                     method: 'POST',
+                     headers: {
+                         'Content-Type': 'application/json',
+                         'X-CSRF-TOKEN': document.querySelector('meta[name=\"csrf-token\"]')?.content,
+                         'Accept': 'application/json'
+                     },
+                     body: JSON.stringify({ keywords: this.keywords })
+                 });
+                 const data = await res.json();
+                 this.resultSuccess = data.success !== false;
+                 this.resultMessage = data.message || 'Saved.';
+                 this.count = Number(data.count || 0);
+                 if (typeof data.raw === 'string') {
+                     this.keywords = data.raw;
+                 }
+             } catch (e) {
+                 this.resultSuccess = false;
+                 this.resultMessage = 'Error: ' + e.message;
+             }
+             this.saving = false;
+         }
+     }">
+    <div class="flex items-start justify-between gap-4 mb-3">
+        <div>
+            <h2 class="font-semibold text-gray-800 mb-1">Image Copyright Blacklist</h2>
+            <p class="text-xs text-gray-500">Shared red-flag keyword list used by image-search packages to warn on likely protected sources.</p>
+        </div>
+        <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-800" x-text="count + ' keyword' + (count === 1 ? '' : 's')"></span>
+    </div>
+
+    <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-xs text-amber-900 space-y-1.5">
+        <p class="font-semibold text-amber-800">Used by:</p>
+        <p>Google CSE and SerpAPI image search results read this exact list and mark matching domains in red. Edit it here once and every package uses the same setting.</p>
+    </div>
+
+    <textarea x-model="keywords"
+              rows="5"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
+              placeholder="reuters&#10;ap.com&#10;gettyimages&#10;shutterstock&#10;alamy"></textarea>
+
+    <div class="flex flex-wrap items-center gap-3 mt-3">
+        <button @click="saveBlacklist()"
+                :disabled="saving"
+                type="button"
+                class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+            <svg x-show="saving" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <span x-text="saving ? 'Saving...' : 'Save Blacklist'"></span>
+        </button>
+        <span x-show="resultMessage" x-cloak class="text-xs" :class="resultSuccess ? 'text-green-700' : 'text-red-700'" x-text="resultMessage"></span>
+    </div>
+</div>
+
 {{-- ═══ GNews ═══ --}}
 @php $gnewsKey = \hexa_core\Models\Setting::getValue('gnews_api_key', ''); @endphp
 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6" x-data="integrationField('gnews', '{{ $gnewsKey }}', '{{ route('settings.update') }}', '{{ route('settings.test-integration') }}')">

@@ -16,3 +16,4 @@ Route::post('/publishing/settings/toggle-pr-source/{site}', [MasterSettingContro
 
 // Integration tests
 Route::post('/settings/test-integration', [SettingsController::class, 'testIntegration'])->name('settings.test-integration');
+Route::post('/settings/image-copyright-blacklist', [SettingsController::class, 'saveImageCopyrightBlacklist'])->name('settings.image-copyright-blacklist.save');
