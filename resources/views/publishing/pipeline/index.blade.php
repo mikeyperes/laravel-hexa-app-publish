@@ -107,7 +107,7 @@
                  @hexa-search-selected.window="if ($event.detail.component_id === 'pipeline-user' && !_restoring) selectUser($event.detail.item)"
                  @hexa-search-cleared.window="if ($event.detail.component_id === 'pipeline-user') clearUser()">
                 @php
-                    $pipelineSelectedUser = isset($draftUser) && $draftUser ? ['id' => $draftUser->id, 'name' => $draftUser->name, 'email' => $draftUser->email] : null;
+                    $pipelineSelectedUser = isset($draftUser) && $draftUser ? ['id' => $draftUser->id, 'name' => $draftUser->name] : null;
                 @endphp
                 <x-hexa-smart-search
                     url="{{ route('api.search.users') }}"
@@ -1377,12 +1377,22 @@
 @include('app-publish::partials.site-connection-mixin')
 @include('app-publish::partials.preset-fields-mixin')
 @include('app-publish::publishing.pipeline.partials.press-release-workflow-script')
+@php
+    $pipelinePayloadSanitized = json_decode(json_encode($pipelinePayload ?? []), true) ?: [];
+    if (isset($pipelinePayloadSanitized['selectedUser']) && is_array($pipelinePayloadSanitized['selectedUser'])) {
+        unset($pipelinePayloadSanitized['selectedUser']['email']);
+    }
+    $pipelineDraftState = json_decode(json_encode($draftState ?? []), true) ?: [];
+    if (isset($pipelineDraftState['selectedUser']) && is_array($pipelineDraftState['selectedUser'])) {
+        unset($pipelineDraftState['selectedUser']['email']);
+    }
+@endphp
 <script>
 function publishPipeline() {
     return {
         ...pressReleaseWorkflowMixin({
             workflowDefinitions: @json($workflowDefinitions ?? []),
-            pipelinePayload: @json($pipelinePayload ?? []),
+            pipelinePayload: @json($pipelinePayloadSanitized ?? []),
             pressReleaseDefaultState: @json($pressReleaseDefaultState ?? []),
         }),
         // Step tracking
@@ -1426,7 +1436,7 @@ function publishPipeline() {
         // Step 3 — Website
         sites: @json($sites ?? []),
         prSourceSites: @json($prSourceSites ?? []),
-        draftState: @json($draftState ?? []),
+        draftState: @json($pipelineDraftState ?? []),
         latestCompletedPrepareHtml: @json($latestCompletedPrepareHtml ?? ''),
         selectedSiteId: '',
         selectedSite: null,

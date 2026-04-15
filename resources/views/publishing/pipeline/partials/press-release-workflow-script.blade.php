@@ -527,6 +527,7 @@ function pressReleaseWorkflowMixin(config) {
                 state[key] = clone(this[key]);
             }
 
+            state.selectedUser = this.sanitizeSelectedUserForPersistence(state.selectedUser);
             state.photoSuggestions = this.sanitizePhotoSuggestionsForPersistence(state.photoSuggestions || []);
             state.featuredPhoto = this.sanitizePhotoAssetForPersistence(state.featuredPhoto || null);
 

@@ -30,7 +30,7 @@
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Contact</label>
-                <input type="text" x-model="pressRelease.details.contact" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Sarah Smith, media@company.com">
+                <input type="text" x-model="pressRelease.details.contact" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Sarah Smith, media contact">
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Contact URL</label>

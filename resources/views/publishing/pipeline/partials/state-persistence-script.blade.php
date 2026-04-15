@@ -130,6 +130,15 @@
             return (Array.isArray(list) ? list : []).map((ps, idx) => this.sanitizePhotoSuggestionForPersistence(ps, idx));
         },
 
+        sanitizeSelectedUserForPersistence(user) {
+            if (!user || typeof user !== 'object') return null;
+
+            return {
+                id: user.id ?? null,
+                name: user.name || '',
+            };
+        },
+
         resolvePhotoThumbUrl(photo) {
             return photo?.url_thumb || photo?.url_large || photo?.url_full || photo?.url || '';
         },
@@ -460,9 +469,9 @@
             // Database-backed draft state is authoritative for site/user/template/preset restore.
             // But localStorage (pipeline state) takes precedence if user changed it this session.
             if (state?.selectedUser) {
-                this.selectedUser = state.selectedUser;
+                this.selectedUser = this.sanitizeSelectedUserForPersistence(state.selectedUser);
             } else if (draftState.selectedUser) {
-                this.selectedUser = draftState.selectedUser;
+                this.selectedUser = this.sanitizeSelectedUserForPersistence(draftState.selectedUser);
             }
             if (draftState.selectedSiteId) {
                 this.selectedSiteId = String(draftState.selectedSiteId);
