@@ -657,7 +657,7 @@ class PipelineController extends Controller
                     return response()->json(['success' => true, 'message' => "Media #{$mediaId} deleted"]);
                 }
             }
-            return response()->json(['success' => false, 'message' => 'SSH connection failed']);
+            return response()->json(['success' => false, 'message' => 'WP Toolkit connection failed']);
         }
 
         // REST mode

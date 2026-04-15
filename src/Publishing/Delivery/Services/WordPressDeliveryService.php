@@ -19,7 +19,7 @@ use hexa_package_wptoolkit\Services\WpToolkitService;
  */
 class WordPressDeliveryService
 {
-    private const MODE_SSH = 'ssh';
+    private const MODE_WPTOOLKIT = 'wptoolkit';
     private const MODE_REST = 'rest';
 
     protected WpToolkitService $wptoolkit;
@@ -51,7 +51,7 @@ class WordPressDeliveryService
      */
     public function createPost(PublishSite $site, string $title, string $html, string $status = 'draft', array $options = []): array
     {
-        if ($this->usesSsh($site)) {
+        if ($this->usesWpToolkit($site)) {
             return $this->createViaSsh($site, $title, $html, $status, $options);
         }
 
@@ -72,8 +72,9 @@ class WordPressDeliveryService
     {
         $resolved = $this->resolveServer($site);
         if (!$resolved['server'] || !$site->wordpress_install_id) {
-            return $this->failure("Site '{$site->name}' is missing WP Toolkit configuration.", self::MODE_SSH);
+            return $this->failure("Site '{$site->name}' is missing WP Toolkit configuration.", self::MODE_WPTOOLKIT);
         }
+        $transportMode = $this->wptoolkit->connectionMode($resolved['server']);
 
         $date = ($status === 'future' && !empty($options['date'])) ? $options['date'] : null;
 
@@ -91,15 +92,15 @@ class WordPressDeliveryService
         );
 
         if (!$result['success']) {
-            return $this->failure($result['message'] ?? 'SSH publish failed.', self::MODE_SSH);
+            return $this->failure($result['message'] ?? 'WP Toolkit publish failed.', $transportMode);
         }
 
         $postId = $result['data']['post_id'] ?? null;
 
         return $this->success(
             $site,
-            self::MODE_SSH,
-            $result['message'] ?? 'Published via SSH.',
+            $transportMode,
+            $result['message'] ?? ('Published via WP Toolkit (' . $transportMode . ').'),
             $postId,
             $result['data']['post_url'] ?? null
         );
@@ -138,7 +139,7 @@ class WordPressDeliveryService
         );
     }
 
-    private function usesSsh(PublishSite $site): bool
+    private function usesWpToolkit(PublishSite $site): bool
     {
         return ($site->connection_type ?? 'wptoolkit') === 'wptoolkit';
     }

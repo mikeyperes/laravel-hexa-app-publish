@@ -345,7 +345,7 @@ class SiteController extends Controller
 
         $ssh = $this->wptoolkit->getConnection($resolved['server']);
         if (!$ssh['success']) {
-            return response()->json(['success' => false, 'authors' => [], 'message' => $ssh['error'] ?? 'SSH failed']);
+            return response()->json(['success' => false, 'authors' => [], 'message' => $ssh['error'] ?? 'WP Toolkit connection failed']);
         }
 
         $escapedId = escapeshellarg((string) $site->wordpress_install_id);
@@ -388,7 +388,7 @@ class SiteController extends Controller
 
         $ssh = $this->wptoolkit->getConnection($resolved['server']);
         if (!$ssh['success']) {
-            return response()->json(['success' => false, 'categories' => [], 'message' => $ssh['error'] ?? 'SSH failed']);
+            return response()->json(['success' => false, 'categories' => [], 'message' => $ssh['error'] ?? 'WP Toolkit connection failed']);
         }
 
         $escapedId = escapeshellarg((string) $site->wordpress_install_id);

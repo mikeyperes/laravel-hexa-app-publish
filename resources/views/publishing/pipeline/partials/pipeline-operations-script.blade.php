@@ -325,7 +325,7 @@
             const site = this.selectedSite || {};
             const activePhotos = this.photoSuggestions.filter(p => !p.removed && p.autoPhoto);
             this._logPrepare('info', 'Starting WordPress preparation for ' + (site.name || 'selected site') + '...');
-            this._logPrepare('info', 'Site: ' + (site.url || 'unknown') + ' | Connection: ' + ((site.connection_type || '') === 'wptoolkit' ? 'SSH' : 'REST API'));
+            this._logPrepare('info', 'Site: ' + (site.url || 'unknown') + ' | Connection: ' + ((site.connection_type || '') === 'wptoolkit' ? 'WP Toolkit' : 'REST API'));
             if (this.publishAuthor) this._logPrepare('info', 'Author: ' + this.publishAuthor);
             this._logPrepare('info', 'Images: ' + activePhotos.length + ' inner + ' + (this.featuredPhoto ? '1 featured' : 'no featured'));
             this._logPrepare('info', 'Categories: ' + this.suggestedCategories.join(', '));

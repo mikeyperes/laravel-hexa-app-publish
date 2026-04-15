@@ -50,12 +50,15 @@ class WordPressPreparationService
     public function prepare(PublishSite $site, string $html, array $options = [], ?callable $onProgress = null): array
     {
         $send = $onProgress ?? function () {};
-        $mode = $site->connection_type === 'wptoolkit' ? 'ssh' : 'rest';
+        $mode = $site->connection_type === 'wptoolkit' ? 'wptoolkit' : 'rest';
+        $connectionMode = $mode === 'wptoolkit' ? 'wptoolkit' : 'rest';
+        $connectionLabel = $mode === 'wptoolkit' ? 'WP Toolkit' : 'REST API';
         $existingUploads = $this->buildExistingUploadMap($options['existing_uploads'] ?? []);
 
-        $this->emitProgress($send, 'info', "Connecting to {$site->name} via {$mode}...", 'connection', 'start', [
+        $this->emitProgress($send, 'info', "Connecting to {$site->name} via {$connectionLabel}...", 'connection', 'start', [
             'site_name' => $site->name,
-            'connection_mode' => $mode,
+            'connection_mode' => $connectionMode,
+            'connection_label' => $connectionLabel,
         ]);
 
         // Validate credentials
@@ -66,7 +69,7 @@ class WordPressPreparationService
 
         $server = null;
         $installId = null;
-        if ($mode === 'ssh') {
+        if ($mode === 'wptoolkit') {
             $resolved = $this->resolveServer($site);
             $server = $resolved['server'];
             $installId = $site->wordpress_install_id;
@@ -74,9 +77,13 @@ class WordPressPreparationService
                 $this->emitProgress($send, 'error', "Missing WP Toolkit server or install ID.", 'connection', 'resolve_server');
                 return ['success' => false, 'html' => $html, 'category_ids' => [], 'tag_ids' => [], 'wp_images' => []];
             }
-            $this->emitProgress($send, 'success', "SSH server resolved: {$server->hostname}", 'connection', 'resolve_server', [
+            $connectionMode = $this->wptoolkit->connectionMode($server);
+            $connectionLabel = $this->wptoolkit->connectionLabel($server);
+            $this->emitProgress($send, 'success', "{$connectionLabel} server resolved: {$server->hostname}", 'connection', 'resolve_server', [
                 'hostname' => $server->hostname,
                 'install_id' => $installId,
+                'connection_mode' => $connectionMode,
+                'connection_label' => $connectionLabel,
             ]);
         } else {
             $this->emitProgress($send, 'success', "REST API credentials verified for {$site->wp_username}", 'connection', 'credentials', [
@@ -91,9 +98,15 @@ class WordPressPreparationService
 
         // Step 0a: Author + SSH warmup (with timeout protection)
         $author = $site->default_author;
-        if ($mode === 'ssh' && $server && $installId) {
-            $this->emitProgress($send, 'info', "Connecting SSH to {$server->hostname}...", 'connection', 'ssh_connect', [
+        if ($mode === 'wptoolkit' && $server && $installId) {
+            $connectMessage = $connectionMode === 'local'
+                ? "Launching local WP Toolkit on {$server->hostname}..."
+                : "Connecting SSH to {$server->hostname}...";
+            $connectSubstage = $connectionMode === 'local' ? 'local_bootstrap' : 'ssh_connect';
+            $this->emitProgress($send, 'info', $connectMessage, 'connection', $connectSubstage, [
                 'hostname' => $server->hostname,
+                'connection_mode' => $connectionMode,
+                'connection_label' => $connectionLabel,
             ]);
             $sshError = null;
             try {
@@ -103,14 +116,21 @@ class WordPressPreparationService
                 $ssh = ['success' => false, 'error' => $sshError];
             }
             if ($ssh['success']) {
-                $this->emitProgress($send, 'success', "SSH connected to {$server->hostname}", 'connection', 'ssh_connect', [
+                $connectedMessage = $connectionMode === 'local'
+                    ? "Local WP Toolkit ready on {$server->hostname}"
+                    : "SSH connected to {$server->hostname}";
+                $this->emitProgress($send, 'success', $connectedMessage, 'connection', $connectSubstage, [
                     'hostname' => $server->hostname,
+                    'connection_mode' => $connectionMode,
+                    'connection_label' => $connectionLabel,
                 ]);
             } else {
-                $this->emitProgress($send, 'error', "SSH connection failed: " . ($ssh['error'] ?? $sshError ?? 'unknown'), 'connection', 'ssh_connect', [
+                $this->emitProgress($send, 'error', "WP Toolkit connection failed: " . ($ssh['error'] ?? $sshError ?? 'unknown'), 'connection', $connectSubstage, [
                     'hostname' => $server->hostname,
+                    'connection_mode' => $connectionMode,
+                    'connection_label' => $connectionLabel,
                 ]);
-                return ['success' => false, 'html' => $html, 'category_ids' => [], 'tag_ids' => [], 'wp_images' => [], 'message' => 'SSH connection failed'];
+                return ['success' => false, 'html' => $html, 'category_ids' => [], 'tag_ids' => [], 'wp_images' => [], 'message' => 'WP Toolkit connection failed'];
             }
             if ($author) {
                 $this->emitProgress($send, 'success', "Author: {$author} (will be set during publish)", 'connection', 'author', [
@@ -531,7 +551,7 @@ class WordPressPreparationService
             'term_total' => count($terms),
         ]);
 
-        if ($mode === 'ssh') {
+        if ($mode === 'wptoolkit') {
             $batchResult = match ($taxonomy) {
                 'categories' => $this->wptoolkit->wpCliBatchCategories($server, $installId, $terms),
                 'tags' => $this->wptoolkit->wpCliBatchTags($server, $installId, $terms),
@@ -702,7 +722,7 @@ class WordPressPreparationService
                 ]);
             }
 
-            if ($mode === 'ssh') {
+            if ($mode === 'wptoolkit') {
                 $result = $this->wptoolkit->wpCliUploadMedia($server, $installId, $url, $tryFilename, $altText, $caption, $altText);
             } else {
                 $result = $this->wp->uploadMedia($site->url, $site->wp_username, $site->wp_application_password, $url, $tryFilename, $altText);

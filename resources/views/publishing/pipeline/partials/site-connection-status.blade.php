@@ -10,7 +10,7 @@
         <span class="text-xs text-gray-400" x-text="selectedSite?.url || ''"></span>
         <span x-show="selectedSite?.wp_username" class="text-gray-300">|</span>
         <span x-show="selectedSite?.wp_username" class="text-xs text-gray-500" x-text="'Posting as: ' + (selectedSite?.wp_username || '')"></span>
-        <span x-show="selectedSite?.connection_type" class="text-xs text-gray-400" x-text="'(' + ((selectedSite?.connection_type || '') === 'wptoolkit' ? 'SSH' : 'REST API') + ')'"></span>
+        <span x-show="selectedSite?.connection_type" class="text-xs text-gray-400" x-text="'(' + ((selectedSite?.connection_type || '') === 'wptoolkit' ? 'WP Toolkit' : 'REST API') + ')'"></span>
         <button x-show="!siteConn.testing" @click="refreshSiteConnection()" class="text-xs text-blue-500 hover:text-blue-700 ml-auto flex-shrink-0">Refresh</button>
     </div>
     <div x-show="siteConn.log.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">
