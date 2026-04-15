@@ -566,74 +566,109 @@
             };
 
             if (this.selectedUser) {
-                this.presetsLoading = true;
-                this.templatesLoading = true;
-                window.dispatchEvent(new CustomEvent('hexa-form-loading', { detail: { component_id: 'article-preset-form', loading: true } }));
                 const restoredPresetId = draftState.selectedPresetId || state?.selectedPresetId || '';
                 const restoredPreset = state?.selectedPreset || null;
                 const restoredTemplateId = draftState.selectedTemplateId || state?.selectedTemplateId || '';
                 const restoredTemplate = state?.selectedTemplate || null;
+                const usingBootstrappedPresets = this._useBootstrappedPresetsIfAvailable();
+                const usingBootstrappedTemplates = this._useBootstrappedTemplatesIfAvailable();
 
-                const presetsPromise = this._useBootstrappedPresetsIfAvailable()
+                this.presetsLoading = !usingBootstrappedPresets;
+                this.templatesLoading = !usingBootstrappedTemplates;
+                window.dispatchEvent(new CustomEvent('hexa-form-loading', {
+                    detail: {
+                        component_id: 'article-preset-form',
+                        loading: !usingBootstrappedTemplates,
+                    }
+                }));
+
+                const presetsPromise = usingBootstrappedPresets
                     ? Promise.resolve(this.presets)
                     : this.loadUserPresets();
-                const templatesPromise = this._useBootstrappedTemplatesIfAvailable()
+                const templatesPromise = usingBootstrappedTemplates
                     ? Promise.resolve(this.templates)
                     : this.loadUserTemplates();
 
-                Promise.all([presetsPromise, templatesPromise]).then(() => {
-                    // Restore saved preset or auto-select default
-                    if (restoredPresetId) {
-                        this.selectedPresetId = String(restoredPresetId);
-                        this.selectedPreset = this.presets.find(p => p.id == restoredPresetId) || restoredPreset;
-                    } else {
-                        const defaultPreset = this.presets.find(p => p.is_default);
-                        if (defaultPreset) {
-                            this.selectedPresetId = String(defaultPreset.id);
-                            this.selectedPreset = defaultPreset;
+                Promise.allSettled([presetsPromise, templatesPromise])
+                    .then((results) => {
+                        const rejected = results.filter(result => result.status === 'rejected');
+                        if (rejected.length > 0) {
+                            this._logActivity('restore', 'warning', 'Preset/template bootstrap fallback encountered an error', {
+                                stage: 'restore',
+                                substage: 'preset_template_load',
+                                details: this._summarizeValue(rejected.map(result => String(result.reason?.message || result.reason || 'Unknown restore error')), 400),
+                            });
                         }
-                    }
-                    if (this.selectedPreset) {
-                        this.loadPresetFields('preset', this.selectedPreset, null, state?.preset_overrides || null);
-                    }
-                    if (state?.preset_overrides) {
-                        Object.assign(this.preset_overrides, state.preset_overrides);
-                        if (state.preset_dirty) Object.assign(this.preset_dirty, state.preset_dirty);
-                    }
 
-                    // Restore saved template or auto-select default
-                    if (restoredTemplateId) {
-                        this.selectedTemplateId = String(restoredTemplateId);
-                        this.selectedTemplate = this.templates.find(t => t.id == restoredTemplateId) || restoredTemplate;
-                    } else {
-                        const defaultTemplate = this.templates.find(t => t.is_default);
-                        if (defaultTemplate) {
-                            this.selectedTemplateId = String(defaultTemplate.id);
-                            this.selectedTemplate = defaultTemplate;
+                        try {
+                            // Restore saved preset or auto-select default
+                            if (restoredPresetId) {
+                                this.selectedPresetId = String(restoredPresetId);
+                                this.selectedPreset = this.presets.find(p => p.id == restoredPresetId) || restoredPreset;
+                            } else {
+                                const defaultPreset = this.presets.find(p => p.is_default);
+                                if (defaultPreset) {
+                                    this.selectedPresetId = String(defaultPreset.id);
+                                    this.selectedPreset = defaultPreset;
+                                }
+                            }
+                            if (this.selectedPreset) {
+                                this.loadPresetFields('preset', this.selectedPreset, null, state?.preset_overrides || null);
+                            }
+                            if (state?.preset_overrides) {
+                                Object.assign(this.preset_overrides, state.preset_overrides);
+                                if (state.preset_dirty) Object.assign(this.preset_dirty, state.preset_dirty);
+                            }
+
+                            // Restore saved template or auto-select default
+                            if (restoredTemplateId) {
+                                this.selectedTemplateId = String(restoredTemplateId);
+                                this.selectedTemplate = this.templates.find(t => t.id == restoredTemplateId) || restoredTemplate;
+                            } else {
+                                const defaultTemplate = this.templates.find(t => t.is_default);
+                                if (defaultTemplate) {
+                                    this.selectedTemplateId = String(defaultTemplate.id);
+                                    this.selectedTemplate = defaultTemplate;
+                                }
+                            }
+                            if (this.selectedTemplate) {
+                                // Pass saved overrides directly so loadPresetFields sends merged values to the form
+                                this.loadPresetFields('template', this.selectedTemplate, null, state?.template_overrides || null);
+                            }
+                            // Re-apply saved overrides to the pipeline override layer
+                            if (state?.template_overrides) {
+                                Object.assign(this.template_overrides, state.template_overrides);
+                                if (state.template_dirty) Object.assign(this.template_dirty, state.template_dirty);
+                            }
+                            // Sync article_type to standalone dropdown
+                            if (this.selectedTemplate?.article_type && !this.template_overrides?.article_type) {
+                                this.template_overrides.article_type = this.selectedTemplate.article_type;
+                            }
+
+                            // Auto-select site from default preset if no site saved
+                            if (this.selectedPreset?.default_site_id && !this.selectedSiteId) {
+                                this.selectedSiteId = String(this.selectedPreset.default_site_id);
+                                this.selectedSite = this.sites.find(s => s.id == this.selectedPreset.default_site_id) || null;
+                            }
+                        } catch (error) {
+                            this._logActivity('restore', 'error', 'Preset/template restore failed: ' + (error?.message || 'Unknown restore error'), {
+                                stage: 'restore',
+                                substage: 'preset_template_restore',
+                            });
                         }
-                    }
-                    if (this.selectedTemplate) {
-                        // Pass saved overrides directly so loadPresetFields sends merged values to the form
-                        this.loadPresetFields('template', this.selectedTemplate, null, state?.template_overrides || null);
-                    }
-                    // Re-apply saved overrides to the pipeline override layer
-                    if (state?.template_overrides) {
-                        Object.assign(this.template_overrides, state.template_overrides);
-                        if (state.template_dirty) Object.assign(this.template_dirty, state.template_dirty);
-                    }
-                    // Sync article_type to standalone dropdown
-                    if (this.selectedTemplate?.article_type && !this.template_overrides?.article_type) {
-                        this.template_overrides.article_type = this.selectedTemplate.article_type;
-                    }
 
-                    // Auto-select site from default preset if no site saved
-                    if (this.selectedPreset?.default_site_id && !this.selectedSiteId) {
-                        this.selectedSiteId = String(this.selectedPreset.default_site_id);
-                        this.selectedSite = this.sites.find(s => s.id == this.selectedPreset.default_site_id) || null;
-                    }
-
-                    finishRestore();
-                });
+                        finishRestore();
+                    })
+                    .finally(() => {
+                        this.presetsLoading = false;
+                        this.templatesLoading = false;
+                        window.dispatchEvent(new CustomEvent('hexa-form-loading', {
+                            detail: {
+                                component_id: 'article-preset-form',
+                                loading: false,
+                            }
+                        }));
+                    });
             } else {
                 finishRestore();
             }
@@ -862,4 +897,3 @@
             window.dispatchEvent(new CustomEvent('hexa-search-clear', { detail: { component_id: 'pipeline-user' } }));
             this.savePipelineState();
         },
-
