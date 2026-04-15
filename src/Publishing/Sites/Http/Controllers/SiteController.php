@@ -295,19 +295,10 @@ class SiteController extends Controller
         // Single SSH session: test write + get authors
         $result = $this->wptoolkit->wpCliTestWriteAccess($resolved['server'], $site->wordpress_install_id);
 
-        // Fetch authors on the same connection
         $authors = [];
         if ($result['success']) {
-            $ssh = $this->wptoolkit->getConnection($resolved['server']);
-            if ($ssh['success']) {
-                $escapedId = escapeshellarg((string) $site->wordpress_install_id);
-                $cmd = "wp-toolkit --wp-cli -instance-id {$escapedId} -- user list --role=administrator --fields=user_login,display_name --format=json 2>/dev/null";
-                $output = trim($ssh['connection']->exec($cmd));
-                foreach (explode("\n", $output) as $line) {
-                    $line = trim($line);
-                    if (str_starts_with($line, '[')) { $authors = json_decode($line, true) ?: []; break; }
-                }
-            }
+            $authorsResult = $this->wptoolkit->wpCliListAdminUsers($resolved['server'], (int) $site->wordpress_install_id);
+            $authors = $authorsResult['success'] ? ($authorsResult['authors'] ?? []) : [];
         }
 
         $site->update([
@@ -343,36 +334,10 @@ class SiteController extends Controller
             return response()->json(['success' => false, 'authors' => [], 'message' => 'Server not configured.']);
         }
 
-        $ssh = $this->wptoolkit->getConnection($resolved['server']);
-        if (!$ssh['success']) {
-            return response()->json(['success' => false, 'authors' => [], 'message' => $ssh['error'] ?? 'WP Toolkit connection failed']);
-        }
+        $result = $this->wptoolkit->wpCliListAdminUsers($resolved['server'], (int) $site->wordpress_install_id);
+        $result['default_author'] = $site->default_author;
 
-        $escapedId = escapeshellarg((string) $site->wordpress_install_id);
-        $cmd = "wp-toolkit --wp-cli -instance-id {$escapedId} -- user list --role=administrator --fields=user_login,display_name --format=json 2>/dev/null";
-        $output = trim($ssh['connection']->exec($cmd));
-
-        // Filter PHP warnings
-        $lines = explode("\n", $output);
-        $jsonLine = '';
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if (str_starts_with($line, '[') || str_starts_with($line, '{')) {
-                $jsonLine = $line;
-                break;
-            }
-        }
-
-        $authors = json_decode($jsonLine, true);
-        if (!is_array($authors)) {
-            return response()->json(['success' => false, 'authors' => [], 'message' => 'Failed to parse WP users.']);
-        }
-
-        return response()->json([
-            'success' => true,
-            'authors' => $authors,
-            'default_author' => $site->default_author,
-        ]);
+        return response()->json($result);
     }
 
     /**
@@ -386,34 +351,9 @@ class SiteController extends Controller
             return response()->json(['success' => false, 'categories' => [], 'message' => 'Server not configured.']);
         }
 
-        $ssh = $this->wptoolkit->getConnection($resolved['server']);
-        if (!$ssh['success']) {
-            return response()->json(['success' => false, 'categories' => [], 'message' => $ssh['error'] ?? 'WP Toolkit connection failed']);
-        }
-
-        $escapedId = escapeshellarg((string) $site->wordpress_install_id);
-        $cmd = "wp-toolkit --wp-cli -instance-id {$escapedId} -- term list category --fields=term_id,name,slug,count --format=json 2>/dev/null";
-        $output = trim($ssh['connection']->exec($cmd));
-
-        $jsonLine = '';
-        foreach (explode("\n", $output) as $line) {
-            $line = trim($line);
-            if (str_starts_with($line, '[')) { $jsonLine = $line; break; }
-        }
-
-        $categories = json_decode($jsonLine, true);
-        if (!is_array($categories)) {
-            return response()->json(['success' => false, 'categories' => [], 'message' => 'Failed to parse categories.']);
-        }
-
-        $result = array_map(fn ($c) => [
-            'id' => (int) ($c['term_id'] ?? 0),
-            'name' => $c['name'] ?? '',
-            'slug' => $c['slug'] ?? '',
-            'count' => (int) ($c['count'] ?? 0),
-        ], $categories);
-
-        return response()->json(['success' => true, 'categories' => $result]);
+        return response()->json(
+            $this->wptoolkit->wpCliListCategories($resolved['server'], (int) $site->wordpress_install_id)
+        );
     }
 
     /**

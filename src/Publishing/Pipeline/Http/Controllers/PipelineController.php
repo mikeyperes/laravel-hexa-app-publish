@@ -650,12 +650,11 @@ class PipelineController extends Controller
             $server = $account ? \hexa_package_whm\Models\WhmServer::find($account->whm_server_id) : null;
             if ($server && $site->wordpress_install_id) {
                 $wptoolkit = app(\hexa_package_wptoolkit\Services\WpToolkitService::class);
-                $ssh = $wptoolkit->getConnection($server);
-                if ($ssh['success']) {
-                    $eid = escapeshellarg((string) $site->wordpress_install_id);
-                    $ssh['connection']->exec("wp-toolkit --wp-cli -instance-id {$eid} -- post delete {$mediaId} --force 2>/dev/null");
+                $result = $wptoolkit->wpCliDeleteMedia($server, (int) $site->wordpress_install_id, $mediaId);
+                if ($result['success']) {
                     return response()->json(['success' => true, 'message' => "Media #{$mediaId} deleted"]);
                 }
+                return response()->json(['success' => false, 'message' => $result['message'] ?? 'WP Toolkit connection failed']);
             }
             return response()->json(['success' => false, 'message' => 'WP Toolkit connection failed']);
         }
