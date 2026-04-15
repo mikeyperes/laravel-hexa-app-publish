@@ -30,7 +30,7 @@
             <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
                 <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Website</span>
                 <div class="text-sm text-gray-800">
-                    <span x-text="selectedSite ? selectedSite.name : 'Not selected'"></span>
+                    <span x-text="selectedSite?.name || 'Not selected'"></span>
                     <a x-show="selectedSite" :href="selectedSite?.url" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 ml-1 inline-flex items-center gap-0.5">
                         <span x-text="selectedSite?.url" class="break-all"></span>
                         <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
@@ -45,7 +45,7 @@
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                     </a>
                     <span x-show="publishAuthorSource === 'profile'" x-cloak class="text-[10px] text-gray-400">(from site profile)</span>
-                    <a x-show="!publishAuthor && selectedSite" x-cloak :href="'/publish/sites/' + selectedSite.id" target="_blank" class="text-xs text-orange-500 hover:text-orange-700">Set in site settings</a>
+                    <a x-show="!publishAuthor && selectedSite?.id" x-cloak :href="selectedSite?.id ? '/publish/sites/' + selectedSite.id : '#'" target="_blank" class="text-xs text-orange-500 hover:text-orange-700">Set in site settings</a>
                 </div>
             </div>
             <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Publish Action</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? 'Publish immediately' : (publishAction === 'draft_wp' ? 'WordPress draft' : (publishAction === 'future' ? 'Scheduled' : 'Local draft'))"></p></div>
@@ -139,10 +139,17 @@
         <div x-show="!publishResult && (publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future')" x-cloak class="border border-gray-200 rounded-xl p-5 mb-4">
             <h5 class="text-sm font-semibold text-gray-700 mb-3">Prepare for WordPress</h5>
 
-            <button @click="prepareForWp()" :disabled="preparing || prepareComplete" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 mb-4">
-                <svg x-show="preparing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                <span x-text="preparing ? 'Preparing...' : (prepareComplete ? 'Prepared' : 'Prepare for WordPress')"></span>
-            </button>
+            <div class="flex items-center gap-3 mb-4">
+                <button @click="prepareForWp()" :disabled="_prepareOperationIsActive()" class="text-white px-5 py-2 rounded-lg text-sm disabled:opacity-50 flex items-center gap-2" :class="prepareComplete && prepareIntegrityIssues.length === 0 && !prepareChecklist.some(c => c.status === 'failed' || c.status === 'skipped') ? 'bg-green-600 hover:bg-green-700' : (prepareComplete ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-600 hover:bg-blue-700')">
+                    <svg x-show="_prepareOperationIsActive()" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    <span x-text="_prepareOperationIsActive() ? (prepareOperationStatus === 'queued' ? 'Queued...' : 'Preparing...') : (prepareComplete && prepareChecklist.some(c => c.status === 'failed' || c.status === 'skipped') ? 'Retry Prepare' : (prepareComplete ? 'Prepared' : 'Prepare for WordPress'))"></span>
+                </button>
+            </div>
+            <div x-show="_prepareOperationIsActive() || prepareOperationStatus" x-cloak class="mb-4 text-[11px] text-gray-500 space-y-1">
+                <p x-show="prepareOperationStatus" x-text="'Status: ' + prepareOperationStatus + (prepareOperationTransport ? ' via ' + prepareOperationTransport.replace('_', ' ') : '')"></p>
+                <p x-show="prepareTraceId" x-text="'Trace: ' + prepareTraceId"></p>
+                <p x-show="_prepareOperationIsActive() && (prepareLastStage || prepareLastMessage)" x-text="'Current: ' + _humanizePipelineLabel(prepareLastStage, prepareOperationStatus === 'queued' ? 'queue' : 'prepare startup') + (prepareLastMessage ? ' — ' + prepareLastMessage : '')"></p>
+            </div>
 
             {{-- Checklist --}}
             <div x-show="prepareChecklist.length > 0" x-cloak class="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
@@ -151,75 +158,80 @@
                     <span class="text-xs text-gray-400" x-text="prepareChecklist.filter(c => c.status === 'done').length + '/' + prepareChecklist.length + ' complete'"></span>
                 </div>
 
+                {{-- Reusable status icon macro --}}
+                {{-- Each section filters by item.type --}}
+
                 {{-- Connection & Auth --}}
                 <div class="mb-3">
                     <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Connection & Auth</p>
-                    <template x-for="(item, idx) in prepareChecklist.filter(c => c.label.includes('author') || c.label.includes('Verify'))" :key="item.label">
-                        <div class="flex items-center gap-2.5 py-1.5 px-2 rounded-lg" :class="item.status === 'done' ? 'bg-green-50' : (item.status === 'failed' ? 'bg-red-50' : '')">
-                            <template x-if="item.status === 'pending'"><div class="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0"></div></template>
-                            <template x-if="item.status === 'running'"><svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
-                            <template x-if="item.status === 'done'"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></template>
-                            <template x-if="item.status === 'failed'"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></template>
-                            <template x-if="item.status === 'skipped'"><svg class="w-5 h-5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></template>
-                            <div class="flex-1 min-w-0">
-                                <span class="text-sm font-medium" :class="{'text-gray-800': item.status === 'done', 'text-blue-700': item.status === 'running', 'text-red-700': item.status === 'failed', 'text-gray-400': item.status === 'pending', 'text-yellow-700': item.status === 'skipped'}" x-text="item.label"></span>
-                                <p x-show="item.detail" class="text-xs text-gray-400 break-words" x-text="item.detail"></p>
-                            </div>
-                        </div>
+                    <template x-for="item in prepareChecklist.filter(c => c.type === 'auth')" :key="item.label">
+                        @include('app-publish::publishing.pipeline.partials.checklist-item')
                     </template>
                 </div>
 
                 {{-- Content Processing --}}
                 <div class="mb-3">
                     <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Content Processing</p>
-                    <template x-for="(item, idx) in prepareChecklist.filter(c => c.label.includes('Clean') || c.label.includes('Integrity'))" :key="item.label">
-                        <div class="flex items-center gap-2.5 py-1.5 px-2 rounded-lg" :class="item.status === 'done' ? 'bg-green-50' : (item.status === 'failed' ? 'bg-red-50' : '')">
-                            <template x-if="item.status === 'pending'"><div class="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0"></div></template>
-                            <template x-if="item.status === 'running'"><svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
-                            <template x-if="item.status === 'done'"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></template>
-                            <template x-if="item.status === 'failed'"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></template>
-                            <template x-if="item.status === 'skipped'"><svg class="w-5 h-5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></template>
-                            <div class="flex-1 min-w-0">
-                                <span class="text-sm font-medium" :class="{'text-gray-800': item.status === 'done', 'text-blue-700': item.status === 'running', 'text-red-700': item.status === 'failed', 'text-gray-400': item.status === 'pending', 'text-yellow-700': item.status === 'skipped'}" x-text="item.label"></span>
-                                <p x-show="item.detail" class="text-xs text-gray-400 break-words" x-text="item.detail"></p>
-                            </div>
-                        </div>
+                    <template x-for="item in prepareChecklist.filter(c => c.type === 'html' || c.type === 'integrity')" :key="item.label">
+                        @include('app-publish::publishing.pipeline.partials.checklist-item')
                     </template>
                 </div>
 
-                {{-- Media --}}
+                {{-- Media Upload — per-photo items with attempts --}}
                 <div class="mb-3">
                     <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Media Upload</p>
-                    <template x-for="(item, idx) in prepareChecklist.filter(c => c.label.includes('Upload') || c.label.includes('image'))" :key="item.label">
-                        <div class="flex items-center gap-2.5 py-1.5 px-2 rounded-lg" :class="item.status === 'done' ? 'bg-green-50' : (item.status === 'failed' ? 'bg-red-50' : '')">
-                            <template x-if="item.status === 'pending'"><div class="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0"></div></template>
-                            <template x-if="item.status === 'running'"><svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
-                            <template x-if="item.status === 'done'"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></template>
-                            <template x-if="item.status === 'failed'"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></template>
-                            <template x-if="item.status === 'skipped'"><svg class="w-5 h-5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></template>
-                            <div class="flex-1 min-w-0">
-                                <span class="text-sm font-medium" :class="{'text-gray-800': item.status === 'done', 'text-blue-700': item.status === 'running', 'text-red-700': item.status === 'failed', 'text-gray-400': item.status === 'pending', 'text-yellow-700': item.status === 'skipped'}" x-text="item.label"></span>
-                                <p x-show="item.detail" class="text-xs text-gray-400 break-words" x-text="item.detail"></p>
+                    <template x-for="item in prepareChecklist.filter(c => c.type === 'photo' || c.type === 'featured')" :key="item.label">
+                        <div class="py-1.5 px-2 rounded-lg mb-1" :class="item.status === 'done' ? 'bg-green-50' : (item.status === 'failed' ? 'bg-red-50' : '')">
+                            <div class="flex items-center gap-2.5">
+                                @include('app-publish::publishing.pipeline.partials.checklist-icon')
+                                <div class="flex-1 min-w-0">
+                                    <span class="text-sm font-medium" :class="{'text-gray-800': item.status === 'done', 'text-blue-700': item.status === 'running', 'text-red-700': item.status === 'failed', 'text-gray-400': item.status === 'pending', 'text-yellow-700': item.status === 'skipped'}" x-text="item.label"></span>
+                                </div>
                             </div>
+                            {{-- Source + filename info --}}
+                            <div x-show="item.source || item.filename" x-cloak class="ml-7 mt-0.5 text-[10px] text-gray-400">
+                                <span x-show="item.source" x-text="item.source"></span>
+                                <span x-show="item.source && item.filename" class="mx-1">|</span>
+                                <span x-show="item.filename" class="font-mono" x-text="item.filename"></span>
+                            </div>
+                            {{-- Attempt log --}}
+                            <template x-if="item.attempts && item.attempts.length > 0">
+                                <div class="ml-7 mt-1 space-y-0.5">
+                                    <template x-for="(att, ai) in item.attempts" :key="ai">
+                                        <p class="text-[10px]" :class="att.type === 'success' || att.text?.toLowerCase().includes('success') ? 'text-green-600' : (att.type === 'warning' ? 'text-red-500' : 'text-gray-400')" x-text="att.text"></p>
+                                    </template>
+                                </div>
+                            </template>
+                            {{-- Final detail — split into text lines, make URLs clickable --}}
+                            <template x-if="item.detail">
+                                <div class="ml-7 mt-0.5 text-[10px] text-gray-500 break-words space-y-0.5">
+                                    <template x-for="(line, li) in (item.detail || '').split('\n').filter(Boolean)" :key="li">
+                                        <p>
+                                            <template x-if="line.match(/^WP:\s*https?:\/\//)">
+                                                <span>WP: <a :href="line.replace(/^WP:\s*/, '')" target="_blank" class="text-blue-500 hover:underline inline-flex items-center gap-0.5" x-text="line.replace(/^WP:\s*/, '')"><svg class="w-2.5 h-2.5 inline flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></span>
+                                            </template>
+                                            <template x-if="!line.match(/^WP:\s*https?:\/\//)">
+                                                <span x-text="line"></span>
+                                            </template>
+                                        </p>
+                                    </template>
+                                </div>
+                            </template>
                         </div>
                     </template>
                 </div>
 
-                {{-- Taxonomy --}}
-                <div>
-                    <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Taxonomy</p>
-                    <template x-for="(item, idx) in prepareChecklist.filter(c => c.label.includes('categor') || c.label.includes('tag'))" :key="item.label">
-                        <div class="flex items-center gap-2.5 py-1.5 px-2 rounded-lg" :class="item.status === 'done' ? 'bg-green-50' : (item.status === 'failed' ? 'bg-red-50' : '')">
-                            <template x-if="item.status === 'pending'"><div class="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0"></div></template>
-                            <template x-if="item.status === 'running'"><svg class="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg></template>
-                            <template x-if="item.status === 'done'"><svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></template>
-                            <template x-if="item.status === 'failed'"><svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></template>
-                            <template x-if="item.status === 'skipped'"><svg class="w-5 h-5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></template>
-                            <div class="flex-1 min-w-0">
-                                <span class="text-sm font-medium" :class="{'text-gray-800': item.status === 'done', 'text-blue-700': item.status === 'running', 'text-red-700': item.status === 'failed', 'text-gray-400': item.status === 'pending', 'text-yellow-700': item.status === 'skipped'}" x-text="item.label"></span>
-                                <p x-show="item.detail" class="text-xs text-gray-400 break-words" x-text="item.detail"></p>
-                            </div>
-                        </div>
+                {{-- Taxonomy — per category + per tag --}}
+                <div class="mb-3" x-show="prepareChecklist.some(c => c.type === 'category')" x-cloak>
+                    <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Categories</p>
+                    <template x-for="item in prepareChecklist.filter(c => c.type === 'category')" :key="item.label">
+                        @include('app-publish::publishing.pipeline.partials.checklist-item')
+                    </template>
+                </div>
+                <div x-show="prepareChecklist.some(c => c.type === 'tag')" x-cloak>
+                    <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Tags</p>
+                    <template x-for="item in prepareChecklist.filter(c => c.type === 'tag')" :key="item.label">
+                        @include('app-publish::publishing.pipeline.partials.checklist-item')
                     </template>
                 </div>
 
@@ -231,6 +243,27 @@
                 </div>
             </div>
 
+            {{-- Orphaned Media Cleanup --}}
+            <div x-show="orphanedMedia && orphanedMedia.length > 0" x-cloak class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
+                <h6 class="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-2">Orphaned Media</h6>
+                <p class="text-xs text-orange-600 mb-3">These photos were uploaded in a previous prepare but are no longer used. Delete them to free up storage on WordPress.</p>
+                <div class="space-y-2">
+                    <template x-for="(media, idx) in orphanedMedia" :key="media.media_id">
+                        <div class="flex items-center gap-3 py-2 px-3 bg-white rounded-lg border border-orange-100" :class="media.deleted ? 'opacity-50' : ''">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-700" x-text="media.filename || ('media_id: ' + media.media_id)"></p>
+                                <p class="text-[10px] text-gray-400 break-all" x-text="media.media_url || ''"></p>
+                            </div>
+                            <button x-show="!media.deleted" @click="deleteOrphanedMedia(idx)" :disabled="media.deleting" class="text-xs text-red-500 hover:text-red-700 px-3 py-1 border border-red-200 rounded hover:bg-red-50 inline-flex items-center gap-1 disabled:opacity-50 flex-shrink-0">
+                                <svg x-show="media.deleting" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                <span x-text="media.deleting ? 'Deleting...' : 'Delete'"></span>
+                            </button>
+                            <span x-show="media.deleted" x-cloak class="text-xs text-green-600 font-medium flex-shrink-0">Deleted</span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
             {{-- Prepare Activity Log --}}
             <div x-show="prepareLog.length > 0" x-cloak class="bg-gray-900 rounded-xl border border-gray-700 p-4 mb-4 max-h-64 overflow-y-auto" x-ref="prepareLogContainer">
                 <div class="flex items-center justify-between mb-2">
@@ -238,18 +271,27 @@
                     <span class="text-[10px] text-gray-500" x-text="prepareLog.length + ' entries'"></span>
                 </div>
                 <template x-for="(entry, idx) in prepareLog" :key="idx">
-                    <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
+                    <div class="py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
+                        <div class="flex items-start gap-2">
                         <span class="text-gray-500 flex-shrink-0" x-text="entry.time"></span>
                         <span :class="{'text-green-400': entry.type === 'success', 'text-red-400': entry.type === 'error', 'text-blue-400': entry.type === 'info', 'text-yellow-400': entry.type === 'warning', 'text-gray-400': entry.type === 'step'}" x-text="entry.message" class="break-words"></span>
+                        </div>
+                        <div x-show="entry.stage || entry.trace_id || entry.duration_ms !== null" x-cloak class="ml-12 mt-0.5 text-[10px] text-gray-500 break-words">
+                            <span x-show="entry.stage" x-text="(entry.stage || '') + (entry.substage ? '/' + entry.substage : '')"></span>
+                            <span x-show="entry.stage && entry.trace_id" class="mx-1">|</span>
+                            <span x-show="entry.trace_id" x-text="'trace ' + entry.trace_id"></span>
+                            <span x-show="(entry.stage || entry.trace_id) && entry.duration_ms !== null" class="mx-1">|</span>
+                            <span x-show="entry.duration_ms !== null" x-text="entry.duration_ms + 'ms'"></span>
+                        </div>
                     </div>
                 </template>
             </div>
 
             {{-- Uploaded photos report --}}
-            <div x-show="uploadedImages && Object.keys(uploadedImages).length > 0" x-cloak class="mt-4">
+            <div x-show="uploadedImageList.length > 0" x-cloak class="mt-4">
                 <h6 class="text-xs font-semibold text-gray-500 uppercase mb-2">Uploaded Photos</h6>
                 <div class="space-y-3">
-                    <template x-for="(img, imgKey) in uploadedImages" :key="imgKey">
+                    <template x-for="(img, imgIdx) in uploadedImageList" :key="_uploadedImageIdentity(img) || imgIdx">
                         <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs space-y-1">
                             <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Filename</span><span class="font-mono text-gray-800 break-all" x-text="img.filename || '—'"></span></div>
                             <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Media ID</span><span class="text-gray-800" x-text="img.media_id || '—'"></span></div>
@@ -257,6 +299,7 @@
                             <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">File Size</span><span class="text-gray-800" x-text="img.file_size ? (Math.round(img.file_size / 1024) + ' KB') : '—'"></span></div>
                             <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Alt Text</span><span class="text-gray-700 break-words" x-text="img.alt_text || '—'"></span></div>
                             <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Caption</span><span class="text-gray-700 break-words" x-text="img.caption || '—'"></span></div>
+                            <div x-show="img.source_url" class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Source</span><a :href="img.source_url" target="_blank" class="text-blue-500 hover:underline break-all inline-flex items-center gap-0.5" x-text="img.source_url"><svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></div>
                             <div x-show="img.sizes" class="mt-1 pt-1 border-t border-gray-200">
                                 <p class="text-gray-400 mb-1">WordPress Sizes:</p>
                                 <template x-for="(url, sizeName) in (img.sizes || {})" :key="sizeName">
@@ -290,12 +333,16 @@
             <div class="flex gap-3">
                 <button @click="publishArticle()" :disabled="publishing || ((publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future') && !prepareComplete)" class="bg-green-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                     <svg x-show="publishing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="publishing ? 'Publishing...' : 'Publish'"></span>
+                    <span x-text="publishing ? (publishOperationStatus === 'queued' ? 'Queued...' : 'Publishing...') : 'Publish'"></span>
                 </button>
                 <button @click="saveDraftNow()" :disabled="savingDraft" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-50 flex items-center gap-2">
                     <svg x-show="savingDraft" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     <span x-text="savingDraft ? 'Saving...' : 'Save Draft'"></span>
                 </button>
+            </div>
+            <div x-show="publishing || publishOperationStatus" x-cloak class="mt-3 text-[11px] text-gray-500 space-y-1">
+                <p x-show="publishOperationStatus" x-text="'Status: ' + publishOperationStatus + (publishOperationTransport ? ' via ' + publishOperationTransport.replace('_', ' ') : '')"></p>
+                <p x-show="publishTraceId" x-text="'Trace: ' + publishTraceId"></p>
             </div>
 
             {{-- Publish error --}}
@@ -323,7 +370,7 @@
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Word Count</span><p class="text-sm text-gray-800" x-text="spunWordCount + ' words'"></p></div>
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">AI Model</span><p class="text-sm font-mono text-gray-800" x-text="aiModel"></p></div>
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Draft ID</span><p class="text-sm text-gray-800" x-text="'#' + draftId"></p></div>
-                <div x-show="featuredPhoto?.url_large" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Featured Image</span><a :href="featuredPhoto?.url_large" target="_blank" class="text-sm text-blue-600 hover:underline break-all" x-text="featuredPhoto?.url_large"></a></div>
+                <div x-show="preparedFeaturedWpUrl || featuredPhoto?.url_large" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Featured Image</span><div><a :href="preparedFeaturedWpUrl || featuredPhoto?.url_large" target="_blank" class="text-sm text-blue-600 hover:underline break-all" x-text="preparedFeaturedWpUrl || featuredPhoto?.url_large"></a><p x-show="preparedFeaturedWpUrl && featuredPhoto?.url_large && preparedFeaturedWpUrl !== featuredPhoto?.url_large" class="text-[10px] text-gray-400 mt-0.5">Source: <span x-text="featuredPhoto?.url_large"></span></p></div></div>
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Date Created</span><p class="text-sm text-gray-800" x-text="new Date().toLocaleString()"></p></div>
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Categories</span><p class="text-sm text-gray-800 break-words" x-text="suggestedCategories.length ? suggestedCategories.join(', ') : 'None'"></p></div>
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Tags</span><p class="text-sm text-gray-800 break-words" x-text="suggestedTags.length ? suggestedTags.join(', ') : 'None'"></p></div>
@@ -364,10 +411,10 @@
             </div>
 
             {{-- Uploaded photos full report --}}
-            <div x-show="uploadedImages && Object.keys(uploadedImages).length > 0" x-cloak>
+            <div x-show="uploadedImageList.length > 0" x-cloak>
                 <h6 class="text-sm font-semibold text-gray-700 mb-2">Photos</h6>
                 <div class="space-y-3">
-                    <template x-for="(img, imgKey) in uploadedImages" :key="imgKey">
+                    <template x-for="(img, imgIdx) in uploadedImageList" :key="_uploadedImageIdentity(img) || imgIdx">
                         <div class="bg-white border border-gray-200 rounded-lg p-3 text-xs space-y-1">
                             <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Filename</span><span class="font-mono text-gray-800 break-all" x-text="img.filename || '—'"></span></div>
                             <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Media ID</span><span class="text-gray-800" x-text="img.media_id || '—'"></span></div>
@@ -375,6 +422,7 @@
                             <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">File Size</span><span class="text-gray-800" x-text="img.file_size ? (Math.round(img.file_size / 1024) + ' KB') : '—'"></span></div>
                             <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Alt Text</span><span class="text-gray-700 break-words" x-text="img.alt_text || '—'"></span></div>
                             <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Caption</span><span class="text-gray-700 break-words" x-text="img.caption || '—'"></span></div>
+                            <div x-show="img.source_url" class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Source</span><a :href="img.source_url" target="_blank" class="text-blue-500 hover:underline break-all inline-flex items-center gap-0.5" x-text="img.source_url"><svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></div>
                             <div class="flex items-start gap-3"><span class="text-gray-400 w-20 flex-shrink-0">Description</span><span class="text-gray-700 break-words" x-text="img.description || '—'"></span></div>
                             <div x-show="img.sizes" class="mt-1 pt-1 border-t border-gray-200">
                                 <p class="text-gray-400 mb-1">WordPress Sizes:</p>

@@ -51,12 +51,16 @@ class WordPressPreparationService
     {
         $send = $onProgress ?? function () {};
         $mode = $site->connection_type === 'wptoolkit' ? 'ssh' : 'rest';
+        $existingUploads = $this->buildExistingUploadMap($options['existing_uploads'] ?? []);
 
-        $send('info', "Connecting to {$site->name} via {$mode}...");
+        $this->emitProgress($send, 'info', "Connecting to {$site->name} via {$mode}...", 'connection', 'start', [
+            'site_name' => $site->name,
+            'connection_mode' => $mode,
+        ]);
 
         // Validate credentials
         if ($mode === 'rest' && (!$site->wp_username || !$site->wp_application_password)) {
-            $send('error', "Site '{$site->name}' has no WordPress credentials configured.");
+            $this->emitProgress($send, 'error', "Site '{$site->name}' has no WordPress credentials configured.", 'connection', 'credentials');
             return ['success' => false, 'html' => $html, 'category_ids' => [], 'tag_ids' => [], 'wp_images' => []];
         }
 
@@ -67,38 +71,63 @@ class WordPressPreparationService
             $server = $resolved['server'];
             $installId = $site->wordpress_install_id;
             if (!$server || !$installId) {
-                $send('error', "Missing WP Toolkit server or install ID.");
+                $this->emitProgress($send, 'error', "Missing WP Toolkit server or install ID.", 'connection', 'resolve_server');
                 return ['success' => false, 'html' => $html, 'category_ids' => [], 'tag_ids' => [], 'wp_images' => []];
             }
-            $send('success', "SSH server resolved: {$server->hostname}");
+            $this->emitProgress($send, 'success', "SSH server resolved: {$server->hostname}", 'connection', 'resolve_server', [
+                'hostname' => $server->hostname,
+                'install_id' => $installId,
+            ]);
         } else {
-            $send('success', "REST API credentials verified for {$site->wp_username}");
+            $this->emitProgress($send, 'success', "REST API credentials verified for {$site->wp_username}", 'connection', 'credentials', [
+                'username' => $site->wp_username,
+            ]);
         }
 
-        // Step 0a: Verify author exists on WordPress
-        $author = $site->default_author;
-        if ($author && $mode === 'ssh' && $server && $installId) {
-            $send('info', "Verifying author '{$author}' exists on WordPress...");
-            $ssh = $this->wptoolkit->getConnection($server);
-            if ($ssh['success']) {
-                $eid = escapeshellarg((string) $installId);
-                $userCheck = trim($ssh['connection']->exec("wp-toolkit --wp-cli -instance-id {$eid} -- user get " . escapeshellarg($author) . " --field=ID 2>/dev/null"));
-                $wpUserId = '';
-                foreach (explode("\n", $userCheck) as $ul) { $ul = trim($ul); if (is_numeric($ul)) { $wpUserId = $ul; break; } }
-                if ($wpUserId) {
-                    $send('success', "Author verified: {$author} (WP user ID: {$wpUserId})");
-                } else {
-                    $send('warning', "Author '{$author}' NOT FOUND on WordPress — post will use default author. Set a valid author in site settings.");
-                }
-            }
-        } elseif (!$author) {
-            $send('warning', "No default author configured for {$site->name} — post will use WP default author.");
-        }
-
-        // Step 0b: Clean HTML — strip editor artifacts
-        $send('info', "Cleaning HTML...");
+        // Step 0b: Clean HTML first (no SSH needed, instant)
+        $this->emitProgress($send, 'info', "Cleaning HTML...", 'html', 'sanitize');
         $html = $this->sanitizeHtml($html);
-        $send('success', "HTML cleaned for WordPress");
+        $this->emitProgress($send, 'success', "HTML cleaned for WordPress", 'html', 'sanitize');
+
+        // Step 0a: Author + SSH warmup (with timeout protection)
+        $author = $site->default_author;
+        if ($mode === 'ssh' && $server && $installId) {
+            $this->emitProgress($send, 'info', "Connecting SSH to {$server->hostname}...", 'connection', 'ssh_connect', [
+                'hostname' => $server->hostname,
+            ]);
+            $sshError = null;
+            try {
+                $ssh = $this->wptoolkit->getConnection($server);
+            } catch (\Throwable $e) {
+                $sshError = $e->getMessage();
+                $ssh = ['success' => false, 'error' => $sshError];
+            }
+            if ($ssh['success']) {
+                $this->emitProgress($send, 'success', "SSH connected to {$server->hostname}", 'connection', 'ssh_connect', [
+                    'hostname' => $server->hostname,
+                ]);
+            } else {
+                $this->emitProgress($send, 'error', "SSH connection failed: " . ($ssh['error'] ?? $sshError ?? 'unknown'), 'connection', 'ssh_connect', [
+                    'hostname' => $server->hostname,
+                ]);
+                return ['success' => false, 'html' => $html, 'category_ids' => [], 'tag_ids' => [], 'wp_images' => [], 'message' => 'SSH connection failed'];
+            }
+            if ($author) {
+                $this->emitProgress($send, 'success', "Author: {$author} (will be set during publish)", 'connection', 'author', [
+                    'author' => $author,
+                ]);
+            } else {
+                $this->emitProgress($send, 'warning', "No default author — post will use WP default author.", 'connection', 'author');
+            }
+        } else {
+            if ($author) {
+                $this->emitProgress($send, 'success', "Author: {$author}", 'connection', 'author', [
+                    'author' => $author,
+                ]);
+            } else {
+                $this->emitProgress($send, 'warning', "No default author configured for {$site->name} — post will use WP default author.", 'connection', 'author');
+            }
+        }
 
         // Step 1: Upload images
         [$html, $wpImages] = $this->uploadImages($site, $html, $mode, $server, $installId, $options, $send);
@@ -110,6 +139,24 @@ class WordPressPreparationService
         if ($featuredMeta) {
             $featuredUrl = $options['featured_url'] ?? null;
             if ($featuredUrl) {
+                // Check if featured image was already uploaded in a prior prepare
+                $existingFeatured = $existingUploads[$featuredUrl] ?? null;
+                $existingFeaturedId = $options['existing_featured_media_id'] ?? null;
+                if ($existingFeatured && !empty($existingFeatured['media_id'])) {
+                    $featuredMediaId = $existingFeatured['media_id'];
+                    $featuredWpUrl = $existingFeatured['media_url'] ?? null;
+                    $wpImages[] = array_merge($existingFeatured, ['is_featured' => true]);
+                    $this->emitProgress($send, 'success', "Featured: Already on WordPress (media_id: {$featuredMediaId})\nWP: " . Str::limit($featuredWpUrl ?? '', 100), 'media', 'featured_duplicate', [
+                        'media_id' => $featuredMediaId,
+                        'wp_url' => $featuredWpUrl,
+                    ]);
+                } elseif ($existingFeaturedId) {
+                    // Featured was uploaded in a previous prepare (media ID persisted in state)
+                    $featuredMediaId = (int) $existingFeaturedId;
+                    $this->emitProgress($send, 'success', "Featured: Already on WordPress (media_id: {$featuredMediaId})", 'media', 'featured_duplicate', [
+                        'media_id' => $featuredMediaId,
+                    ]);
+                } else {
                 $fDomain = parse_url($featuredUrl, PHP_URL_HOST) ?: 'unknown';
                 $fSource = match(true) {
                     str_contains($fDomain, 'pexels') => 'Pexels',
@@ -118,17 +165,22 @@ class WordPressPreparationService
                     str_contains($fDomain, 'cdn.') => 'CDN/External',
                     default => 'External URL',
                 };
-                $send('info', "Uploading featured image — Source: {$fSource} ({$fDomain})");
-                $send('info', "  URL: " . Str::limit($featuredUrl, 120));
+                $this->emitProgress($send, 'info', "Uploading featured image — Source: {$fSource} ({$fDomain})", 'media', 'featured_start', [
+                    'source_type' => $fSource,
+                    'source_domain' => $fDomain,
+                ]);
+                $this->emitProgress($send, 'info', "  URL: " . Str::limit($featuredUrl, 120), 'media', 'featured_source', [
+                    'source_url' => $featuredUrl,
+                ]);
                 $fFilename = $featuredMeta['filename'] ?? 'featured';
                 $ext = pathinfo(parse_url($featuredUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
                 $fFilename = Str::endsWith($fFilename, '.' . $ext) ? $fFilename : $fFilename . '.' . $ext;
 
-                if ($mode === 'ssh') {
-                    $uploadResult = $this->wptoolkit->wpCliUploadMedia($server, $installId, $featuredUrl, $fFilename, $featuredMeta['alt_text'] ?? '', $featuredMeta['caption'] ?? '', $featuredMeta['alt_text'] ?? '');
-                } else {
-                    $uploadResult = $this->wp->uploadMedia($site->url, $site->wp_username, $site->wp_application_password, $featuredUrl, $fFilename, $featuredMeta['alt_text'] ?? '');
-                }
+                $uploadResult = $this->uploadWithRetry(
+                    $site, $mode, $server, $installId,
+                    $featuredUrl, $fFilename,
+                    $featuredMeta['alt_text'] ?? '', $featuredMeta['caption'] ?? '', $send
+                );
 
                 if ($uploadResult['success'] && !empty($uploadResult['data']['media_id'])) {
                     $featuredMediaId = $uploadResult['data']['media_id'];
@@ -137,12 +189,17 @@ class WordPressPreparationService
                     if ($mode === 'rest') {
                         $this->setHexaMeta($site, (int) $featuredMediaId, $options['draft_id'] ?? 0);
                     }
-                    $send('success', "Featured image uploaded: media_id={$featuredMediaId}", ['wp_image' => $uploadResult['data']]);
+                    $this->emitProgress($send, 'success', "Featured image uploaded: media_id={$featuredMediaId}", 'media', 'featured_uploaded', [
+                        'media_id' => $featuredMediaId,
+                        'wp_url' => $featuredWpUrl,
+                        'wp_image' => $uploadResult['data'],
+                    ]);
                 } else {
-                    $send('error', "Featured image upload failed: " . ($uploadResult['message'] ?? 'unknown'));
+                    $this->emitProgress($send, 'error', "Featured image upload failed: " . ($uploadResult['message'] ?? 'unknown'), 'media', 'featured_failed');
                 }
+                } // end else (not duplicate)
             } else {
-                $send('warning', "No featured image URL provided");
+                $this->emitProgress($send, 'warning', "No featured image URL provided", 'media', 'featured_missing');
             }
         }
 
@@ -153,7 +210,7 @@ class WordPressPreparationService
         $tagIds = $this->createTags($site, $mode, $server, $installId, $options['tags'] ?? [], $send);
 
         // Step 4: Integrity check — validate HTML structure, photos, and cleanup
-        $send('info', "Running integrity check...");
+        $this->emitProgress($send, 'info', "Running integrity check...", 'integrity', 'start');
         $integrityIssues = [];
 
         // Check for leftover photo placeholders
@@ -207,12 +264,14 @@ class WordPressPreparationService
         // Report
         $htmlValid = !empty(trim(strip_tags($html)));
         if (empty($integrityIssues)) {
-            $send('success', "Integrity check passed — HTML clean, all photos processed");
+            $this->emitProgress($send, 'success', "Integrity check passed — HTML clean, all photos processed", 'integrity', 'complete');
         } else {
             foreach ($integrityIssues as $issue) {
-                $send('warning', "Integrity: {$issue} (auto-fixed)");
+                $this->emitProgress($send, 'warning', "Integrity: {$issue} (auto-fixed)", 'integrity', 'issue');
             }
-            $send($htmlValid ? 'success' : 'error', 'Integrity check complete — ' . count($integrityIssues) . ' issue(s) auto-fixed');
+            $this->emitProgress($send, $htmlValid ? 'success' : 'error', 'Integrity check complete — ' . count($integrityIssues) . ' issue(s) auto-fixed', 'integrity', 'complete', [
+                'issue_count' => count($integrityIssues),
+            ]);
         }
 
         return [
@@ -248,11 +307,13 @@ class WordPressPreparationService
         $imgIndex = 0;
 
         if (empty($imageUrls)) {
-            $send('step', "No images to upload");
+            $this->emitProgress($send, 'step', "No images to upload", 'media', 'inline_none');
             return [$html, $wpImages];
         }
 
-        $send('info', "Uploading " . count($imageUrls) . " image(s)...");
+        $this->emitProgress($send, 'info', "Uploading " . count($imageUrls) . " image(s)...", 'media', 'inline_start', [
+            'image_count' => count($imageUrls),
+        ]);
         $articleTitle = $options['title'] ?? 'article';
         $draftId = $options['draft_id'] ?? 0;
 
@@ -266,8 +327,38 @@ class WordPressPreparationService
         // Indexed photo_meta from pipeline (ordered, matched by position)
         $photoMetaIndexed = $options['photo_meta'] ?? [];
 
+        // Build duplicate detection map — key by ALL known URLs for each photo
+        // After first prepare, HTML has WP URLs (sized), so we match source, media, inline, and all sizes
+        $existingUploads = $this->buildExistingUploadMap($options['existing_uploads'] ?? []);
+
         foreach ($imageUrls as $imgUrl) {
-            if (str_starts_with($imgUrl, rtrim($site->url, '/'))) continue;
+            if (str_starts_with($imgUrl, rtrim($site->url, '/'))) {
+                $imgIndex++;
+                $existingMedia = $existingUploads[$imgUrl] ?? null;
+                $mediaId = $existingMedia['media_id'] ?? '?';
+                $this->emitProgress($send, 'success', "Uploading photo {$imgIndex}/" . count($imageUrls) . ": Already on WordPress (media_id: {$mediaId})\nWP: " . Str::limit($imgUrl, 100), 'media', 'inline_duplicate', [
+                    'photo_index' => $imgIndex,
+                    'photo_total' => count($imageUrls),
+                    'source_url' => $imgUrl,
+                    'media_id' => $mediaId,
+                ]);
+                continue;
+            }
+
+            // Duplicate detection: skip if this URL was already uploaded in a prior prepare
+            if (isset($existingUploads[$imgUrl])) {
+                $existing = $existingUploads[$imgUrl];
+                $imageMap[$imgUrl] = $existing['inline_url'] ?? $existing['media_url'];
+                $wpImages[] = array_merge($existing, ['source_url' => $existing['source_url'] ?? $imgUrl, 'skipped_duplicate' => true]);
+                $imgIndex++;
+                $this->emitProgress($send, 'success', "Skipped — already on WordPress (media_id: " . ($existing['media_id'] ?? '?') . ")\nWP: " . Str::limit($existing['inline_url'] ?? $existing['media_url'] ?? '', 100), 'media', 'inline_duplicate', [
+                    'photo_index' => $imgIndex,
+                    'photo_total' => count($imageUrls),
+                    'media_id' => $existing['media_id'] ?? null,
+                    'source_url' => $imgUrl,
+                ]);
+                continue;
+            }
 
             $ps = $photoMeta[$imgUrl] ?? null;
             $pm = $photoMetaIndexed[$imgIndex] ?? null;
@@ -298,22 +389,50 @@ class WordPressPreparationService
                 str_contains($imgUrl, 'blob:') => 'Local Upload',
                 default => 'External URL',
             };
-            $send('step', "Uploading photo {$imgIndex}/" . count($imageUrls) . ": {$properFilename}");
-            $send('info', "  Source: {$sourceType} ({$sourceDomain})");
-            $send('info', "  URL: " . Str::limit($imgUrl, 120));
-            if ($altText) $send('info', "  Alt: {$altText}");
-            if ($caption) $send('info', "  Caption: " . Str::limit($caption, 100));
-
-            if ($mode === 'ssh') {
-                $uploadResult = $this->wptoolkit->wpCliUploadMedia($server, $installId, $imgUrl, $properFilename, $altText, $caption, $altText);
-            } else {
-                $uploadResult = $this->wp->uploadMedia($site->url, $site->wp_username, $site->wp_application_password, $imgUrl, $properFilename, $altText);
+            $this->emitProgress($send, 'step', "Uploading photo {$imgIndex}/" . count($imageUrls) . ": {$properFilename}", 'media', 'inline_uploading', [
+                'photo_index' => $imgIndex,
+                'photo_total' => count($imageUrls),
+                'filename' => $properFilename,
+                'source_url' => $imgUrl,
+            ]);
+            $this->emitProgress($send, 'info', "  Source: {$sourceType} ({$sourceDomain})", 'media', 'inline_source', [
+                'photo_index' => $imgIndex,
+                'photo_total' => count($imageUrls),
+                'source_domain' => $sourceDomain,
+                'source_type' => $sourceType,
+            ]);
+            $this->emitProgress($send, 'info', "  URL: " . Str::limit($imgUrl, 120), 'media', 'inline_source', [
+                'photo_index' => $imgIndex,
+                'photo_total' => count($imageUrls),
+                'source_url' => $imgUrl,
+            ]);
+            if ($altText) {
+                $this->emitProgress($send, 'info', "  Alt: {$altText}", 'media', 'inline_meta', [
+                    'photo_index' => $imgIndex,
+                    'photo_total' => count($imageUrls),
+                ]);
+            }
+            if ($caption) {
+                $this->emitProgress($send, 'info', "  Caption: " . Str::limit($caption, 100), 'media', 'inline_meta', [
+                    'photo_index' => $imgIndex,
+                    'photo_total' => count($imageUrls),
+                ]);
             }
 
+            $uploadResult = $this->uploadWithRetry(
+                $site, $mode, $server, $installId,
+                $imgUrl, $properFilename, $altText, $caption, $send
+            );
+
             if ($uploadResult['success'] && !empty($uploadResult['data']['media_url'])) {
-                $imageMap[$imgUrl] = $uploadResult['data']['media_url'];
+                // Use configured inline size (default medium_large) instead of full
+                $inlineSize = \hexa_core\Models\Setting::getValue('wp_inline_photo_size', 'medium_large');
+                $sizes = $uploadResult['data']['sizes'] ?? [];
+                $sizedUrl = $sizes[$inlineSize] ?? $sizes['medium_large'] ?? $sizes['large'] ?? $uploadResult['data']['media_url'];
+                $imageMap[$imgUrl] = $sizedUrl;
                 $wpImg = array_merge($uploadResult['data'], [
                     'source_url'  => $imgUrl,
+                    'inline_url'  => $sizedUrl,
                     'filename'    => $properFilename,
                     'alt_text'    => $altText,
                     'caption'     => $caption,
@@ -324,20 +443,34 @@ class WordPressPreparationService
                 if (!empty($wpImg['media_id']) && $mode === 'rest') {
                     $this->setHexaMeta($site, (int) $wpImg['media_id'], $options['draft_id'] ?? 0);
                 }
-                $send('success', "  Uploaded: media_id=" . ($wpImg['media_id'] ?? '?') . " | " . ($wpImg['file_size'] ? round($wpImg['file_size'] / 1024) . ' KB' : '') . " | " . Str::limit($wpImg['media_url'] ?? '', 80), ['wp_image' => $wpImg]);
+                $this->emitProgress($send, 'success', "Uploaded — media_id: " . ($wpImg['media_id'] ?? '?') . " | " . ($wpImg['file_size'] ? round($wpImg['file_size'] / 1024) . ' KB' : '') . " | " . $properFilename . "\nWP: " . Str::limit($sizedUrl, 100), 'media', 'inline_uploaded', [
+                    'photo_index' => $imgIndex,
+                    'photo_total' => count($imageUrls),
+                    'media_id' => $wpImg['media_id'] ?? null,
+                    'wp_image' => $wpImg,
+                ]);
             } else {
-                $send('error', "  Failed: {$properFilename} — " . ($uploadResult['message'] ?? 'unknown error'));
+                $this->emitProgress($send, 'error', "  Failed: {$properFilename} — " . ($uploadResult['message'] ?? 'unknown error'), 'media', 'inline_failed', [
+                    'photo_index' => $imgIndex,
+                    'photo_total' => count($imageUrls),
+                    'filename' => $properFilename,
+                ]);
             }
         }
 
-        $send('success', count($imageMap) . "/" . count($imageUrls) . " images uploaded");
+        $this->emitProgress($send, 'success', count($imageMap) . "/" . count($imageUrls) . " images uploaded", 'media', 'inline_complete', [
+            'uploaded_count' => count($imageMap),
+            'image_total' => count($imageUrls),
+        ]);
 
         // Replace image URLs in HTML
         if (!empty($imageMap)) {
             foreach ($imageMap as $oldUrl => $newUrl) {
                 $html = str_replace($oldUrl, $newUrl, $html);
             }
-            $send('success', count($imageMap) . " image URL(s) replaced in HTML");
+            $this->emitProgress($send, 'success', count($imageMap) . " image URL(s) replaced in HTML", 'media', 'replace_html', [
+                'replaced_count' => count($imageMap),
+            ]);
         }
 
         return [$html, $wpImages];
@@ -390,11 +523,13 @@ class WordPressPreparationService
     private function resolveTaxonomyIds(PublishSite $site, string $mode, ?WhmServer $server, ?string $installId, array $terms, string $taxonomy, callable $send): array
     {
         if (empty($terms)) {
-            $send('step', "No {$taxonomy} to create");
+            $this->emitProgress($send, 'step', "No {$taxonomy} to create", 'taxonomy', $taxonomy . '_none');
             return [];
         }
 
-        $send('info', "Creating " . count($terms) . " {$taxonomy}...");
+        $this->emitProgress($send, 'info', "Creating " . count($terms) . " {$taxonomy}...", 'taxonomy', $taxonomy . '_start', [
+            'term_total' => count($terms),
+        ]);
 
         if ($mode === 'ssh') {
             $batchResult = match ($taxonomy) {
@@ -404,7 +539,33 @@ class WordPressPreparationService
             };
 
             $termIds = $batchResult['term_ids'] ?? [];
-            $send('success', count($termIds) . "/" . count($terms) . " {$taxonomy} ready");
+            $termDetails = $batchResult['term_details'] ?? [];
+            // Report per-term results with existed/created status
+            foreach ($termDetails as $td) {
+                $name = $td['name'] ?? '?';
+                $id = $td['id'] ?? 0;
+                $existed = $td['existed'] ?? false;
+                $error = $td['error'] ?? null;
+                if ($error) {
+                    $this->emitProgress($send, 'warning', ucfirst($taxonomy) . ": '{$name}' — failed: {$error}", 'taxonomy', $taxonomy . '_term_failed', [
+                        'term_name' => $name,
+                    ]);
+                } elseif ($existed) {
+                    $this->emitProgress($send, 'success', ucfirst($taxonomy) . ": '{$name}' — already exists (id: {$id})", 'taxonomy', $taxonomy . '_term_ready', [
+                        'term_name' => $name,
+                        'term_id' => $id,
+                    ]);
+                } else {
+                    $this->emitProgress($send, 'success', ucfirst($taxonomy) . ": '{$name}' — created (id: {$id})", 'taxonomy', $taxonomy . '_term_ready', [
+                        'term_name' => $name,
+                        'term_id' => $id,
+                    ]);
+                }
+            }
+            $this->emitProgress($send, 'success', count($termIds) . "/" . count($terms) . " {$taxonomy} ready", 'taxonomy', $taxonomy . '_complete', [
+                'term_ready_count' => count($termIds),
+                'term_total' => count($terms),
+            ]);
 
             return $termIds;
         }
@@ -443,7 +604,10 @@ class WordPressPreparationService
             }
         }
 
-        $send('success', count($termIds) . "/" . count($terms) . " {$taxonomy} ready");
+        $this->emitProgress($send, 'success', count($termIds) . "/" . count($terms) . " {$taxonomy} ready", 'taxonomy', $taxonomy . '_complete', [
+            'term_ready_count' => count($termIds),
+            'term_total' => count($terms),
+        ]);
 
         return $termIds;
     }
@@ -498,6 +662,155 @@ class WordPressPreparationService
         } catch (\Exception $e) {
             // Non-critical — meta is for filtering only
         }
+    }
+
+    /**
+     * Upload an image with smart retry — tries alternate URL formats on failure.
+     *
+     * Reports each attempt via $send callback so the prepare checklist shows progress.
+     * Returns the first successful upload result, or the last failure.
+     *
+     * @param PublishSite $site
+     * @param string $mode 'ssh' or 'rest'
+     * @param WhmServer|null $server
+     * @param string|null $installId
+     * @param string $imageUrl Original image URL
+     * @param string $filename Target filename
+     * @param string $altText
+     * @param string $caption
+     * @param callable $send SSE progress callback
+     * @return array Upload result with 'success', 'data', 'message', 'attempts'
+     */
+    private function uploadWithRetry(
+        PublishSite $site, string $mode, ?WhmServer $server, ?string $installId,
+        string $imageUrl, string $filename, string $altText, string $caption, callable $send
+    ): array {
+        $urlVariants = $this->buildUrlVariants($imageUrl);
+        $attempts = [];
+        $attemptNum = 0;
+
+        foreach ($urlVariants as $variant) {
+            $attemptNum++;
+            $label = $variant['label'];
+            $url = $variant['url'];
+            $tryFilename = $variant['filename'] ?? $filename;
+
+            if ($attemptNum > 1) {
+                $this->emitProgress($send, 'info', "Retry #{$attemptNum}: {$label}", 'media', 'upload_retry', [
+                    'attempt' => $attemptNum,
+                    'attempt_label' => $label,
+                ]);
+            }
+
+            if ($mode === 'ssh') {
+                $result = $this->wptoolkit->wpCliUploadMedia($server, $installId, $url, $tryFilename, $altText, $caption, $altText);
+            } else {
+                $result = $this->wp->uploadMedia($site->url, $site->wp_username, $site->wp_application_password, $url, $tryFilename, $altText);
+            }
+
+            $attempts[] = ['label' => $label, 'url' => $url, 'success' => $result['success'], 'message' => $result['message'] ?? ''];
+
+            if ($result['success'] && !empty($result['data']['media_url'] ?? $result['data']['media_id'] ?? null)) {
+                $result['attempts'] = $attempts;
+                return $result;
+            }
+
+            $failMsg = $result['message'] ?? 'unknown error';
+            $this->emitProgress($send, 'warning', "Retry #{$attemptNum} ({$label}) failed: " . Str::limit($failMsg, 80), 'media', 'upload_retry_failed', [
+                'attempt' => $attemptNum,
+                'attempt_label' => $label,
+            ]);
+        }
+
+        return [
+            'success' => false,
+            'message' => "All {$attemptNum} download attempts failed",
+            'attempts' => $attempts,
+        ];
+    }
+
+    /**
+     * Build URL variants to try when downloading an image.
+     *
+     * @param string $originalUrl
+     * @return array<array{label: string, url: string, filename?: string}>
+     */
+    private function buildUrlVariants(string $originalUrl): array
+    {
+        $variants = [
+            ['label' => 'Direct URL', 'url' => $originalUrl],
+        ];
+
+        $parsed = parse_url($originalUrl);
+        $host = $parsed['host'] ?? '';
+        $path = $parsed['path'] ?? '';
+        $query = $parsed['query'] ?? '';
+        $scheme = ($parsed['scheme'] ?? 'https') . '://' . $host;
+
+        // Known CDN domains — don't swap extensions, use query-param variants instead
+        $isCdn = str_contains($host, 'pexels') || str_contains($host, 'unsplash')
+            || str_contains($host, 'pixabay') || str_contains($host, 'cdn.');
+
+        if ($isCdn) {
+            // Strip resize/transform params, keep the base image path
+            if ($query) {
+                $variants[] = ['label' => 'Strip CDN params', 'url' => $scheme . $path];
+            }
+            // Source-specific format variants
+            if (str_contains($host, 'pexels')) {
+                $variants[] = ['label' => 'Pexels compress only', 'url' => $scheme . $path . '?auto=compress'];
+                $variants[] = ['label' => 'Pexels small', 'url' => $scheme . $path . '?auto=compress&cs=tinysrgb&w=1200'];
+            } elseif (str_contains($host, 'unsplash')) {
+                $variants[] = ['label' => 'Unsplash JPG', 'url' => $scheme . $path . '?fm=jpg&q=80&w=1200'];
+                $variants[] = ['label' => 'Unsplash raw', 'url' => $scheme . $path . '?fm=jpg&q=90'];
+            } elseif (str_contains($host, 'pixabay')) {
+                $variants[] = ['label' => 'Pixabay direct', 'url' => $scheme . $path];
+            }
+        } else {
+            // Non-CDN: strip query params + try alternate extensions
+            if ($query) {
+                $variants[] = ['label' => 'Strip query params', 'url' => $scheme . $path];
+            }
+            $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+            $ext = preg_replace('/[^a-z].*/', '', $ext);
+            $baseUrl = $scheme . preg_replace('/\.[^.\/]+$/', '', $path);
+
+            foreach (['jpg', 'jpeg', 'webp', 'png'] as $altExt) {
+                if ($altExt === $ext) continue;
+                $variants[] = ['label' => "Swap to .{$altExt}", 'url' => $baseUrl . '.' . $altExt, 'filename' => pathinfo($path, PATHINFO_FILENAME) . '.' . $altExt];
+            }
+        }
+
+        return $variants;
+    }
+
+    private function buildExistingUploadMap(array $existingUploads): array
+    {
+        $map = [];
+
+        foreach ($existingUploads as $existingUpload) {
+            if (empty($existingUpload['media_url']) && empty($existingUpload['source_url'])) {
+                continue;
+            }
+
+            if (!empty($existingUpload['source_url'])) $map[$existingUpload['source_url']] = $existingUpload;
+            if (!empty($existingUpload['media_url'])) $map[$existingUpload['media_url']] = $existingUpload;
+            if (!empty($existingUpload['inline_url'])) $map[$existingUpload['inline_url']] = $existingUpload;
+
+            foreach ($existingUpload['sizes'] ?? [] as $sizeUrl) {
+                if (is_string($sizeUrl)) $map[$sizeUrl] = $existingUpload;
+            }
+        }
+
+        return $map;
+    }
+
+    private function emitProgress(callable $send, string $type, string $message, string $stage, string $substage, array $extra = []): void
+    {
+        $send($type, $message, array_merge([
+            'stage' => $stage,
+            'substage' => $substage,
+        ], $extra));
     }
 
     private function resolveServer(PublishSite $site): array

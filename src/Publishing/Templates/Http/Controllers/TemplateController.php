@@ -13,10 +13,14 @@ use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
 use hexa_app_publish\Services\PublishService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 class TemplateController extends Controller
 {
+    private const JSON_CACHE_TTL_SECONDS = 600;
+    private const JSON_CACHE_VERSION_KEY = 'publish:templates:json:version';
+
     protected GenericService $generic;
     protected PublishService $publishService;
     protected FormRegistryService $formRegistry;
@@ -48,6 +52,14 @@ class TemplateController extends Controller
      */
     public function index(Request $request): View|JsonResponse
     {
+        if ($request->wantsJson() || $request->filled('format')) {
+            return response()->json($this->jsonTemplates(
+                $request->integer('user_id') ?: null,
+                $request->integer('account_id') ?: null,
+                $request->string('article_type')->trim()->value() ?: null,
+            ));
+        }
+
         $query = PublishTemplate::with(['account', 'campaigns']);
 
         if ($request->filled('account_id')) {
@@ -59,10 +71,6 @@ class TemplateController extends Controller
         }
 
         $templates = $query->orderByDesc('created_at')->get();
-
-        if ($request->wantsJson() || $request->filled('format')) {
-            return response()->json($templates);
-        }
 
         $accounts = PublishAccount::orderBy('name')->get();
 
@@ -110,6 +118,7 @@ class TemplateController extends Controller
         }
 
         $template = PublishTemplate::create($data);
+        $this->bumpJsonCacheVersion();
 
         hexaLog('publish', 'template_created', "Template created: {$template->name}");
 
@@ -182,6 +191,7 @@ class TemplateController extends Controller
         }
 
         $template->update($data);
+        $this->bumpJsonCacheVersion();
 
         hexaLog('publish', 'template_updated', "Template updated: {$template->name}");
 
@@ -203,6 +213,7 @@ class TemplateController extends Controller
         $name = $template->name;
 
         $template->delete();
+        $this->bumpJsonCacheVersion();
 
         hexaLog('publish', 'template_deleted', "Template deleted: {$name}");
 
@@ -245,5 +256,86 @@ class TemplateController extends Controller
         $status = $request->input('status', $default);
 
         return in_array($status, ['draft', 'active'], true) ? $status : $default;
+    }
+
+    private function jsonTemplates(?int $userId = null, ?int $accountId = null, ?string $articleType = null): array
+    {
+        $cacheKey = implode(':', [
+            'publish',
+            'templates',
+            'json',
+            'v' . $this->jsonCacheVersion(),
+            'user',
+            $userId ?: 'all',
+            'account',
+            $accountId ?: 'all',
+            'type',
+            $articleType ?: 'all',
+        ]);
+
+        return Cache::remember($cacheKey, now()->addSeconds(self::JSON_CACHE_TTL_SECONDS), function () use ($userId, $accountId, $articleType) {
+            $query = PublishTemplate::query()
+                ->select([
+                    'id',
+                    'publish_account_id',
+                    'name',
+                    'status',
+                    'is_default',
+                    'article_type',
+                    'description',
+                    'ai_prompt',
+                    'ai_engine',
+                    'tone',
+                    'word_count_min',
+                    'word_count_max',
+                    'photos_per_article',
+                    'photo_sources',
+                    'max_links',
+                    'structure',
+                    'rules',
+                    'searching_agent',
+                    'scraping_agent',
+                    'spinning_agent',
+                    'created_at',
+                    'updated_at',
+                ])
+                ->with(['account:id,name,owner_user_id'])
+                ->orderByDesc('updated_at');
+
+            if ($accountId) {
+                $query->where('publish_account_id', $accountId);
+            }
+
+            if ($articleType) {
+                $query->where('article_type', $articleType);
+            }
+
+            if ($userId) {
+                $query->where(function ($accountScope) use ($userId) {
+                    $accountScope->whereNull('publish_account_id')
+                        ->orWhereHas('account', function ($query) use ($userId) {
+                            $query->where('owner_user_id', $userId)
+                                ->orWhereHas('users', fn ($users) => $users->where('user_id', $userId));
+                        });
+                });
+            }
+
+            return $query->get()->map(fn (PublishTemplate $template) => $template->toArray())->all();
+        });
+    }
+
+    private function jsonCacheVersion(): int
+    {
+        return (int) Cache::get(self::JSON_CACHE_VERSION_KEY, 1);
+    }
+
+    private function bumpJsonCacheVersion(): void
+    {
+        if (!Cache::has(self::JSON_CACHE_VERSION_KEY)) {
+            Cache::forever(self::JSON_CACHE_VERSION_KEY, 2);
+            return;
+        }
+
+        Cache::increment(self::JSON_CACHE_VERSION_KEY);
     }
 }

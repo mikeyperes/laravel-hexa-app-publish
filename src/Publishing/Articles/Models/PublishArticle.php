@@ -10,6 +10,8 @@ use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
 use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineState;
+use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineRun;
+use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineOperation;
 use hexa_app_publish\Publishing\Prompts\Models\PublishPrompt;
 use hexa_app_publish\Publishing\Settings\Models\PublishMasterSetting;
 use hexa_app_publish\Discovery\Sources\Models\PublishUsedSource;
@@ -139,6 +141,16 @@ class PublishArticle extends Model
     public function pipelineState(): HasOne
     {
         return $this->hasOne(PublishPipelineState::class, 'publish_article_id');
+    }
+
+    public function pipelineRuns(): HasMany
+    {
+        return $this->hasMany(PublishPipelineRun::class, 'publish_article_id');
+    }
+
+    public function pipelineOperations(): HasMany
+    {
+        return $this->hasMany(PublishPipelineOperation::class, 'publish_article_id');
     }
 
     /**

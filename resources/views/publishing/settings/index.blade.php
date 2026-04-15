@@ -282,6 +282,50 @@
         <p class="text-xs text-gray-400 mt-2">Preview: <span class="font-mono text-gray-600" x-text="pattern.replace('{draft_id}', '33').replace('{seo_name}', 'college-sports-reform').replace('{index}', '1').replace('{article_slug}', 'trump-signs-executive-order').replace('{date}', '20260404').replace('{post_id}', '1234') + '.jpg'"></span></p>
     </div>
 
+    {{-- ═══ WordPress Photo Sizes ═══ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" x-data="{
+        inlineSize: '{{ \hexa_core\Models\Setting::getValue('wp_inline_photo_size', 'medium_large') }}',
+        featuredSize: '{{ \hexa_core\Models\Setting::getValue('wp_featured_photo_size', 'full') }}',
+        saving: false, saved: false
+    }">
+        <h3 class="font-semibold text-gray-800 mb-1">WordPress Photo Sizes</h3>
+        <p class="text-sm text-gray-500 mb-3">Which WordPress image size to use when inserting photos into articles.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Inline Article Photos</label>
+                <select x-model="inlineSize" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="thumbnail">Thumbnail (150px)</option>
+                    <option value="medium">Medium (300px)</option>
+                    <option value="medium_large">Medium Large (768px)</option>
+                    <option value="large">Large (1024px)</option>
+                    <option value="full">Full (original)</option>
+                </select>
+                <p class="text-xs text-gray-400 mt-1">Recommended: Medium Large for fast page loads</p>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Featured Image</label>
+                <select x-model="featuredSize" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="medium_large">Medium Large (768px)</option>
+                    <option value="large">Large (1024px)</option>
+                    <option value="full">Full (original)</option>
+                </select>
+                <p class="text-xs text-gray-400 mt-1">Recommended: Full for best quality on social cards</p>
+            </div>
+        </div>
+
+        <button @click="
+            saving = true; saved = false;
+            Promise.all([
+                fetch('{{ route('publish.settings.master.save-setting') }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content }, body: JSON.stringify({ setting_key: 'wp_inline_photo_size', setting_value: inlineSize }) }),
+                fetch('{{ route('publish.settings.master.save-setting') }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content }, body: JSON.stringify({ setting_key: 'wp_featured_photo_size', setting_value: featuredSize }) })
+            ]).then(() => { saving = false; saved = true; setTimeout(() => saved = false, 3000); }).catch(() => saving = false);
+        " :disabled="saving" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+            <svg x-show="saving" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <span x-text="saving ? 'Saving...' : (saved ? 'Saved!' : 'Save Sizes')"></span>
+        </button>
+    </div>
+
     {{-- ═══ Spin Prompts — managed in Prompt Center ═══ --}}
     @if(Route::has('prompt-center.index'))
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">

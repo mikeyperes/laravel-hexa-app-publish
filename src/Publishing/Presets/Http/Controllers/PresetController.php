@@ -10,6 +10,7 @@ use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 /**
@@ -18,6 +19,9 @@ use Illuminate\View\View;
  */
 class PresetController extends Controller
 {
+    private const JSON_CACHE_TTL_SECONDS = 600;
+    private const JSON_CACHE_VERSION_KEY = 'publish:presets:json:version';
+
     public function __construct(
         private FormRegistryService $formRegistry,
         private FormHydrationService $formHydration,
@@ -32,6 +36,10 @@ class PresetController extends Controller
      */
     public function index(Request $request): View|JsonResponse
     {
+        if ($request->wantsJson() || $request->filled('format')) {
+            return response()->json($this->jsonPresets($request->integer('user_id') ?: null));
+        }
+
         $query = PublishPreset::with('user');
 
         if ($request->filled('user_id')) {
@@ -39,10 +47,6 @@ class PresetController extends Controller
         }
 
         $presets = $query->orderByDesc('updated_at')->get();
-
-        if ($request->wantsJson() || $request->filled('format')) {
-            return response()->json($presets);
-        }
 
         return view('app-publish::publishing.presets.index', [
             'presets' => $presets,
@@ -87,6 +91,7 @@ class PresetController extends Controller
         }
 
         $preset = PublishPreset::create($data);
+        $this->bumpJsonCacheVersion();
 
         hexaLog('publish', 'preset_created', "Preset created: {$preset->name}");
 
@@ -159,6 +164,7 @@ class PresetController extends Controller
         }
 
         $preset->update($data);
+        $this->bumpJsonCacheVersion();
 
         hexaLog('publish', 'preset_updated', "Preset updated: {$preset->name}");
 
@@ -180,12 +186,14 @@ class PresetController extends Controller
 
         if ($preset->is_default) {
             $preset->update(['is_default' => false]);
+            $this->bumpJsonCacheVersion();
             hexaLog('publish', 'preset_default_removed', "Default removed: {$preset->name}");
             return response()->json(['success' => true, 'message' => "'{$preset->name}' is no longer the default.", 'is_default' => false]);
         }
 
         PublishPreset::where('user_id', $preset->user_id)->where('id', '!=', $preset->id)->update(['is_default' => false]);
         $preset->update(['is_default' => true]);
+        $this->bumpJsonCacheVersion();
 
         hexaLog('publish', 'preset_default_set', "Default preset set: {$preset->name}");
         return response()->json(['success' => true, 'message' => "'{$preset->name}' is now the default.", 'is_default' => true]);
@@ -203,6 +211,7 @@ class PresetController extends Controller
         $name = $preset->name;
 
         $preset->delete();
+        $this->bumpJsonCacheVersion();
 
         hexaLog('publish', 'preset_deleted', "Preset deleted: {$name}");
 
@@ -267,5 +276,64 @@ class PresetController extends Controller
         $status = $request->input('status', $default);
 
         return in_array($status, ['draft', 'active'], true) ? $status : $default;
+    }
+
+    private function jsonPresets(?int $userId = null): array
+    {
+        $cacheKey = implode(':', [
+            'publish',
+            'presets',
+            'json',
+            'v' . $this->jsonCacheVersion(),
+            'user',
+            $userId ?: 'all',
+        ]);
+
+        return Cache::remember($cacheKey, now()->addSeconds(self::JSON_CACHE_TTL_SECONDS), function () use ($userId) {
+            $query = PublishPreset::query()
+                ->select([
+                    'id',
+                    'user_id',
+                    'name',
+                    'status',
+                    'is_default',
+                    'default_site_id',
+                    'follow_links',
+                    'article_format',
+                    'tone',
+                    'image_preference',
+                    'default_publish_action',
+                    'default_category_count',
+                    'default_tag_count',
+                    'image_layout',
+                    'searching_agent',
+                    'scraping_agent',
+                    'spinning_agent',
+                    'created_at',
+                    'updated_at',
+                ])
+                ->orderByDesc('updated_at');
+
+            if ($userId) {
+                $query->where('user_id', $userId);
+            }
+
+            return $query->get()->map(fn (PublishPreset $preset) => $preset->toArray())->all();
+        });
+    }
+
+    private function jsonCacheVersion(): int
+    {
+        return (int) Cache::get(self::JSON_CACHE_VERSION_KEY, 1);
+    }
+
+    private function bumpJsonCacheVersion(): void
+    {
+        if (!Cache::has(self::JSON_CACHE_VERSION_KEY)) {
+            Cache::forever(self::JSON_CACHE_VERSION_KEY, 2);
+            return;
+        }
+
+        Cache::increment(self::JSON_CACHE_VERSION_KEY);
     }
 }

@@ -7,10 +7,10 @@
         <template x-if="!siteConn.testing && siteConn.status === null"><svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></template>
         <span class="text-xs" :class="siteConn.status === true ? 'text-green-700' : (siteConn.status === false ? 'text-red-700' : 'text-gray-500')" x-text="siteConn.testing ? 'Testing connection...' : (siteConn.status === true ? 'Connected' : (siteConn.status === false ? siteConn.message : 'Unknown'))"></span>
         <span class="text-gray-300">|</span>
-        <span class="text-xs text-gray-400" x-text="selectedSite.url"></span>
-        <span x-show="selectedSite.wp_username" class="text-gray-300">|</span>
-        <span x-show="selectedSite.wp_username" class="text-xs text-gray-500" x-text="'Posting as: ' + selectedSite.wp_username"></span>
-        <span x-show="selectedSite.connection_type" class="text-xs text-gray-400" x-text="'(' + (selectedSite.connection_type === 'wptoolkit' ? 'SSH' : 'REST API') + ')'"></span>
+        <span class="text-xs text-gray-400" x-text="selectedSite?.url || ''"></span>
+        <span x-show="selectedSite?.wp_username" class="text-gray-300">|</span>
+        <span x-show="selectedSite?.wp_username" class="text-xs text-gray-500" x-text="'Posting as: ' + (selectedSite?.wp_username || '')"></span>
+        <span x-show="selectedSite?.connection_type" class="text-xs text-gray-400" x-text="'(' + ((selectedSite?.connection_type || '') === 'wptoolkit' ? 'SSH' : 'REST API') + ')'"></span>
         <button x-show="!siteConn.testing" @click="refreshSiteConnection()" class="text-xs text-blue-500 hover:text-blue-700 ml-auto flex-shrink-0">Refresh</button>
     </div>
     <div x-show="siteConn.log.length > 0" x-cloak class="mt-2 bg-gray-900 rounded-lg border border-gray-700 p-3 max-h-32 overflow-y-auto">

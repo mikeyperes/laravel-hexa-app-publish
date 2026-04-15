@@ -3,10 +3,8 @@
 namespace hexa_app_publish\Discovery\Search\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
+use hexa_app_publish\Discovery\Media\Services\MediaSearchService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
-use hexa_package_pexels\Services\PexelsService;
-use hexa_package_unsplash\Services\UnsplashService;
-use hexa_package_pixabay\Services\PixabayService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -47,54 +45,50 @@ class SearchController extends Controller
         $request->validate([
             'query'    => 'required|string|max:255',
             'per_page' => 'integer|min:1|max:30',
+            'page'     => 'integer|min:1|max:50',
             'sources'  => 'array',
         ]);
 
         $query   = $request->input('query');
         $perPage = (int) $request->input('per_page', 10);
+        $page    = (int) $request->input('page', 1);
         $selectedSources = $request->input('sources', ['pexels', 'unsplash', 'pixabay']);
-
-        $allPhotos = [];
-        $errors = [];
-        $totals = [];
-        $timings = [];
-
-        $serviceMap = [
-            'pexels'   => PexelsService::class,
-            'unsplash' => UnsplashService::class,
-            'pixabay'  => PixabayService::class,
-        ];
-
-        foreach ($selectedSources as $source) {
-            if (!isset($serviceMap[$source])) continue;
-            $start = microtime(true);
-            try {
-                $result = app($serviceMap[$source])->searchPhotos($query, $perPage);
-                $elapsed = round((microtime(true) - $start) * 1000);
-                $timings[$source] = $elapsed;
-                if ($result['success'] && !empty($result['data']['photos'])) {
-                    $allPhotos = array_merge($allPhotos, $result['data']['photos']);
-                    $totals[$source] = $result['data']['total'] ?? 0;
-                } elseif (!$result['success']) {
-                    $errors[] = ucfirst($source) . ': ' . ($result['message'] ?? 'Failed') . " ({$elapsed}ms)";
-                }
-            } catch (\Exception $e) {
-                $elapsed = round((microtime(true) - $start) * 1000);
-                $timings[$source] = $elapsed;
-                $errors[] = ucfirst($source) . ': ' . $e->getMessage() . " ({$elapsed}ms)";
-            }
-        }
-
-        $totalTime = array_sum($timings);
+        $result = app(MediaSearchService::class)->searchPhotos($query, $selectedSources, $perPage, $page);
 
         return response()->json([
-            'success' => count($allPhotos) > 0,
-            'message' => count($allPhotos) . ' photos in ' . $totalTime . 'ms (' . implode(', ', array_map(fn ($k, $v) => $k . ':' . $v . 'ms', array_keys($timings), $timings)) . ')',
+            'success' => $result['success'],
+            'message' => count($result['photos']) . ' photos in ' . ($result['total_ms'] ?? 0) . 'ms',
             'data'    => [
-                'photos'  => $allPhotos,
-                'totals'  => $totals,
-                'errors'  => $errors,
-                'timings' => $timings,
+                'photos'  => $result['photos'],
+                'totals'  => $result['totals'],
+                'errors'  => $result['errors'],
+                'timings' => $result['timings'] ?? [],
+            ],
+        ]);
+    }
+
+    public function searchImagesBatch(Request $request): JsonResponse
+    {
+        $request->validate([
+            'queries' => 'required|array|min:1|max:20',
+            'queries.*.key' => 'nullable|string|max:100',
+            'queries.*.query' => 'required|string|max:255',
+            'queries.*.per_page' => 'nullable|integer|min:1|max:30',
+            'queries.*.page' => 'nullable|integer|min:1|max:50',
+            'sources' => 'nullable|array',
+        ]);
+
+        $result = app(MediaSearchService::class)->searchPhotosBatch(
+            $request->input('queries', []),
+            $request->input('sources', ['pexels', 'unsplash', 'pixabay'])
+        );
+
+        return response()->json([
+            'success' => $result['success'],
+            'message' => 'Batch image search completed in ' . ($result['total_ms'] ?? 0) . 'ms',
+            'data' => [
+                'results' => $result['results'],
+                'total_ms' => $result['total_ms'] ?? 0,
             ],
         ]);
     }
@@ -107,10 +101,12 @@ class SearchController extends Controller
         $request->validate([
             'query'    => 'required|string|max:255',
             'per_page' => 'integer|min:1|max:20',
+            'start'    => 'integer|min:0|max:100',
         ]);
 
         $query = $request->input('query');
         $perPage = (int) $request->input('per_page', 10);
+        $start = (int) $request->input('start', 0);
         $result = null;
         $provider = null;
         $timing = 0;
@@ -123,9 +119,9 @@ class SearchController extends Controller
         if ($useGoogle && class_exists(\hexa_package_google_cse\Services\GoogleCseService::class)) {
             $cse = app(\hexa_package_google_cse\Services\GoogleCseService::class);
             if (!$cse->isQuotaExhausted()) {
-                $start = microtime(true);
-                $result = $cse->searchImages($query, $perPage);
-                $timing = round((microtime(true) - $start) * 1000);
+                $t0 = microtime(true);
+                $result = $cse->searchImages($query, $perPage, $start + 1);
+                $timing = round((microtime(true) - $t0) * 1000);
                 $provider = 'google-cse';
 
                 if ($result['success']) {
@@ -149,9 +145,9 @@ class SearchController extends Controller
         // SerpAPI (primary or fallback)
         if (!$result && $useSerp && class_exists(\hexa_package_serpapi\Services\SerpApiService::class)) {
             $serp = app(\hexa_package_serpapi\Services\SerpApiService::class);
-            $start = microtime(true);
-            $result = $serp->searchImages($query, $perPage);
-            $timing = round((microtime(true) - $start) * 1000);
+            $t0 = microtime(true);
+            $result = $serp->searchImages($query, $perPage, $start);
+            $timing = round((microtime(true) - $t0) * 1000);
             $provider = 'serpapi';
 
             if ($result['success']) {

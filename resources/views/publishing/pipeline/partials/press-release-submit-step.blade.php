@@ -213,13 +213,17 @@
                 </div>
             </div>
 
-            <div x-show="pressRelease.photo_method === 'upload-files'" x-cloak class="space-y-3">
-                <div class="flex items-center justify-between gap-3">
-                    <p class="text-xs text-gray-500">Upload image files, then refresh the synced list below.</p>
-                    <button @click="refreshPressReleasePhotoFiles()" type="button" class="text-xs text-blue-600 hover:text-blue-800">Refresh Uploaded Photos</button>
-                </div>
-                @include('upload-portal::components.upload-portal', ['context' => 'press-release-photo', 'contextId' => $draftId, 'multi' => true])
+        <div x-show="pressRelease.photo_method === 'upload-files'" x-cloak class="space-y-3">
+            <div class="flex items-center justify-between gap-3">
+                <p class="text-xs text-gray-500">Upload image files, then refresh the synced list below.</p>
+                <button @click="refreshPressReleasePhotoFiles()" type="button" class="text-xs text-blue-600 hover:text-blue-800">Refresh Uploaded Photos</button>
             </div>
+            <template x-if="pressRelease.photo_method === 'upload-files'">
+                <div>
+                    @include('upload-portal::components.upload-portal', ['context' => 'press-release-photo', 'contextId' => $draftId, 'multi' => true])
+                </div>
+            </template>
+        </div>
 
             <div x-show="pressRelease.photo_method === 'detect-from-public-url'" x-cloak class="space-y-3">
                 <div>
@@ -290,7 +294,7 @@
     {{-- Polish toggle --}}
     <div class="bg-white border border-gray-200 rounded-xl p-5">
         <label class="inline-flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" x-model="pressRelease.polish_only" @change="savePipelineState(); refreshPromptPreview()" class="rounded border-gray-300 text-purple-600">
+            <input type="checkbox" x-model="pressRelease.polish_only" @change="savePipelineState(); invalidatePromptPreview('press_release_polish_toggle', { fetch: true })" class="rounded border-gray-300 text-purple-600">
             <span class="text-sm text-gray-700">Polish grammar and structure but do not spin with AI.</span>
         </label>
     </div>

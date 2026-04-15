@@ -11,10 +11,16 @@ use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Publishing\Campaigns\Services\NewsDiscoveryOptionsService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
 use hexa_app_publish\Publishing\Articles\Services\MetadataGenerationService;
-use hexa_app_publish\Publishing\Articles\Services\ArticlePersistenceService;
-use hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService;
+use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
+use hexa_app_publish\Publishing\Pipeline\Jobs\PreparePipelineOperationJob;
+use hexa_app_publish\Publishing\Pipeline\Jobs\PublishPipelineOperationJob;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineStateService;
+use hexa_app_publish\Publishing\Pipeline\Services\PipelineDraftSessionService;
+use hexa_app_publish\Publishing\Pipeline\Services\PipelineOperationExecutor;
+use hexa_app_publish\Publishing\Pipeline\Services\PipelineOperationService;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineWorkflowRegistry;
+use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineOperation;
+use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\CheckSourcesRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\DetectAiRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\GenerateMetadataRequest;
@@ -26,8 +32,9 @@ use hexa_app_publish\Publishing\Pipeline\Http\Requests\SaveDraftRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\SpinRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * PublishPipelineController — 11-step article publishing pipeline.
@@ -40,6 +47,7 @@ class PipelineController extends Controller
     protected SourceExtractionService $sourceExtraction;
     protected NewsDiscoveryOptionsService $newsOptions;
     protected PipelineStateService $pipelineState;
+    protected PipelineDraftSessionService $draftSession;
     protected PipelineWorkflowRegistry $workflowRegistry;
 
     /**
@@ -49,38 +57,40 @@ class PipelineController extends Controller
         SourceExtractionService $sourceExtraction,
         NewsDiscoveryOptionsService $newsOptions,
         PipelineStateService $pipelineState,
+        PipelineDraftSessionService $draftSession,
         PipelineWorkflowRegistry $workflowRegistry
     )
     {
         $this->sourceExtraction = $sourceExtraction;
         $this->newsOptions = $newsOptions;
         $this->pipelineState = $pipelineState;
+        $this->draftSession = $draftSession;
         $this->workflowRegistry = $workflowRegistry;
     }
 
     public function index(Request $request)
     {
+        $forceFreshDraft = $request->boolean('spawn') || $request->boolean('fresh');
+
         // If no ?id= in URL, reuse an existing empty draft or create one
         if (!$request->has('id')) {
-            $draft = PublishArticle::where('created_by', auth()->id())
-                ->where('status', 'drafting')
-                ->where(function ($q) {
-                    $q->whereNull('body')->orWhere('body', '');
-                })
-                ->where(function ($q) {
-                    $q->where('title', 'Untitled')->orWhereNull('title')->orWhere('title', '');
-                })
-                ->orderByDesc('id')
-                ->first();
+            $draft = null;
+
+            if (!$forceFreshDraft) {
+                $draft = PublishArticle::where('created_by', auth()->id())
+                    ->where('status', 'drafting')
+                    ->where(function ($q) {
+                        $q->whereNull('body')->orWhere('body', '');
+                    })
+                    ->where(function ($q) {
+                        $q->where('title', 'Untitled')->orWhereNull('title')->orWhere('title', '');
+                    })
+                    ->orderByDesc('id')
+                    ->first();
+            }
 
             if (!$draft) {
-                $draft = PublishArticle::create([
-                    'article_id' => PublishArticle::generateArticleId(),
-                    'title'      => 'Untitled',
-                    'status'     => 'drafting',
-                    'created_by' => auth()->id(),
-                    'user_id'    => auth()->id(),
-                ]);
+                $draft = $this->createFreshPipelineDraft();
             }
 
             return redirect()->route('publish.pipeline', ['id' => $draft->id]);
@@ -111,7 +121,15 @@ class PipelineController extends Controller
                 ? $draft->creator
                 : User::find($draftUserId);
         }
+        $initialUserPresets = $draftUserId ? $this->pipelineBootstrapPresetsForUser((int) $draftUserId) : [];
+        $initialUserTemplates = $draftUserId ? $this->pipelineBootstrapTemplatesForUser((int) $draftUserId) : [];
         $pipelinePayload = $this->pipelineState->payload($draft);
+        $latestCompletedPrepareHtml = PublishPipelineOperation::query()
+            ->where('publish_article_id', $draft->id)
+            ->where('operation_type', PublishPipelineOperation::TYPE_PREPARE)
+            ->where('status', PublishPipelineOperation::STATUS_COMPLETED)
+            ->latest('id')
+            ->value('result_payload->html');
         $draftState = [
             'selectedUser' => $draftUser ? [
                 'id' => $draftUser->id,
@@ -189,6 +207,9 @@ class PipelineController extends Controller
             'aiDetectors'       => $aiDetectors,
             'grokModels'        => class_exists(\hexa_package_grok\Services\GrokService::class) ? app(\hexa_package_grok\Services\GrokService::class)->listModels() : [],
             'pipelinePayload'   => $pipelinePayload,
+            'latestCompletedPrepareHtml' => $latestCompletedPrepareHtml ?: '',
+            'initialUserPresets' => $initialUserPresets,
+            'initialUserTemplates' => $initialUserTemplates,
             'workflowDefinitions' => $this->workflowRegistry->definitions(),
             'pressReleaseDefaultState' => app(\hexa_app_publish\Publishing\Pipeline\Services\PressReleaseWorkflowService::class)->defaultState(),
         ]);
@@ -199,12 +220,33 @@ class PipelineController extends Controller
         $validated = $request->validated();
 
         $anthropic = app(\hexa_package_anthropic\Services\AnthropicService::class);
-        $prompt = "You are a photo metadata expert. Generate contextual metadata for a stock photo used in an article.\n\n"
-            . "Photo search term: " . $validated['search_term'] . "\n"
-            . "Article title: " . ($validated['article_title'] ?? '') . "\n"
-            . "Article excerpt: " . mb_substr($validated['article_text'] ?? '', 0, 1000) . "\n\n"
-            . "Respond ONLY with JSON, no other text:\n"
-            . '{"alt":"contextual alt text describing what this photo represents in the article context (under 125 chars)","caption":"one sentence explaining why this photo is relevant to the article","filename":"seo-friendly-lowercase-hyphenated-name-no-extension"}';
+        $photoSource = $validated['photo_source'] ?? '';
+        $photoAlt = $validated['photo_alt'] ?? '';
+        $photoUrl = $validated['photo_url'] ?? '';
+        $isStock = in_array($photoSource, ['pexels', 'unsplash', 'pixabay', '']);
+        $isGoogle = in_array($photoSource, ['google', 'google-cse']);
+
+        if ($isGoogle && $photoAlt) {
+            // Real photo from Google — use the original alt/caption context
+            $prompt = "You are a photo metadata expert. Generate metadata for a REAL PHOTO found via Google Image Search.\n\n"
+                . "The original image caption/alt from the source is: \"{$photoAlt}\"\n"
+                . "If this identifies a specific person, USE their name in the alt and caption. Describe the actual person and scene.\n\n"
+                . "Photo search term: " . $validated['search_term'] . "\n"
+                . "Original image caption: {$photoAlt}\n"
+                . "Article title: " . ($validated['article_title'] ?? '') . "\n"
+                . "Article excerpt: " . mb_substr($validated['article_text'] ?? '', 0, 1000) . "\n\n"
+                . "Respond ONLY with JSON, no other text:\n"
+                . '{"alt":"describe who/what is in the photo using the original caption for context (under 125 chars)","caption":"one sentence about the person/scene in the photo and their relevance to the article","filename":"seo-friendly-lowercase-hyphenated-name-no-extension"}';
+        } else {
+            // Stock photo — generic description, no person names
+            $prompt = "You are a photo metadata expert. Generate metadata for a STOCK PHOTO used in an article.\n\n"
+                . "CRITICAL: This is a stock photo, NOT a real photo of the people in the article. The alt text and caption must describe what is visually in the stock photo based on the search term — NOT name or reference specific people from the article. Never put a person's name in the alt or caption unless the search term itself is that person's name.\n\n"
+                . "Photo search term: " . $validated['search_term'] . "\n"
+                . "Article title: " . ($validated['article_title'] ?? '') . "\n"
+                . "Article excerpt: " . mb_substr($validated['article_text'] ?? '', 0, 1000) . "\n\n"
+                . "Respond ONLY with JSON, no other text:\n"
+                . '{"alt":"describe what the stock photo visually shows based on the search term (under 125 chars, do NOT name article subjects)","caption":"one sentence describing the stock photo and how the visual theme relates to the article topic (do NOT name article subjects unless the search term is their name)","filename":"seo-friendly-lowercase-hyphenated-name-no-extension"}';
+        }
 
         $result = $anthropic->chat(
             'You are a photo metadata expert. Output ONLY valid JSON.',
@@ -523,39 +565,110 @@ class PipelineController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function prepareForWordpress(PrepareForWordpressRequest $request): StreamedResponse
+    public function prepareForWordpress(PrepareForWordpressRequest $request): JsonResponse
     {
         $validated = $request->validated();
+        $draft = $this->resolveAuthorizedDraft((int) $validated['draft_id']);
+        $site = PublishSite::findOrFail($validated['site_id']);
+        $operationService = app(PipelineOperationService::class);
+        $active = $operationService->activeForArticle($draft, PublishPipelineOperation::TYPE_PREPARE);
+        if ($active) {
+            return response()->json([
+                'success' => true,
+                'message' => 'A prepare operation is already in progress for this draft.',
+                'operation' => $this->serializePipelineOperation($active),
+            ], 202);
+        }
+
+        $strategy = $operationService->detectExecutionStrategy();
+        $clientTrace = $this->pipelineClientTrace($request) ?: ('prepare-' . $draft->id . '-' . Str::lower(Str::random(8)));
+        $traceId = (string) Str::uuid();
+        $requestSummary = [
+            'trace_id' => $traceId,
+            'client_trace' => $clientTrace,
+            'debug_mode' => $this->pipelineDebugEnabled($request),
+            'user_id' => auth()->id(),
+            'site_id' => $site->id,
+            'site_name' => $site->name,
+            'draft_id' => (int) ($validated['draft_id'] ?? 0),
+            'image_count' => substr_count($validated['html'] ?? '', '<img'),
+            'category_count' => count($validated['categories'] ?? []),
+            'tag_count' => count($validated['tags'] ?? []),
+            'has_featured' => !empty($validated['featured_url']),
+            'transport' => $strategy['transport'],
+        ];
+
+        $operation = $operationService->create($draft, PublishPipelineOperation::TYPE_PREPARE, $requestSummary, [
+            'publish_site_id' => $site->id,
+            'created_by' => auth()->id(),
+            'workflow_type' => $validated['article_type'] ?? ($draft->article_type ?: null),
+            'transport' => $strategy['transport'],
+            'queue_connection' => $strategy['queue_connection'],
+            'queue_name' => $strategy['queue_name'],
+            'client_trace' => $clientTrace,
+            'trace_id' => $traceId,
+            'debug_enabled' => $this->pipelineDebugEnabled($request),
+        ]);
+
+        $payload = array_merge($validated, [
+            'client_trace' => $clientTrace,
+            'trace_id' => $traceId,
+            'debug_mode' => $this->pipelineDebugEnabled($request),
+            'user_id' => auth()->id(),
+            'user_ip' => $request->ip(),
+        ]);
+
+        $this->dispatchPipelineOperation($strategy, $operation, $payload, PublishPipelineOperation::TYPE_PREPARE);
+
+        return response()->json([
+            'success' => true,
+            'message' => $strategy['transport'] === 'sync'
+                ? 'Prepare operation completed.'
+                : 'Prepare operation started.',
+            'operation' => $this->serializePipelineOperation($operation->fresh()),
+        ], $strategy['transport'] === 'sync' ? 200 : 202);
+    }
+
+    /**
+     * Delete orphaned media from WordPress.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function deleteMedia(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'site_id' => 'required|integer|exists:publish_sites,id',
+            'media_id' => 'required|integer',
+        ]);
 
         $site = PublishSite::findOrFail($validated['site_id']);
-        $prepService = app(\hexa_app_publish\Publishing\Delivery\Services\WordPressPreparationService::class);
+        $mediaId = (int) $validated['media_id'];
 
-        return response()->stream(function () use ($validated, $site, $prepService) {
-            $send = function (string $type, string $message, array $extra = []) {
-                $event = array_merge(['type' => $type, 'message' => $message, 'time' => now()->format('H:i:s')], $extra);
-                echo "data: " . json_encode($event) . "\n\n";
-                if (ob_get_level()) ob_flush();
-                flush();
-            };
+        if ($site->connection_type === 'wptoolkit') {
+            $account = \hexa_package_whm\Models\HostingAccount::find($site->hosting_account_id);
+            $server = $account ? \hexa_package_whm\Models\WhmServer::find($account->whm_server_id) : null;
+            if ($server && $site->wordpress_install_id) {
+                $wptoolkit = app(\hexa_package_wptoolkit\Services\WpToolkitService::class);
+                $ssh = $wptoolkit->getConnection($server);
+                if ($ssh['success']) {
+                    $eid = escapeshellarg((string) $site->wordpress_install_id);
+                    $ssh['connection']->exec("wp-toolkit --wp-cli -instance-id {$eid} -- post delete {$mediaId} --force 2>/dev/null");
+                    return response()->json(['success' => true, 'message' => "Media #{$mediaId} deleted"]);
+                }
+            }
+            return response()->json(['success' => false, 'message' => 'SSH connection failed']);
+        }
 
-            $result = $prepService->prepare($site, $validated['html'], [
-                'title'             => $validated['title'] ?? null,
-                'categories'        => $validated['categories'] ?? [],
-                'tags'              => $validated['tags'] ?? [],
-                'photo_suggestions' => $validated['photo_suggestions'] ?? [],
-                'photo_meta'        => $validated['photo_meta'] ?? [],
-                'featured_meta'     => $validated['featured_meta'] ?? null,
-                'draft_id'          => $validated['draft_id'] ?? 0,
-            ], $send);
-
-            $send('done', $result['success'] ? 'Preparation complete' : 'Preparation failed', $result);
-
-        }, 200, [
-            'Content-Type'  => 'text/event-stream',
-            'Cache-Control' => 'no-cache',
-            'Connection'    => 'keep-alive',
-            'X-Accel-Buffering' => 'no',
-        ]);
+        // REST mode
+        try {
+            $resp = \Illuminate\Support\Facades\Http::withBasicAuth($site->wp_username, $site->wp_application_password)
+                ->timeout(15)
+                ->delete(rtrim($site->url, '/') . '/wp-json/wp/v2/media/' . $mediaId . '?force=true');
+            return response()->json(['success' => $resp->successful(), 'message' => $resp->successful() ? "Media #{$mediaId} deleted" : 'Delete failed']);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
     }
 
     /**
@@ -564,108 +677,78 @@ class PipelineController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function publishToWordpress(PublishToWordpressRequest $request): StreamedResponse
+    public function publishToWordpress(PublishToWordpressRequest $request): JsonResponse
     {
         $validated = $request->validated();
+        $draft = $this->resolveAuthorizedDraft((int) $validated['draft_id']);
         $site = PublishSite::findOrFail($validated['site_id']);
+        $operationService = app(PipelineOperationService::class);
+        $active = $operationService->activeForArticle($draft, PublishPipelineOperation::TYPE_PUBLISH);
+        if ($active) {
+            return response()->json([
+                'success' => true,
+                'message' => 'A publish operation is already in progress for this draft.',
+                'operation' => $this->serializePipelineOperation($active),
+            ], 202);
+        }
 
-        return response()->stream(function () use ($validated, $site) {
-            $send = function (string $type, string $message, array $extra = []) {
-                $event = array_merge(['type' => $type, 'message' => $message, 'time' => now()->format('H:i:s')], $extra);
-                echo "data: " . json_encode($event) . "\n\n";
-                if (ob_get_level()) ob_flush();
-                flush();
-            };
+        $activePrepare = $operationService->activeForArticle($draft, PublishPipelineOperation::TYPE_PREPARE);
+        if ($activePrepare) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Prepare is still running for this draft. Wait for it to finish before publishing.',
+                'operation' => $this->serializePipelineOperation($activePrepare),
+            ], 409);
+        }
 
-            $send('step', "Connecting to {$site->name}...");
-            $send('step', "Creating WordPress post ({$validated['status']})...");
-            $send('info', "Title: {$validated['title']}");
-            if (!empty($validated['author'])) $send('info', "Author: {$validated['author']}");
-            if (!empty($validated['featured_media_id'])) $send('info', "Featured media ID: {$validated['featured_media_id']}");
+        $strategy = $operationService->detectExecutionStrategy();
+        $clientTrace = $this->pipelineClientTrace($request) ?: ('publish-' . $draft->id . '-' . Str::lower(Str::random(8)));
+        $traceId = (string) Str::uuid();
+        $requestSummary = [
+            'trace_id' => $traceId,
+            'client_trace' => $clientTrace,
+            'debug_mode' => $this->pipelineDebugEnabled($request),
+            'user_id' => auth()->id(),
+            'draft_id' => (int) ($validated['draft_id'] ?? 0),
+            'site_id' => $site->id,
+            'site_name' => $site->name,
+            'status' => $validated['status'],
+            'category_count' => count($validated['category_ids'] ?? []),
+            'tag_count' => count($validated['tag_ids'] ?? []),
+            'wp_image_count' => count($validated['wp_images'] ?? []),
+            'has_featured' => !empty($validated['featured_media_id']),
+            'transport' => $strategy['transport'],
+        ];
 
-            $delivery = app(WordPressDeliveryService::class);
-            $result = $delivery->createPost($site, $validated['title'], $validated['html'], $validated['status'], [
-                'category_ids' => $validated['category_ids'] ?? [],
-                'tag_ids'      => $validated['tag_ids'] ?? [],
-                'date'         => ($validated['status'] === 'future' && !empty($validated['date'])) ? $validated['date'] : null,
-                'featured_media_id' => $validated['featured_media_id'] ?? null,
-                'author'            => $validated['author'] ?? null,
-            ]);
-
-            if (!$result['success']) {
-                hexaLog('publish', 'pipeline_publish_failed', "Pipeline publish failed to {$site->name}: {$result['message']}");
-                $send('error', "WordPress publish failed: {$result['message']}");
-                $send('done', 'Publish failed.', ['success' => false, 'message' => $result['message']]);
-                return;
-            }
-
-            $send('success', "WordPress post created — ID: {$result['post_id']}");
-            if ($result['post_url']) $send('success', "Permalink: {$result['post_url']}");
-
-            $send('step', 'Saving article record...');
-            $persistence = app(ArticlePersistenceService::class);
-            $article = $persistence->createOrUpdate([
-                'pipeline_session_id' => $validated['pipeline_session_id'] ?? null,
-                'user_id'             => $validated['user_id'] ?? auth()->id(),
-                'publish_site_id'     => $site->id,
-                'publish_template_id' => $validated['template_id'] ?? null,
-                'preset_id'           => $validated['preset_id'] ?? null,
-                'article_type'        => $validated['article_type'] ?? null,
-                'title'               => $validated['title'],
-                'body'                => $validated['html'],
-                'word_count'          => $validated['word_count'] ?? str_word_count(strip_tags($validated['html'])),
-                'ai_engine_used'      => $validated['ai_model'] ?? null,
-                'ai_cost'             => $validated['ai_cost'] ?? null,
-                'ai_provider'         => $validated['ai_provider'] ?? 'anthropic',
-                'ai_tokens_input'     => $validated['ai_tokens_input'] ?? null,
-                'ai_tokens_output'    => $validated['ai_tokens_output'] ?? null,
-                'resolved_prompt'     => $validated['resolved_prompt'] ?? null,
-                'photo_suggestions'   => $validated['photo_suggestions'] ?? null,
-                'featured_image_search' => $validated['featured_image_search'] ?? null,
-                'user_ip'             => request()->ip(),
-                'author'              => $validated['author'] ?? $site->default_author ?? null,
-                'status'              => 'completed',
-                'wp_post_id'          => $result['post_id'],
-                'wp_post_url'         => $result['post_url'],
-                'wp_status'           => $validated['status'],
-                'published_at'        => now(),
-                'source_articles'     => $validated['sources'] ?? null,
-                'categories'          => $validated['categories'] ?? null,
-                'tags'                => $validated['tags'] ?? null,
-                'wp_images'           => $validated['wp_images'] ?? null,
-                'links_injected'      => null,
-                'created_by'          => auth()->id(),
-            ], $validated['draft_id'] ?? null);
-
-            $send('success', "Article saved — #{$article->article_id}");
-            hexaLog('publish', 'pipeline_published', "Pipeline published to {$site->name}: {$validated['title']} (WP ID: {$result['post_id']}, Article: {$article->article_id})");
-
-            if (in_array($validated['status'], ['publish', 'draft'], true) && !empty($validated['draft_id'])) {
-                $send('step', 'Cleaning up temporary uploads...');
-                try {
-                    $uploadCleanup = app(\hexa_app_publish\Publishing\Uploads\Services\ArticleUploadService::class);
-                    $uploadCleanup->cleanupAfterPublish((int) $validated['draft_id']);
-                    $send('success', 'Temp uploads cleaned.');
-                } catch (\Throwable $e) {
-                    $send('warning', 'Upload cleanup failed: ' . $e->getMessage());
-                    hexaLog('publish', 'upload_cleanup_error', "Upload cleanup failed for draft #{$validated['draft_id']}: {$e->getMessage()}");
-                }
-            }
-
-            $send('done', "Published to {$site->name}!", [
-                'success'     => true,
-                'message'     => "Article published to {$site->name}. WP Post ID: {$result['post_id']}.",
-                'post_id'     => $result['post_id'],
-                'post_url'    => $result['post_url'],
-                'article_id'  => $article->id,
-                'article_url' => route('publish.articles.show', $article->id),
-            ]);
-        }, 200, [
-            'Content-Type'      => 'text/event-stream',
-            'Cache-Control'     => 'no-cache',
-            'Connection'        => 'keep-alive',
-            'X-Accel-Buffering' => 'no',
+        $operation = $operationService->create($draft, PublishPipelineOperation::TYPE_PUBLISH, $requestSummary, [
+            'publish_site_id' => $site->id,
+            'created_by' => auth()->id(),
+            'workflow_type' => $validated['article_type'] ?? ($draft->article_type ?: null),
+            'transport' => $strategy['transport'],
+            'queue_connection' => $strategy['queue_connection'],
+            'queue_name' => $strategy['queue_name'],
+            'client_trace' => $clientTrace,
+            'trace_id' => $traceId,
+            'debug_enabled' => $this->pipelineDebugEnabled($request),
         ]);
+
+        $payload = array_merge($validated, [
+            'client_trace' => $clientTrace,
+            'trace_id' => $traceId,
+            'debug_mode' => $this->pipelineDebugEnabled($request),
+            'user_id' => auth()->id(),
+            'user_ip' => $request->ip(),
+        ]);
+
+        $this->dispatchPipelineOperation($strategy, $operation, $payload, PublishPipelineOperation::TYPE_PUBLISH);
+
+        return response()->json([
+            'success' => true,
+            'message' => $strategy['transport'] === 'sync'
+                ? 'Publish operation completed.'
+                : 'Publish operation started.',
+            'operation' => $this->serializePipelineOperation($operation->fresh()),
+        ], $strategy['transport'] === 'sync' ? 200 : 202);
     }
 
     /**
@@ -764,6 +847,23 @@ class PipelineController extends Controller
     public function saveDraft(SaveDraftRequest $request): JsonResponse
     {
         $validated = $request->validated();
+        $editorReady = $request->boolean('editor_ready');
+        $debugMode = $this->pipelineDebugEnabled($request);
+        $clientTrace = $this->pipelineClientTrace($request);
+        $startedAt = microtime(true);
+        $tabId = trim((string) $request->headers->get('X-Pipeline-Tab-Id', ''));
+        $requestSummary = [
+            'client_trace' => $clientTrace,
+            'debug_mode' => $debugMode,
+            'draft_id' => (int) ($validated['draft_id'] ?? 0),
+            'user_id' => (int) ($validated['user_id'] ?? auth()->id()),
+            'site_id' => (int) ($validated['site_id'] ?? 0),
+            'tab_id' => $tabId,
+            'editor_ready' => $editorReady,
+            'body_length' => strlen((string) ($validated['body'] ?? '')),
+            'title_length' => strlen((string) ($validated['title'] ?? '')),
+        ];
+        $this->logPipelineDebug('[Draft] Save requested', $requestSummary, $debugMode);
 
         $data = [
             'title'            => $validated['title'] ?? 'Untitled Pipeline Draft',
@@ -780,28 +880,144 @@ class PipelineController extends Controller
             'author'           => $validated['author'] ?? null,
             'source_articles'  => $validated['sources'] ?? null,
             'word_count'       => isset($validated['body']) ? str_word_count(strip_tags($validated['body'])) : 0,
-            'photo_suggestions' => $validated['photo_suggestions'] ?? null,
+            'photo_suggestions' => $this->sanitizePhotoSuggestionsForPersistence($validated['photo_suggestions'] ?? null),
             'featured_image_search' => $validated['featured_image_search'] ?? null,
             'notes'            => $validated['notes'] ?? null,
         ];
 
         if (!empty($validated['draft_id'])) {
             $draft = PublishArticle::findOrFail($validated['draft_id']);
+            if ($conflict = $this->draftSession->conflictFor($draft, $tabId, auth()->id())) {
+                return $this->draftSessionConflictResponse($draft, $conflict, 'draft save');
+            }
+            $incomingBody = $validated['body'] ?? null;
+            if (
+                !$editorReady
+                && ($incomingBody === null || trim((string) $incomingBody) === '')
+                && !empty($draft->body)
+            ) {
+                $data['body'] = $draft->body;
+                $data['word_count'] = $draft->word_count;
+            }
             $draft->update($data);
+            $this->draftSession->claim($draft, $tabId, auth()->id(), [
+                'source' => 'draft_save',
+                'client_trace' => $clientTrace,
+            ]);
             $message = "Draft updated: {$draft->title}";
         } else {
             $data['article_id'] = PublishArticle::generateArticleId();
             $draft = PublishArticle::create($data);
+            $this->draftSession->claim($draft, $tabId, auth()->id(), [
+                'source' => 'draft_create',
+                'client_trace' => $clientTrace,
+            ]);
             $message = "Draft created: {$draft->title}";
         }
 
         hexaLog('publish', 'pipeline_draft_saved', $message);
 
-        return response()->json([
+        $response = [
             'success'  => true,
             'message'  => $message,
             'draft_id' => $draft->id,
-        ]);
+        ];
+
+        if ($debugMode) {
+            $response['debug'] = [
+                'client_trace' => $clientTrace,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                'word_count' => $draft->word_count,
+            ];
+            $this->logPipelineDebug('[Draft] Save completed', array_merge($requestSummary, [
+                'duration_ms' => $response['debug']['duration_ms'],
+                'saved_draft_id' => $draft->id,
+                'word_count' => $draft->word_count,
+            ]), true);
+        }
+
+        return response()->json($response);
+    }
+
+    private function draftSessionConflictResponse(PublishArticle $draft, array $conflict, string $scope): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'code' => 'draft_session_conflict',
+            'message' => 'Another tab is actively editing this draft. Saves are paused in this tab to avoid overwriting draft #' . $draft->id . '.',
+            'conflict' => array_merge($conflict, [
+                'scope' => $scope,
+                'draft_id' => $draft->id,
+            ]),
+        ], 409);
+    }
+
+    private function sanitizePhotoSuggestionsForPersistence(?array $suggestions): ?array
+    {
+        if (!is_array($suggestions)) {
+            return null;
+        }
+
+        return array_map(function ($suggestion, $index) {
+            if (!is_array($suggestion)) {
+                return [
+                    'position' => $index,
+                    'search_term' => '',
+                    'alt_text' => '',
+                    'caption' => '',
+                    'suggestedFilename' => '',
+                    'autoPhoto' => null,
+                    'confirmed' => false,
+                    'removed' => false,
+                ];
+            }
+
+            $autoPhoto = $this->sanitizePhotoAssetForPersistence($suggestion['autoPhoto'] ?? null);
+
+            return [
+                'position' => (int) ($suggestion['position'] ?? $index),
+                'search_term' => trim((string) ($suggestion['search_term'] ?? '')),
+                'alt_text' => (string) ($suggestion['alt_text'] ?? ''),
+                'caption' => (string) ($suggestion['caption'] ?? ''),
+                'suggestedFilename' => (string) ($suggestion['suggestedFilename'] ?? ''),
+                'autoPhoto' => $autoPhoto,
+                'confirmed' => $autoPhoto !== null && !empty($suggestion['confirmed']),
+                'removed' => !empty($suggestion['removed']),
+            ];
+        }, $suggestions, array_keys($suggestions));
+    }
+
+    private function sanitizePhotoAssetForPersistence(mixed $photo): ?array
+    {
+        if (!is_array($photo)) {
+            return null;
+        }
+
+        $normalized = [
+            'id' => $photo['id'] ?? null,
+            'source' => (string) ($photo['source'] ?? ''),
+            'source_url' => (string) ($photo['source_url'] ?? $photo['pexels_url'] ?? $photo['unsplash_url'] ?? $photo['pixabay_url'] ?? $photo['url'] ?? ''),
+            'url' => (string) ($photo['url'] ?? $photo['url_large'] ?? $photo['url_full'] ?? $photo['url_thumb'] ?? ''),
+            'url_thumb' => (string) ($photo['url_thumb'] ?? $photo['url_large'] ?? $photo['url_full'] ?? $photo['url'] ?? ''),
+            'url_large' => (string) ($photo['url_large'] ?? $photo['url_full'] ?? $photo['url_thumb'] ?? $photo['url'] ?? ''),
+            'url_full' => (string) ($photo['url_full'] ?? $photo['url_large'] ?? $photo['url_thumb'] ?? $photo['url'] ?? ''),
+            'alt' => (string) ($photo['alt'] ?? ''),
+            'photographer' => (string) ($photo['photographer'] ?? ''),
+            'photographer_url' => (string) ($photo['photographer_url'] ?? ''),
+            'width' => (int) ($photo['width'] ?? 0),
+            'height' => (int) ($photo['height'] ?? 0),
+        ];
+
+        if (
+            $normalized['url'] === ''
+            && $normalized['url_thumb'] === ''
+            && $normalized['url_large'] === ''
+            && $normalized['url_full'] === ''
+        ) {
+            return null;
+        }
+
+        return $normalized;
     }
 
     public function detectAi(DetectAiRequest $request): JsonResponse
@@ -889,5 +1105,235 @@ class PipelineController extends Controller
             'all_pass' => $allPass,
             'results' => $results,
         ]);
+    }
+
+    private function pipelineDebugEnabled(Request $request): bool
+    {
+        return $request->boolean('debug_mode')
+            || $request->headers->get('X-Pipeline-Debug') === '1';
+    }
+
+    private function dispatchPipelineOperation(array $strategy, PublishPipelineOperation $operation, array $payload, string $type): void
+    {
+        if ($strategy['transport'] === 'sync') {
+            $executor = app(PipelineOperationExecutor::class);
+            if ($type === PublishPipelineOperation::TYPE_PREPARE) {
+                $executor->runPrepare($operation->id, $payload);
+            } else {
+                $executor->runPublish($operation->id, $payload);
+            }
+
+            return;
+        }
+
+        if ($strategy['transport'] === 'queue') {
+            if ($type === PublishPipelineOperation::TYPE_PREPARE) {
+                PreparePipelineOperationJob::dispatch($operation->id, $payload)
+                    ->onConnection($strategy['queue_connection'])
+                    ->onQueue($strategy['queue_name']);
+            } else {
+                PublishPipelineOperationJob::dispatch($operation->id, $payload)
+                    ->onConnection($strategy['queue_connection'])
+                    ->onQueue($strategy['queue_name']);
+            }
+
+            return;
+        }
+
+        if ($strategy['transport'] === 'queue_once') {
+            if ($type === PublishPipelineOperation::TYPE_PREPARE) {
+                PreparePipelineOperationJob::dispatch($operation->id, $payload)
+                    ->onConnection($strategy['queue_connection'])
+                    ->onQueue($strategy['queue_name']);
+            } else {
+                PublishPipelineOperationJob::dispatch($operation->id, $payload)
+                    ->onConnection($strategy['queue_connection'])
+                    ->onQueue($strategy['queue_name']);
+            }
+
+            app(PipelineOperationService::class)->spawnTransientQueueWorker(
+                (string) $strategy['queue_connection'],
+                (string) $strategy['queue_name']
+            );
+
+            return;
+        }
+
+        app()->terminating(function () use ($operation, $payload, $type) {
+            $executor = app(PipelineOperationExecutor::class);
+            if ($type === PublishPipelineOperation::TYPE_PREPARE) {
+                $executor->runPrepare($operation->id, $payload);
+            } else {
+                $executor->runPublish($operation->id, $payload);
+            }
+        });
+    }
+
+    private function pipelineClientTrace(Request $request): string
+    {
+        return (string) ($request->headers->get('X-Pipeline-Client-Trace') ?: '');
+    }
+
+    private function pipelineBootstrapPresetsForUser(int $userId): array
+    {
+        $cacheKey = implode(':', [
+            'publish',
+            'presets',
+            'json',
+            'v' . ((int) Cache::get('publish:presets:json:version', 1)),
+            'user',
+            $userId,
+        ]);
+
+        return Cache::remember($cacheKey, now()->addMinutes(10), function () use ($userId) {
+            return PublishPreset::query()
+                ->select([
+                    'id',
+                    'user_id',
+                    'name',
+                    'status',
+                    'is_default',
+                    'default_site_id',
+                    'follow_links',
+                    'article_format',
+                    'tone',
+                    'image_preference',
+                    'default_publish_action',
+                    'default_category_count',
+                    'default_tag_count',
+                    'image_layout',
+                    'searching_agent',
+                    'scraping_agent',
+                    'spinning_agent',
+                    'created_at',
+                    'updated_at',
+                ])
+                ->where('user_id', $userId)
+                ->orderByDesc('updated_at')
+                ->get()
+                ->map(fn (PublishPreset $preset) => $preset->toArray())
+                ->all();
+        });
+    }
+
+    private function pipelineBootstrapTemplatesForUser(int $userId): array
+    {
+        $cacheKey = implode(':', [
+            'publish',
+            'templates',
+            'json',
+            'v' . ((int) Cache::get('publish:templates:json:version', 1)),
+            'user',
+            $userId,
+            'account',
+            'all',
+            'type',
+            'all',
+        ]);
+
+        return Cache::remember($cacheKey, now()->addMinutes(10), function () use ($userId) {
+            return PublishTemplate::query()
+                ->select([
+                    'id',
+                    'publish_account_id',
+                    'name',
+                    'status',
+                    'is_default',
+                    'article_type',
+                    'description',
+                    'ai_prompt',
+                    'ai_engine',
+                    'tone',
+                    'word_count_min',
+                    'word_count_max',
+                    'photos_per_article',
+                    'photo_sources',
+                    'max_links',
+                    'structure',
+                    'rules',
+                    'searching_agent',
+                    'scraping_agent',
+                    'spinning_agent',
+                    'created_at',
+                    'updated_at',
+                ])
+                ->with(['account:id,name,owner_user_id'])
+                ->where(function ($accountScope) use ($userId) {
+                    $accountScope->whereNull('publish_account_id')
+                        ->orWhereHas('account', function ($query) use ($userId) {
+                            $query->where('owner_user_id', $userId)
+                                ->orWhereHas('users', fn ($users) => $users->where('user_id', $userId));
+                        });
+                })
+                ->orderByDesc('updated_at')
+                ->get()
+                ->map(fn (PublishTemplate $template) => $template->toArray())
+                ->all();
+        });
+    }
+
+    private function logPipelineDebug(string $message, array $context, bool $enabled): void
+    {
+        if (!$enabled) {
+            return;
+        }
+
+        \Log::info($message, $context);
+    }
+
+    private function resolveAuthorizedDraft(int $draftId): PublishArticle
+    {
+        $draft = PublishArticle::findOrFail($draftId);
+        $user = auth()->user();
+
+        abort_unless(
+            $user && ($user->isAdmin() || $draft->created_by === $user->id || $draft->user_id === $user->id),
+            403
+        );
+
+        return $draft;
+    }
+
+    private function createFreshPipelineDraft(): PublishArticle
+    {
+        return PublishArticle::create([
+            'article_id' => PublishArticle::generateArticleId(),
+            'title' => 'Untitled',
+            'status' => 'drafting',
+            'created_by' => auth()->id(),
+            'user_id' => auth()->id(),
+        ]);
+    }
+
+    private function serializePipelineOperation(?PublishPipelineOperation $operation): ?array
+    {
+        if (!$operation) {
+            return null;
+        }
+
+        return [
+            'id' => $operation->id,
+            'draft_id' => $operation->publish_article_id,
+            'site_id' => $operation->publish_site_id,
+            'operation_type' => $operation->operation_type,
+            'status' => $operation->status,
+            'transport' => $operation->transport,
+            'queue_connection' => $operation->queue_connection,
+            'queue_name' => $operation->queue_name,
+            'client_trace' => $operation->client_trace,
+            'trace_id' => $operation->trace_id,
+            'debug_enabled' => $operation->debug_enabled,
+            'event_sequence' => $operation->event_sequence,
+            'total_events' => $operation->total_events,
+            'last_stage' => $operation->last_stage,
+            'last_substage' => $operation->last_substage,
+            'last_message' => $operation->last_message,
+            'error_message' => $operation->error_message,
+            'request_summary' => $operation->request_summary,
+            'result_payload' => $operation->result_payload,
+            'started_at' => optional($operation->started_at)->toIso8601String(),
+            'completed_at' => optional($operation->completed_at)->toIso8601String(),
+            'last_event_at' => optional($operation->last_event_at)->toIso8601String(),
+        ];
     }
 }

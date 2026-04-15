@@ -33,7 +33,9 @@ class PublishToWordpressRequest extends PipelineRequest
             'preset_id' => 'nullable|integer',
             'user_id' => 'nullable|integer',
             'article_type' => 'nullable|string|max:100',
-            'draft_id' => 'nullable|integer|exists:publish_articles,id',
+            'draft_id' => 'required|integer|exists:publish_articles,id',
+            'featured_media_id' => 'nullable|integer',
+            'featured_wp_url' => 'nullable|string',
         ];
     }
 }

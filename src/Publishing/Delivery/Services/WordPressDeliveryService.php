@@ -192,13 +192,31 @@ class WordPressDeliveryService
 
     private function success(PublishSite $site, string $mode, string $message, ?int $postId, ?string $postUrl = null): array
     {
+        $postUrl = $this->normalizePostUrl($postUrl)
+            ?: ($postId ? rtrim($site->url, '/') . '/?p=' . $postId : null);
+
         return [
             'success' => true,
             'message' => $message,
             'post_id' => $postId,
-            'post_url' => $postUrl ?: ($postId ? rtrim($site->url, '/') . '/?p=' . $postId : null),
+            'post_url' => $postUrl,
             'mode' => $mode,
         ];
+    }
+
+    private function normalizePostUrl(?string $postUrl): ?string
+    {
+        $postUrl = trim((string) $postUrl);
+        if ($postUrl === '') {
+            return null;
+        }
+
+        preg_match_all('/https?:\/\/[^\s]+/i', $postUrl, $matches);
+        if (!empty($matches[0])) {
+            return end($matches[0]) ?: null;
+        }
+
+        return str_starts_with($postUrl, 'http') ? $postUrl : null;
     }
 
     /**

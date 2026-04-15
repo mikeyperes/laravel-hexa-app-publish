@@ -17,10 +17,14 @@
     googleResults: [],
     stockSearching: false,
     googleSearching: false,
+    stockLoadingMore: false,
+    googleLoadingMore: false,
     stockTimings: {},
     googleTiming: 0,
     stockError: '',
     googleError: '',
+    stockPage: 1,
+    googlePage: 1,
 
     loadTerm(term) {
         if (this.stockQuery === term && this.stockResults.length > 0) return;
@@ -29,43 +33,49 @@
         this.searchStock();
     },
 
-    async searchStock() {
+    async searchStock(loadMore = false) {
         if (!this.stockQuery.trim()) return;
-        this.stockSearching = true;
-        this.stockResults = [];
+        if (loadMore) { this.stockLoadingMore = true; this.stockPage++; }
+        else { this.stockSearching = true; this.stockResults = []; this.stockPage = 1; }
         this.stockError = '';
         try {
             const resp = await fetch('{{ route('publish.search.images.post') }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
-                body: JSON.stringify({ query: this.stockQuery, per_page: 5, sources: ['pexels', 'unsplash', 'pixabay'] })
+                body: JSON.stringify({ query: this.stockQuery, per_page: 3, page: this.stockPage, sources: ['pexels', 'unsplash', 'pixabay'] })
             });
             const data = await resp.json();
-            this.stockResults = data.data?.photos || [];
+            const photos = data.data?.photos || [];
+            if (loadMore) { this.stockResults = [...this.stockResults, ...photos]; }
+            else { this.stockResults = photos; }
             this.stockTimings = data.data?.timings || {};
             if (!data.success && data.data?.errors?.length) this.stockError = data.data.errors.join(', ');
         } catch (e) { this.stockError = e.message; }
         this.stockSearching = false;
+        this.stockLoadingMore = false;
     },
 
-    async searchGoogle() {
+    async searchGoogle(loadMore = false) {
         if (!this.googleQuery.trim()) return;
-        this.googleSearching = true;
-        this.googleResults = [];
+        if (loadMore) { this.googleLoadingMore = true; this.googlePage++; }
+        else { this.googleSearching = true; this.googleResults = []; this.googlePage = 1; }
         this.googleError = '';
         const start = Date.now();
         try {
             const resp = await fetch('{{ route('publish.search.google-images') }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
-                body: JSON.stringify({ query: this.googleQuery, per_page: 12 })
+                body: JSON.stringify({ query: this.googleQuery, per_page: 9, start: (this.googlePage - 1) * 9 })
             });
             const data = await resp.json();
             this.googleTiming = Date.now() - start;
-            if (data.success) { this.googleResults = data.data?.photos || []; }
+            const photos = data.data?.photos || [];
+            if (loadMore) { this.googleResults = [...this.googleResults, ...photos]; }
+            else if (data.success) { this.googleResults = photos; }
             else { this.googleError = data.message || 'Search failed'; }
         } catch (e) { this.googleError = e.message; }
         this.googleSearching = false;
+        this.googleLoadingMore = false;
     },
 
     pickPhoto(photo) {
@@ -89,13 +99,25 @@
             <template x-for="(photo, idx) in googleResults" :key="'g'+idx">
                 <div @click="pickPhoto(photo)" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-colors" :class="photo.copyright_flag ? 'border-red-300 hover:border-red-500' : 'border-gray-200 hover:border-blue-400'">
                     <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-64 object-cover" loading="lazy">
-                    <div class="px-1.5 py-1 bg-white">
+                    <div class="px-1.5 py-1 bg-white space-y-0.5">
                         <p class="text-[9px] font-medium text-gray-700 break-words" x-text="(photo.alt || '').substring(0, 40)"></p>
-                        <p class="text-[9px] text-gray-400" x-text="photo.domain + ' — ' + (photo.width || '?') + 'x' + (photo.height || '?')"></p>
+                        <div class="flex items-center gap-1 flex-wrap">
+                            <span class="text-[9px] text-gray-400" x-text="(photo.width || '?') + 'x' + (photo.height || '?')"></span>
+                            <template x-if="photo.width && photo.height">
+                                <span class="text-[8px] font-medium px-1 rounded" :class="(() => { const r = photo.width/photo.height; return r >= 1.3 ? 'bg-green-100 text-green-700' : (r >= 1.0 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'); })()" x-text="(photo.width/photo.height).toFixed(1) + ':1'"></span>
+                            </template>
+                        </div>
+                        <a :href="photo.url_large || photo.source_url" target="_blank" @click.stop class="text-[8px] text-blue-500 hover:underline break-all block" :title="photo.url_large || photo.source_url" x-text="(() => { try { const u = new URL(photo.url_large || photo.source_url || ''); return u.hostname + u.pathname.substring(0, 30) + '...'; } catch(e) { return ''; } })()"></a>
                         <div x-show="photo.copyright_flag" x-cloak class="text-[8px] text-red-500" x-text="photo.copyright_reason"></div>
                     </div>
                 </div>
             </template>
+        </div>
+        <div x-show="googleResults.length > 0 && googleResults.length >= 9 * googlePage" x-cloak class="mt-2 text-center">
+            <button type="button" @click.stop="searchGoogle(true)" :disabled="googleLoadingMore" class="text-xs text-blue-600 hover:text-blue-800 px-4 py-1.5 border border-blue-200 rounded-lg hover:bg-blue-50 inline-flex items-center gap-1 disabled:opacity-50">
+                <svg x-show="googleLoadingMore" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                <span x-text="googleLoadingMore ? 'Loading...' : 'Load More Google Images'"></span>
+            </button>
         </div>
     </div>
 
@@ -115,11 +137,23 @@
             <template x-for="(photo, idx) in stockResults" :key="'s'+idx">
                 <div @click="pickPhoto(photo)" class="cursor-pointer rounded-lg overflow-hidden border-2 border-gray-200 hover:border-purple-400 transition-colors">
                     <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-64 object-cover" loading="lazy">
-                    <div class="px-1.5 py-1 bg-white">
-                        <p class="text-[9px] text-gray-500" x-text="photo.source + ' — ' + (photo.width || '?') + 'x' + (photo.height || '?')"></p>
+                    <div class="px-1.5 py-1 bg-white space-y-0.5">
+                        <div class="flex items-center gap-1 flex-wrap">
+                            <span class="text-[9px] text-gray-500" x-text="photo.source + ' — ' + (photo.width || '?') + 'x' + (photo.height || '?')"></span>
+                            <template x-if="photo.width && photo.height">
+                                <span class="text-[8px] font-medium px-1 rounded" :class="(() => { const r = photo.width/photo.height; return r >= 1.2 ? 'bg-green-100 text-green-700' : (r >= 0.8 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'); })()" x-text="(photo.width/photo.height).toFixed(1) + ':1'"></span>
+                            </template>
+                        </div>
+                        <a :href="photo.url_large" target="_blank" @click.stop class="text-[8px] text-blue-500 hover:underline break-all block" :title="photo.url_large" x-text="(() => { try { const u = new URL(photo.url_large || ''); return u.hostname + u.pathname.substring(0, 30) + '...'; } catch(e) { return ''; } })()"></a>
                     </div>
                 </div>
             </template>
+        </div>
+        <div x-show="stockResults.length > 0" x-cloak class="mt-2 text-center">
+            <button type="button" @click.stop="searchStock(true)" :disabled="stockLoadingMore" class="text-xs text-purple-600 hover:text-purple-800 px-4 py-1.5 border border-purple-200 rounded-lg hover:bg-purple-50 inline-flex items-center gap-1 disabled:opacity-50">
+                <svg x-show="stockLoadingMore" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                <span x-text="stockLoadingMore ? 'Loading...' : 'Load More Stock Photos'"></span>
+            </button>
         </div>
     </div>
 </div>

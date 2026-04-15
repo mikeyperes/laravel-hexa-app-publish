@@ -138,6 +138,7 @@ function pressReleaseWorkflowMixin(config) {
                 this.pressRelease.photo_public_url = this.pressRelease.public_url;
             }
             this.savePipelineState();
+            this.invalidatePromptPreview('press_release_submit_method');
         },
 
         continuePressReleaseStep3() {
@@ -166,7 +167,7 @@ function pressReleaseWorkflowMixin(config) {
         continuePressReleaseStep4() {
             this.completeStep(4);
             this.openStep(5);
-            this.refreshPromptPreview();
+            this.invalidatePromptPreview('press_release_step4_continue', { fetch: true });
             this.savePipelineState();
         },
 
@@ -234,7 +235,7 @@ function pressReleaseWorkflowMixin(config) {
                     const normalized = this.normalizePressReleaseState(data.press_release);
                     Object.assign(this.pressRelease, normalized);
                     this.savePipelineState();
-                    this.refreshPromptPreview();
+                    this.invalidatePromptPreview('press_release_fields_detected', { fetch: true });
                 }
                 if (!response.ok && !data.press_release) {
                     throw new Error(data.message || 'Field detection failed.');
@@ -255,6 +256,9 @@ function pressReleaseWorkflowMixin(config) {
             const now = () => new Date().toLocaleTimeString('en-US', { hour12: false });
             const log = (type, message) => {
                 this.pressRelease.photo_detect_log.push({ type, message, time: now() });
+                if (typeof this._logActivity === 'function') {
+                    this._logActivity('press_release', type, message, { debug_only: type === 'step' });
+                }
             };
 
             const url = this.pressRelease.photo_public_url || this.pressRelease.public_url || '';
@@ -304,7 +308,12 @@ function pressReleaseWorkflowMixin(config) {
             this.pressRelease.photo_detect_log = [];
 
             const now = () => new Date().toLocaleTimeString('en-US', { hour12: false });
-            const log = (type, message) => { this.pressRelease.photo_detect_log.push({ type, message, time: now() }); };
+            const log = (type, message) => {
+                this.pressRelease.photo_detect_log.push({ type, message, time: now() });
+                if (typeof this._logActivity === 'function') {
+                    this._logActivity('press_release', type, message, { debug_only: type === 'step' });
+                }
+            };
 
             log('info', 'Fetching photos from Google Drive...');
             log('step', 'URL: ' + this.pressRelease.google_drive_url);
@@ -354,6 +363,9 @@ function pressReleaseWorkflowMixin(config) {
             const log = (type, message) => {
                 if (!this.pressRelease.content_detect_log) this.pressRelease.content_detect_log = [];
                 this.pressRelease.content_detect_log.push({ type, message, time: now() });
+                if (typeof this._logActivity === 'function') {
+                    this._logActivity('press_release', type, message, { debug_only: type === 'step' });
+                }
             };
 
             log('info', 'Starting content detection from URL...');
@@ -393,6 +405,7 @@ function pressReleaseWorkflowMixin(config) {
                         this.pressRelease.resolved_source_preview = (result.text || '').substring(0, 500) + (result.text?.length > 500 ? '...' : '');
                         this.pressRelease.resolved_source_label = result.title || 'Detected from URL';
                         this.savePipelineState();
+                        this.invalidatePromptPreview('press_release_content_detected', { fetch: this.currentStep === 5 || this.openSteps.includes(5) });
                     } else {
                         log('error', 'Extraction failed: ' + (result.message || 'Unknown error'));
                         if (result.fetch_info?.reason) log('step', 'Reason: ' + result.fetch_info.reason);
@@ -410,28 +423,97 @@ function pressReleaseWorkflowMixin(config) {
 
         queueServerPipelineStateSave() {
             clearTimeout(this._serverPipelineStateTimer);
+            const signature = this._lastLocalPipelineStateSignature || this._stableSignature(this.buildPipelineStateSnapshot());
+            if (!this._pendingServerPipelineStateSave && signature && signature === this._lastServerPipelineStateSignature) {
+                this._logDebug?.('state', 'Skipped server pipeline-state queue (signature unchanged)', {
+                    stage: 'state',
+                    substage: 'server_skip',
+                });
+                return;
+            }
+
+            this._pendingServerPipelineStateSave = true;
+            this._logDebug?.('state', 'Queued server pipeline-state save', {
+                stage: 'state',
+                substage: 'server_queued',
+            });
             this._serverPipelineStateTimer = setTimeout(() => this.savePipelineStateToServer(), 350);
         },
 
         async savePipelineStateToServer() {
-            if (this._savingPipelineStateServer || !this.draftId) return;
+            if (!this.draftId) return;
+            if (this._draftSessionConflictActive) return;
+            if (this._savingPipelineStateServer) {
+                this._pendingServerPipelineStateSave = true;
+                this._logDebug?.('state', 'Server pipeline-state save deferred while another request is in flight', {
+                    stage: 'state',
+                    substage: 'server_deferred',
+                });
+                return;
+            }
+
+            const payload = this.buildPipelineStateSnapshot();
+            const signature = this._stableSignature(payload);
+            if (!this._pendingServerPipelineStateSave && signature === this._lastServerPipelineStateSignature) {
+                return;
+            }
+
             this._savingPipelineStateServer = true;
+            this._pendingServerPipelineStateSave = false;
+            const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
             try {
-                await fetch('{{ route("publish.pipeline.state.save") }}', {
+                const response = await this._rawPipelineFetch('{{ route("publish.pipeline.state.save") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
                     body: JSON.stringify({
                         draft_id: this.draftId,
                         workflow_type: this.currentWorkflowKey(),
-                        payload: this.buildPipelineStateSnapshot(),
+                        payload,
                     }),
                 });
+                const data = await response.json().catch(() => ({}));
+                if (response.status === 409 && data.code === 'draft_session_conflict') {
+                    this._handleDraftSessionConflict?.('state', data, { silent: true });
+                    this._savingPipelineStateServer = false;
+                    return;
+                }
+                if (response.ok && data.success) {
+                    this._clearDraftSessionConflict?.();
+                    this._lastServerPipelineStateSignature = signature;
+                    this._logDebug?.('state', 'Server pipeline state saved', {
+                        stage: 'state',
+                        substage: 'server_saved',
+                        status: response.status,
+                        duration_ms: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt)),
+                        details: data.state_id ? ('state_id: ' + data.state_id + ' | workflow: ' + (data.workflow_type || this.currentWorkflowKey())) : '',
+                    });
+                } else {
+                    this._pendingServerPipelineStateSave = true;
+                    this._logActivity?.('state', 'error', data.message || 'Server pipeline state save failed', {
+                        stage: 'state',
+                        substage: 'server_response_error',
+                        status: response.status,
+                        duration_ms: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt)),
+                    });
+                }
             } catch (error) {
-                // Local state remains intact; server sync can retry on the next change.
+                if (this._isLikelyNavigationAbort?.(error)) {
+                    this._savingPipelineStateServer = false;
+                    return;
+                }
+                this._pendingServerPipelineStateSave = true;
+                this._logActivity?.('state', 'error', 'Server pipeline state save error: ' + error.message, {
+                    stage: 'state',
+                    substage: 'server_exception',
+                    duration_ms: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt)),
+                });
             }
 
             this._savingPipelineStateServer = false;
+            if (this._pendingServerPipelineStateSave) {
+                this.queueServerPipelineStateSave();
+            }
         },
 
         buildPipelineStateSnapshot() {
@@ -444,6 +526,9 @@ function pressReleaseWorkflowMixin(config) {
             for (const key of this.persistentFields) {
                 state[key] = clone(this[key]);
             }
+
+            state.photoSuggestions = this.sanitizePhotoSuggestionsForPersistence(state.photoSuggestions || []);
+            state.featuredPhoto = this.sanitizePhotoAssetForPersistence(state.featuredPhoto || null);
 
             return state;
         },

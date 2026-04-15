@@ -47,7 +47,7 @@
 <p class="text-xs text-gray-600 uppercase tracking-wider pt-4 pb-1 px-3">Article</p>
 
 @if(Route::has('publish.pipeline'))
-<a href="{{ route('publish.pipeline') }}"
+<a href="{{ route('publish.pipeline', ['spawn' => 1]) }}"
    class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
           {{ request()->routeIs('publish.pipeline') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
     <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -10,6 +10,7 @@ class SaveDraftRequest extends PipelineRequest
             'draft_id' => 'nullable|integer|exists:publish_articles,id',
             'title' => 'nullable|string|max:500',
             'body' => 'nullable|string',
+            'editor_ready' => 'nullable|boolean',
             'excerpt' => 'nullable|string|max:1000',
             'user_id' => 'nullable|integer|exists:users,id',
             'site_id' => 'nullable|integer|exists:publish_sites,id',

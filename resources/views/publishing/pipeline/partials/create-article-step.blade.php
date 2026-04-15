@@ -10,14 +10,17 @@
                 <template x-if="!completedSteps.includes(6)"><span>6</span></template>
             </span>
             <span class="font-semibold text-gray-800">Create Article</span>
-            <span x-show="spunContent" x-cloak class="text-sm text-green-600" x-text="spunWordCount + ' words'"></span>
+            <span x-show="Number(spunWordCount || 0) > 0" x-cloak class="text-sm text-green-600" x-text="spunWordCount + ' words'"></span>
         </div>
         <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(6) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
     </button>
     <div x-show="openSteps.includes(6)" x-cloak x-collapse class="px-4 pb-4">
 
         {{-- Spun content in TinyMCE editor --}}
-        <div x-show="spunContent" x-cloak>
+        <div x-show="spunContent || editorContent || isStepAccessible(6)" x-cloak>
+            <p x-show="!spunContent && !editorContent" x-cloak class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                This draft body is currently blank. The editor is still available so the draft can be repaired instead of collapsing into an empty card.
+            </p>
             <p class="text-xs text-gray-500 mb-2">Generated article — edit directly below</p>
             {{-- Title textbox --}}
             <div class="mb-3">
@@ -195,37 +198,96 @@
                     <div class="p-3">
                         <div class="flex items-start gap-3">
                             {{-- Thumbnail --}}
-                            <div class="w-40 h-28 flex-shrink-0 rounded overflow-hidden bg-gray-100">
-                                <img x-show="featuredPhoto" x-cloak :src="featuredPhoto?.url_large || featuredPhoto?.url_thumb" class="w-full h-full object-cover">
-                                <div x-show="!featuredPhoto" class="w-full h-full flex items-center justify-center text-gray-300">
+                            <div class="w-40 h-28 flex-shrink-0 rounded overflow-hidden bg-gray-100 relative">
+                                <img x-show="featuredPhoto && !featuredThumbError" x-cloak data-featured-thumb :src="resolvePhotoThumbUrl(featuredPhoto)" class="w-full h-full object-cover transition-opacity" :class="featuredThumbLoading ? 'opacity-0' : 'opacity-100'" x-on:load="featuredThumbLoading = false; featuredThumbError = ''" x-on:error="featuredThumbLoading = false; featuredThumbError = 'Featured thumbnail failed to load'">
+                                <div x-show="featuredPhoto && featuredThumbLoading" x-cloak class="absolute inset-0 w-full h-full flex items-center justify-center bg-purple-50/90">
+                                    <svg class="w-5 h-5 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                </div>
+                                <div x-show="!featuredPhoto && featuredSearching" x-cloak class="w-full h-full flex items-center justify-center bg-purple-50">
+                                    <svg class="w-5 h-5 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                </div>
+                                <div x-show="featuredPhoto && featuredThumbError" x-cloak class="w-full h-full flex flex-col items-center justify-center text-red-400 bg-red-50 px-2 text-center">
+                                    <svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86A2.07 2.07 0 0020.73 16L13.8 4a2.07 2.07 0 00-3.6 0L3.27 16A2.07 2.07 0 005.07 19z"/></svg>
+                                    <span class="text-[10px] font-medium">Thumbnail failed</span>
+                                </div>
+                                <div x-show="!featuredPhoto && !featuredSearching" class="w-full h-full flex items-center justify-center text-gray-300">
                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                                 </div>
                             </div>
                             {{-- Info + metadata --}}
                             <div class="flex-1 min-w-0 space-y-1.5">
                                 <p class="text-sm font-medium text-purple-700 break-words" x-text="featuredImageSearch"></p>
-                                <p x-show="featuredPhoto" x-cloak class="text-[11px] text-gray-400" x-text="(featuredPhoto?.source || '') + ' — ' + (featuredPhoto?.width || '') + 'x' + (featuredPhoto?.height || '')"></p>
+                                <p x-show="!featuredPhoto && featuredSearching" x-cloak class="text-[11px] text-amber-600">Loading suggestions...</p>
+                                <p x-show="!featuredPhoto && !featuredSearching && featuredSearchPending" x-cloak class="text-[11px] text-amber-600">Suggestions load automatically while Create Article is open.</p>
+                                <p x-show="featuredLoadError" x-cloak class="text-[11px] text-red-500" x-text="featuredLoadError"></p>
+                                <p x-show="featuredThumbError" x-cloak class="text-[11px] text-red-500" x-text="featuredThumbError"></p>
+                                <div x-show="featuredPhoto" x-cloak class="flex items-center gap-2 text-[11px]">
+                                    <span class="text-gray-400" x-text="(featuredPhoto?.source || '') + ' — ' + (featuredPhoto?.width || '') + 'x' + (featuredPhoto?.height || '')"></span>
+                                    <template x-if="featuredPhoto?.width && featuredPhoto?.height">
+                                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                                            :class="(() => {
+                                                const r = featuredPhoto.width / featuredPhoto.height;
+                                                if (r >= 1.3 && r <= 2.0) return 'bg-green-100 text-green-700';
+                                                if (r >= 1.0 && r < 1.3) return 'bg-yellow-100 text-yellow-700';
+                                                return 'bg-red-100 text-red-700';
+                                            })()"
+                                            x-text="(() => {
+                                                const r = featuredPhoto.width / featuredPhoto.height;
+                                                const label = r.toFixed(2) + ':1';
+                                                if (r >= 1.3 && r <= 2.0) return label + ' Landscape';
+                                                if (r >= 1.0 && r < 1.3) return label + ' Square';
+                                                if (r < 1.0) return label + ' Portrait';
+                                                return label + ' Ultra-wide';
+                                            })()">
+                                        </span>
+                                    </template>
+                                    <template x-if="featuredPhoto?.width && featuredPhoto?.height && (featuredPhoto.width / featuredPhoto.height) < 1.3">
+                                        <span class="text-[10px] text-red-500">Bad for featured</span>
+                                    </template>
+                                </div>
                                 <div x-show="featuredPhoto" x-cloak class="space-y-0.5 max-w-lg">
                                     <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Alt</label><input type="text" x-model="featuredAlt" class="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs" placeholder="Alt text..."></div>
                                     <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Caption</label><input type="text" x-model="featuredCaption" class="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs" placeholder="Caption..."></div>
-                                    <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Filename</label><p class="text-[11px] font-mono text-gray-500" x-text="featuredFilename || 'auto'"></p></div>
+                                    <div class="flex items-center gap-2"><label class="text-[10px] uppercase w-16 flex-shrink-0" :class="!featuredFilename || featuredFilename === 'auto' ? 'text-red-400 font-semibold' : 'text-gray-400'">Filename</label><p class="text-[11px] font-mono" :class="!featuredFilename || featuredFilename === 'auto' ? 'text-red-500' : 'text-gray-500'" x-text="featuredFilename || 'auto'"></p></div>
                                 </div>
                                 <div class="flex items-center gap-2 mt-1">
-                                    <button @click.stop="refreshFeaturedMeta()" :disabled="featuredRefreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50">
+                                    <button @click.stop="refreshFeaturedMeta()" :disabled="featuredRefreshingMeta" class="text-[11px] inline-flex items-center gap-1 disabled:opacity-50" :class="(() => { const bad = !featuredAlt || !featuredCaption || featuredFilename === 'auto' || !featuredFilename || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|dreamstime|alamy|flickr|wikimedia/i.test(featuredAlt) || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|wikimedia/i.test(featuredCaption); return bad ? 'text-red-500 hover:text-red-700 font-semibold' : 'text-purple-500 hover:text-purple-700'; })()">
                                         <svg class="w-3 h-3" :class="featuredRefreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                         <span x-text="featuredRefreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
                                     </button>
+                                    <template x-if="!featuredAlt || !featuredCaption || featuredFilename === 'auto' || !featuredFilename || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|dreamstime|alamy|flickr|wikimedia/i.test(featuredAlt) || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|wikimedia/i.test(featuredCaption)">
+                                        <span class="text-[10px] text-red-500 font-medium">Needs metadata</span>
+                                    </template>
                                 </div>
-                                <div x-show="featuredPhoto?.source === 'url-import'" x-cloak class="mt-1">
-                                    <span class="text-[10px] text-gray-400">Source:</span>
-                                    <a :href="featuredPhoto?.url_large" target="_blank" class="text-[10px] text-blue-500 hover:text-blue-700 break-all" x-text="featuredPhoto?.url_large"></a>
+                                {{-- Source info — compact block with provider + URLs --}}
+                                <div x-show="featuredPhoto" x-cloak class="text-[10px] mt-1.5 bg-gray-50 border border-gray-100 rounded px-2 py-1.5 space-y-1">
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <span x-show="featuredPhoto?.source === 'google'" class="text-green-600 font-medium">via Google (SerpAPI)</span>
+                                        <span x-show="featuredPhoto?.source === 'google-cse'" class="text-blue-600 font-medium">via Google (CSE)</span>
+                                        <span x-show="featuredPhoto?.source === 'pexels'" class="text-teal-600 font-medium">Pexels</span>
+                                        <span x-show="featuredPhoto?.source === 'unsplash'" class="text-gray-600 font-medium">Unsplash</span>
+                                        <span x-show="featuredPhoto?.source === 'pixabay'" class="text-yellow-600 font-medium">Pixabay</span>
+                                        <span x-show="featuredPhoto?.source === 'url-import'" class="text-orange-600 font-medium">Import URL</span>
+                                        <span x-show="featuredPhoto?.source === 'upload'" class="text-purple-600 font-medium">Upload</span>
+                                        <a :href="featuredPhoto?.url_large" target="_blank" class="text-blue-500 hover:underline truncate max-w-xs inline-flex items-center gap-0.5" :title="featuredPhoto?.url_large">
+                                            <strong class="text-blue-700" x-text="(() => { try { return new URL(featuredPhoto?.url_large || '').hostname; } catch(e) { return ''; } })()"></strong><span class="truncate" x-text="(() => { try { const u = new URL(featuredPhoto?.url_large || ''); const p = u.pathname; return p.length > 40 ? p.substring(0, 20) + '...' + p.substring(p.length - 18) : p; } catch(e) { return ''; } })()"></span>
+                                            <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                        </a>
+                                    </div>
+                                    <div x-show="featuredPhoto?.source_url && featuredPhoto?.source_url !== featuredPhoto?.url_large" x-cloak class="flex items-center gap-1.5">
+                                        <span class="text-gray-400">Found on:</span>
+                                        <a :href="featuredPhoto?.source_url" target="_blank" class="text-blue-500 hover:underline inline-flex items-center gap-0.5" :title="featuredPhoto?.source_url">
+                                            <strong class="text-blue-700" x-text="(() => { try { return new URL(featuredPhoto?.source_url || '').hostname; } catch(e) { return ''; } })()"></strong>
+                                            <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                        </a>
+                                    </div>
                                 </div>
                                 {{-- Change Photo / Import URL / Upload --}}
                                 <div class="mt-2" x-data="{ showFeaturedUrl: false, featuredUrlVal: '' }">
                                     <div class="flex items-center gap-1.5">
-                                        <button @click.stop="featuredExpanded = !featuredExpanded" class="text-[11px] text-blue-500 hover:text-blue-700 inline-flex items-center gap-1">
+                                        <button @click.stop="featuredExpanded = !featuredExpanded; if (featuredExpanded) { featuredSearchPending = false; }" class="text-[11px] text-blue-500 hover:text-blue-700 inline-flex items-center gap-1">
                                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
-                                            Change Photo
+                                            <span x-text="featuredPhoto ? 'Change Photo' : (featuredSearchPending ? 'Loading Suggestions…' : 'Find Photo')"></span>
                                         </button>
                                         <span class="text-gray-300">|</span>
                                         <button @click.stop="showFeaturedUrl = !showFeaturedUrl" class="text-[11px] text-blue-500 hover:text-blue-700">Import URL</button>
@@ -235,11 +297,11 @@
                                             <input type="file" class="hidden" accept="image/*" @change="uploadFeaturedPhoto($event.target.files); $event.target.value = null">
                                         </label>
                                         <span class="text-gray-300">|</span>
-                                        <button x-show="featuredPhoto" x-cloak @click="featuredPhoto = null; featuredAlt = ''; featuredCaption = ''; featuredFilename = ''" class="text-[11px] text-red-500 hover:text-red-700">Remove</button>
+                                        <button x-show="featuredPhoto" x-cloak @click="featuredPhoto = null; featuredAlt = ''; featuredCaption = ''; featuredFilename = ''; featuredThumbLoading = false; featuredThumbError = ''; featuredSearchPending = !!featuredImageSearch" class="text-[11px] text-red-500 hover:text-red-700">Remove</button>
                                     </div>
                                     <div x-show="showFeaturedUrl" x-cloak class="flex gap-1.5 mt-1.5">
                                         <input type="text" x-model="featuredUrlVal" class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Paste image URL...">
-                                        <button @click.stop="if(featuredUrlVal.trim()){featuredPhoto={url_large:featuredUrlVal.trim(),url_thumb:featuredUrlVal.trim(),source:'url-import',alt:'',width:0,height:0};featuredAlt='';featuredCaption='';featuredFilename='auto';featuredUrlVal='';showFeaturedUrl=false;}" class="text-[11px] bg-blue-600 text-white px-2 py-1 rounded">Import</button>
+                                        <button @click.stop="if(featuredUrlVal.trim()){featuredPhoto={url_large:featuredUrlVal.trim(),url_thumb:featuredUrlVal.trim(),source:'url-import',alt:'',width:0,height:0};setFeaturedThumbPending();featuredAlt='';featuredCaption='';featuredFilename='auto';featuredSearchPending=false;featuredUrlVal='';showFeaturedUrl=false;}" class="text-[11px] bg-blue-600 text-white px-2 py-1 rounded">Import</button>
                                     </div>
                                 </div>
                             </div>
@@ -255,7 +317,7 @@
                         @include('app-publish::publishing.pipeline.partials.photo-picker', [
                             'pickerId' => 'featured-picker',
                             'searchQuery' => '',
-                            'onSelect' => 'function(photo) { featuredPhoto = photo; featuredAlt = photo.alt || \'\'; featuredCaption = \'\'; featuredFilename = \'auto\'; }',
+                            'onSelect' => 'function(photo) { const dup = photoSuggestions.find(p => p.autoPhoto && p.autoPhoto.url_large === photo.url_large); if (dup) { showNotification(\'warning\', \'This photo is already used as inline photo: \' + dup.search_term); } featuredPhoto = photo; setFeaturedThumbPending(); featuredAlt = photo.alt || \'\'; featuredCaption = \'\'; featuredFilename = \'auto\'; featuredSearchPending = false; }',
                         ])
                     </div>
                 </div>
@@ -264,11 +326,17 @@
             {{-- Photo Suggestions Panel --}}
             <div class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4" data-photo-section>
                 <div class="flex items-center justify-between mb-3">
-                    <h5 class="text-sm font-semibold text-gray-700">Inline Article Photos</h5>
-                    <span x-show="autoFetchingPhotos" x-cloak class="text-xs text-purple-600 flex items-center gap-1">
-                        <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        Auto-loading photos...
-                    </span>
+                    <div>
+                        <h5 class="text-sm font-semibold text-gray-700">Inline Article Photos</h5>
+                        <p x-show="hasUnresolvedPhotoSuggestions() && !autoFetchingPhotos" x-cloak class="text-[11px] text-amber-600 mt-1" x-text="photoSuggestionsPending ? 'Suggestions load automatically while Create Article is open.' : 'Some image suggestions still need loading.'"></p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button x-show="hasUnresolvedPhotoSuggestions() && !autoFetchingPhotos" x-cloak type="button" @click="loadPendingPhotoSuggestions()" class="text-xs text-blue-600 hover:text-blue-800" x-text="photoSuggestionsPending ? 'Load Suggestions' : 'Retry Loading'"></button>
+                        <span x-show="autoFetchingPhotos" x-cloak class="text-xs text-purple-600 flex items-center gap-1">
+                            <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            Loading photos...
+                        </span>
+                    </div>
                 </div>
 
                 {{-- AI photo suggestions — photo + metadata in one card --}}
@@ -279,39 +347,87 @@
                             <div class="p-3">
                                 <div class="flex items-start gap-3">
                                     {{-- Thumbnail --}}
-                                    <div class="w-40 h-28 flex-shrink-0 rounded overflow-hidden bg-gray-100">
-                                        <img x-show="ps.autoPhoto" x-cloak :src="ps.autoPhoto?.url_thumb" class="w-full h-full object-cover">
-                                        <div x-show="!ps.autoPhoto && autoFetchingPhotos" x-cloak class="w-full h-full flex items-center justify-center bg-purple-50">
+                                    <div class="w-40 h-28 flex-shrink-0 rounded overflow-hidden bg-gray-100 relative">
+                                        <img x-show="ps.autoPhoto && !ps.thumbError" x-cloak :data-inline-thumb-index="idx" :src="resolvePhotoThumbUrl(ps.autoPhoto)" class="w-full h-full object-cover transition-opacity" :class="ps.thumbLoading ? 'opacity-0' : 'opacity-100'" x-on:load="photoSuggestions[idx].thumbLoading = false; photoSuggestions[idx].thumbError = ''" x-on:error="photoSuggestions[idx].thumbLoading = false; photoSuggestions[idx].thumbError = 'Thumbnail failed to load'">
+                                        <div x-show="ps.autoPhoto && ps.thumbLoading" x-cloak class="absolute inset-0 w-full h-full flex items-center justify-center bg-purple-50/90">
                                             <svg class="w-5 h-5 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                                         </div>
-                                        <div x-show="!ps.autoPhoto && !autoFetchingPhotos" class="w-full h-full flex items-center justify-center text-gray-300">
+                                        <div x-show="!ps.autoPhoto && ps.searching" x-cloak class="w-full h-full flex items-center justify-center bg-purple-50">
+                                            <svg class="w-5 h-5 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                        </div>
+                                        <div x-show="ps.autoPhoto && ps.thumbError" x-cloak class="w-full h-full flex flex-col items-center justify-center text-red-400 bg-red-50 px-2 text-center">
+                                            <svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86A2.07 2.07 0 0020.73 16L13.8 4a2.07 2.07 0 00-3.6 0L3.27 16A2.07 2.07 0 005.07 19z"/></svg>
+                                            <span class="text-[10px] font-medium">Thumbnail failed</span>
+                                        </div>
+                                        <div x-show="!ps.autoPhoto && !ps.searching" class="w-full h-full flex items-center justify-center text-gray-300">
                                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                                         </div>
                                     </div>
                                     {{-- Info + metadata --}}
                                     <div class="flex-1 min-w-0 space-y-1.5">
                                         <p class="text-sm font-medium text-purple-700 break-words" x-text="ps.search_term"></p>
-                                        <p x-show="ps.autoPhoto" x-cloak class="text-[11px] text-gray-400" x-text="(ps.autoPhoto?.source || '') + ' — ' + (ps.autoPhoto?.width || '') + 'x' + (ps.autoPhoto?.height || '')"></p>
+                                        <p x-show="ps.loadError" x-cloak class="text-[11px] text-red-500 break-words" x-text="ps.loadError"></p>
+                                        <p x-show="ps.thumbError" x-cloak class="text-[11px] text-red-500 break-words" x-text="ps.thumbError"></p>
+                                        <div x-show="ps.autoPhoto" x-cloak class="flex items-center gap-2 text-[11px]">
+                                            <span class="text-gray-400" x-text="(ps.autoPhoto?.source || '') + ' — ' + (ps.autoPhoto?.width || '') + 'x' + (ps.autoPhoto?.height || '')"></span>
+                                            <template x-if="ps.autoPhoto?.width && ps.autoPhoto?.height">
+                                                <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                                                    :class="(() => {
+                                                        const r = ps.autoPhoto.width / ps.autoPhoto.height;
+                                                        if (r >= 1.2 && r <= 2.5) return 'bg-green-100 text-green-700';
+                                                        if (r >= 0.8 && r < 1.2) return 'bg-yellow-100 text-yellow-700';
+                                                        return 'bg-red-100 text-red-700';
+                                                    })()"
+                                                    x-text="(() => {
+                                                        const r = ps.autoPhoto.width / ps.autoPhoto.height;
+                                                        const label = r.toFixed(2) + ':1';
+                                                        if (r >= 1.2 && r <= 2.5) return label + ' Landscape';
+                                                        if (r >= 1.0 && r < 1.2) return label + ' Square';
+                                                        if (r < 1.0) return label + ' Portrait';
+                                                        return label + ' Ultra-wide';
+                                                    })()">
+                                                </span>
+                                            </template>
+                                        </div>
+                                        {{-- Source info — compact block with provider + URLs --}}
+                                        <div x-show="ps.autoPhoto" x-cloak class="text-[10px] mt-1.5 bg-gray-50 border border-gray-100 rounded px-2 py-1.5 space-y-1">
+                                            <div class="flex items-center gap-1.5 flex-wrap">
+                                                <span x-show="ps.autoPhoto?.source === 'google'" class="text-green-600 font-medium">via Google (SerpAPI)</span>
+                                                <span x-show="ps.autoPhoto?.source === 'google-cse'" class="text-blue-600 font-medium">via Google (CSE)</span>
+                                                <span x-show="ps.autoPhoto?.source === 'pexels'" class="text-teal-600 font-medium">Pexels</span>
+                                                <span x-show="ps.autoPhoto?.source === 'unsplash'" class="text-gray-600 font-medium">Unsplash</span>
+                                                <span x-show="ps.autoPhoto?.source === 'pixabay'" class="text-yellow-600 font-medium">Pixabay</span>
+                                                <span x-show="ps.autoPhoto?.source === 'url-import'" class="text-orange-600 font-medium">Import URL</span>
+                                                <span x-show="ps.autoPhoto?.source === 'upload'" class="text-purple-600 font-medium">Upload</span>
+                                                <a :href="ps.autoPhoto?.url_large" target="_blank" class="text-blue-500 hover:underline truncate max-w-xs inline-flex items-center gap-0.5" :title="ps.autoPhoto?.url_large">
+                                                    <strong class="text-blue-700" x-text="(() => { try { return new URL(ps.autoPhoto?.url_large || '').hostname; } catch(e) { return ''; } })()"></strong><span class="truncate" x-text="(() => { try { const u = new URL(ps.autoPhoto?.url_large || ''); const p = u.pathname; return p.length > 40 ? p.substring(0, 20) + '...' + p.substring(p.length - 18) : p; } catch(e) { return ''; } })()"></span>
+                                                    <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                                </a>
+                                            </div>
+                                            <div x-show="ps.autoPhoto?.source_url && ps.autoPhoto?.source_url !== ps.autoPhoto?.url_large" x-cloak class="flex items-center gap-1.5">
+                                                <span class="text-gray-400">Found on:</span>
+                                                <a :href="ps.autoPhoto?.source_url" target="_blank" class="text-blue-500 hover:underline inline-flex items-center gap-0.5" :title="ps.autoPhoto?.source_url">
+                                                    <strong class="text-blue-700" x-text="(() => { try { return new URL(ps.autoPhoto?.source_url || '').hostname; } catch(e) { return ''; } })()"></strong>
+                                                    <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                                </a>
+                                            </div>
+                                        </div>
                                         {{-- Metadata fields --}}
                                         <div x-show="ps.autoPhoto || ps.alt_text || ps.caption" x-cloak class="space-y-0.5 max-w-lg">
                                             <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Alt</label><input type="text" x-model="photoSuggestions[idx].alt_text" class="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs" placeholder="Alt text..."></div>
                                             <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Caption</label><input type="text" x-model="photoSuggestions[idx].caption" class="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs" placeholder="Caption..."></div>
-                                            <div class="flex items-center gap-2"><label class="text-[10px] text-gray-400 uppercase w-16 flex-shrink-0">Filename</label><p class="text-[11px] font-mono text-gray-500" x-text="photoSuggestions[idx].suggestedFilename || 'auto'"></p></div>
+                                            <div class="flex items-center gap-2"><label class="text-[10px] uppercase w-16 flex-shrink-0" :class="!photoSuggestions[idx].suggestedFilename || photoSuggestions[idx].suggestedFilename === 'auto' ? 'text-red-400 font-semibold' : 'text-gray-400'">Filename</label><p class="text-[11px] font-mono" :class="!photoSuggestions[idx].suggestedFilename || photoSuggestions[idx].suggestedFilename === 'auto' ? 'text-red-500' : 'text-gray-500'" x-text="photoSuggestions[idx].suggestedFilename || 'auto'"></p></div>
                                         </div>
                                         <div class="flex items-center gap-2 mt-1">
-                                            <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] text-purple-500 hover:text-purple-700 inline-flex items-center gap-1 disabled:opacity-50">
+                                            <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] inline-flex items-center gap-1 disabled:opacity-50" :class="(() => { const a = ps.alt_text || ''; const c = ps.caption || ''; const f = ps.suggestedFilename || ''; const bad = !a || !c || f === 'auto' || !f || /wikipedia|pexels|unsplash|pixabay|imdb|getty/i.test(a); return bad ? 'text-red-500 hover:text-red-700 font-semibold' : 'text-purple-500 hover:text-purple-700'; })()">
                                                 <svg class="w-3 h-3" :class="ps.refreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                                 <span x-text="ps.refreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
                                             </button>
+                                            <template x-if="!(ps.alt_text) || !(ps.caption) || ps.suggestedFilename === 'auto' || !(ps.suggestedFilename) || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|dreamstime|alamy|flickr|wikimedia/i.test(ps.alt_text || '') || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|wikimedia/i.test(ps.caption || '')">
+                                                <span class="text-[10px] text-red-500 font-medium">Needs metadata</span>
+                                            </template>
                                         </div>
-                                        {{-- Source URL display (when imported from URL) --}}
-                                        <div x-show="ps.autoPhoto?.source === 'url-import'" x-cloak class="mt-1">
-                                            <span class="text-[10px] text-gray-400">Source:</span>
-                                            <a :href="ps.autoPhoto?.url_large" target="_blank" class="text-[10px] text-blue-500 hover:text-blue-700 break-all inline-flex items-center gap-0.5">
-                                                <span x-text="(ps.autoPhoto?.url_large || '').substring(0, 80)"></span>
-                                                <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                                            </a>
-                                        </div>
+                                        {{-- (Source URL now shown above with bold domain for all photo types) --}}
                                         {{-- Import URL / Upload for this photo --}}
                                         <div class="mt-2" x-data="{ showUrlInput: false, photoUrlVal: '' }">
                                             <div class="flex items-center gap-1.5">
@@ -339,6 +455,7 @@
                                                         const file = $event.target.files[0]; if (!file) return;
                                                         const url = URL.createObjectURL(file);
                                                         photoSuggestions[idx].autoPhoto = { url_large: url, url_thumb: url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: 0, height: 0 };
+                                                        setPhotoThumbPending(idx);
                                                         photoSuggestions[idx].confirmed = false;
                                                         $event.target.value = null;
                                                     ">
@@ -349,6 +466,7 @@
                                                 <button @click.stop="
                                                     if (photoUrlVal.trim()) {
                                                         photoSuggestions[idx].autoPhoto = { url_large: photoUrlVal.trim(), url_thumb: photoUrlVal.trim(), source: 'url-import', alt: '', width: 0, height: 0 };
+                                                        setPhotoThumbPending(idx);
                                                         photoSuggestions[idx].confirmed = false;
                                                         photoUrlVal = '';
                                                         showUrlInput = false;
@@ -496,7 +614,7 @@
                     <label class="block text-xs text-gray-500 mb-1">Publish As</label>
                     <div class="flex items-center gap-2">
                         <select x-model="publishAuthor" @change="publishAuthorSource = 'manual'; autoSaveDraft()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" x-effect="$nextTick(() => { if (publishAuthor) $el.value = publishAuthor; })">
-                            <option value="">— Default author —</option>
+                            <option value="" x-text="selectedSite?.default_author ? '— Default: ' + selectedSite?.default_author + ' —' : '— Default author —'"></option>
                             <template x-if="publishAuthor && !siteConn.authors.some(a => a.user_login === publishAuthor)">
                                 <option :value="publishAuthor" x-text="publishAuthor"></option>
                             </template>

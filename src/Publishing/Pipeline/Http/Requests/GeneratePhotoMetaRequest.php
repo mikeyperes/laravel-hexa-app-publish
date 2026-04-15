@@ -10,6 +10,9 @@ class GeneratePhotoMetaRequest extends PipelineRequest
             'search_term' => 'required|string|max:200',
             'article_title' => 'nullable|string|max:500',
             'article_text' => 'nullable|string|max:2000',
+            'photo_source' => 'nullable|string|max:50',
+            'photo_alt' => 'nullable|string|max:500',
+            'photo_url' => 'nullable|string',
         ];
     }
 }

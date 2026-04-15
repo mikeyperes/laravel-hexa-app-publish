@@ -1,7 +1,9 @@
     {{-- Upload Portal Modal (triggered from TinyMCE toolbar) --}}
-    <div x-show="showUploadPortal" x-cloak>
-        @include('upload-portal::components.upload-portal', ['context' => 'article', 'contextId' => $draftId, 'multi' => true])
-    </div>
+    <template x-if="showUploadPortal">
+        <div x-cloak>
+            @include('upload-portal::components.upload-portal', ['context' => 'article', 'contextId' => $draftId, 'multi' => true])
+        </div>
+    </template>
 
     {{-- Photo Search Overlay (triggered from TinyMCE toolbar) --}}
     <div x-show="showPhotoOverlay" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-0 m-0" style="top:0;left:0;right:0;bottom:0;" @click.self="showPhotoOverlay = false" @keydown.escape.window="showPhotoOverlay = false">
