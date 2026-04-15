@@ -34,7 +34,7 @@ class ArticleController extends Controller
      * @param Request $request
      * @return View
      */
-    public function index(Request $request): View
+    public function index(Request $request): View|JsonResponse
     {
         $query = PublishArticle::with(['account', 'site', 'campaign', 'template', 'creator']);
 
@@ -50,8 +50,14 @@ class ArticleController extends Controller
             $query->where('publish_campaign_id', $request->input('campaign_id'));
         }
 
+        $tab = $request->input('tab', 'active');
+
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
+        } elseif ($tab === 'deleted') {
+            $query->where('status', 'deleted');
+        } else {
+            $query->where('status', '!=', 'deleted');
         }
 
         if ($request->filled('search')) {
@@ -63,11 +69,24 @@ class ArticleController extends Controller
         }
 
         $articles = $query->orderByDesc('created_at')->paginate(25);
+
+        if ($request->wantsJson() || ($request->filled('page') && $request->header('X-Requested-With') === 'XMLHttpRequest')) {
+            return response()->json([
+                'html'         => view('app-publish::publishing.articles.partials.article-rows', ['articles' => $articles])->render(),
+                'next_page'    => $articles->currentPage() < $articles->lastPage() ? $articles->currentPage() + 1 : null,
+                'total'        => $articles->total(),
+                'current_page' => $articles->currentPage(),
+                'last_page'    => $articles->lastPage(),
+            ]);
+        }
+
         $accounts = PublishAccount::orderBy('name')->get();
+        $deletedCount = PublishArticle::where('status', 'deleted')->count();
 
         return view('app-publish::publishing.articles.index', [
-            'articles' => $articles,
-            'accounts' => $accounts,
+            'articles'     => $articles,
+            'accounts'     => $accounts,
+            'deletedCount' => $deletedCount,
             'statuses' => config('hws-publish.article_statuses', []),
         ]);
     }
