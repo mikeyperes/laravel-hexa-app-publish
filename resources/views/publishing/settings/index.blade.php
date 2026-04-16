@@ -169,6 +169,52 @@
         </div>
     </div>
 
+    {{-- ═══ Photo Metadata Strategy ═══ --}}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" x-data="{ strategy: '{{ \hexa_core\Models\Setting::getValue('publish_photo_meta_strategy', 'local_deterministic_first') }}', saving: false, saved: false, error: '' }">
+        <h3 class="font-semibold text-gray-800 mb-1">Photo Metadata Strategy</h3>
+        <p class="text-sm text-gray-500 mb-4">Controls how featured-image alt text, captions, and SEO filenames are generated during the pipeline.</p>
+
+        <div class="space-y-3">
+            <label class="block text-sm text-gray-700">
+                <span class="block text-xs text-gray-500 mb-1">Generation Strategy</span>
+                <select x-model="strategy" class="w-full md:w-1/2 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    @foreach(config('hws-publish.photo_meta_generation_strategies', []) as $value => $meta)
+                        <option value="{{ $value }}">{{ $meta['label'] }}</option>
+                    @endforeach
+                </select>
+            </label>
+
+            <div class="bg-gray-50 rounded-lg border border-gray-200 p-4 space-y-2">
+                @foreach(config('hws-publish.photo_meta_generation_strategies', []) as $value => $meta)
+                    <div x-show="strategy === '{{ $value }}'" x-cloak>
+                        <p class="text-sm font-medium text-gray-800">{{ $meta['label'] }}</p>
+                        <p class="text-xs text-gray-500 mt-1">{{ $meta['description'] }}</p>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3 mt-4">
+            <button @click="
+                saving = true; saved = false; error = '';
+                fetch('{{ route('publish.settings.master.save-setting') }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
+                    body: JSON.stringify({ setting_key: 'publish_photo_meta_strategy', setting_value: strategy })
+                }).then(r => r.json()).then(d => {
+                    saving = false;
+                    if (d.success) { saved = true; setTimeout(() => saved = false, 3000); }
+                    else { error = d.message || 'Save failed'; }
+                }).catch(e => { saving = false; error = e.message || 'Save failed'; });
+            " :disabled="saving" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+                <svg x-show="saving" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                <span x-text="saving ? 'Saving...' : (saved ? 'Saved!' : 'Save Strategy')"></span>
+            </button>
+            <span x-show="saved" x-cloak class="text-sm text-green-600">Photo metadata strategy saved.</span>
+            <span x-show="error" x-cloak class="text-sm text-red-600" x-text="error"></span>
+        </div>
+    </div>
+
     {{-- ═══ Image Search Providers ═══ --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" x-data="{
         useGoogleSearch: '{{ \hexa_core\Models\Setting::getValue('use_google_image_search', '0') }}' === '1',

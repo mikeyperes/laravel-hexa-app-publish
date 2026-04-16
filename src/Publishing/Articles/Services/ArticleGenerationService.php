@@ -6,6 +6,7 @@ use hexa_app_publish\Quality\Detection\Models\AiActivityLog;
 use hexa_app_publish\Publishing\Settings\Models\PublishMasterSetting;
 use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
+use hexa_app_publish\Support\AiModelCatalog;
 use hexa_package_anthropic\Services\AnthropicService;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
@@ -22,22 +23,6 @@ use Illuminate\Support\Facades\Log;
 class ArticleGenerationService
 {
     protected AnthropicService $anthropic;
-
-    /** Pricing per million tokens */
-    private const PRICING = [
-        'claude-opus-4-6'              => ['input' => 15.0, 'output' => 75.0],
-        'claude-opus-4-20250514'       => ['input' => 15.0, 'output' => 75.0],
-        'claude-sonnet-4-6'            => ['input' => 3.0,  'output' => 15.0],
-        'claude-sonnet-4-20250514'     => ['input' => 3.0,  'output' => 15.0],
-        'claude-haiku-4-5-20251001'    => ['input' => 0.80, 'output' => 4.0],
-        'gpt-4o'                       => ['input' => 2.50, 'output' => 10.0],
-        'gpt-4-turbo'                  => ['input' => 10.0, 'output' => 30.0],
-        'gpt-4'                        => ['input' => 30.0, 'output' => 60.0],
-        'gpt-3.5-turbo'                => ['input' => 0.50, 'output' => 1.50],
-        'grok-3'                       => ['input' => 3.0,  'output' => 15.0],
-        'grok-3-mini'                  => ['input' => 0.30, 'output' => 0.50],
-        'grok-2'                       => ['input' => 2.0,  'output' => 10.0],
-    ];
 
     /**
      * @param AnthropicService $anthropic
@@ -97,14 +82,47 @@ class ArticleGenerationService
         }
 
         // Call AI — route to correct provider
-        $isOpenAI = str_starts_with($model, 'gpt-');
-        $isGrok = str_starts_with($model, 'grok-');
-        if ($isGrok) {
+        $catalog = app(AiModelCatalog::class);
+        $provider = $catalog->providerForModel($model);
+
+        if ($provider === 'grok') {
+            if (!class_exists(\hexa_package_grok\Services\GrokService::class)) {
+                return [
+                    'success' => false,
+                    'message' => 'Grok package not available',
+                    'html' => '', 'text' => '', 'word_count' => 0, 'usage' => [],
+                    'model' => $model, 'cost' => 0, 'photo_suggestions' => [],
+                    'featured_image' => null, 'metadata' => [], 'resolved_prompt' => $systemPrompt,
+                ];
+            }
             $grok = app(\hexa_package_grok\Services\GrokService::class);
             $result = $grok->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
-        } elseif ($isOpenAI) {
+        } elseif ($provider === 'openai') {
+            if (!class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)) {
+                return [
+                    'success' => false,
+                    'message' => 'ChatGPT package not available',
+                    'html' => '', 'text' => '', 'word_count' => 0, 'usage' => [],
+                    'model' => $model, 'cost' => 0, 'photo_suggestions' => [],
+                    'featured_image' => null, 'metadata' => [], 'resolved_prompt' => $systemPrompt,
+                ];
+            }
             $chatgpt = app(\hexa_package_chatgpt\Services\ChatGptService::class);
             $result = $chatgpt->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
+        } elseif ($provider === 'gemini') {
+            if (!class_exists(\hexa_package_gemini\Services\GeminiService::class)) {
+                return [
+                    'success' => false,
+                    'message' => 'Gemini package not available',
+                    'html' => '', 'text' => '', 'word_count' => 0, 'usage' => [],
+                    'model' => $model, 'cost' => 0, 'photo_suggestions' => [],
+                    'featured_image' => null, 'metadata' => [], 'resolved_prompt' => $systemPrompt,
+                ];
+            }
+            $gemini = app(\hexa_package_gemini\Services\GeminiService::class);
+            $result = !empty($options['web_research'])
+                ? $gemini->chatWithGoogleSearch($systemPrompt, 'Generate the article now.', $model, 0.7, 8192)
+                : $gemini->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
         } else {
             $result = $this->anthropic->chat($systemPrompt, 'Generate the article now.', $model, 8192);
         }
@@ -149,7 +167,7 @@ class ArticleGenerationService
             'usage'            => $usage,
             'model'            => $result['data']['model'] ?? $model,
             'cost'             => round($cost, 6),
-            'provider'         => $isGrok ? 'grok' : ($isOpenAI ? 'openai' : 'anthropic'),
+            'provider'         => $provider,
             'photo_suggestions' => $photoSuggestions['photos'],
             'featured_image'   => $featuredImage['search'],
             'featured_meta'    => $featuredImage['featured_meta'] ?? null,
@@ -547,10 +565,7 @@ class ArticleGenerationService
      */
     public function calculateCost(string $model, array $usage): float
     {
-        $rates = self::PRICING[$model] ?? ['input' => 0, 'output' => 0];
-        $inputTokens = $usage['input_tokens'] ?? 0;
-        $outputTokens = $usage['output_tokens'] ?? 0;
-        return ($inputTokens * $rates['input'] / 1_000_000) + ($outputTokens * $rates['output'] / 1_000_000);
+        return app(AiModelCatalog::class)->calculateCost($model, $usage);
     }
 
     /**
@@ -565,15 +580,19 @@ class ArticleGenerationService
      */
     private function logActivity(string $model, string $agent, string $systemPrompt, string $content, array $usage): void
     {
-        $isOpenAI = str_starts_with($model, 'gpt-');
-        $isGrok = str_starts_with($model, 'grok-');
-        $apiKey = $isGrok
-            ? ''
-            : ($isOpenAI
-                ? \hexa_core\Models\Setting::getValue('chatgpt_api_key', '')
-                : \hexa_core\Models\Setting::getValue('anthropic_api_key', ''));
+        $catalog = app(AiModelCatalog::class);
+        $provider = $catalog->providerForModel($model);
+        $credentialService = app(\hexa_core\Services\CredentialService::class);
+
+        $apiKey = match ($provider) {
+            'grok' => $credentialService->get('grok', 'api_key') ?? '',
+            'gemini' => $credentialService->get('gemini', 'api_key') ?? '',
+            'openai' => \hexa_core\Models\Setting::getValue('chatgpt_api_key', ''),
+            default => \hexa_core\Models\Setting::getValue('anthropic_api_key', ''),
+        };
+
         AiActivityLog::logCall([
-            'provider'          => $isGrok ? 'grok' : ($isOpenAI ? 'openai' : 'anthropic'),
+            'provider'          => $provider,
             'model'             => $model,
             'agent'             => $agent,
             'prompt_tokens'     => $usage['input_tokens'] ?? 0,

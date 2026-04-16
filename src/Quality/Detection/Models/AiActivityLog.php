@@ -79,20 +79,13 @@ class AiActivityLog extends Model
      */
     public static function logCall(array $data): static
     {
-        // Calculate cost based on model pricing (per million tokens)
-        $pricing = [
-            'claude-opus-4-6'           => ['input' => 15.0, 'output' => 75.0],
-            'claude-opus-4-20250514'    => ['input' => 15.0, 'output' => 75.0],
-            'claude-sonnet-4-6'         => ['input' => 3.0,  'output' => 15.0],
-            'claude-sonnet-4-20250514'  => ['input' => 3.0,  'output' => 15.0],
-            'claude-haiku-4-5-20251001' => ['input' => 0.80, 'output' => 4.0],
-        ];
-
         $model = $data['model'] ?? '';
-        $rates = $pricing[$model] ?? ['input' => 0, 'output' => 0];
         $promptTokens = $data['prompt_tokens'] ?? 0;
         $completionTokens = $data['completion_tokens'] ?? 0;
-        $cost = ($promptTokens * $rates['input'] / 1_000_000) + ($completionTokens * $rates['output'] / 1_000_000);
+        $cost = app(\hexa_app_publish\Support\AiModelCatalog::class)->calculateCost($model, [
+            'input_tokens' => $promptTokens,
+            'output_tokens' => $completionTokens,
+        ]);
 
         return static::create([
             'user_id'          => $data['user_id'] ?? auth()->id(),

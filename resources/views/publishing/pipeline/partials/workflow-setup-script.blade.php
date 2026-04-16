@@ -471,8 +471,8 @@
 
                     // Cost info
                     if (data.data.usage) {
-                        this.aiSearchCost = { model: data.data.model || 'claude-haiku-4-5-20251001', cost: data.data.cost || 0, usage: data.data.usage };
-                        this._logAi('info', 'Cost: $' + (data.data.cost || 0).toFixed(4) + ' | Tokens: ' + (data.data.usage.input_tokens || 0) + '+' + (data.data.usage.output_tokens || 0) + ' | Model: ' + (data.data.model || 'claude-haiku-4-5-20251001'));
+                        this.aiSearchCost = { model: data.data.model || @json(($pipelineDefaults['search_model'] ?? 'claude-haiku-4-5-20251001')), cost: data.data.cost || 0, usage: data.data.usage };
+                        this._logAi('info', 'Cost: $' + (data.data.cost || 0).toFixed(4) + ' | Tokens: ' + (data.data.usage.input_tokens || 0) + '+' + (data.data.usage.output_tokens || 0) + ' | Model: ' + (data.data.model || @json(($pipelineDefaults['search_model'] ?? 'claude-haiku-4-5-20251001'))));
                     }
 
                     this.showNotification('success', data.data.articles.length + ' article(s) found — select sources below.');
@@ -758,22 +758,29 @@
             this.invalidatePromptPreview('source_removed');
             this.savePipelineState();
         },
-        async saveFailedSource(idx) {
-            const result = this.checkResults[idx];
+        failedSourceKeywords(idx) {
             const source = this.sources[idx];
-            if (!source) return;
+            if (!source) return '';
 
-            // Extract keywords from URL for search
             const url = source.url || '';
             const title = source.title || '';
             let keywords = title;
+
             if (!keywords) {
-                // Parse URL path into keywords: /world/2024/04/05/taiwan-president-lai-female-vice -> taiwan president lai female vice
                 try {
                     const path = new URL(url).pathname;
                     keywords = path.split('/').pop().replace(/[-_]/g, ' ').replace(/\.(html?|php|aspx?)$/i, '').replace(/\d{4,}/g, '').trim();
-                } catch(e) { keywords = ''; }
+                } catch (e) {
+                    keywords = '';
+                }
             }
+
+            return keywords;
+        },
+        async persistFailedSource(idx) {
+            const result = this.checkResults[idx];
+            const source = this.sources[idx];
+            if (!source) return false;
 
             try {
                 await fetch('{{ route("publish.failed-sources.store") }}', {
@@ -781,22 +788,49 @@
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
                     body: JSON.stringify({
                         url: source.url,
-                        title: title,
+                        title: source.title || '',
                         error_message: result?.message || 'Extraction failed',
                         source_api: result?.source_api || '',
                     })
                 });
-            } catch(e) {}
-            this.removeSource(idx);
-
-            // Switch to Search Online tab with extracted keywords
-            if (keywords) {
-                this.sourceTab = 'ai';
-                this.aiSearchTopic = keywords;
-                this.showNotification('info', 'Searching for alternative sources: ' + keywords);
-            } else {
-                this.showNotification('success', 'Saved to failed list and removed.');
+                return true;
+            } catch (e) {
+                return false;
             }
+        },
+        async markFailedSource(idx) {
+            const saved = await this.persistFailedSource(idx);
+            this.removeSource(idx);
+            this.showNotification(saved ? 'warning' : 'info', saved ? 'Source marked as broken and removed.' : 'Source removed.');
+        },
+        async searchFailedSource(idx) {
+            const keywords = this.failedSourceKeywords(idx);
+            this.removeSource(idx);
+            if (!keywords) {
+                this.showNotification('warning', 'No title keywords were available for search.');
+                return;
+            }
+            this.sourceTab = 'ai';
+            this.currentStep = 3;
+            if (!this.openSteps.includes(3)) this.openSteps.push(3);
+            this.aiSearchTopic = keywords;
+            this.showNotification('info', 'Searching for alternative sources: ' + keywords);
+            await this.aiSearchArticles();
+        },
+        async markAndSearchFailedSource(idx) {
+            const keywords = this.failedSourceKeywords(idx);
+            const saved = await this.persistFailedSource(idx);
+            this.removeSource(idx);
+            if (!keywords) {
+                this.showNotification(saved ? 'warning' : 'info', saved ? 'Source marked as broken and removed.' : 'Source removed.');
+                return;
+            }
+            this.sourceTab = 'ai';
+            this.currentStep = 3;
+            if (!this.openSteps.includes(3)) this.openSteps.push(3);
+            this.aiSearchTopic = keywords;
+            this.showNotification(saved ? 'warning' : 'info', (saved ? 'Marked broken. ' : '') + 'Searching for alternative sources: ' + keywords);
+            await this.aiSearchArticles();
         },
 
         _logCheck(type, message) {
@@ -818,7 +852,7 @@
             // Keep step 4 open during extraction
             if (!this.openSteps.includes(4)) this.openSteps.push(4);
 
-            const methodNames = { auto: 'Auto (Readability + Regex fallback)', readability: 'Readability (structured)', regex: 'Regex (raw HTML parsing)', trafilatura: 'Trafilatura (Python)', jina: 'Jina Reader API' };
+            const methodNames = { auto: 'Auto (Readability + Regex fallback)', readability: 'Readability (structured)', css: 'CSS Selector', regex: 'Regex (raw HTML parsing)', claude: 'Claude AI', gpt: 'GPT', grok: 'Grok', gemini: 'Gemini', trafilatura: 'Trafilatura (Python)', jina: 'Jina Reader API' };
             const uaNames = { chrome: 'Chrome Desktop', googlebot: 'Googlebot', bingbot: 'Bingbot', mobile: 'Mobile Chrome', curl: 'cURL' };
             this._logCheck('info', 'Starting article extraction for ' + this.sources.length + ' source(s)...');
             this.sources.forEach((s, i) => this._logCheck('step', (i + 1) + '. ' + s.url));

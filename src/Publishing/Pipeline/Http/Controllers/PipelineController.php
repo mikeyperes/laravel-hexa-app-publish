@@ -30,6 +30,7 @@ use hexa_app_publish\Publishing\Pipeline\Http\Requests\PreviewPromptRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\PublishToWordpressRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\SaveDraftRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\SpinRequest;
+use hexa_app_publish\Support\AiModelCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -113,6 +114,7 @@ class PipelineController extends Controller
             $sites = $sites->sortBy('name')->values();
         }
         $newsCategories = $this->newsOptions->newsCategories();
+        $aiCatalog = app(AiModelCatalog::class);
 
         $draftUserId = $draft->user_id ?: $draft->created_by;
         $draftUser = null;
@@ -206,6 +208,11 @@ class PipelineController extends Controller
             'filenamePattern'   => \hexa_core\Models\Setting::getValue('wp_photo_filename_pattern', 'hexa_{draft_id}_{seo_name}'),
             'aiDetectors'       => $aiDetectors,
             'grokModels'        => class_exists(\hexa_package_grok\Services\GrokService::class) ? app(\hexa_package_grok\Services\GrokService::class)->listModels() : [],
+            'aiModelGroups'     => $aiCatalog->groupedSelectOptions(),
+            'pipelineDefaults'  => [
+                'search_model' => $aiCatalog->defaultSearchModel() ?: 'claude-haiku-4-5-20251001',
+                'spin_model' => $aiCatalog->defaultSpinModel() ?: 'grok-3',
+            ],
             'pipelinePayload'   => $pipelinePayload,
             'latestCompletedPrepareHtml' => $latestCompletedPrepareHtml ?: '',
             'initialUserPresets' => $initialUserPresets,
@@ -218,62 +225,32 @@ class PipelineController extends Controller
     public function generatePhotoMeta(GeneratePhotoMetaRequest $request): JsonResponse
     {
         $validated = $request->validated();
+        $strategy = (string) Setting::getValue('publish_photo_meta_strategy', 'local_deterministic_first');
+        $local = $this->generatePhotoMetaDeterministically($validated);
 
-        $anthropic = app(\hexa_package_anthropic\Services\AnthropicService::class);
-        $photoSource = $validated['photo_source'] ?? '';
-        $photoAlt = $validated['photo_alt'] ?? '';
-        $photoUrl = $validated['photo_url'] ?? '';
-        $isStock = in_array($photoSource, ['pexels', 'unsplash', 'pixabay', '']);
-        $isGoogle = in_array($photoSource, ['google', 'google-cse']);
-
-        if ($isGoogle && $photoAlt) {
-            // Real photo from Google — use the original alt/caption context
-            $prompt = "You are a photo metadata expert. Generate metadata for a REAL PHOTO found via Google Image Search.\n\n"
-                . "The original image caption/alt from the source is: \"{$photoAlt}\"\n"
-                . "If this identifies a specific person, USE their name in the alt and caption. Describe the actual person and scene.\n\n"
-                . "Photo search term: " . $validated['search_term'] . "\n"
-                . "Original image caption: {$photoAlt}\n"
-                . "Article title: " . ($validated['article_title'] ?? '') . "\n"
-                . "Article excerpt: " . mb_substr($validated['article_text'] ?? '', 0, 1000) . "\n\n"
-                . "Respond ONLY with JSON, no other text:\n"
-                . '{"alt":"describe who/what is in the photo using the original caption for context (under 125 chars)","caption":"one sentence about the person/scene in the photo and their relevance to the article","filename":"seo-friendly-lowercase-hyphenated-name-no-extension"}';
-        } else {
-            // Stock photo — generic description, no person names
-            $prompt = "You are a photo metadata expert. Generate metadata for a STOCK PHOTO used in an article.\n\n"
-                . "CRITICAL: This is a stock photo, NOT a real photo of the people in the article. The alt text and caption must describe what is visually in the stock photo based on the search term — NOT name or reference specific people from the article. Never put a person's name in the alt or caption unless the search term itself is that person's name.\n\n"
-                . "Photo search term: " . $validated['search_term'] . "\n"
-                . "Article title: " . ($validated['article_title'] ?? '') . "\n"
-                . "Article excerpt: " . mb_substr($validated['article_text'] ?? '', 0, 1000) . "\n\n"
-                . "Respond ONLY with JSON, no other text:\n"
-                . '{"alt":"describe what the stock photo visually shows based on the search term (under 125 chars, do NOT name article subjects)","caption":"one sentence describing the stock photo and how the visual theme relates to the article topic (do NOT name article subjects unless the search term is their name)","filename":"seo-friendly-lowercase-hyphenated-name-no-extension"}';
+        if ($strategy === 'local_only') {
+            return response()->json(array_merge(['success' => true, 'generator' => 'local', 'strategy' => $strategy], $local));
         }
 
-        $result = $anthropic->chat(
-            'You are a photo metadata expert. Output ONLY valid JSON.',
-            $prompt,
-            'claude-haiku-4-5-20251001',
-            256
-        );
-
-        if (!$result['success']) {
-            return response()->json(['success' => false, 'message' => $result['message'] ?? 'AI call failed']);
+        if ($strategy === 'local_deterministic_first' && $this->photoMetaPayloadIsUsable($local)) {
+            return response()->json(array_merge(['success' => true, 'generator' => 'local', 'strategy' => $strategy], $local));
         }
 
-        $content = $result['data']['content'] ?? '';
-        $content = preg_replace('/^```json\s*/i', '', $content);
-        $content = preg_replace('/\s*```$/', '', $content);
-        $parsed = json_decode(trim($content), true);
-
-        if (!$parsed || !isset($parsed['alt'])) {
-            return response()->json(['success' => false, 'message' => 'Failed to parse AI response']);
+        $ai = $this->generatePhotoMetaWithAi($validated);
+        if ($ai['success']) {
+            return response()->json(array_merge($ai, ['generator' => 'ai', 'strategy' => $strategy]));
         }
 
-        return response()->json([
-            'success'  => true,
-            'alt'      => $parsed['alt'] ?? '',
-            'caption'  => $parsed['caption'] ?? '',
-            'filename' => $parsed['filename'] ?? '',
-        ]);
+        if ($strategy !== 'ai_only' && $this->photoMetaPayloadIsUsable($local)) {
+            return response()->json(array_merge([
+                'success' => true,
+                'generator' => 'local',
+                'strategy' => $strategy,
+                'fallback_message' => $ai['message'] ?? null,
+            ], $local));
+        }
+
+        return response()->json(['success' => false, 'message' => $ai['message'] ?? 'AI call failed']);
     }
 
     public function previewPrompt(PreviewPromptRequest $request): JsonResponse
@@ -410,10 +387,7 @@ class PipelineController extends Controller
     }
 
     /**
-     * AI Article Search — use Claude with web search to find articles on a topic.
-     *
-     * @param Request $request
-     * @return JsonResponse
+     * AI Article Search — use the selected provider to find recent articles on a topic.
      */
     public function aiSearchArticles(Request $request): JsonResponse
     {
@@ -423,18 +397,18 @@ class PipelineController extends Controller
             'model' => 'nullable|string|max:100',
         ]);
 
-        $model = $request->input('model', '');
+        $catalog = app(AiModelCatalog::class);
+        $model = (string) $request->input('model', ($catalog->defaultSearchModel() ?: 'claude-haiku-4-5-20251001'));
         $topic = $request->input('topic');
         $count = $request->input('count', 4);
-        $isGrok = str_starts_with($model, 'grok-');
-        $isOpenAI = str_starts_with($model, 'gpt-');
+        $provider = $catalog->providerForModel($model);
 
         $searchPrompt = "Search the web for {$count} recent news articles about: {$topic}. "
             . "Find real, published articles from different reputable news sources. "
             . "For each article return the exact URL, the article title, and a 1-2 sentence description. "
             . "Return ONLY a JSON array of objects with keys: url, title, description. No other text.";
 
-        if ($isGrok) {
+        if ($provider === 'grok') {
             if (!class_exists(\hexa_package_grok\Services\GrokService::class)) {
                 return response()->json(['success' => false, 'message' => 'Grok package not available.'], 400);
             }
@@ -447,7 +421,7 @@ class PipelineController extends Controller
                 2048
             );
             $result = $this->parseSearchResult($raw, $model);
-        } elseif ($isOpenAI) {
+        } elseif ($provider === 'openai') {
             if (!class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)) {
                 return response()->json(['success' => false, 'message' => 'ChatGPT package not available.'], 400);
             }
@@ -460,8 +434,12 @@ class PipelineController extends Controller
                 2048
             );
             $result = $this->parseSearchResult($raw, $model);
+        } elseif ($provider === 'gemini') {
+            if (!class_exists(\hexa_package_gemini\Services\GeminiService::class)) {
+                return response()->json(['success' => false, 'message' => 'Gemini package not available.'], 400);
+            }
+            $result = app(\hexa_package_gemini\Services\GeminiService::class)->searchArticles($topic, $count, $model);
         } else {
-            // Claude — use web search tool
             if (!class_exists(\hexa_package_anthropic\Services\AnthropicService::class)) {
                 return response()->json(['success' => false, 'message' => 'Anthropic package not available.'], 400);
             }
@@ -469,18 +447,9 @@ class PipelineController extends Controller
             $result = $anthropic->searchArticles($topic, $count, $model ?: null);
         }
 
-        // Calculate cost if successful
         if ($result['success'] && !empty($result['data']['usage'])) {
-            $pricing = [
-                'claude-haiku-4-5-20251001' => ['input' => 0.80, 'output' => 4.0],
-                'claude-sonnet-4-20250514'  => ['input' => 3.0,  'output' => 15.0],
-            ];
             $usedModel = $result['data']['model'] ?? $model;
-            $rates = $pricing[$usedModel] ?? ['input' => 1.0, 'output' => 5.0];
-            $usage = $result['data']['usage'];
-            $cost = ($usage['input_tokens'] * $rates['input'] / 1_000_000)
-                  + ($usage['output_tokens'] * $rates['output'] / 1_000_000);
-            $result['data']['cost'] = round($cost, 6);
+            $result['data']['cost'] = round($catalog->calculateCost($usedModel, (array) $result['data']['usage']), 6);
         }
 
         return response()->json($result);
@@ -1281,6 +1250,180 @@ class PipelineController extends Controller
                 ->map(fn (PublishTemplate $template) => $template->toArray())
                 ->all();
         });
+    }
+
+    private function photoMetaPayloadIsUsable(array $payload): bool
+    {
+        return !empty($payload['alt']) && !empty($payload['caption']) && !empty($payload['filename']);
+    }
+
+    /**
+     * @param array<string, mixed> $validated
+     * @return array{alt: string, caption: string, filename: string}
+     */
+    private function generatePhotoMetaDeterministically(array $validated): array
+    {
+        $photoSource = Str::lower((string) ($validated['photo_source'] ?? ''));
+        $photoAlt = $this->cleanPhotoMetaText((string) ($validated['photo_alt'] ?? ''));
+        $searchTerm = $this->cleanPhotoMetaText((string) ($validated['search_term'] ?? ''));
+        $articleTitle = $this->cleanPhotoMetaText((string) ($validated['article_title'] ?? ''));
+        $isGoogle = in_array($photoSource, ['google', 'google-cse'], true);
+
+        $visualSubject = $searchTerm !== '' ? $searchTerm : ($photoAlt !== '' ? $photoAlt : ($articleTitle !== '' ? $articleTitle : 'featured image'));
+
+        if ($isGoogle && $photoAlt !== '') {
+            $alt = Str::limit(rtrim($photoAlt, '.!?'), 125, '');
+            $caption = $articleTitle !== ''
+                ? $this->ensureSentence($photoAlt . ' related to ' . $articleTitle)
+                : $this->ensureSentence($photoAlt);
+        } else {
+            $alt = Str::limit(rtrim($visualSubject, '.!?'), 125, '');
+            $caption = $articleTitle !== ''
+                ? $this->ensureSentence('Stock photo illustrating ' . $visualSubject . ' for ' . $articleTitle)
+                : $this->ensureSentence('Stock photo illustrating ' . $visualSubject);
+        }
+
+        $filenameSource = $searchTerm !== '' ? $searchTerm : ($articleTitle !== '' ? $articleTitle : ($photoAlt !== '' ? $photoAlt : 'featured-image'));
+        $filename = Str::slug($filenameSource);
+
+        return [
+            'alt' => $alt,
+            'caption' => $caption,
+            'filename' => $filename !== '' ? Str::limit($filename, 80, '') : 'featured-image',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $validated
+     * @return array{success: bool, message?: string, alt?: string, caption?: string, filename?: string}
+     */
+    private function generatePhotoMetaWithAi(array $validated): array
+    {
+        $catalog = app(AiModelCatalog::class);
+        $model = $catalog->defaultPhotoMetaModel() ?: 'claude-haiku-4-5-20251001';
+        $result = $this->dispatchAiChat(
+            $model,
+            'You are a photo metadata expert. Output ONLY valid JSON.',
+            $this->buildPhotoMetaPrompt($validated),
+            256,
+            0.2
+        );
+
+        if (!$result['success']) {
+            return ['success' => false, 'message' => $result['message'] ?? 'AI call failed'];
+        }
+
+        $parsed = $this->parseJsonPayload((string) ($result['data']['content'] ?? ''));
+        if (!is_array($parsed) || empty($parsed['alt'])) {
+            return ['success' => false, 'message' => 'Failed to parse AI response'];
+        }
+
+        return [
+            'success' => true,
+            'alt' => (string) ($parsed['alt'] ?? ''),
+            'caption' => (string) ($parsed['caption'] ?? ''),
+            'filename' => (string) ($parsed['filename'] ?? ''),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $validated
+     */
+    private function buildPhotoMetaPrompt(array $validated): string
+    {
+        $photoSource = (string) ($validated['photo_source'] ?? '');
+        $photoAlt = $this->cleanPhotoMetaText((string) ($validated['photo_alt'] ?? ''));
+        $isGoogle = in_array($photoSource, ['google', 'google-cse'], true);
+
+        if ($isGoogle && $photoAlt !== '') {
+            return "You are a photo metadata expert. Generate metadata for a REAL PHOTO found via Google Image Search.\n\n"
+                . "The original image caption/alt from the source is: \"{$photoAlt}\"\n"
+                . "If this identifies a specific person, use their name in the alt and caption. Describe the actual person and scene.\n\n"
+                . "Photo search term: " . ($validated['search_term'] ?? '') . "\n"
+                . "Original image caption: {$photoAlt}\n"
+                . "Article title: " . ($validated['article_title'] ?? '') . "\n"
+                . "Article excerpt: " . mb_substr((string) ($validated['article_text'] ?? ''), 0, 1000) . "\n\n"
+                . "Respond ONLY with JSON, no other text:\n"
+                . '{"alt":"describe who/what is in the photo using the original caption for context (under 125 chars)","caption":"one sentence about the person/scene in the photo and their relevance to the article","filename":"seo-friendly-lowercase-hyphenated-name-no-extension"}';
+        }
+
+        return "You are a photo metadata expert. Generate metadata for a STOCK PHOTO used in an article.\n\n"
+            . "CRITICAL: This is a stock photo, not a real photo of the people in the article. The alt text and caption must describe what is visually in the stock photo based on the search term, not name or reference article subjects. Never put a person's name in the alt or caption unless the search term itself is that person's name.\n\n"
+            . "Photo search term: " . ($validated['search_term'] ?? '') . "\n"
+            . "Article title: " . ($validated['article_title'] ?? '') . "\n"
+            . "Article excerpt: " . mb_substr((string) ($validated['article_text'] ?? ''), 0, 1000) . "\n\n"
+            . "Respond ONLY with JSON, no other text:\n"
+            . '{"alt":"describe what the stock photo visually shows based on the search term (under 125 chars, do NOT name article subjects)","caption":"one sentence describing the stock photo and how the visual theme relates to the article topic (do NOT name article subjects unless the search term is their name)","filename":"seo-friendly-lowercase-hyphenated-name-no-extension"}';
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function parseJsonPayload(string $content): ?array
+    {
+        $content = preg_replace('/^```(?:json)?\s*/i', '', trim($content));
+        $content = preg_replace('/\s*```$/', '', $content);
+
+        $parsed = json_decode(trim($content), true);
+        if (is_array($parsed)) {
+            return $parsed;
+        }
+
+        if (preg_match('/\{.*\}/s', $content, $matches)) {
+            $parsed = json_decode($matches[0], true);
+            if (is_array($parsed)) {
+                return $parsed;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{success: bool, message: string, data: array|null}
+     */
+    private function dispatchAiChat(
+        string $model,
+        string $systemPrompt,
+        string $userMessage,
+        int $maxTokens = 1024,
+        float $temperature = 0.3,
+        bool $withGoogleSearch = false
+    ): array
+    {
+        $provider = app(AiModelCatalog::class)->providerForModel($model);
+
+        return match ($provider) {
+            'grok' => class_exists(\hexa_package_grok\Services\GrokService::class)
+                ? app(\hexa_package_grok\Services\GrokService::class)->chat($systemPrompt, $userMessage, $model, $temperature, $maxTokens)
+                : ['success' => false, 'message' => 'Grok package not available.', 'data' => null],
+            'openai' => class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)
+                ? app(\hexa_package_chatgpt\Services\ChatGptService::class)->chat($systemPrompt, $userMessage, $model, $temperature, $maxTokens)
+                : ['success' => false, 'message' => 'ChatGPT package not available.', 'data' => null],
+            'gemini' => class_exists(\hexa_package_gemini\Services\GeminiService::class)
+                ? ($withGoogleSearch
+                    ? app(\hexa_package_gemini\Services\GeminiService::class)->chatWithGoogleSearch($systemPrompt, $userMessage, $model, $temperature, $maxTokens)
+                    : app(\hexa_package_gemini\Services\GeminiService::class)->chat($systemPrompt, $userMessage, $model, $temperature, $maxTokens))
+                : ['success' => false, 'message' => 'Gemini package not available.', 'data' => null],
+            default => class_exists(\hexa_package_anthropic\Services\AnthropicService::class)
+                ? app(\hexa_package_anthropic\Services\AnthropicService::class)->chat($systemPrompt, $userMessage, $model, $maxTokens)
+                : ['success' => false, 'message' => 'Anthropic package not available.', 'data' => null],
+        };
+    }
+
+    private function cleanPhotoMetaText(string $value): string
+    {
+        $value = html_entity_decode(strip_tags($value), ENT_QUOTES, 'UTF-8');
+        $value = preg_replace('/\s+/u', ' ', $value);
+
+        return trim((string) $value, " \t\n\r\0\x0B\"'");
+    }
+
+    private function ensureSentence(string $value): string
+    {
+        $value = trim($this->cleanPhotoMetaText($value));
+
+        return $value === '' ? '' : rtrim($value, '.!?') . '.';
     }
 
     private function logPipelineDebug(string $message, array $context, bool $enabled): void

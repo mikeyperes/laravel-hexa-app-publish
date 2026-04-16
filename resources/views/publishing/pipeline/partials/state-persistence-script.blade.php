@@ -862,7 +862,13 @@
             this.selectedSite = null;
             this.sources = [];
             this.checkResults = [];
-            this.aiModel = 'grok-3';
+            this.aiSearchTopic = '';
+            this.aiSearchResults = [];
+            this.aiSearchError = '';
+            this.aiSearchCost = null;
+            this.aiHasSearched = false;
+            this.aiModel = @json(($pipelineDefaults['spin_model'] ?? 'grok-3'));
+            this.aiSearchModel = @json(($pipelineDefaults['search_model'] ?? 'claude-haiku-4-5-20251001'));
             this.spunContent = '';
             this.spunWordCount = 0;
             this.articleTitle = '';

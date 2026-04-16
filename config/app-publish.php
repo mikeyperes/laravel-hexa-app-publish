@@ -2,7 +2,7 @@
 
 return [
 
-    'version' => '18.10.10',
+    'version' => '18.10.11',
 
     /*
     |--------------------------------------------------------------------------
@@ -100,6 +100,29 @@ return [
         'passive_background' => [
             'label' => 'Passive / Background',
             'description' => 'Favor broad background and reference material for context, not heavy evidence gathering.',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Photo Metadata Generation Strategies
+    |--------------------------------------------------------------------------
+    |
+    | Controls how featured-image alt text, captions, and filenames are created.
+    |
+    */
+    'photo_meta_generation_strategies' => [
+        'local_deterministic_first' => [
+            'label' => 'Local deterministic generator first',
+            'description' => 'Use a fast PHP generator first and only fall back to AI when required.',
+        ],
+        'local_only' => [
+            'label' => 'Local deterministic only',
+            'description' => 'Always generate photo metadata locally with no AI fallback.',
+        ],
+        'ai_only' => [
+            'label' => 'AI only',
+            'description' => 'Always call an AI model for photo metadata.',
         ],
     ],
 

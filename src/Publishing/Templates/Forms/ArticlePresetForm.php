@@ -4,6 +4,7 @@ namespace hexa_app_publish\Publishing\Templates\Forms;
 
 use hexa_app_publish\Publishing\Accounts\Models\PublishAccount;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
+use hexa_app_publish\Support\AiModelCatalog;
 use hexa_core\Forms\Definitions\FieldDefinition;
 use hexa_core\Forms\Definitions\FormDefinition;
 use hexa_core\Forms\Services\FormRegistryService;
@@ -357,18 +358,12 @@ class ArticlePresetForm
 
     protected static function companyOptions(): array
     {
-        return [
-            'Anthropic' => 'Anthropic',
-            'OpenAI' => 'OpenAI',
-        ];
+        return app(AiModelCatalog::class)->companyOptions();
     }
 
     protected static function companyModels(): array
     {
-        return [
-            'Anthropic' => array_values(array_filter((array) config('anthropic.available_models', []))),
-            'OpenAI' => array_values(array_filter((array) config('chatgpt.available_models', []))),
-        ];
+        return app(AiModelCatalog::class)->companyModels();
     }
 
     protected static function flatModelOptions(): array
@@ -390,29 +385,12 @@ class ArticlePresetForm
 
     protected static function defaultCompany(): string
     {
-        foreach (self::companyModels() as $company => $models) {
-            if (!empty($models)) {
-                return $company;
-            }
-        }
-
-        return 'Anthropic';
+        return app(AiModelCatalog::class)->detectCompany(app(AiModelCatalog::class)->defaultSpinModel());
     }
 
     protected static function defaultEngine(): ?string
     {
-        $anthropicModels = self::companyModels()['Anthropic'] ?? [];
-        if (in_array('claude-opus-4-6', $anthropicModels, true)) {
-            return 'claude-opus-4-6';
-        }
-
-        foreach (self::companyModels() as $models) {
-            if (!empty($models)) {
-                return $models[0];
-            }
-        }
-
-        return null;
+        return app(AiModelCatalog::class)->defaultSpinModel();
     }
 
     protected static function defaultPhotoSources(array $context = []): array
@@ -426,25 +404,7 @@ class ArticlePresetForm
 
     protected static function allProviderModelOptions(): array
     {
-        $options = [];
-
-        foreach (config('anthropic.models', []) as $m) {
-            if (($m['type'] ?? '') === 'api' || ($m['type'] ?? '') === 'both') {
-                $options[$m['id']] = 'Claude — ' . $m['name'];
-            }
-        }
-
-        foreach (config('chatgpt.models', []) as $m) {
-            $options[$m['id']] = 'GPT — ' . $m['name'];
-        }
-
-        if (class_exists(\hexa_package_grok\Services\GrokService::class)) {
-            foreach (app(\hexa_package_grok\Services\GrokService::class)->listModels() as $m) {
-                $options[$m['id']] = 'Grok — ' . $m['name'];
-            }
-        }
-
-        return $options;
+        return app(AiModelCatalog::class)->selectOptions();
     }
 
     protected static function listItemOptions(string $category): array

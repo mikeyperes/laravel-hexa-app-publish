@@ -4,6 +4,7 @@ namespace hexa_app_publish\Publishing\Presets\Forms;
 
 use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
+use hexa_app_publish\Support\AiModelCatalog;
 use hexa_core\Forms\Definitions\FieldDefinition;
 use hexa_core\Forms\Definitions\FormDefinition;
 use hexa_core\Forms\Services\FormRegistryService;
@@ -291,28 +292,7 @@ class WordPressPresetForm
      */
     protected static function aiModelOptions(): array
     {
-        $options = [];
-
-        // Anthropic / Claude
-        foreach (config('anthropic.models', []) as $m) {
-            if (($m['type'] ?? '') === 'api' || ($m['type'] ?? '') === 'both') {
-                $options[$m['id']] = 'Claude — ' . $m['name'];
-            }
-        }
-
-        // OpenAI / ChatGPT
-        foreach (config('chatgpt.models', []) as $m) {
-            $options[$m['id']] = 'GPT — ' . $m['name'];
-        }
-
-        // Grok / xAI
-        if (class_exists(\hexa_package_grok\Services\GrokService::class)) {
-            foreach (app(\hexa_package_grok\Services\GrokService::class)->listModels() as $m) {
-                $options[$m['id']] = 'Grok — ' . $m['name'];
-            }
-        }
-
-        return $options;
+        return app(AiModelCatalog::class)->selectOptions();
     }
 
     /**

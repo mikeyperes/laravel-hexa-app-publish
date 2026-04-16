@@ -38,8 +38,8 @@ class SourceExtractionService
         $minWords = $options['min_words'] ?? 50;
         $autoFallback = $options['auto_fallback'] ?? true;
 
-        // AI extraction methods — delegate to Claude, GPT, or Grok
-        if ($method === 'claude' || $method === 'gpt' || $method === 'grok') {
+        // AI extraction methods — delegate to Claude, GPT, Grok, or Gemini
+        if (in_array($method, ['claude', 'gpt', 'grok', 'gemini'], true)) {
             return $this->extractWithAi($url, $method, $minWords);
         }
 
@@ -195,10 +195,10 @@ class SourceExtractionService
     }
 
     /**
-     * Extract article content using Claude AI or GPT with web search.
+     * Extract article content using an AI provider.
      *
      * @param string $url
-     * @param string $provider 'claude' or 'gpt'
+     * @param string $provider 'claude', 'gpt', 'grok', or 'gemini'
      * @param int $minWords
      * @return array
      */
@@ -260,6 +260,46 @@ class SourceExtractionService
                     return $this->fail($url, $result['message']);
                 }
                 $textContent = $result['data']['content'] ?? '';
+            } elseif ($provider === 'gemini') {
+                if (!class_exists(\hexa_package_gemini\Services\GeminiService::class)) {
+                    return $this->fail($url, 'Gemini package not available.');
+                }
+                $ai = app(\hexa_package_gemini\Services\GeminiService::class);
+                $result = $ai->extractArticle($url, 'gemini-2.5-flash');
+
+                if (!$result['success']) {
+                    return $this->fail($url, $result['message']);
+                }
+
+                $parsed = $result['data'] ?? [];
+                $title = (string) ($parsed['title'] ?? '');
+                $text = (string) ($parsed['text'] ?? '');
+                $html = (string) ($parsed['html'] ?? ('<p>' . nl2br(e($text)) . '</p>'));
+                $wordCount = str_word_count($text);
+
+                if ($wordCount < $minWords) {
+                    return [
+                        'success' => false,
+                        'message' => "AI extracted only {$wordCount} words (minimum: {$minWords}).",
+                        'url' => $url,
+                        'title' => $title,
+                        'text' => $text,
+                        'word_count' => $wordCount,
+                        'formatted_html' => $html,
+                        'fetch_info' => ['method' => $provider],
+                    ];
+                }
+
+                return [
+                    'success' => true,
+                    'message' => "Extracted {$wordCount} words via {$provider}.",
+                    'url' => $url,
+                    'title' => $title,
+                    'text' => $text,
+                    'word_count' => $wordCount,
+                    'formatted_html' => $html,
+                    'fetch_info' => ['method' => $provider],
+                ];
             } else {
                 // GPT — use chat (no native web search, but can process URL context)
                 if (!class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)) {

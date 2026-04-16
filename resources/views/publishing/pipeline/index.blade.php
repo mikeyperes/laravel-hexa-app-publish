@@ -698,7 +698,7 @@
                             <span class="w-5 h-5 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold cursor-help">?</span>
                             <div class="absolute bottom-7 left-1/2 -translate-x-1/2 w-72 bg-gray-900 text-gray-200 text-xs rounded-lg p-3 shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
                                 <p class="font-semibold text-white mb-1">Search Online</p>
-                                <p>Claude AI searches the web in real-time to find recent news articles on your topic. Multiple sources on the same topic are intentionally selected — this gives the AI spinner more material to produce a unique, high-quality rewrite.</p>
+                                <p>The selected AI model searches the web in real-time to find recent news articles on your topic. Multiple sources on the same topic are intentionally selected so the spinner has enough material for a stronger rewrite.</p>
                                 <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
                             </div>
                         </div>
@@ -706,28 +706,13 @@
                     <div class="flex gap-2">
                         <input type="text" x-model="aiSearchTopic" @keydown.enter="aiSearchArticles()" placeholder="e.g. cryptocurrency regulations 2026" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <select x-model="aiSearchModel" class="border border-gray-300 rounded-lg px-2 py-2 text-xs w-auto">
-
-                            <optgroup label="Claude">
-                                @foreach(config('anthropic.models', []) as $m)
-                                    @if(($m['type'] ?? '') === 'api' || ($m['type'] ?? '') === 'both')
-                                        <option value="{{ $m['id'] }}">{{ $m['name'] }}</option>
-                                    @endif
+                            @foreach(($aiModelGroups ?? []) as $company => $models)
+                            <optgroup label="{{ $company }}">
+                                @foreach($models as $model)
+                                    <option value="{{ $model['id'] }}">{{ $model['label'] }}</option>
                                 @endforeach
                             </optgroup>
-                            @if(config('chatgpt.models'))
-                            <optgroup label="GPT">
-                                @foreach(config('chatgpt.models', []) as $m)
-                                    <option value="{{ $m['id'] }}">{{ $m['name'] }}</option>
-                                @endforeach
-                            </optgroup>
-                            @endif
-                            @if(!empty($grokModels))
-                            <optgroup label="Grok">
-                                @foreach($grokModels as $m)
-                                    <option value="{{ $m['id'] }}">{{ $m['name'] }}</option>
-                                @endforeach
-                            </optgroup>
-                            @endif
+                            @endforeach
                         </select>
                         <button @click="aiSearchArticles()" :disabled="aiSearching || !aiSearchTopic.trim()" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2">
                             <svg x-show="aiSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -876,6 +861,7 @@
                             <option value="claude">Claude AI</option>
                             <option value="gpt">GPT</option>
                             <option value="grok">Grok</option>
+                            <option value="gemini">Gemini</option>
                         </select>
                     </div>
                     <div>
@@ -926,7 +912,7 @@
                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
                     <div class="flex justify-between">
                         <span class="text-gray-400">Method</span>
-                        <span class="text-white font-medium" x-text="extractMethod === 'auto' ? 'Auto (Readability + Regex)' : extractMethod === 'readability' ? 'Readability' : extractMethod === 'css' ? 'CSS Selector' : extractMethod === 'regex' ? 'Regex' : extractMethod === 'claude' ? 'Claude AI' : extractMethod === 'gpt' ? 'GPT' : extractMethod === 'grok' ? 'Grok' : extractMethod"></span>
+                        <span class="text-white font-medium" x-text="extractMethod === 'auto' ? 'Auto (Readability + Regex)' : extractMethod === 'readability' ? 'Readability' : extractMethod === 'css' ? 'CSS Selector' : extractMethod === 'regex' ? 'Regex' : extractMethod === 'claude' ? 'Claude AI' : extractMethod === 'gpt' ? 'GPT' : extractMethod === 'grok' ? 'Grok' : extractMethod === 'gemini' ? 'Gemini' : extractMethod"></span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-gray-400">User Agent</span>
@@ -1006,7 +992,9 @@
                                 <p x-show="!result.success" class="text-sm text-red-600 font-medium mt-1" x-text="'Extraction failed — ' + (result.message || 'unknown error')"></p>
                             </div>
                             <div class="flex items-center gap-2 flex-shrink-0">
-                                <button x-show="!result.success" @click.stop="saveFailedSource(idx)" class="text-xs text-orange-600 hover:text-orange-800 px-2 py-1 bg-orange-50 rounded">Find Another</button>
+                                <button x-show="!result.success" @click.stop="markFailedSource(idx)" class="text-xs text-orange-700 hover:text-orange-900 px-2 py-1 bg-orange-50 rounded">Mark Broken</button>
+                                <button x-show="!result.success" @click.stop="searchFailedSource(idx)" class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-blue-50 rounded">Search Title</button>
+                                <button x-show="!result.success" @click.stop="markAndSearchFailedSource(idx)" class="text-xs text-purple-700 hover:text-purple-900 px-2 py-1 bg-purple-50 rounded">Broken + Search</button>
                                 <button x-show="!result.success" @click.stop="removeSource(idx)" class="text-xs text-red-600 hover:text-red-800 px-2 py-1 bg-red-50 rounded">Remove</button>
                                 <svg x-show="result.success" class="w-5 h-5 text-gray-400 transition-transform" :class="expandedSources.includes(idx) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                             </div>
@@ -1073,27 +1061,13 @@
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">AI Model</label>
                     <select x-model="aiModel" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <optgroup label="Claude">
-                            @foreach(config('anthropic.models', []) as $model)
-                                @if($model['type'] === 'api' || $model['type'] === 'both')
-                                    <option value="{{ $model['id'] }}">Claude — {{ $model['name'] }}</option>
-                                @endif
+                        @foreach(($aiModelGroups ?? []) as $company => $models)
+                        <optgroup label="{{ $company }}">
+                            @foreach($models as $model)
+                                <option value="{{ $model['id'] }}">{{ $model['label'] }}</option>
                             @endforeach
                         </optgroup>
-                        @if(config('chatgpt.models'))
-                        <optgroup label="GPT">
-                            @foreach(config('chatgpt.models', []) as $model)
-                                <option value="{{ $model['id'] }}">GPT — {{ $model['name'] }}</option>
-                            @endforeach
-                        </optgroup>
-                        @endif
-                        @if(!empty($grokModels))
-                        <optgroup label="Grok">
-                            @foreach($grokModels as $model)
-                                <option value="{{ $model['id'] }}">Grok — {{ $model['name'] }}</option>
-                            @endforeach
-                        </optgroup>
-                        @endif
+                        @endforeach
                     </select>
                 </div>
                 <button @click="spinArticle()" :disabled="spinning" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2">
@@ -1481,7 +1455,7 @@ function publishPipeline() {
         uploadedSourceText: '',
         aiSearchTopic: '',
         aiSearchHistory: JSON.parse(localStorage.getItem('hws_search_history') || '[]'),
-        aiSearchModel: 'claude-haiku-4-5-20251001',
+        aiSearchModel: @json(($pipelineDefaults['search_model'] ?? 'claude-haiku-4-5-20251001')),
         aiSearchCount: 4,
         aiSearching: false,
         aiSearchResults: [],
@@ -1513,7 +1487,7 @@ function publishPipeline() {
         editingTemplate: false,
 
         // Step 7 — Model
-        aiModel: 'grok-3',
+        aiModel: @json(($pipelineDefaults['spin_model'] ?? 'grok-3')),
         customPrompt: '',
         supportingUrlType: 'matching_content_type',
 
