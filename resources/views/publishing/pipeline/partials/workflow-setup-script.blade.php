@@ -455,6 +455,13 @@
                     this._logAi('success', 'Found ' + data.data.articles.length + ' article(s)');
                     this.aiSearchResults = data.data.articles;
 
+                    // Save to search history
+                    const term = this.aiSearchTopic.trim();
+                    if (term) {
+                        this.aiSearchHistory = [term, ...this.aiSearchHistory.filter(t => t !== term)].slice(0, 20);
+                        localStorage.setItem('hws_search_history', JSON.stringify(this.aiSearchHistory));
+                    }
+
                     // Log each article
                     data.data.articles.forEach((article, i) => {
                         this._logAi('step', (i + 1) + '. ' + article.title + ' — ' + article.url.substring(0, 80));

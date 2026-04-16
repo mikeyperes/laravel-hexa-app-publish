@@ -301,6 +301,7 @@
                     if (this.aiDetectionEnabled) {
                         this.$nextTick(() => this.runAiDetection());
                     }
+                    this._hasSpunThisSession = true;
                 } else {
                     this.spinError = data.message;
                     this._logSpin('error', 'Spin failed: ' + data.message);
@@ -371,6 +372,7 @@
                     this.appliedSmartEdits = [];
                     this.showNotification('success', 'Changes applied.');
                     this.queueAutoSaveDraft(300);
+                    this._hasSpunThisSession = true;
 
                     // Re-run AI detection after changes
                     this.$nextTick(() => this.runAiDetection());

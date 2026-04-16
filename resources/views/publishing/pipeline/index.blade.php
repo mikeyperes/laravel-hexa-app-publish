@@ -706,6 +706,7 @@
                     <div class="flex gap-2">
                         <input type="text" x-model="aiSearchTopic" @keydown.enter="aiSearchArticles()" placeholder="e.g. cryptocurrency regulations 2026" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <select x-model="aiSearchModel" class="border border-gray-300 rounded-lg px-2 py-2 text-xs w-auto">
+
                             <optgroup label="Claude">
                                 @foreach(config('anthropic.models', []) as $m)
                                     @if(($m['type'] ?? '') === 'api' || ($m['type'] ?? '') === 'both')
@@ -732,6 +733,15 @@
                             <svg x-show="aiSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             <span x-text="aiSearching ? 'Searching...' : 'Find Articles'"></span>
                         </button>
+                    </div>
+
+                    {{-- Recent Searches --}}
+                    <div x-show="aiSearchHistory.length > 0" x-cloak class="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span class="text-[10px] text-gray-400 uppercase tracking-wide">Recent:</span>
+                        <template x-for="(term, hi) in aiSearchHistory.slice(0, 8)" :key="hi">
+                            <button type="button" @click="aiSearchTopic = term" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700 transition-colors truncate max-w-[200px]" x-text="term"></button>
+                        </template>
+                        <button type="button" @click="aiSearchHistory = []; localStorage.removeItem('hws_search_history')" class="text-[10px] text-gray-400 hover:text-red-500 ml-1">clear</button>
                     </div>
 
                     {{-- Activity Log --}}
@@ -1086,20 +1096,11 @@
                         @endif
                     </select>
                 </div>
-                <div class="min-w-[220px]">
-                    <label class="block text-xs text-gray-500 mb-1">Supporting URL Type</label>
-                    <select x-model="supportingUrlType" @change="invalidatePromptPreview('supporting_url_type', { fetch: true })" class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full">
-                        @foreach(config('hws-publish.supporting_url_types', []) as $optionKey => $option)
-                            <option value="{{ $optionKey }}">{{ $option['label'] }}</option>
-                        @endforeach
-                    </select>
-                    <p class="text-xs text-gray-400 mt-1" x-text="supportingUrlTypeDescription()"></p>
-                </div>
                 <button @click="spinArticle()" :disabled="spinning" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2">
                     <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="spinning ? (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Polishing...' : 'Spinning...') : (spunContent ? (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Re-polish' : 'Re-spin') : (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Polish Content' : 'Spin Article'))"></span>
+                    <span x-text="spinning ? (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Polishing...' : 'Spinning...') : (_hasSpunThisSession ? (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Re-polish' : 'Re-spin') : (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Polish Content' : 'Spin Article'))"></span>
                 </button>
-                <p x-show="spunContent && !spinning" x-cloak class="text-sm text-green-600 mt-1 inline-flex items-center gap-1">
+                <p x-show="spunContent && !spinning" x-cloak class="text-sm text-green-600 inline-flex items-center gap-1">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                     Article spun successfully<span x-show="Number(spunWordCount || 0) > 0"> — <span x-text="spunWordCount + ' words'"></span></span>
                 </p>
@@ -1118,9 +1119,15 @@
                     <span class="text-sm text-gray-700">Search online for additional supporting points</span>
                 </label>
                 <p x-show="spinWebResearch" x-cloak class="text-xs text-gray-400 mt-1 ml-6">The AI will search the web for real-time data, statistics, and expert opinions to strengthen the article.</p>
-                <p x-show="spinWebResearch && supportingUrlType" x-cloak class="text-xs text-gray-400 mt-1 ml-6">
-                    Supporting URL filter: <span class="font-medium text-gray-500" x-text="supportingUrlTypeLabel()"></span>
-                </p>
+                <div x-show="spinWebResearch" x-cloak class="mt-2 ml-6">
+                    <label class="block text-xs text-gray-500 mb-1">Supporting URL Type</label>
+                    <select x-model="supportingUrlType" @change="invalidatePromptPreview('supporting_url_type', { fetch: true })" class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64">
+                        @foreach(config('hws-publish.supporting_url_types', []) as $optionKey => $option)
+                            <option value="{{ $optionKey }}">{{ $option['label'] }}</option>
+                        @endforeach
+                    </select>
+                    <p class="text-xs text-gray-400 mt-1" x-text="supportingUrlTypeDescription()"></p>
+                </div>
             </div>
 
             {{-- Resolved Prompt — always visible, live-updating --}}
@@ -1473,6 +1480,7 @@ function publishPipeline() {
         uploadedSourceDoc: null,
         uploadedSourceText: '',
         aiSearchTopic: '',
+        aiSearchHistory: JSON.parse(localStorage.getItem('hws_search_history') || '[]'),
         aiSearchModel: 'claude-haiku-4-5-20251001',
         aiSearchCount: 4,
         aiSearching: false,
@@ -1511,6 +1519,7 @@ function publishPipeline() {
 
         // Step 7 — Spin
         spinning: false,
+        _hasSpunThisSession: false,
         spinWebResearch: true,
         spunContent: '',
         spunWordCount: 0,
