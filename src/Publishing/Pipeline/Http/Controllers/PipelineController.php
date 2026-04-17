@@ -212,7 +212,7 @@ class PipelineController extends Controller
             'grokModels'        => class_exists(\hexa_package_grok\Services\GrokService::class) ? app(\hexa_package_grok\Services\GrokService::class)->listModels() : [],
             'aiModelGroups'     => $aiCatalog->groupedSelectOptions(),
             'pipelineDefaults'  => [
-                'search_model' => $aiCatalog->defaultSearchModel() ?: 'claude-haiku-4-5-20251001',
+                'search_model' => $aiCatalog->defaultSearchModel() ?: 'grok-3-mini',
                 'spin_model' => $aiCatalog->defaultSpinModel() ?: 'grok-3',
             ],
             'pipelinePayload'   => $pipelinePayload,
@@ -415,7 +415,7 @@ class PipelineController extends Controller
         ]);
 
         $catalog = app(AiModelCatalog::class);
-        $model = (string) $request->input('model', ($catalog->defaultSearchModel() ?: 'claude-haiku-4-5-20251001'));
+        $model = (string) $request->input('model', ($catalog->defaultSearchModel() ?: 'grok-3-mini'));
         $topic = $request->input('topic');
         $count = min((int) $request->input('count', 4), 6);
         $provider = $catalog->providerForModel($model);

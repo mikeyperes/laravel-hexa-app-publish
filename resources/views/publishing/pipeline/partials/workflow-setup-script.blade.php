@@ -482,8 +482,8 @@
 
                     // Cost info
                     if (data.data.usage) {
-                        this.aiSearchCost = { model: data.data.model || @json(($pipelineDefaults['search_model'] ?? 'claude-haiku-4-5-20251001')), cost: data.data.cost || 0, usage: data.data.usage };
-                        this._logAi('info', 'Cost: $' + (data.data.cost || 0).toFixed(4) + ' | Tokens: ' + (data.data.usage.input_tokens || 0) + '+' + (data.data.usage.output_tokens || 0) + ' | Model: ' + (data.data.model || @json(($pipelineDefaults['search_model'] ?? 'claude-haiku-4-5-20251001'))));
+                        this.aiSearchCost = { model: data.data.model || @json(($pipelineDefaults['search_model'] ?? 'grok-3-mini')), cost: data.data.cost || 0, usage: data.data.usage };
+                        this._logAi('info', 'Cost: $' + (data.data.cost || 0).toFixed(4) + ' | Tokens: ' + (data.data.usage.input_tokens || 0) + '+' + (data.data.usage.output_tokens || 0) + ' | Model: ' + (data.data.model || @json(($pipelineDefaults['search_model'] ?? 'grok-3-mini'))));
                     }
 
                     this.showNotification('success', data.data.articles.length + ' article(s) found — select sources below.');
