@@ -438,7 +438,7 @@
             this.aiLog = [];
 
             this._logAi('info', 'Starting AI article search for: ' + this.aiSearchTopic);
-            this._logAi('info', 'Requesting top 10 articles via ' + this.aiSearchModel + ' with web search...');
+            this._logAi('info', 'Requesting top 6 articles via ' + this.aiSearchModel + ' with web search...');
 
             try {
                 const resp = await fetch('{{ route("publish.pipeline.ai-search") }}', {
@@ -446,7 +446,7 @@
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
                     body: JSON.stringify({
                         topic: this.aiSearchTopic,
-                        count: 10,
+                        count: 6,
                         model: this.aiSearchModel,
                     }),
                 });
@@ -454,6 +454,14 @@
                 if (data.success && data.data && data.data.articles) {
                     this._logAi('success', 'Found ' + data.data.articles.length + ' article(s)');
                     this.aiSearchResults = data.data.articles;
+
+                    if (data.data.search_backend_label) {
+                        let backendMessage = 'Reliable search backend: ' + data.data.search_backend_label;
+                        if (data.data.fallback_reason) {
+                            backendMessage += ' | AI search fallback reason: ' + data.data.fallback_reason;
+                        }
+                        this._logAi('info', backendMessage);
+                    }
 
                     // Save to search history
                     const term = this.aiSearchTopic.trim();
@@ -799,38 +807,40 @@
             }
         },
         async markFailedSource(idx) {
+            this._markingBrokenIdx = idx;
             const saved = await this.persistFailedSource(idx);
+            this._markingBrokenIdx = null;
             this.removeSource(idx);
             this.showNotification(saved ? 'warning' : 'info', saved ? 'Source marked as broken and removed.' : 'Source removed.');
         },
-        async searchFailedSource(idx) {
+        searchFailedSource(idx) {
             const keywords = this.failedSourceKeywords(idx);
             this.removeSource(idx);
             if (!keywords) {
-                this.showNotification('warning', 'No title keywords were available for search.');
+                this.showNotification('warning', 'No title keywords available.');
                 return;
             }
             this.sourceTab = 'ai';
             this.currentStep = 3;
             if (!this.openSteps.includes(3)) this.openSteps.push(3);
             this.aiSearchTopic = keywords;
-            this.showNotification('info', 'Searching for alternative sources: ' + keywords);
-            await this.aiSearchArticles();
+            this.showNotification('info', 'Search term loaded — click Find Articles when ready.');
         },
         async markAndSearchFailedSource(idx) {
             const keywords = this.failedSourceKeywords(idx);
+            this._markingBrokenIdx = idx;
             const saved = await this.persistFailedSource(idx);
+            this._markingBrokenIdx = null;
             this.removeSource(idx);
             if (!keywords) {
-                this.showNotification(saved ? 'warning' : 'info', saved ? 'Source marked as broken and removed.' : 'Source removed.');
+                this.showNotification(saved ? 'warning' : 'info', saved ? 'Marked broken and removed.' : 'Removed.');
                 return;
             }
             this.sourceTab = 'ai';
             this.currentStep = 3;
             if (!this.openSteps.includes(3)) this.openSteps.push(3);
             this.aiSearchTopic = keywords;
-            this.showNotification(saved ? 'warning' : 'info', (saved ? 'Marked broken. ' : '') + 'Searching for alternative sources: ' + keywords);
-            await this.aiSearchArticles();
+            this.showNotification(saved ? 'warning' : 'info', (saved ? 'Marked broken. ' : '') + 'Search term loaded — click Find Articles when ready.');
         },
 
         _logCheck(type, message) {

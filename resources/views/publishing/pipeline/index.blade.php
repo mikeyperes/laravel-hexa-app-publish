@@ -849,11 +849,11 @@
             <div x-show="currentArticleType !== 'press-release'" x-cloak>
             {{-- Extraction Options --}}
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-                <div class="flex flex-wrap items-end gap-3">
+                <div class="grid grid-cols-6 gap-3 items-end">
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Method</label>
-                        <select x-model="extractMethod" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                            <option value="auto">Auto (Recommended)</option>
+                        <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Method</label>
+                        <select x-model="extractMethod" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
+                            <option value="auto">Auto</option>
                             <option value="readability">Readability</option>
                             <option value="css">CSS Selector</option>
                             <option value="regex">Regex</option>
@@ -864,8 +864,8 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">User Agent</label>
-                        <select x-model="checkUserAgent" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">User Agent</label>
+                        <select x-model="checkUserAgent" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
                             <option value="chrome">Chrome Desktop</option>
                             <option value="firefox">Firefox Desktop</option>
                             <option value="safari">Safari macOS</option>
@@ -873,33 +873,35 @@
                             <option value="bot">HWS Bot</option>
                         </select>
                     </div>
-                    <div>
-                        <label class="block text-xs text-gray-500 mb-1">Retries</label>
-                        <select x-model="extractRetries" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                            <option value="0">0</option>
-                            <option value="1" selected>1</option>
-                            <option value="2">2</option>
-                            <option value="3">3</option>
-                        </select>
+                    <div class="grid grid-cols-3 gap-2 col-span-2">
+                        <div>
+                            <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Retries</label>
+                            <select x-model="extractRetries" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
+                                <option value="0">0</option>
+                                <option value="1" selected>1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Timeout</label>
+                            <select x-model="extractTimeout" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
+                                <option value="10">10s</option>
+                                <option value="20" selected>20s</option>
+                                <option value="30">30s</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Min Words</label>
+                            <input type="number" x-model="extractMinWords" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs" min="10" max="1000">
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-xs text-gray-500 mb-1">Timeout</label>
-                        <select x-model="extractTimeout" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                            <option value="10">10s</option>
-                            <option value="20" selected>20s</option>
-                            <option value="30">30s</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs text-gray-500 mb-1">Min Words</label>
-                        <input type="number" x-model="extractMinWords" class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-20" min="10" max="1000">
-                    </div>
-                    <label class="flex items-center gap-2 text-xs text-gray-600 pb-2">
+                    <label class="flex items-center gap-1.5 text-xs text-gray-600 pb-0.5">
                         <input type="checkbox" x-model="extractAutoFallback" class="rounded border-gray-300 text-blue-600">
-                        Auto-fallback (Googlebot)
+                        Auto-fallback
                     </label>
-                    <button @click.stop="checkAllSources()" :disabled="checking" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
-                        <svg x-show="checking" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    <button @click.stop="checkAllSources()" :disabled="checking" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center justify-center gap-1.5">
+                        <svg x-show="checking" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         <span x-text="checking ? 'Extracting...' : 'Get Articles'"></span>
                     </button>
                 </div>
@@ -990,11 +992,17 @@
                                 </div>
                                 <p x-show="!result.success" class="text-sm text-red-600 font-medium mt-1" x-text="'Extraction failed — ' + (result.message || 'unknown error')"></p>
                             </div>
-                            <div class="flex items-center gap-2 flex-shrink-0">
-                                <button x-show="!result.success" @click.stop="markFailedSource(idx)" class="text-xs text-orange-700 hover:text-orange-900 px-2 py-1 bg-orange-50 rounded">Mark Broken</button>
-                                <button x-show="!result.success" @click.stop="searchFailedSource(idx)" class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-blue-50 rounded">Search Title</button>
-                                <button x-show="!result.success" @click.stop="markAndSearchFailedSource(idx)" class="text-xs text-purple-700 hover:text-purple-900 px-2 py-1 bg-purple-50 rounded">Broken + Search</button>
-                                <button x-show="!result.success" @click.stop="removeSource(idx)" class="text-xs text-red-600 hover:text-red-800 px-2 py-1 bg-red-50 rounded">Remove</button>
+                            <div class="flex items-center gap-1.5 flex-shrink-0">
+                                <button x-show="!result.success" @click.stop="markFailedSource(idx)" :disabled="_markingBrokenIdx === idx" class="text-xs text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 px-2.5 py-1 rounded inline-flex items-center gap-1">
+                                    <svg x-show="_markingBrokenIdx === idx" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                    Mark Broken
+                                </button>
+                                <button x-show="!result.success" @click.stop="searchFailedSource(idx)" class="text-xs text-blue-700 hover:text-blue-900 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 rounded">Search Title</button>
+                                <button x-show="!result.success" @click.stop="markAndSearchFailedSource(idx)" :disabled="_markingBrokenIdx === idx" class="text-xs text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 px-2.5 py-1 rounded inline-flex items-center gap-1">
+                                    <svg x-show="_markingBrokenIdx === idx" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                    Broken + Search
+                                </button>
+                                <button x-show="!result.success" @click.stop="removeSource(idx)" class="text-xs text-gray-500 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50">Remove</button>
                                 <svg x-show="result.success" class="w-5 h-5 text-gray-400 transition-transform" :class="expandedSources.includes(idx) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                             </div>
                         </div>
@@ -1454,13 +1462,14 @@ function publishPipeline() {
         uploadedSourceText: '',
         aiSearchTopic: '',
         aiSearchHistory: JSON.parse(localStorage.getItem('hws_search_history') || '[]'),
-        aiSearchModel: @json(($pipelineDefaults['search_model'] ?? 'claude-haiku-4-5-20251001')),
+        aiSearchModel: @json(($pipelineDefaults['search_model'] ?? 'grok-3-mini')),
         aiSearchCount: 4,
         aiSearching: false,
         aiSearchResults: [],
         aiSearchError: '',
         aiHasSearched: false,
         aiLog: [],
+        _markingBrokenIdx: null,
         aiSearchCost: null,
 
         // Step 5 — Get Articles
