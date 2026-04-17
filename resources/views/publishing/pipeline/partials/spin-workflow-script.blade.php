@@ -53,11 +53,9 @@
                 if (data.success) {
                     this.photoSuggestions[idx].alt_text = data.alt;
                     this.photoSuggestions[idx].caption = data.caption;
-                    // Filename comes from settings pattern, not AI
                     this.photoSuggestions[idx].suggestedFilename = this.buildFilename(ps.search_term, idx + 1);
-                    console.log('[Photo Meta #' + idx + '] OLD: alt="' + oldAlt + '" caption="' + oldCaption + '"');
-                    console.log('[Photo Meta #' + idx + '] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + this.photoSuggestions[idx].suggestedFilename + '"');
-                    this.showNotification('success', 'Metadata refreshed for photo #' + (idx + 1));
+                    this.photoSuggestions[idx].metaGenerator = data.generator || 'unknown';
+                    this.showNotification('success', 'Photo #' + (idx + 1) + ' metadata refreshed via ' + (data.generator === 'local' ? 'PHP' : 'AI'));
                 } else {
                     console.error('[Photo Meta #' + idx + '] Error:', data.message || 'Unknown error');
                     this.showNotification('error', 'Failed to refresh metadata: ' + (data.message || 'Unknown error'));
@@ -92,11 +90,9 @@
                 if (data.success) {
                     this.featuredAlt = data.alt;
                     this.featuredCaption = data.caption;
-                    // Filename comes from settings pattern, not AI
                     this.featuredFilename = this.buildFilename(this.featuredImageSearch, 0);
-                    console.log('[Featured Meta] OLD: alt="' + oldAlt + '" caption="' + oldCaption + '"');
-                    console.log('[Featured Meta] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + this.featuredFilename + '"');
-                    this.showNotification('success', 'Featured image metadata refreshed');
+                    this.featuredMetaGenerator = data.generator || 'unknown';
+                    this.showNotification('success', 'Metadata refreshed via ' + (data.generator === 'local' ? 'PHP generator' : 'AI'));
                 } else {
                     console.error('[Featured Meta] Error:', data.message || 'Unknown error');
                     this.showNotification('error', 'Failed to refresh metadata: ' + (data.message || 'Unknown error'));

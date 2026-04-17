@@ -1619,6 +1619,7 @@ function publishPipeline() {
         featuredCaption: '',
         featuredFilename: '',
         featuredRefreshingMeta: false,
+        featuredMetaGenerator: '',
         resolvedPrompt: '',
         promptLog: [],
         promptLogOpen: false,

@@ -253,8 +253,9 @@
                                 <div class="flex items-center gap-2 mt-1">
                                     <button @click.stop="refreshFeaturedMeta()" :disabled="featuredRefreshingMeta" class="text-[11px] inline-flex items-center gap-1 disabled:opacity-50" :class="(() => { const bad = !featuredAlt || !featuredCaption || featuredFilename === 'auto' || !featuredFilename || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|dreamstime|alamy|flickr|wikimedia/i.test(featuredAlt) || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|wikimedia/i.test(featuredCaption); return bad ? 'text-red-500 hover:text-red-700 font-semibold' : 'text-purple-500 hover:text-purple-700'; })()">
                                         <svg class="w-3 h-3" :class="featuredRefreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                        <span x-text="featuredRefreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
+                                        <span x-text="featuredRefreshingMeta ? 'Generating...' : 'Refresh Metadata'"></span>
                                     </button>
+                                    <span x-show="featuredMetaGenerator" x-cloak class="text-[9px] px-1.5 py-0.5 rounded" :class="featuredMetaGenerator === 'local' ? 'bg-gray-100 text-gray-500' : 'bg-purple-100 text-purple-600'" x-text="featuredMetaGenerator === 'local' ? 'PHP' : 'AI'"></span>
                                     <template x-if="!featuredAlt || !featuredCaption || featuredFilename === 'auto' || !featuredFilename || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|dreamstime|alamy|flickr|wikimedia/i.test(featuredAlt) || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|wikimedia/i.test(featuredCaption)">
                                         <span class="text-[10px] text-red-500 font-medium">Needs metadata</span>
                                     </template>
@@ -421,8 +422,9 @@
                                         <div class="flex items-center gap-2 mt-1">
                                             <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] inline-flex items-center gap-1 disabled:opacity-50" :class="(() => { const a = ps.alt_text || ''; const c = ps.caption || ''; const f = ps.suggestedFilename || ''; const bad = !a || !c || f === 'auto' || !f || /wikipedia|pexels|unsplash|pixabay|imdb|getty/i.test(a); return bad ? 'text-red-500 hover:text-red-700 font-semibold' : 'text-purple-500 hover:text-purple-700'; })()">
                                                 <svg class="w-3 h-3" :class="ps.refreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                                <span x-text="ps.refreshingMeta ? 'Generating...' : 'AI Refresh Metadata'"></span>
+                                                <span x-text="ps.refreshingMeta ? 'Generating...' : 'Refresh Metadata'"></span>
                                             </button>
+                                            <span x-show="ps.metaGenerator" x-cloak class="text-[9px] px-1.5 py-0.5 rounded" :class="ps.metaGenerator === 'local' ? 'bg-gray-100 text-gray-500' : 'bg-purple-100 text-purple-600'" x-text="ps.metaGenerator === 'local' ? 'PHP' : 'AI'"></span>
                                             <template x-if="!(ps.alt_text) || !(ps.caption) || ps.suggestedFilename === 'auto' || !(ps.suggestedFilename) || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|dreamstime|alamy|flickr|wikimedia/i.test(ps.alt_text || '') || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|wikimedia/i.test(ps.caption || '')">
                                                 <span class="text-[10px] text-red-500 font-medium">Needs metadata</span>
                                             </template>
