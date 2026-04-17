@@ -444,6 +444,12 @@
             this._logAi('info', 'Requesting top 6 articles via ' + this.aiSearchModel + ' with web search...');
 
             try {
+                // Collect URLs from current results + already-added sources to exclude duplicates on re-search
+                const excludeUrls = [
+                    ...this.aiSearchResults.map(a => a.url),
+                    ...this.sources.map(s => s.url),
+                ].filter(Boolean);
+
                 const resp = await fetch('{{ route("publish.pipeline.ai-search") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
@@ -451,6 +457,7 @@
                         topic: this.aiSearchTopic,
                         count: 6,
                         model: this.aiSearchModel,
+                        exclude_urls: excludeUrls.length > 0 ? excludeUrls : undefined,
                     }),
                 });
                 const data = await resp.json();

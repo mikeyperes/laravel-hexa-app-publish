@@ -412,6 +412,8 @@ class PipelineController extends Controller
             'topic' => 'required|string|min:3|max:500',
             'count' => 'nullable|integer|min:2|max:10',
             'model' => 'nullable|string|max:100',
+            'exclude_urls' => 'nullable|array|max:50',
+            'exclude_urls.*' => 'string|max:2000',
         ]);
 
         $catalog = app(AiModelCatalog::class);
@@ -419,6 +421,7 @@ class PipelineController extends Controller
         $topic = $request->input('topic');
         $count = min((int) $request->input('count', 4), 6);
         $provider = $catalog->providerForModel($model);
+        $excludeUrls = array_filter((array) $request->input('exclude_urls', []));
 
         $searchPrompt = "Search the web for {$count} recent news articles about: {$topic}. "
             . "Return only LIVE, canonical article pages from reputable publishers. "
@@ -426,6 +429,11 @@ class PipelineController extends Controller
             . "If you are not confident a direct article URL currently resolves, omit it. "
             . "For each article return the exact canonical URL, the article title, and a brief description under 20 words. "
             . "Return ONLY a JSON array of objects with keys: url, title, description. No other text.";
+
+        if (!empty($excludeUrls)) {
+            $excludeList = implode("\n", array_slice($excludeUrls, 0, 20));
+            $searchPrompt .= "\n\nDo NOT include any of these URLs or articles from the same pages — they were already found:\n{$excludeList}";
+        }
 
         if ($provider === 'grok') {
             if (!class_exists(\hexa_package_grok\Services\GrokService::class)) {
