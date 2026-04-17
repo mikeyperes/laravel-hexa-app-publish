@@ -130,8 +130,9 @@
                             <option value="">None</option>
                             <option value="auto">Auto</option>
                             <option value="readability">Readability</option>
+                            <option value="structured">Structured Data</option>
+                            <option value="heuristic">DOM Heuristic</option>
                             <option value="regex">Regex</option>
-                            <option value="trafilatura">Trafilatura</option>
                             <option value="jina">Jina Reader</option>
                         </select>
                     </div>

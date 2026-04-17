@@ -865,7 +865,7 @@
             // Keep step 4 open during extraction
             if (!this.openSteps.includes(4)) this.openSteps.push(4);
 
-            const methodNames = { auto: 'Auto (Readability + Regex fallback)', readability: 'Readability (structured)', css: 'CSS Selector', regex: 'Regex (raw HTML parsing)', claude: 'Claude AI', gpt: 'GPT', grok: 'Grok', gemini: 'Gemini', trafilatura: 'Trafilatura (Python)', jina: 'Jina Reader API' };
+            const methodNames = { auto: 'Auto (Readability + Structured + Heuristic + Jina)', readability: 'Readability', structured: 'Structured Data (JSON-LD)', heuristic: 'DOM Heuristic', css: 'CSS Selector', regex: 'Regex (raw HTML parsing)', jina: 'Jina Reader', claude: 'Claude AI', gpt: 'GPT', grok: 'Grok', gemini: 'Gemini' };
             const uaNames = { chrome: 'Chrome Desktop', googlebot: 'Googlebot', bingbot: 'Bingbot', mobile: 'Mobile Chrome', curl: 'cURL' };
             this._logCheck('info', 'Starting article extraction for ' + this.sources.length + ' source(s)...');
             this.sources.forEach((s, i) => this._logCheck('step', (i + 1) + '. ' + s.url));

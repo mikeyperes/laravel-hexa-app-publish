@@ -20,7 +20,7 @@ class SourceExtractionService
      *
      * @param string $url
      * @param array $options {
-     *     @type string $method     Extraction method: auto|readability|css|regex (default: auto)
+     *     @type string $method     Extraction method: auto|readability|structured|heuristic|css|regex|jina (default: auto)
      *     @type string $user_agent UA string: chrome|googlebot (default: chrome)
      *     @type int    $retries    Retry count (default: 1)
      *     @type int    $timeout    Request timeout in seconds (default: 20)
@@ -81,9 +81,9 @@ class SourceExtractionService
                 'word_count'     => $extraction['data']['word_count'] ?? 0,
                 'formatted_html' => $extraction['data']['content_formatted'] ?? '',
                 'fetch_info'     => $fetchInfo,
-                'method_used'    => $fetchInfo['method'] ?? $method,
+                'method_used'    => $fetchInfo['method_used'] ?? $fetchInfo['method'] ?? $method,
                 'response_time'  => $fetchInfo['response_time_ms'] ?? null,
-                'http_status'    => $fetchInfo['http_status'] ?? null,
+                'http_status'    => $fetchInfo['http_status'] ?? $fetchInfo['status'] ?? null,
                 'fallback_tried' => $fallbackUsed,
             ];
 

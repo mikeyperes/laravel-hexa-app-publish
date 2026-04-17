@@ -72,8 +72,11 @@
                     <select x-model="pressRelease.public_url_method" @change="savePipelineState()" class="w-full md:w-80 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="auto">Auto</option>
                         <option value="readability">Readability</option>
+                        <option value="structured">Structured Data</option>
+                        <option value="heuristic">DOM Heuristic</option>
                         <option value="css">CSS Selector</option>
                         <option value="regex">Regex</option>
+                        <option value="jina">Jina Reader</option>
                         <option value="claude">Claude AI</option>
                         <option value="gpt">GPT</option>
                         <option value="grok">Grok</option>

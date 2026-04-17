@@ -855,8 +855,11 @@
                         <select x-model="extractMethod" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
                             <option value="auto">Auto</option>
                             <option value="readability">Readability</option>
+                            <option value="structured">Structured Data</option>
+                            <option value="heuristic">DOM Heuristic</option>
                             <option value="css">CSS Selector</option>
                             <option value="regex">Regex</option>
+                            <option value="jina">Jina Reader</option>
                             <option value="claude">Claude AI</option>
                             <option value="gpt">GPT</option>
                             <option value="grok">Grok</option>
@@ -869,7 +872,9 @@
                             <option value="chrome">Chrome Desktop</option>
                             <option value="firefox">Firefox Desktop</option>
                             <option value="safari">Safari macOS</option>
+                            <option value="mobile">Mobile Chrome</option>
                             <option value="googlebot">Googlebot</option>
+                            <option value="bingbot">Bingbot</option>
                             <option value="bot">HWS Bot</option>
                         </select>
                     </div>
@@ -913,11 +918,11 @@
                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
                     <div class="flex justify-between">
                         <span class="text-gray-400">Method</span>
-                        <span class="text-white font-medium" x-text="extractMethod === 'auto' ? 'Auto (Readability + Regex)' : extractMethod === 'readability' ? 'Readability' : extractMethod === 'css' ? 'CSS Selector' : extractMethod === 'regex' ? 'Regex' : extractMethod === 'claude' ? 'Claude AI' : extractMethod === 'gpt' ? 'GPT' : extractMethod === 'grok' ? 'Grok' : extractMethod === 'gemini' ? 'Gemini' : extractMethod"></span>
+                        <span class="text-white font-medium" x-text="extractMethod === 'auto' ? 'Auto (Readability + Structured + Heuristic + Jina)' : extractMethod === 'readability' ? 'Readability' : extractMethod === 'structured' ? 'Structured Data' : extractMethod === 'heuristic' ? 'DOM Heuristic' : extractMethod === 'css' ? 'CSS Selector' : extractMethod === 'regex' ? 'Regex' : extractMethod === 'jina' ? 'Jina Reader' : extractMethod === 'claude' ? 'Claude AI' : extractMethod === 'gpt' ? 'GPT' : extractMethod === 'grok' ? 'Grok' : extractMethod === 'gemini' ? 'Gemini' : extractMethod"></span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-gray-400">User Agent</span>
-                        <span class="text-white font-medium" x-text="checkUserAgent === 'chrome' ? 'Chrome Desktop' : checkUserAgent === 'firefox' ? 'Firefox Desktop' : checkUserAgent === 'safari' ? 'Safari macOS' : checkUserAgent === 'googlebot' ? 'Googlebot' : 'HWS Bot'"></span>
+                        <span class="text-white font-medium" x-text="checkUserAgent === 'chrome' ? 'Chrome Desktop' : checkUserAgent === 'firefox' ? 'Firefox Desktop' : checkUserAgent === 'safari' ? 'Safari macOS' : checkUserAgent === 'mobile' ? 'Mobile Chrome' : checkUserAgent === 'googlebot' ? 'Googlebot' : checkUserAgent === 'bingbot' ? 'Bingbot' : 'HWS Bot'"></span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-gray-400">Retries</span>
