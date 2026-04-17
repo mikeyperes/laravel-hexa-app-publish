@@ -137,11 +137,7 @@
                     <template x-if="!completedSteps.includes(2)"><span>2</span></template>
                 </span>
                 <span class="font-semibold text-gray-800">Article Configuration</span>
-                <span x-show="selectedSite && siteConn.status === true" x-cloak class="text-sm text-green-600" x-text="selectedSite?.name"></span>
-                <span x-show="selectedSite && siteConn.status === null && siteConn.testing" x-cloak class="text-sm text-blue-500 inline-flex items-center gap-1">
-                    <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    Connecting...
-                </span>
+                <span x-show="selectedSite" x-cloak class="text-sm" :class="siteConn.status === true ? 'text-green-600' : 'text-gray-500'" x-text="selectedSite?.name"></span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(2) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
@@ -705,7 +701,14 @@
                     </div>
                     <div class="flex gap-2">
                         <input type="text" x-model="aiSearchTopic" @keydown.enter="aiSearchArticles()" placeholder="e.g. cryptocurrency regulations 2026" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        <select x-model="aiSearchModel" class="border border-gray-300 rounded-lg px-2 py-2 text-xs w-auto">
+                        <button @click="aiSearchArticles()" :disabled="aiSearching || !aiSearchTopic.trim()" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2">
+                            <svg x-show="aiSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <span x-text="aiSearching ? 'Searching...' : 'Find Articles'"></span>
+                        </button>
+                    </div>
+                    <div class="mt-2">
+                        <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Search Agent</label>
+                        <select x-model="aiSearchModel" class="border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
                             @foreach(($aiModelGroups ?? []) as $company => $models)
                             <optgroup label="{{ $company }}">
                                 @foreach($models as $model)
@@ -714,10 +717,6 @@
                             </optgroup>
                             @endforeach
                         </select>
-                        <button @click="aiSearchArticles()" :disabled="aiSearching || !aiSearchTopic.trim()" class="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2">
-                            <svg x-show="aiSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                            <span x-text="aiSearching ? 'Searching...' : 'Find Articles'"></span>
-                        </button>
                     </div>
 
                     {{-- Recent Searches --}}
