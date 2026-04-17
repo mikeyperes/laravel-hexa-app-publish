@@ -111,6 +111,40 @@
                     return false;
                 }
             },
+
+            /**
+             * Load site authors without running a full write test.
+             *
+             * @param {number|string} siteId
+             * @returns {Promise<Array>}
+             */
+            async loadSiteAuthors(siteId) {
+                if (!siteId) return [];
+
+                if (Object.prototype.hasOwnProperty.call(this, 'authorsLoading')) {
+                    this.authorsLoading = true;
+                }
+
+                try {
+                    const resp = await fetch('/publish/sites/' + siteId + '/authors', {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const data = await resp.json();
+
+                    this.siteConn.authors = Array.isArray(data.authors) ? data.authors : [];
+                    if (data.default_author) {
+                        this.siteConn.defaultAuthor = data.default_author;
+                    }
+
+                    return this.siteConn.authors;
+                } catch (e) {
+                    return [];
+                } finally {
+                    if (Object.prototype.hasOwnProperty.call(this, 'authorsLoading')) {
+                        this.authorsLoading = false;
+                    }
+                }
+            },
         };
     }
 </script>

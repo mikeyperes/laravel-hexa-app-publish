@@ -33,7 +33,7 @@ class MetadataGenerationService
     public function generate(string $articleHtml, string $model = 'claude-haiku-4-5-20251001'): array
     {
         $articleText = strip_tags($articleHtml);
-        $prompt = "Based on this article, generate exactly:\n\n1. 10 unique title options (compelling, SEO-friendly)\n2. 15 category suggestions (broad topics)\n3. 15 tag suggestions (specific keywords)\n\nArticle:\n" . mb_substr($articleText, 0, 3000) . "\n\nRespond ONLY in this exact JSON format, no other text:\n{\"titles\":[\"title1\",...],\"categories\":[\"cat1\",...],\"tags\":[\"tag1\",...]}";
+        $prompt = "Based on this article, generate exactly:\n\n1. 10 unique title options (compelling, SEO-friendly)\n2. 10 category suggestions (broad topics)\n3. 10 tag suggestions (specific keywords)\n\nArticle:\n" . mb_substr($articleText, 0, 3000) . "\n\nRespond ONLY in this exact JSON format, no other text:\n{\"titles\":[\"title1\",...],\"categories\":[\"cat1\",...],\"tags\":[\"tag1\",...]}";
 
         $result = $this->anthropic->chat(
             'You are a content metadata expert. Output ONLY valid JSON. No markdown, no explanation.',
@@ -74,8 +74,8 @@ class MetadataGenerationService
             'success'    => true,
             'message'    => 'Metadata generated.',
             'titles'     => array_slice($parsed['titles'] ?? [], 0, 10),
-            'categories' => array_slice($parsed['categories'] ?? [], 0, 15),
-            'tags'       => array_slice($parsed['tags'] ?? [], 0, 15),
+            'categories' => array_slice($parsed['categories'] ?? [], 0, 10),
+            'tags'       => array_slice($parsed['tags'] ?? [], 0, 10),
             'urls'       => array_slice($parsed['urls'] ?? [], 0, 10),
         ];
     }

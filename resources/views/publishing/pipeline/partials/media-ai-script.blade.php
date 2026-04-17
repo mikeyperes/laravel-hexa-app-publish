@@ -118,14 +118,12 @@
                 });
                 const data = await resp.json();
                 if (data.success) {
-                    this.suggestedTitles = data.titles || [];
-                    this.suggestedCategories = data.categories || [];
-                    this.suggestedTags = data.tags || [];
-                    this.suggestedUrls = data.urls || [];
-                    this.selectedTitleIdx = 0;
-                    if (this.suggestedTitles.length > 0) this.articleTitle = this.suggestedTitles[0];
-                    this.selectedCategories = Array.from({length: Math.min(10, this.suggestedCategories.length)}, (_, i) => i);
-                    this.selectedTags = Array.from({length: Math.min(10, this.suggestedTags.length)}, (_, i) => i);
+                    this.applyGeneratedMetadata(data);
+                    this.suggestedUrls = (data.urls || []).map((url) => this.normalizeSuggestedUrlEntry({
+                        url,
+                        title: url,
+                        nofollow: true,
+                    }));
                 }
             } catch (e) { /* silently fail */ }
             this.metadataLoading = false;
@@ -137,15 +135,96 @@
             else arr.splice(pos, 1);
         },
 
+        addCustomCategory() {
+            this.addCustomMetadataValue('category', this.customCategoryInput);
+            this.customCategoryInput = '';
+        },
+
+        addCustomTag() {
+            this.addCustomMetadataValue('tag', this.customTagInput);
+            this.customTagInput = '';
+        },
+
+        normalizeSuggestedUrlEntry(link = {}) {
+            return {
+                url: String(link.url || '').trim(),
+                title: String(link.title || link.url || '').trim(),
+                nofollow: !!link.nofollow,
+                checking: false,
+                status_code: link.status_code ?? null,
+                status_text: link.status_text || '',
+                status_tone: link.status_tone || 'gray',
+                checked_via: link.checked_via || '',
+                final_url: link.final_url || '',
+                is_broken: !!link.is_broken,
+            };
+        },
+
         extractArticleLinks(html) {
             const tmp = document.createElement('div');
             tmp.innerHTML = html;
             const anchors = tmp.querySelectorAll('a[href]');
-            this.suggestedUrls = Array.from(anchors).map(a => ({
-                url: a.getAttribute('href'),
-                title: a.textContent.trim() || a.getAttribute('href'),
-                nofollow: (a.getAttribute('rel') || '').includes('nofollow'),
-            })).filter(l => l.url && l.url.startsWith('http'));
+            const seen = new Set();
+            this.suggestedUrls = Array.from(anchors)
+                .map(a => this.normalizeSuggestedUrlEntry({
+                    url: a.getAttribute('href'),
+                    title: a.textContent.trim() || a.getAttribute('href'),
+                    nofollow: (a.getAttribute('rel') || '').includes('nofollow'),
+                }))
+                .filter((link) => {
+                    if (!link.url || !link.url.startsWith('http')) return false;
+                    const key = link.url.replace(/\/+$/, '').toLowerCase();
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+        },
+
+        async checkArticleLinkStatus(idx) {
+            const link = this.suggestedUrls[idx];
+            if (!link?.url || link.checking) return;
+
+            this.suggestedUrls.splice(idx, 1, { ...link, checking: true });
+
+            try {
+                const resp = await fetch('{{ route("publish.pipeline.link-status") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    body: JSON.stringify({ url: link.url }),
+                });
+                const data = await resp.json();
+                const updated = {
+                    ...link,
+                    checking: false,
+                    status_code: data.data?.status_code ?? null,
+                    status_text: data.data?.status_text || (data.success ? 'OK' : 'Check failed'),
+                    status_tone: data.data?.status_tone || (data.success ? 'green' : 'red'),
+                    checked_via: data.data?.checked_via || '',
+                    final_url: data.data?.final_url || '',
+                    is_broken: !!(data.data?.is_broken),
+                };
+
+                this.suggestedUrls.splice(idx, 1, updated);
+
+                if (updated.is_broken) {
+                    this.showNotification('warning', 'Broken link detected: ' + updated.status_text);
+                }
+            } catch (e) {
+                this.suggestedUrls.splice(idx, 1, {
+                    ...link,
+                    checking: false,
+                    status_text: 'Check failed',
+                    status_tone: 'red',
+                    is_broken: false,
+                });
+            }
+        },
+
+        async checkAllArticleLinks() {
+            if (!Array.isArray(this.suggestedUrls) || this.suggestedUrls.length === 0 || this.checkingAllArticleLinks) return;
+            this.checkingAllArticleLinks = true;
+            await Promise.all(this.suggestedUrls.map((link, idx) => this.checkArticleLinkStatus(idx)));
+            this.checkingAllArticleLinks = false;
         },
 
         async loadSyndicationCategories() {
@@ -252,10 +331,8 @@
         importFeaturedFromUrl() {
             const url = this.featuredUrlImport.trim();
             if (!url) return;
-            this.featuredPhoto = { url_large: url, url_thumb: url, url: url, source: 'url-import', alt: '', width: 0, height: 0 };
-            this.setFeaturedThumbPending();
+            this.applyFeaturedPhotoSelection({ url_large: url, url_thumb: url, url: url, source: 'url-import', alt: '', width: 0, height: 0 });
             this.featuredUrlImport = '';
-            this.syncDeferredEnrichmentState('featured_import_url');
             this.showNotification('success', 'Featured image set from URL');
         },
 
@@ -276,18 +353,14 @@
                 });
                 const data = await resp.json();
                 if (data.success) {
-                    this.featuredPhoto = { url_large: data.url, url_thumb: data.url, url: data.url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: data.width || 0, height: data.height || 0 };
-                    this.setFeaturedThumbPending();
-                    this.syncDeferredEnrichmentState('featured_upload');
+                    this.applyFeaturedPhotoSelection({ url_large: data.url, url_thumb: data.url, url: data.url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: data.width || 0, height: data.height || 0 });
                     this.showNotification('success', 'Featured image uploaded');
                 } else {
                     this.showNotification('error', data.message || 'Upload failed');
                 }
             } catch (e) {
                 // Fallback: use local blob URL
-                this.featuredPhoto = { url_large: url, url_thumb: url, url: url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: 0, height: 0 };
-                this.setFeaturedThumbPending();
-                this.syncDeferredEnrichmentState('featured_upload_fallback');
+                this.applyFeaturedPhotoSelection({ url_large: url, url_thumb: url, url: url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: 0, height: 0 });
                 this.showNotification('info', 'Using local preview — will upload during prepare');
             }
         },
@@ -798,15 +871,67 @@
             this.photoSuggestions[idx].searching = false;
         },
 
-        selectPhotoForSuggestion(idx, photo) {
-            this.photoSuggestions[idx].autoPhoto = this.sanitizePhotoAssetForPersistence(photo);
-            this.photoSuggestions[idx].confirmed = false;
-            this.photoSuggestions[idx].loadAttempted = true;
-            this.photoSuggestions[idx].loadError = '';
+        applyPhotoSuggestionSelection(idx, photo, options = {}) {
+            if (!this.photoSuggestions[idx]) return;
+
+            const normalizedPhoto = this.sanitizePhotoAssetForPersistence(photo);
+            if (!normalizedPhoto) return;
+
+            this.photoSuggestions.splice(idx, 1, {
+                ...this.photoSuggestions[idx],
+                autoPhoto: normalizedPhoto,
+                confirmed: false,
+                loadAttempted: true,
+                loadError: '',
+                alt_text: normalizedPhoto.alt || '',
+                caption: '',
+                suggestedFilename: 'auto',
+                metaGenerator: '',
+            });
             this.setPhotoThumbPending(idx);
             this.updatePlaceholderInEditor(idx);
             this.syncDeferredEnrichmentState('inline_photo_selected');
             this.queueAutoSaveDraft(300);
+
+            if (options.refreshMeta !== false) {
+                this.$nextTick(() => setTimeout(() => this.refreshPhotoMeta(idx), 75));
+            }
+        },
+
+        applyFeaturedPhotoSelection(photo, options = {}) {
+            const normalizedPhoto = this.sanitizePhotoAssetForPersistence(photo);
+            if (!normalizedPhoto) return;
+
+            this.featuredPhoto = normalizedPhoto;
+            this.setFeaturedThumbPending();
+            this.featuredAlt = normalizedPhoto.alt || '';
+            this.featuredCaption = '';
+            this.featuredFilename = 'auto';
+            this.featuredMetaGenerator = '';
+            this.featuredSearchPending = false;
+            this.syncDeferredEnrichmentState('featured_photo_selected');
+            this.queueAutoSaveDraft(300);
+
+            if (options.refreshMeta !== false) {
+                this.$nextTick(() => setTimeout(() => this.refreshFeaturedMeta(), 75));
+            }
+        },
+
+        resetFeaturedPhotoSelection() {
+            this.featuredPhoto = null;
+            this.featuredAlt = '';
+            this.featuredCaption = '';
+            this.featuredFilename = '';
+            this.featuredMetaGenerator = '';
+            this.featuredThumbLoading = false;
+            this.featuredThumbError = '';
+            this.featuredSearchPending = !!this.featuredImageSearch;
+            this.syncDeferredEnrichmentState('featured_photo_removed');
+            this.queueAutoSaveDraft(300);
+        },
+
+        selectPhotoForSuggestion(idx, photo) {
+            this.applyPhotoSuggestionSelection(idx, photo);
         },
 
         async loadSmartEdits() {

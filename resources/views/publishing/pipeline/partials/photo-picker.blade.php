@@ -97,23 +97,29 @@
         <div x-show="googleTiming > 0 && googleResults.length > 0" x-cloak class="text-[10px] text-gray-400 mb-1" x-text="googleResults.length + ' photos in ' + googleTiming + 'ms'"></div>
         <div x-show="googleResults.length > 0" x-cloak class="grid grid-cols-4 gap-2">
             <template x-for="(photo, idx) in googleResults" :key="'g'+idx">
-                <div @click="pickPhoto(photo, 'g'+idx)" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-all relative" :class="selectedPhotoKey === 'g'+idx ? 'border-green-500 ring-2 ring-green-300' : (photo.copyright_flag ? 'border-red-300 hover:border-red-500' : 'border-gray-200 hover:border-blue-400')">
+                <div @click="pickPhoto(photo, 'g'+idx)" class="cursor-pointer rounded-lg overflow-hidden border-2 transition-all relative" :class="selectedPhotoKey === 'g'+idx ? 'border-green-500 ring-2 ring-green-300' : (photo.copyright_flag ? 'border-red-600 ring-2 ring-red-200 bg-red-50 hover:border-red-700' : 'border-gray-200 hover:border-blue-400')">
                     <div class="relative">
                         <img :src="photo.url_thumb" :alt="photo.alt || ''" class="w-full h-64 object-cover" loading="lazy">
+                        <div x-show="photo.copyright_flag" x-cloak class="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full bg-red-700 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-white shadow">
+                            <span>Banned Domain</span>
+                        </div>
                         <div x-show="selectedPhotoKey === 'g'+idx" x-cloak class="absolute top-1.5 right-1.5 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow">
                             <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
                         </div>
                     </div>
-                    <div class="px-1.5 py-1 bg-white space-y-0.5">
+                    <div class="px-1.5 py-1 space-y-0.5" :class="photo.copyright_flag ? 'bg-red-50' : 'bg-white'">
                         <p class="text-[9px] font-medium text-gray-700 break-words" x-text="(photo.alt || '').substring(0, 40)"></p>
                         <div class="flex items-center gap-1 flex-wrap">
-                            <span class="text-[9px] text-gray-400" x-text="(photo.width || '?') + 'x' + (photo.height || '?')"></span>
+                            <span class="text-[9px]" :class="photo.copyright_flag ? 'text-red-700 font-semibold' : 'text-gray-400'" x-text="(photo.domain || '') + ' — ' + (photo.width || '?') + 'x' + (photo.height || '?')"></span>
                             <template x-if="photo.width && photo.height">
                                 <span class="text-[8px] font-medium px-1 rounded" :class="(() => { const r = photo.width/photo.height; return r >= 1.3 ? 'bg-green-100 text-green-700' : (r >= 1.0 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'); })()" x-text="(photo.width/photo.height).toFixed(1) + ':1'"></span>
                             </template>
                         </div>
                         <a :href="photo.url_large || photo.source_url" target="_blank" @click.stop class="text-[8px] text-blue-500 hover:underline break-all block" :title="photo.url_large || photo.source_url" x-text="(() => { try { const u = new URL(photo.url_large || photo.source_url || ''); return u.hostname + u.pathname.substring(0, 30) + '...'; } catch(e) { return ''; } })()"></a>
-                        <div x-show="photo.copyright_flag" x-cloak class="text-[8px] text-red-500" x-text="photo.copyright_reason"></div>
+                        <div x-show="photo.copyright_flag" x-cloak class="rounded border border-red-200 bg-red-100 px-1.5 py-1 text-[8px] font-semibold text-red-700">
+                            <div class="uppercase tracking-wide">Blacklisted for photos</div>
+                            <div class="font-medium normal-case" x-text="photo.copyright_reason"></div>
+                        </div>
                     </div>
                 </div>
             </template>

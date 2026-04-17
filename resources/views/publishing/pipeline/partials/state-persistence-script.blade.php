@@ -19,6 +19,122 @@
             return suggestion;
         },
 
+        normalizeUniqueTextList(values, limit = 10) {
+            const seen = new Set();
+
+            return (Array.isArray(values) ? values : [])
+                .map((value) => String(value || '').trim())
+                .filter((value) => {
+                    if (!value) return false;
+                    const key = value.toLowerCase();
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                })
+                .slice(0, limit);
+        },
+
+        metadataSelectionDefaults(categoryCount = 0, tagCount = 0) {
+            return {
+                categories: Array.from({ length: Math.min(3, Number(categoryCount || 0)) }, (_, i) => i),
+                tags: Array.from({ length: Math.min(5, Number(tagCount || 0)) }, (_, i) => i),
+            };
+        },
+
+        selectedCategoryNames() {
+            return (Array.isArray(this.suggestedCategories) ? this.suggestedCategories : [])
+                .filter((value, idx) => Array.isArray(this.selectedCategories) && this.selectedCategories.includes(idx));
+        },
+
+        selectedTagNames() {
+            return (Array.isArray(this.suggestedTags) ? this.suggestedTags : [])
+                .filter((value, idx) => Array.isArray(this.selectedTags) && this.selectedTags.includes(idx));
+        },
+
+        applyGeneratedMetadata(metadata = {}) {
+            const titles = this.normalizeUniqueTextList(metadata.titles || [], 10);
+            const categories = this.normalizeUniqueTextList(metadata.categories || [], 10);
+            const tags = this.normalizeUniqueTextList(metadata.tags || [], 10);
+            const defaults = this.metadataSelectionDefaults(categories.length, tags.length);
+
+            this.suggestedTitles = titles;
+            this.suggestedCategories = categories;
+            this.suggestedTags = tags;
+            this.selectedTitleIdx = 0;
+            this.selectedCategories = defaults.categories;
+            this.selectedTags = defaults.tags;
+
+            if (titles.length > 0) {
+                this.articleTitle = titles[0];
+            }
+
+            if (typeof metadata.description === 'string' && metadata.description.trim()) {
+                this.articleDescription = metadata.description.trim();
+            }
+        },
+
+        addCustomMetadataValue(kind, rawValue) {
+            const value = String(rawValue || '').trim();
+            if (!value) return;
+
+            const listKey = kind === 'category' ? 'suggestedCategories' : 'suggestedTags';
+            const selectionKey = kind === 'category' ? 'selectedCategories' : 'selectedTags';
+            const existingIndex = this[listKey].findIndex(item => String(item || '').trim().toLowerCase() === value.toLowerCase());
+
+            if (existingIndex !== -1) {
+                if (!this[selectionKey].includes(existingIndex)) {
+                    this[selectionKey] = [...this[selectionKey], existingIndex];
+                }
+                return;
+            }
+
+            const nextIndex = this[listKey].length;
+            this[listKey] = [...this[listKey], value];
+            this[selectionKey] = [...this[selectionKey], nextIndex];
+        },
+
+        isGoogleLikePhotoSource(source = '') {
+            return ['google', 'google-cse'].includes(String(source || '').toLowerCase());
+        },
+
+        metadataTextLooksBad(text = '') {
+            return /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|dreamstime|alamy|flickr|wikimedia/i.test(String(text || ''));
+        },
+
+        photoSuggestionNeedsMetadata(ps = null) {
+            const source = ps?.autoPhoto?.source || '';
+            const alt = String(ps?.alt_text || '').trim();
+            const caption = String(ps?.caption || '').trim();
+            const filename = String(ps?.suggestedFilename || '').trim();
+
+            if (!alt || !caption || !filename || filename === 'auto') {
+                return true;
+            }
+
+            if (this.metadataTextLooksBad(alt) || this.metadataTextLooksBad(caption)) {
+                return true;
+            }
+
+            return false;
+        },
+
+        featuredPhotoNeedsMetadata() {
+            const source = this.featuredPhoto?.source || '';
+            const alt = String(this.featuredAlt || '').trim();
+            const caption = String(this.featuredCaption || '').trim();
+            const filename = String(this.featuredFilename || '').trim();
+
+            if (!alt || !caption || !filename || filename === 'auto') {
+                return true;
+            }
+
+            if (this.metadataTextLooksBad(alt) || this.metadataTextLooksBad(caption)) {
+                return true;
+            }
+
+            return false;
+        },
+
         setPhotoThumbPending(idx) {
             if (!this.photoSuggestions[idx]) return;
             this.photoSuggestions[idx].thumbLoading = !!this.photoSuggestions[idx].autoPhoto;
@@ -447,6 +563,12 @@
                     this.checkPassCount = state.checkResults.filter(r => r.success).length;
                 }
 
+                this.suggestedTitles = this.normalizeUniqueTextList(this.suggestedTitles || [], 10);
+                this.suggestedCategories = this.normalizeUniqueTextList(this.suggestedCategories || [], 10);
+                this.suggestedTags = this.normalizeUniqueTextList(this.suggestedTags || [], 10);
+                this.selectedCategories = (Array.isArray(this.selectedCategories) ? this.selectedCategories : []).filter(idx => idx < this.suggestedCategories.length);
+                this.selectedTags = (Array.isArray(this.selectedTags) ? this.selectedTags : []).filter(idx => idx < this.suggestedTags.length);
+
                 // Photo suggestions — reset loading flags + rebuild filenames
                 if (state.photoSuggestions) {
                     this.photoSuggestions = state.photoSuggestions.map((ps, idx) => this.normalizePhotoSuggestionState(ps, idx));
@@ -868,7 +990,7 @@
             this.aiSearchCost = null;
             this.aiHasSearched = false;
             this.aiModel = @json(($pipelineDefaults['spin_model'] ?? 'grok-3'));
-            this.aiSearchModel = @json(($pipelineDefaults['search_model'] ?? 'claude-haiku-4-5-20251001'));
+            this.aiSearchModel = @json(($pipelineDefaults['search_model'] ?? 'grok-3-mini'));
             this.spunContent = '';
             this.spunWordCount = 0;
             this.articleTitle = '';

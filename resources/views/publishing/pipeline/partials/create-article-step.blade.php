@@ -67,9 +67,9 @@
             </div>
 
             {{-- Categories & Tags --}}
-            <div x-show="suggestedCategories.length > 0 || suggestedTags.length > 0" x-cloak class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div x-show="suggestedCategories.length > 0" class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h5 class="text-sm font-semibold text-gray-700 mb-2">Categories <span class="font-normal text-gray-400" x-text="'(' + selectedCategories.length + ' selected)'"></span></h5>
+            <div x-show="spunContent || editorContent" x-cloak class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h5 class="text-sm font-semibold text-gray-700 mb-2">Categories <span class="font-normal text-gray-400" x-text="'(' + selectedCategories.length + ' selected of ' + suggestedCategories.length + ')'"></span></h5>
                     <div class="space-y-1">
                         <template x-for="(cat, idx) in suggestedCategories" :key="idx">
                             <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
@@ -78,9 +78,13 @@
                             </label>
                         </template>
                     </div>
+                    <div class="mt-3 flex items-center gap-2">
+                        <input type="text" x-model="customCategoryInput" @keydown.enter.prevent="addCustomCategory()" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Add category manually">
+                        <button @click="addCustomCategory()" type="button" class="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs hover:bg-green-700">Add</button>
+                    </div>
                 </div>
-                <div x-show="suggestedTags.length > 0" class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h5 class="text-sm font-semibold text-gray-700 mb-2">Tags <span class="font-normal text-gray-400" x-text="'(' + selectedTags.length + ' selected)'"></span></h5>
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h5 class="text-sm font-semibold text-gray-700 mb-2">Tags <span class="font-normal text-gray-400" x-text="'(' + selectedTags.length + ' selected of ' + suggestedTags.length + ')'"></span></h5>
                     <div class="space-y-1">
                         <template x-for="(tag, idx) in suggestedTags" :key="idx">
                             <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
@@ -88,6 +92,10 @@
                                 <span x-text="tag"></span>
                             </label>
                         </template>
+                    </div>
+                    <div class="mt-3 flex items-center gap-2">
+                        <input type="text" x-model="customTagInput" @keydown.enter.prevent="addCustomTag()" class="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Add tag manually">
+                        <button @click="addCustomTag()" type="button" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs hover:bg-blue-700">Add</button>
                     </div>
                 </div>
             </div>
@@ -121,7 +129,13 @@
 
             {{-- Article Links --}}
             <div x-show="suggestedUrls.length > 0" x-cloak class="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <h5 class="text-sm font-semibold text-gray-700 mb-2">Article Links <span class="font-normal text-gray-400" x-text="'(' + suggestedUrls.length + ')'"></span></h5>
+                <div class="flex items-center justify-between gap-3 mb-2">
+                    <h5 class="text-sm font-semibold text-gray-700">Article Links <span class="font-normal text-gray-400" x-text="'(' + suggestedUrls.length + ')'"></span></h5>
+                    <button @click="checkAllArticleLinks()" type="button" class="text-xs px-2.5 py-1 rounded border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-50 inline-flex items-center gap-1" :disabled="checkingAllArticleLinks">
+                        <svg x-show="checkingAllArticleLinks" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        <span x-text="checkingAllArticleLinks ? 'Checking…' : 'Test All 404s'"></span>
+                    </button>
+                </div>
                 <div class="space-y-2">
                     <template x-for="(link, idx) in suggestedUrls" :key="idx">
                         <div class="flex items-center gap-3 text-sm bg-white rounded-lg px-3 py-2 border border-gray-100">
@@ -132,7 +146,12 @@
                                     <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                                 </a>
                             </div>
+                            <span x-show="link.status_text" x-cloak class="text-[10px] px-2 py-1 rounded font-medium flex-shrink-0" :class="link.status_tone === 'green' ? 'bg-green-100 text-green-700' : (link.status_tone === 'red' ? 'bg-red-100 text-red-700' : (link.status_tone === 'amber' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'))" x-text="link.status_text"></span>
                             <button @click="link.nofollow = !link.nofollow" class="text-xs px-2 py-1 rounded flex-shrink-0" :class="link.nofollow ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'" x-text="link.nofollow ? 'nofollow' : 'follow'"></button>
+                            <button @click="checkArticleLinkStatus(idx)" type="button" class="text-xs px-2 py-1 rounded border border-amber-300 text-amber-700 hover:bg-amber-50 flex-shrink-0 inline-flex items-center gap-1" :disabled="link.checking">
+                                <svg x-show="link.checking" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                <span x-text="link.checking ? 'Checking…' : 'Test 404'"></span>
+                            </button>
                             <button @click="removeArticleLink(idx)" class="text-red-400 hover:text-red-600 flex-shrink-0">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
@@ -251,12 +270,12 @@
                                     <div class="flex items-center gap-2"><label class="text-[10px] uppercase w-16 flex-shrink-0" :class="!featuredFilename || featuredFilename === 'auto' ? 'text-red-400 font-semibold' : 'text-gray-400'">Filename</label><p class="text-[11px] font-mono" :class="!featuredFilename || featuredFilename === 'auto' ? 'text-red-500' : 'text-gray-500'" x-text="featuredFilename || 'auto'"></p></div>
                                 </div>
                                 <div class="flex items-center gap-2 mt-1">
-                                    <button @click.stop="refreshFeaturedMeta()" :disabled="featuredRefreshingMeta" class="text-[11px] inline-flex items-center gap-1 disabled:opacity-50" :class="(() => { const bad = !featuredAlt || !featuredCaption || featuredFilename === 'auto' || !featuredFilename || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|dreamstime|alamy|flickr|wikimedia/i.test(featuredAlt) || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|wikimedia/i.test(featuredCaption); return bad ? 'text-red-500 hover:text-red-700 font-semibold' : 'text-purple-500 hover:text-purple-700'; })()">
+                                    <button @click.stop="refreshFeaturedMeta()" :disabled="featuredRefreshingMeta" class="text-[11px] inline-flex items-center gap-1 disabled:opacity-50" :class="featuredPhotoNeedsMetadata() ? 'text-red-500 hover:text-red-700 font-semibold' : 'text-purple-500 hover:text-purple-700'">
                                         <svg class="w-3 h-3" :class="featuredRefreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                         <span x-text="featuredRefreshingMeta ? 'Generating...' : 'Refresh Metadata'"></span>
                                     </button>
                                     <span x-show="featuredMetaGenerator" x-cloak class="text-[9px] px-1.5 py-0.5 rounded" :class="featuredMetaGenerator === 'local' ? 'bg-gray-100 text-gray-500' : 'bg-purple-100 text-purple-600'" x-text="featuredMetaGenerator === 'local' ? 'PHP' : 'AI'"></span>
-                                    <template x-if="!featuredAlt || !featuredCaption || featuredFilename === 'auto' || !featuredFilename || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|dreamstime|alamy|flickr|wikimedia/i.test(featuredAlt) || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|wikimedia/i.test(featuredCaption)">
+                                    <template x-if="featuredPhotoNeedsMetadata()">
                                         <span class="text-[10px] text-red-500 font-medium">Needs metadata</span>
                                     </template>
                                 </div>
@@ -298,11 +317,11 @@
                                             <input type="file" class="hidden" accept="image/*" @change="uploadFeaturedPhoto($event.target.files); $event.target.value = null">
                                         </label>
                                         <span class="text-gray-300">|</span>
-                                        <button x-show="featuredPhoto" x-cloak @click="featuredPhoto = null; featuredAlt = ''; featuredCaption = ''; featuredFilename = ''; featuredThumbLoading = false; featuredThumbError = ''; featuredSearchPending = !!featuredImageSearch" class="text-[11px] text-red-500 hover:text-red-700">Remove</button>
+                                        <button x-show="featuredPhoto" x-cloak @click="resetFeaturedPhotoSelection()" class="text-[11px] text-red-500 hover:text-red-700">Remove</button>
                                     </div>
                                     <div x-show="showFeaturedUrl" x-cloak class="flex gap-1.5 mt-1.5">
                                         <input type="text" x-model="featuredUrlVal" class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Paste image URL...">
-                                        <button @click.stop="if(featuredUrlVal.trim()){featuredPhoto={url_large:featuredUrlVal.trim(),url_thumb:featuredUrlVal.trim(),source:'url-import',alt:'',width:0,height:0};setFeaturedThumbPending();featuredAlt='';featuredCaption='';featuredFilename='auto';featuredSearchPending=false;featuredUrlVal='';showFeaturedUrl=false;}" class="text-[11px] bg-blue-600 text-white px-2 py-1 rounded">Import</button>
+                                        <button @click.stop="if(featuredUrlVal.trim()){applyFeaturedPhotoSelection({url_large:featuredUrlVal.trim(),url_thumb:featuredUrlVal.trim(),source:'url-import',alt:'',width:0,height:0});featuredUrlVal='';showFeaturedUrl=false;}" class="text-[11px] bg-blue-600 text-white px-2 py-1 rounded">Import</button>
                                     </div>
                                 </div>
                             </div>
@@ -318,7 +337,7 @@
                         @include('app-publish::publishing.pipeline.partials.photo-picker', [
                             'pickerId' => 'featured-picker',
                             'searchQuery' => '',
-                            'onSelect' => 'function(photo) { const dup = photoSuggestions.find(p => p.autoPhoto && p.autoPhoto.url_large === photo.url_large); if (dup) { showNotification(\'warning\', \'This photo is already used as inline photo: \' + dup.search_term); } featuredPhoto = photo; setFeaturedThumbPending(); featuredAlt = photo.alt || \'\'; featuredCaption = \'\'; featuredFilename = \'auto\'; featuredSearchPending = false; }',
+                            'onSelect' => 'function(photo) { const dup = photoSuggestions.find(p => p.autoPhoto && p.autoPhoto.url_large === photo.url_large); if (dup) { showNotification(\'warning\', \'This photo is already used as inline photo: \' + dup.search_term); } applyFeaturedPhotoSelection(photo); }',
                         ])
                     </div>
                 </div>
@@ -420,12 +439,12 @@
                                             <div class="flex items-center gap-2"><label class="text-[10px] uppercase w-16 flex-shrink-0" :class="!photoSuggestions[idx].suggestedFilename || photoSuggestions[idx].suggestedFilename === 'auto' ? 'text-red-400 font-semibold' : 'text-gray-400'">Filename</label><p class="text-[11px] font-mono" :class="!photoSuggestions[idx].suggestedFilename || photoSuggestions[idx].suggestedFilename === 'auto' ? 'text-red-500' : 'text-gray-500'" x-text="photoSuggestions[idx].suggestedFilename || 'auto'"></p></div>
                                         </div>
                                         <div class="flex items-center gap-2 mt-1">
-                                            <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] inline-flex items-center gap-1 disabled:opacity-50" :class="(() => { const a = ps.alt_text || ''; const c = ps.caption || ''; const f = ps.suggestedFilename || ''; const bad = !a || !c || f === 'auto' || !f || /wikipedia|pexels|unsplash|pixabay|imdb|getty/i.test(a); return bad ? 'text-red-500 hover:text-red-700 font-semibold' : 'text-purple-500 hover:text-purple-700'; })()">
+                                            <button @click.stop="refreshPhotoMeta(idx)" :disabled="ps.refreshingMeta" class="text-[11px] inline-flex items-center gap-1 disabled:opacity-50" :class="photoSuggestionNeedsMetadata(ps) ? 'text-red-500 hover:text-red-700 font-semibold' : 'text-purple-500 hover:text-purple-700'">
                                                 <svg class="w-3 h-3" :class="ps.refreshingMeta ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                                 <span x-text="ps.refreshingMeta ? 'Generating...' : 'Refresh Metadata'"></span>
                                             </button>
                                             <span x-show="ps.metaGenerator" x-cloak class="text-[9px] px-1.5 py-0.5 rounded" :class="ps.metaGenerator === 'local' ? 'bg-gray-100 text-gray-500' : 'bg-purple-100 text-purple-600'" x-text="ps.metaGenerator === 'local' ? 'PHP' : 'AI'"></span>
-                                            <template x-if="!(ps.alt_text) || !(ps.caption) || ps.suggestedFilename === 'auto' || !(ps.suggestedFilename) || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|dreamstime|alamy|flickr|wikimedia/i.test(ps.alt_text || '') || /wikipedia|pexels|unsplash|pixabay|imdb|getty|shutterstock|wikimedia/i.test(ps.caption || '')">
+                                            <template x-if="photoSuggestionNeedsMetadata(ps)">
                                                 <span class="text-[10px] text-red-500 font-medium">Needs metadata</span>
                                             </template>
                                         </div>
@@ -456,9 +475,7 @@
                                                     <input type="file" class="hidden" accept="image/*" @change.stop="
                                                         const file = $event.target.files[0]; if (!file) return;
                                                         const url = URL.createObjectURL(file);
-                                                        photoSuggestions[idx].autoPhoto = { url_large: url, url_thumb: url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: 0, height: 0 };
-                                                        setPhotoThumbPending(idx);
-                                                        photoSuggestions[idx].confirmed = false;
+                                                        applyPhotoSuggestionSelection(idx, { url_large: url, url_thumb: url, source: 'upload', alt: file.name.replace(/\.[^.]+$/, ''), width: 0, height: 0 });
                                                         $event.target.value = null;
                                                     ">
                                                 </label>
@@ -467,9 +484,7 @@
                                                 <input type="text" x-model="photoUrlVal" class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Paste image URL...">
                                                 <button @click.stop="
                                                     if (photoUrlVal.trim()) {
-                                                        photoSuggestions[idx].autoPhoto = { url_large: photoUrlVal.trim(), url_thumb: photoUrlVal.trim(), source: 'url-import', alt: '', width: 0, height: 0 };
-                                                        setPhotoThumbPending(idx);
-                                                        photoSuggestions[idx].confirmed = false;
+                                                        applyPhotoSuggestionSelection(idx, { url_large: photoUrlVal.trim(), url_thumb: photoUrlVal.trim(), source: 'url-import', alt: '', width: 0, height: 0 });
                                                         photoUrlVal = '';
                                                         showUrlInput = false;
                                                     }
@@ -627,6 +642,7 @@
                         <svg x-show="siteConn.testing || authorsLoading" x-cloak class="w-4 h-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         <span x-show="authorsLoading" x-cloak class="text-xs text-blue-500">Loading authors...</span>
                         <span x-show="!siteConn.testing && !authorsLoading && siteConn.authors.length > 0" x-cloak class="text-xs text-gray-400" x-text="siteConn.authors.length + ' authors'"></span>
+                        <button x-show="!siteConn.testing && !authorsLoading && selectedSiteId" x-cloak @click="loadSiteAuthors(selectedSiteId)" type="button" class="text-xs text-blue-500 hover:text-blue-700">Reload authors</button>
                         <a x-show="publishAuthor && selectedSite" x-cloak :href="(selectedSite?.url || '').replace(/\/$/, '') + '/author/' + publishAuthor + '/'" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 inline-flex items-center gap-0.5" title="View author on WordPress">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                         </a>

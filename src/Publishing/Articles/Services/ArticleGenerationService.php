@@ -285,20 +285,22 @@ class ArticleGenerationService
 
         // Dynamic metadata counts — pull from preset, fall back to defaults
         $titleCount = 10;
-        $categoryCount = 15;
-        $tagCount = 15;
+        $categoryCount = 10;
+        $tagCount = 10;
         $titleSource = 'Default (10)';
-        $categorySource = 'Default (15)';
-        $tagSource = 'Default (15)';
+        $categorySource = 'Default minimum (10)';
+        $tagSource = 'Default minimum (10)';
 
         if ($preset) {
             if ($preset->default_category_count) {
-                $categoryCount = (int) $preset->default_category_count;
-                $categorySource = "Preset: {$preset->name} → default_category_count = {$categoryCount}";
+                $requested = (int) $preset->default_category_count;
+                $categoryCount = max(10, $requested);
+                $categorySource = "Preset: {$preset->name} → default_category_count = {$requested}" . ($categoryCount !== $requested ? ' (raised to minimum 10)' : '');
             }
             if ($preset->default_tag_count) {
-                $tagCount = (int) $preset->default_tag_count;
-                $tagSource = "Preset: {$preset->name} → default_tag_count = {$tagCount}";
+                $requested = (int) $preset->default_tag_count;
+                $tagCount = max(10, $requested);
+                $tagSource = "Preset: {$preset->name} → default_tag_count = {$requested}" . ($tagCount !== $requested ? ' (raised to minimum 10)' : '');
             }
         }
 
@@ -373,6 +375,10 @@ class ArticleGenerationService
         }
 
         $result = preg_replace("/\n{3,}/", "\n\n", trim($prompt));
+        $result .= "\n\n" . $this->hardLinkSafetyRules() . "\n\n" . $this->hardStockPhotoRules();
+
+        $log[] = ['shortcode' => '(link safety)', 'source' => 'Hardcoded safeguard', 'value' => 'Require live canonical supporting URLs only.'];
+        $log[] = ['shortcode' => '(stock photo safety)', 'source' => 'Hardcoded safeguard', 'value' => 'Never use article-specific names for generic stock photos.'];
 
         if ($withLog) {
             return ['prompt' => $result, 'log' => $log];
@@ -415,7 +421,17 @@ class ArticleGenerationService
      */
     private function defaultPrompt(): string
     {
-        return "You are a professional content writer. Rewrite the provided source articles into a single new unique article.\n\n{custom_instructions}\n\n{wordpress_guidelines}\n\n{spinning_guidelines}\n\n{preset_config}\n\n{template_config}\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include the article title anywhere in the body — no <h1> and no title-like <h2> at the top. The title is handled separately. Start the body directly with the first paragraph of content. Use <h2> ONLY for section subheadings within the article, not as a title. Use <p> for paragraphs. Use <strong> and <em> for emphasis. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links. Do NOT output markdown.\n\nSUPPORTING LINKS: Include 3-5 relevant external links within the article using <a href=\"URL\" target=\"_blank\"> tags.\n\nPHOTO PLACEMENT: Insert HTML comments for photos at natural breaking points. Use this EXACT format:\n<!-- PHOTO: stock photo search term | alt text describing what the stock photo shows | caption describing the photo scene and how it relates to the topic | seo-filename -->\n\nIMPORTANT: These are STOCK PHOTOS, not real photos of the people in the article. The alt text and caption must describe the visual content of the stock photo (e.g. \"actress performing on stage during theatrical production\"), NOT name or reference specific people from the article. Only use a person's name if the search term itself is that person's name.\n\nPlace {photo_count} photo markers.\n\nFEATURED IMAGE: Output one line:\n<!-- FEATURED: stock photo search term | alt text describing the stock photo | caption describing the photo scene | seo-filename -->\n\nMETADATA: At the very end of your response, output a JSON block:\n<!-- METADATA: {\"titles\":[\"title1\",\"title2\",...{title_count} titles],\"categories\":[\"cat1\",\"cat2\",...{category_count} categories],\"tags\":[\"tag1\",\"tag2\",...{tag_count} tags],\"description\":\"A 1-2 sentence SEO meta description summarizing the article\"} -->\n\nThe titles should be compelling and SEO-friendly. Categories are broad topics. Tags are specific keywords. Description is a concise meta description for SEO (under 160 characters).\n\n{source_articles}";
+        return "You are a professional content writer. Rewrite the provided source articles into a single new unique article.\n\n{custom_instructions}\n\n{wordpress_guidelines}\n\n{spinning_guidelines}\n\n{preset_config}\n\n{template_config}\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include the article title anywhere in the body — no <h1> and no title-like <h2> at the top. The title is handled separately. Start the body directly with the first paragraph of content. Use <h2> ONLY for section subheadings within the article, not as a title. Use <p> for paragraphs. Use <strong> and <em> for emphasis. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links. Do NOT output markdown.\n\nSUPPORTING LINKS: Include up to 3-5 relevant external links only when you can use real live canonical URLs. Never invent a URL, never guess a slug, and never use homepages, search pages, topic pages, category pages, author pages, archive pages, or redirect/tracking links. If you are not sure a supporting URL is real and live, omit it.\n\nPHOTO PLACEMENT: Insert HTML comments for photos at natural breaking points. Use this EXACT format:\n<!-- PHOTO: stock photo search term | alt text describing what the stock photo shows | caption describing the photo scene and how it relates to the topic | seo-filename -->\n\nIMPORTANT: These are STOCK PHOTOS, not real photos of the people in the article. The alt text and caption must describe the visual content of the stock photo, NOT name or reference specific people from the article unless the stock image source clearly identifies that exact real person.\n\nPlace {photo_count} photo markers.\n\nFEATURED IMAGE: Output one line:\n<!-- FEATURED: stock photo search term | alt text describing the stock photo | caption describing the photo scene | seo-filename -->\n\nMETADATA: At the very end of your response, output a JSON block:\n<!-- METADATA: {\"titles\":[\"title1\",\"title2\",...{title_count} titles],\"categories\":[\"cat1\",\"cat2\",...{category_count} categories],\"tags\":[\"tag1\",\"tag2\",...{tag_count} tags],\"description\":\"A 1-2 sentence SEO meta description summarizing the article\"} -->\n\nThe titles should be compelling and SEO-friendly. Categories are broad topics. Tags are specific keywords. Description is a concise meta description for SEO (under 160 characters).\n\n{source_articles}";
+    }
+
+    private function hardLinkSafetyRules(): string
+    {
+        return "LINK SAFETY RULES: Supporting URLs must be direct live article or primary-source pages that currently resolve. Never fabricate URLs or guess paths. Never use homepages, topic indexes, search results, author pages, archives, AMP mirrors, or redirect/tracking URLs. If uncertain, omit the link.";
+    }
+
+    private function hardStockPhotoRules(): string
+    {
+        return "STOCK PHOTO RULES: For PHOTO and FEATURED metadata, describe only what a generic stock photo visibly shows. Do not use article-specific names or identities unless the image source itself clearly identifies that exact real person.";
     }
 
     /**

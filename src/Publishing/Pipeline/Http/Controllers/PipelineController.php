@@ -35,6 +35,7 @@ use hexa_app_publish\Support\AiModelCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -387,6 +388,21 @@ class PipelineController extends Controller
         ]);
     }
 
+    public function checkLinkStatus(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'url' => 'required|string|max:2000',
+        ]);
+
+        $status = $this->probeArticleUrl((string) $validated['url']);
+
+        return response()->json([
+            'success' => !$status['probe_failed'],
+            'message' => $status['status_text'],
+            'data' => $status,
+        ], $status['probe_failed'] ? 422 : 200);
+    }
+
     /**
      * AI Article Search — use the selected provider to find recent articles on a topic.
      */
@@ -405,8 +421,10 @@ class PipelineController extends Controller
         $provider = $catalog->providerForModel($model);
 
         $searchPrompt = "Search the web for {$count} recent news articles about: {$topic}. "
-            . "Find real, published articles from different reputable news sources. "
-            . "For each article return the exact URL, the article title, and a brief description under 20 words. "
+            . "Return only LIVE, canonical article pages from reputable publishers. "
+            . "Do NOT guess URL slugs. Do NOT return homepages, search pages, tag pages, category pages, topic pages, author pages, archive pages, AMP pages, cached pages, redirect links, or Google/AI intermediary links. "
+            . "If you are not confident a direct article URL currently resolves, omit it. "
+            . "For each article return the exact canonical URL, the article title, and a brief description under 20 words. "
             . "Return ONLY a JSON array of objects with keys: url, title, description. No other text.";
 
         if ($provider === 'grok') {
@@ -448,19 +466,74 @@ class PipelineController extends Controller
             $result = $anthropic->searchArticles($topic, $count, $model ?: null);
         }
 
-        if (!$result['success'] || empty($result['data']['articles'])) {
-            $fallback = $this->fallbackArticleSearch($topic, (int) $count, (string) ($result['message'] ?? 'AI article search failed.'));
-            if ($fallback['success']) {
-                $result = $fallback;
-            }
-        }
-
         if ($result['success'] && !empty($result['data']['usage'])) {
             $usedModel = $result['data']['model'] ?? $model;
             $result['data']['cost'] = round($catalog->calculateCost($usedModel, (array) $result['data']['usage']), 6);
         }
 
-        return response()->json($result);
+        $verifiedPrimary = $this->verifyArticleCandidates((array) data_get($result, 'data.articles', []), $count);
+        $articles = $verifiedPrimary['articles'];
+        $fallbackStats = ['checked' => 0, 'kept' => 0, 'discarded' => 0];
+        $fallbackResult = null;
+        $fallbackUsed = false;
+
+        if (count($articles) < $count) {
+            $fallbackReason = (!$result['success'] || empty(data_get($result, 'data.articles')))
+                ? (string) ($result['message'] ?? 'AI article search failed.')
+                : 'AI article search returned dead, duplicate, or non-canonical URLs.';
+
+            $fallbackResult = $this->fallbackArticleSearch($topic, (int) $count, $fallbackReason);
+
+            if ($fallbackResult['success']) {
+                $verifiedFallback = $this->verifyArticleCandidates(
+                    (array) data_get($fallbackResult, 'data.articles', []),
+                    $count - count($articles),
+                    array_column($articles, 'url')
+                );
+
+                $fallbackStats = $verifiedFallback['stats'];
+                if (!empty($verifiedFallback['articles'])) {
+                    $articles = array_merge($articles, $verifiedFallback['articles']);
+                    $fallbackUsed = true;
+                }
+            }
+        }
+
+        if (empty($articles)) {
+            return response()->json([
+                'success' => false,
+                'message' => (string) (($fallbackResult['message'] ?? null) ?: ($result['message'] ?? 'No live articles found.')),
+                'data' => [
+                    'verification' => [
+                        'primary' => $verifiedPrimary['stats'],
+                        'fallback' => $fallbackStats,
+                    ],
+                ],
+            ]);
+        }
+
+        $backendLabels = array_values(array_filter([
+            data_get($result, 'data.search_backend_label') ?: ucfirst($provider),
+            $fallbackUsed ? (data_get($fallbackResult, 'data.search_backend_label') ?: 'News providers') : null,
+        ]));
+
+        return response()->json([
+            'success' => true,
+            'message' => count($articles) . ' live article(s) verified.',
+            'data' => [
+                'articles' => array_slice($articles, 0, $count),
+                'model' => data_get($result, 'data.model', $model),
+                'usage' => (array) data_get($result, 'data.usage', []),
+                'cost' => data_get($result, 'data.cost'),
+                'search_backend' => $fallbackUsed ? 'hybrid_live_verification' : (data_get($result, 'data.search_backend') ?: $provider),
+                'search_backend_label' => !empty($backendLabels) ? implode(' + ', $backendLabels) : 'Live article verification',
+                'fallback_reason' => $fallbackUsed ? data_get($fallbackResult, 'data.fallback_reason') : null,
+                'verification' => [
+                    'primary' => $verifiedPrimary['stats'],
+                    'fallback' => $fallbackStats,
+                ],
+            ],
+        ]);
     }
 
     /**
@@ -517,6 +590,347 @@ class PipelineController extends Controller
         $mapped = array_values(array_filter(array_map(static fn (string $provider): ?string => $labels[$provider] ?? null, $providers)));
 
         return empty($mapped) ? 'News providers' : implode(', ', $mapped);
+    }
+
+    /**
+     * @param array<int, mixed> $articles
+     * @param array<int, string> $excludeUrls
+     * @return array{articles: array<int, array<string, mixed>>, stats: array{checked: int, kept: int, discarded: int}}
+     */
+    private function verifyArticleCandidates(array $articles, int $limit, array $excludeUrls = []): array
+    {
+        $verified = [];
+        $seen = [];
+
+        foreach ($excludeUrls as $excludeUrl) {
+            $normalized = $this->normalizeArticleUrlCandidate((string) $excludeUrl);
+            if ($normalized) {
+                $seen[$normalized] = true;
+            }
+        }
+
+        $checked = 0;
+        $discarded = 0;
+
+        foreach ($articles as $article) {
+            if (count($verified) >= $limit) {
+                break;
+            }
+
+            $candidate = $this->normalizeArticleCandidate($article);
+            if ($candidate === null) {
+                $discarded++;
+                continue;
+            }
+
+            if (isset($seen[$candidate['url']])) {
+                continue;
+            }
+
+            $checked++;
+            $probe = $this->probeArticleUrl($candidate['url']);
+            if ($probe['probe_failed'] || $probe['is_broken']) {
+                $discarded++;
+                continue;
+            }
+
+            $resolvedUrl = $this->normalizeArticleUrlCandidate((string) ($probe['final_url'] ?? '')) ?: $candidate['url'];
+            if (!$this->looksLikeCanonicalArticleUrl($resolvedUrl) || isset($seen[$resolvedUrl])) {
+                $discarded++;
+                continue;
+            }
+
+            $seen[$resolvedUrl] = true;
+            $verified[] = array_merge($candidate, [
+                'url' => $resolvedUrl,
+                'status_code' => $probe['status_code'],
+                'status_text' => $probe['status_text'],
+                'checked_via' => $probe['checked_via'],
+                'final_url' => $resolvedUrl,
+                'is_broken' => false,
+            ]);
+        }
+
+        return [
+            'articles' => $verified,
+            'stats' => [
+                'checked' => $checked,
+                'kept' => count($verified),
+                'discarded' => $discarded,
+            ],
+        ];
+    }
+
+    /**
+     * @param mixed $article
+     * @return array<string, mixed>|null
+     */
+    private function normalizeArticleCandidate(mixed $article): ?array
+    {
+        if (!is_array($article)) {
+            return null;
+        }
+
+        $url = $this->normalizeArticleUrlCandidate((string) ($article['url'] ?? ''));
+        if (!$url || !$this->looksLikeCanonicalArticleUrl($url)) {
+            return null;
+        }
+
+        return [
+            'url' => $url,
+            'title' => trim((string) ($article['title'] ?? $url)),
+            'description' => trim((string) ($article['description'] ?? '')),
+        ];
+    }
+
+    /**
+     * @return array{url: string, status_code: int|null, status_text: string, status_tone: string, checked_via: string, final_url: string, is_broken: bool, probe_failed: bool}
+     */
+    private function probeArticleUrl(string $url): array
+    {
+        $normalized = $this->normalizeArticleUrlCandidate($url);
+        if (!$normalized) {
+            return [
+                'url' => $url,
+                'status_code' => null,
+                'status_text' => 'Invalid URL',
+                'status_tone' => 'red',
+                'checked_via' => 'validation',
+                'final_url' => '',
+                'is_broken' => true,
+                'probe_failed' => true,
+            ];
+        }
+
+        $cacheKey = 'publish:link-status:' . md5($normalized);
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        $result = $this->probeArticleUrlUncached($normalized);
+        if (!$result['probe_failed']) {
+            Cache::put($cacheKey, $result, now()->addMinutes(15));
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array{url: string, status_code: int|null, status_text: string, status_tone: string, checked_via: string, final_url: string, is_broken: bool, probe_failed: bool}
+     */
+    private function probeArticleUrlUncached(string $url): array
+    {
+        if (!$this->looksLikeCanonicalArticleUrl($url)) {
+            return [
+                'url' => $url,
+                'status_code' => null,
+                'status_text' => 'Non-article URL',
+                'status_tone' => 'red',
+                'checked_via' => 'validation',
+                'final_url' => $url,
+                'is_broken' => true,
+                'probe_failed' => true,
+            ];
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'User-Agent' => 'Hexa Publish Link Checker/1.0',
+                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            ])
+                ->connectTimeout(5)
+                ->timeout(10)
+                ->withOptions([
+                    'allow_redirects' => ['max' => 5, 'track_redirects' => true],
+                    'http_errors' => false,
+                ])
+                ->head($url);
+
+            $checkedVia = 'HEAD';
+            $statusCode = $response->status();
+
+            if ($this->shouldRetryWithGet($statusCode)) {
+                $response = Http::withHeaders([
+                    'User-Agent' => 'Hexa Publish Link Checker/1.0',
+                    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                ])
+                    ->connectTimeout(5)
+                    ->timeout(10)
+                    ->withOptions([
+                        'allow_redirects' => ['max' => 5, 'track_redirects' => true],
+                        'http_errors' => false,
+                    ])
+                    ->get($url);
+                $checkedVia = 'GET';
+                $statusCode = $response->status();
+            }
+
+            $finalUrl = $this->resolveFinalUrlFromResponse($url, $response);
+            $isBroken = !($statusCode >= 200 && $statusCode < 400);
+            $statusText = $this->articleStatusLabel($statusCode);
+
+            if (!$isBroken && !$this->looksLikeCanonicalArticleUrl($finalUrl)) {
+                $isBroken = true;
+                $statusText = 'Redirected to non-article page';
+            }
+
+            return [
+                'url' => $url,
+                'status_code' => $statusCode,
+                'status_text' => $statusText,
+                'status_tone' => $this->articleStatusTone($statusCode, $isBroken),
+                'checked_via' => $checkedVia,
+                'final_url' => $finalUrl,
+                'is_broken' => $isBroken,
+                'probe_failed' => false,
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'url' => $url,
+                'status_code' => null,
+                'status_text' => 'Check failed: ' . Str::limit($e->getMessage(), 120, ''),
+                'status_tone' => 'amber',
+                'checked_via' => 'error',
+                'final_url' => $url,
+                'is_broken' => false,
+                'probe_failed' => true,
+            ];
+        }
+    }
+
+    private function shouldRetryWithGet(?int $statusCode): bool
+    {
+        return in_array((int) $statusCode, [0, 403, 405, 406], true);
+    }
+
+    private function resolveFinalUrlFromResponse(string $url, $response): string
+    {
+        $history = $response->header('X-Guzzle-Redirect-History');
+
+        if (is_array($history) && !empty($history)) {
+            $last = end($history);
+            return is_string($last) && $last !== '' ? $last : $url;
+        }
+
+        if (is_string($history) && trim($history) !== '') {
+            $parts = array_values(array_filter(array_map('trim', explode(',', $history))));
+            if (!empty($parts)) {
+                return $parts[count($parts) - 1];
+            }
+        }
+
+        return $url;
+    }
+
+    private function normalizeArticleUrlCandidate(string $url): ?string
+    {
+        $url = html_entity_decode(trim($url), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $url = trim($url, " \t\n\r\0\x0B<>\"'");
+        $url = rtrim($url, '.,;)]}');
+
+        if (preg_match('/^www\./i', $url)) {
+            $url = 'https://' . $url;
+        }
+
+        if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
+        $parts = parse_url($url);
+        if (!is_array($parts)) {
+            return null;
+        }
+
+        $scheme = Str::lower((string) ($parts['scheme'] ?? ''));
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return null;
+        }
+
+        return $url;
+    }
+
+    private function looksLikeCanonicalArticleUrl(string $url): bool
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts)) {
+            return false;
+        }
+
+        $host = Str::lower((string) ($parts['host'] ?? ''));
+        if ($host === '') {
+            return false;
+        }
+
+        foreach ([
+            'google.com',
+            'www.google.com',
+            'news.google.com',
+            'webcache.googleusercontent.com',
+            'vertexaisearch.cloud.google.com',
+        ] as $blockedHost) {
+            if ($host === $blockedHost || Str::endsWith($host, '.' . $blockedHost)) {
+                return false;
+            }
+        }
+
+        $path = trim((string) ($parts['path'] ?? ''), '/');
+        if ($path === '') {
+            return false;
+        }
+
+        $segments = array_values(array_filter(explode('/', Str::lower($path))));
+        $first = $segments[0] ?? '';
+
+        if (in_array($first, ['search', 'tag', 'tags', 'category', 'categories', 'topic', 'topics', 'author', 'authors', 'archive', 'archives'], true)) {
+            return false;
+        }
+
+        if (count($segments) === 1 && in_array($first, ['news', 'latest', 'live', 'video', 'videos', 'photos'], true)) {
+            return false;
+        }
+
+        parse_str((string) ($parts['query'] ?? ''), $query);
+        if (isset($query['s']) || isset($query['search'])) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function articleStatusTone(?int $statusCode, bool $isBroken): string
+    {
+        if (!$isBroken && $statusCode !== null && $statusCode >= 200 && $statusCode < 400) {
+            return 'green';
+        }
+
+        if ($statusCode !== null && in_array($statusCode, [403, 405, 406, 429, 500, 502, 503, 504], true)) {
+            return 'amber';
+        }
+
+        return 'red';
+    }
+
+    private function articleStatusLabel(?int $statusCode): string
+    {
+        return match ((int) $statusCode) {
+            200 => '200 OK',
+            301 => '301 Redirect',
+            302 => '302 Redirect',
+            307 => '307 Redirect',
+            308 => '308 Redirect',
+            403 => '403 Forbidden',
+            404 => '404 Not Found',
+            405 => '405 Method Not Allowed',
+            406 => '406 Not Acceptable',
+            410 => '410 Gone',
+            429 => '429 Rate Limited',
+            500 => '500 Server Error',
+            502 => '502 Bad Gateway',
+            503 => '503 Service Unavailable',
+            504 => '504 Gateway Timeout',
+            default => $statusCode ? ($statusCode . ' Response') : 'No response',
+        };
     }
 
     /**
@@ -589,7 +1003,7 @@ class PipelineController extends Controller
     }
 
     /**
-     * Generate article metadata: 10 title options, 15 categories, 15 tags.
+     * Generate article metadata: 10 title options, 10 categories, 10 tags.
      * Uses Haiku for speed and cost efficiency.
      *
      * @param Request $request
@@ -1332,8 +1746,16 @@ class PipelineController extends Controller
         $searchTerm = $this->cleanPhotoMetaText((string) ($validated['search_term'] ?? ''));
         $articleTitle = $this->cleanPhotoMetaText((string) ($validated['article_title'] ?? ''));
         $isGoogle = in_array($photoSource, ['google', 'google-cse'], true);
+        $usablePhotoAlt = $this->photoMetaTextLooksUnusable($photoAlt) ? '' : $photoAlt;
+        $personSpecificSearch = $this->searchTermLooksPersonSpecific($searchTerm);
 
-        $visualSubject = $searchTerm !== '' ? $searchTerm : ($photoAlt !== '' ? $photoAlt : ($articleTitle !== '' ? $articleTitle : 'featured image'));
+        if ($isGoogle) {
+            $visualSubject = $photoAlt !== '' ? $photoAlt : ($searchTerm !== '' ? $searchTerm : ($articleTitle !== '' ? $articleTitle : 'featured image'));
+        } else {
+            $visualSubject = $usablePhotoAlt !== ''
+                ? $usablePhotoAlt
+                : ($personSpecificSearch ? 'generic stock photo related to the topic' : ($searchTerm !== '' ? $searchTerm : 'general topic illustration'));
+        }
 
         if ($isGoogle && $photoAlt !== '') {
             $alt = Str::limit(rtrim($photoAlt, '.!?'), 125, '');
@@ -1342,12 +1764,16 @@ class PipelineController extends Controller
                 : $this->ensureSentence($photoAlt);
         } else {
             $alt = Str::limit(rtrim($visualSubject, '.!?'), 125, '');
-            $caption = $articleTitle !== ''
-                ? $this->ensureSentence('Stock photo illustrating ' . $visualSubject . ' for ' . $articleTitle)
-                : $this->ensureSentence('Stock photo illustrating ' . $visualSubject);
+            $caption = $usablePhotoAlt !== ''
+                ? $this->ensureSentence('Stock photo showing ' . $usablePhotoAlt)
+                : $this->ensureSentence('Stock photo illustrating a general concept related to the article topic');
         }
 
-        $filenameSource = $searchTerm !== '' ? $searchTerm : ($articleTitle !== '' ? $articleTitle : ($photoAlt !== '' ? $photoAlt : 'featured-image'));
+        $filenameSource = $isGoogle
+            ? ($searchTerm !== '' ? $searchTerm : ($articleTitle !== '' ? $articleTitle : ($photoAlt !== '' ? $photoAlt : 'featured-image')))
+            : ($usablePhotoAlt !== ''
+                ? $usablePhotoAlt
+                : ($personSpecificSearch ? 'stock-photo' : ($searchTerm !== '' ? $searchTerm : 'featured-image')));
         $filename = Str::slug($filenameSource);
 
         return [
@@ -1402,7 +1828,7 @@ class PipelineController extends Controller
         if ($isGoogle && $photoAlt !== '') {
             return "You are a photo metadata expert. Generate metadata for a REAL PHOTO found via Google Image Search.\n\n"
                 . "The original image caption/alt from the source is: \"{$photoAlt}\"\n"
-                . "If this identifies a specific person, use their name in the alt and caption. Describe the actual person and scene.\n\n"
+                . "Use the source caption as the primary clue. Only name a specific person when the source caption clearly identifies that real person. Otherwise describe the visible scene without guessing identities.\n\n"
                 . "Photo search term: " . ($validated['search_term'] ?? '') . "\n"
                 . "Original image caption: {$photoAlt}\n"
                 . "Article title: " . ($validated['article_title'] ?? '') . "\n"
@@ -1412,12 +1838,13 @@ class PipelineController extends Controller
         }
 
         return "You are a photo metadata expert. Generate metadata for a STOCK PHOTO used in an article.\n\n"
-            . "CRITICAL: This is a stock photo, not a real photo of the people in the article. The alt text and caption must describe what is visually in the stock photo based on the search term, not name or reference article subjects. Never put a person's name in the alt or caption unless the search term itself is that person's name.\n\n"
+            . "CRITICAL: This is a stock photo, not a real photo of the people in the article. The alt text and caption must describe only what is visually shown in the stock photo. Treat the search term and article context as loose topic hints only. Never name or reference article subjects unless the stock provider caption explicitly identifies that exact real person in the image.\n\n"
             . "Photo search term: " . ($validated['search_term'] ?? '') . "\n"
+            . "Stock provider alt/description: " . ($photoAlt !== '' ? $photoAlt : '(none provided)') . "\n"
             . "Article title: " . ($validated['article_title'] ?? '') . "\n"
             . "Article excerpt: " . mb_substr((string) ($validated['article_text'] ?? ''), 0, 1000) . "\n\n"
             . "Respond ONLY with JSON, no other text:\n"
-            . '{"alt":"describe what the stock photo visually shows based on the search term (under 125 chars, do NOT name article subjects)","caption":"one sentence describing the stock photo and how the visual theme relates to the article topic (do NOT name article subjects unless the search term is their name)","filename":"seo-friendly-lowercase-hyphenated-name-no-extension"}';
+            . '{"alt":"describe what the stock photo visibly shows using the provider alt first when available (under 125 chars, never guess article people names)","caption":"one sentence describing the visible stock photo scene in generic topical terms (never invent or name article subjects)","filename":"seo-friendly-lowercase-hyphenated-name-no-extension"}';
     }
 
     /**
@@ -1481,6 +1908,31 @@ class PipelineController extends Controller
         $value = preg_replace('/\s+/u', ' ', $value);
 
         return trim((string) $value, " \t\n\r\0\x0B\"'");
+    }
+
+    private function photoMetaTextLooksUnusable(string $value): bool
+    {
+        if ($value === '') {
+            return true;
+        }
+
+        return (bool) preg_match('/wikipedia|pexels|unsplash|pixabay|shutterstock|dreamstime|alamy|flickr|wikimedia|photo by|download/i', $value);
+    }
+
+    private function searchTermLooksPersonSpecific(string $value): bool
+    {
+        if ($value === '') {
+            return false;
+        }
+
+        if (preg_match('/\b(smiling|speaking|arriving|posing|performing|walking|looking|portrait|headshot)\b/i', $value)) {
+            return true;
+        }
+
+        $words = preg_split('/\s+/', trim($value)) ?: [];
+        $capitalizedWords = array_filter($words, static fn (string $word): bool => (bool) preg_match('/^[A-Z][a-z]+$/', $word));
+
+        return count($capitalizedWords) >= 2;
     }
 
     private function ensureSentence(string $value): string

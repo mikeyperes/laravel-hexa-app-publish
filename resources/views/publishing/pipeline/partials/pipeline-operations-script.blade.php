@@ -278,13 +278,13 @@
                 filename: this.featuredFilename || '',
                 attempts: [],
             };
-            const catItems = this.suggestedCategories.map(c => ({
+            const catItems = this.selectedCategoryNames().map(c => ({
                 label: c,
                 status: 'pending',
                 detail: '',
                 type: 'category',
             }));
-            const tagItems = this.suggestedTags.map(t => ({
+            const tagItems = this.selectedTagNames().map(t => ({
                 label: t,
                 status: 'pending',
                 detail: '',
@@ -328,8 +328,8 @@
             this._logPrepare('info', 'Site: ' + (site.url || 'unknown') + ' | Connection: ' + ((site.connection_type || '') === 'wptoolkit' ? 'WP Toolkit' : 'REST API'));
             if (this.publishAuthor) this._logPrepare('info', 'Author: ' + this.publishAuthor);
             this._logPrepare('info', 'Images: ' + activePhotos.length + ' inner + ' + (this.featuredPhoto ? '1 featured' : 'no featured'));
-            this._logPrepare('info', 'Categories: ' + this.suggestedCategories.join(', '));
-            this._logPrepare('info', 'Tags: ' + this.suggestedTags.join(', '));
+            this._logPrepare('info', 'Categories: ' + this.selectedCategoryNames().join(', '));
+            this._logPrepare('info', 'Tags: ' + this.selectedTagNames().join(', '));
         },
 
         _mergeUploadedImageRecord(img) {
@@ -941,8 +941,8 @@
                 html,
                 title: this.articleTitle || 'article',
                 site_id: this.selectedSite?.id || null,
-                categories: this.suggestedCategories,
-                tags: this.suggestedTags,
+                categories: this.selectedCategoryNames(),
+                tags: this.selectedTagNames(),
                 draft_id: this.draftId,
                 photo_meta: this.photoSuggestions.filter(p => !p.removed && p.autoPhoto).map((p, i) => ({
                     alt_text: p.alt_text || '',
@@ -972,8 +972,8 @@
                 status: wpStatus,
                 date: this.publishAction === 'future' ? this.scheduleDate : null,
                 draft_id: this.draftId,
-                categories: this.suggestedCategories,
-                tags: this.suggestedTags,
+                categories: this.selectedCategoryNames(),
+                tags: this.selectedTagNames(),
                 wp_images: this.uploadedImageList,
                 word_count: this.spunWordCount,
                 ai_model: this.aiModel,

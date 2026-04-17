@@ -51,10 +51,13 @@
                 });
                 const data = await resp.json();
                 if (data.success) {
-                    this.photoSuggestions[idx].alt_text = data.alt;
-                    this.photoSuggestions[idx].caption = data.caption;
-                    this.photoSuggestions[idx].suggestedFilename = this.buildFilename(ps.search_term, idx + 1);
-                    this.photoSuggestions[idx].metaGenerator = data.generator || 'unknown';
+                    this.photoSuggestions.splice(idx, 1, {
+                        ...this.photoSuggestions[idx],
+                        alt_text: data.alt,
+                        caption: data.caption,
+                        suggestedFilename: data.filename || this.buildFilename(ps.autoPhoto?.alt || ps.search_term, idx + 1),
+                        metaGenerator: data.generator || 'unknown',
+                    });
                     this.showNotification('success', 'Photo #' + (idx + 1) + ' metadata refreshed via ' + (data.generator === 'local' ? 'PHP' : 'AI'));
                 } else {
                     console.error('[Photo Meta #' + idx + '] Error:', data.message || 'Unknown error');
@@ -90,7 +93,7 @@
                 if (data.success) {
                     this.featuredAlt = data.alt;
                     this.featuredCaption = data.caption;
-                    this.featuredFilename = this.buildFilename(this.featuredImageSearch, 0);
+                    this.featuredFilename = data.filename || this.buildFilename(this.featuredPhoto?.alt || this.featuredImageSearch, 0);
                     this.featuredMetaGenerator = data.generator || 'unknown';
                     this.showNotification('success', 'Metadata refreshed via ' + (data.generator === 'local' ? 'PHP generator' : 'AI'));
                 } else {
@@ -125,8 +128,7 @@
                 if (data.success) {
                     this.overlayPhotoAlt = data.alt;
                     this.overlayPhotoCaption = data.caption;
-                    // Filename comes from settings pattern, not AI
-                    this.overlayPhotoFilename = this.buildFilename(this.photoSearch || this.insertingPhoto?.alt, 0);
+                    this.overlayPhotoFilename = data.filename || this.buildFilename(this.photoSearch || this.insertingPhoto?.alt, 0);
                     this.overlayMetaGenerated = true;
                     console.log('[Overlay Meta] NEW: alt="' + data.alt + '" caption="' + data.caption + '" file="' + this.overlayPhotoFilename + '"');
                     this.showNotification('success', 'Photo metadata generated');
@@ -240,14 +242,7 @@
                     // Metadata from single prompt (titles, categories, tags)
                     if (data.metadata) {
                         this._logSpin('success', 'Metadata: ' + (data.metadata.titles?.length || 0) + ' titles, ' + (data.metadata.categories?.length || 0) + ' categories, ' + (data.metadata.tags?.length || 0) + ' tags');
-                        this.suggestedTitles = data.metadata.titles || [];
-                        this.suggestedCategories = data.metadata.categories || [];
-                        this.suggestedTags = data.metadata.tags || [];
-                        if (data.metadata.description) this.articleDescription = data.metadata.description;
-                        this.selectedTitleIdx = 0;
-                        if (this.suggestedTitles.length > 0) this.articleTitle = this.suggestedTitles[0];
-                        this.selectedCategories = Array.from({length: Math.min(10, this.suggestedCategories.length)}, (_, i) => i);
-                        this.selectedTags = Array.from({length: Math.min(10, this.suggestedTags.length)}, (_, i) => i);
+                        this.applyGeneratedMetadata(data.metadata);
                     }
 
                     // Featured image — auto-fetch with results
@@ -323,13 +318,6 @@
                 this.spunContent = tmp.innerHTML;
             }
             this.editorContent = this.spunContent;
-            // Populate categories/tags from selections
-            if (this.selectedCategories.length > 0 && this.suggestedCategories.length > 0) {
-                this.suggestedCategories = this.suggestedCategories.filter((c, i) => this.selectedCategories.includes(i));
-            }
-            if (this.selectedTags.length > 0 && this.suggestedTags.length > 0) {
-                this.suggestedTags = this.suggestedTags.filter((t, i) => this.selectedTags.includes(i));
-            }
             this.completeStep(6);
             this.openStep(7);
             this.autoSaveDraft();

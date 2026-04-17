@@ -157,7 +157,7 @@ class WordPressPreparationService
         $featuredWpUrl = null;
         $featuredMeta = $options['featured_meta'] ?? null;
         if ($featuredMeta) {
-            $featuredUrl = $options['featured_url'] ?? null;
+            $featuredUrl = $this->normalizeMediaSourceUrl((string) ($options['featured_url'] ?? ''));
             if ($featuredUrl) {
                 // Check if featured image was already uploaded in a prior prepare
                 $existingFeatured = $existingUploads[$featuredUrl] ?? null;
@@ -340,8 +340,9 @@ class WordPressPreparationService
         // Build photo metadata lookup from photo_suggestions (legacy) + photo_meta (new)
         $photoMeta = [];
         foreach ($options['photo_suggestions'] ?? [] as $ps) {
-            if (!empty($ps['autoPhoto']['url_large'])) {
-                $photoMeta[$ps['autoPhoto']['url_large']] = $ps;
+            $photoUrl = $this->normalizeMediaSourceUrl((string) ($ps['autoPhoto']['url_large'] ?? ''));
+            if ($photoUrl !== '') {
+                $photoMeta[$photoUrl] = $ps;
             }
         }
         // Indexed photo_meta from pipeline (ordered, matched by position)
@@ -351,7 +352,12 @@ class WordPressPreparationService
         // After first prepare, HTML has WP URLs (sized), so we match source, media, inline, and all sizes
         $existingUploads = $this->buildExistingUploadMap($options['existing_uploads'] ?? []);
 
-        foreach ($imageUrls as $imgUrl) {
+        foreach ($imageUrls as $rawImgUrl) {
+            $imgUrl = $this->normalizeMediaSourceUrl($rawImgUrl);
+            if ($imgUrl === '') {
+                $imgUrl = $rawImgUrl;
+            }
+
             if (str_starts_with($imgUrl, rtrim($site->url, '/'))) {
                 $imgIndex++;
                 $existingMedia = $existingUploads[$imgUrl] ?? null;
@@ -368,7 +374,7 @@ class WordPressPreparationService
             // Duplicate detection: skip if this URL was already uploaded in a prior prepare
             if (isset($existingUploads[$imgUrl])) {
                 $existing = $existingUploads[$imgUrl];
-                $imageMap[$imgUrl] = $existing['inline_url'] ?? $existing['media_url'];
+                $imageMap[$rawImgUrl] = $existing['inline_url'] ?? $existing['media_url'];
                 $wpImages[] = array_merge($existing, ['source_url' => $existing['source_url'] ?? $imgUrl, 'skipped_duplicate' => true]);
                 $imgIndex++;
                 $this->emitProgress($send, 'success', "Skipped — already on WordPress (media_id: " . ($existing['media_id'] ?? '?') . ")\nWP: " . Str::limit($existing['inline_url'] ?? $existing['media_url'] ?? '', 100), 'media', 'inline_duplicate', [
@@ -386,7 +392,7 @@ class WordPressPreparationService
             $caption = $pm['caption'] ?? $ps['caption'] ?? '';
             $seoName = $pm['filename'] ?? $ps['suggestedFilename'] ?? '';
 
-            if (!$altText && preg_match('/<img[^>]+src\s*=\s*["\']' . preg_quote($imgUrl, '/') . '["\'][^>]*alt\s*=\s*["\']([^"\']*)["\'][^>]*>/i', $html, $altMatch)) {
+            if (!$altText && preg_match('/<img[^>]+src\s*=\s*["\']' . preg_quote($rawImgUrl, '/') . '["\'][^>]*alt\s*=\s*["\']([^"\']*)["\'][^>]*>/i', $html, $altMatch)) {
                 $altText = $altMatch[1];
             }
 
@@ -449,7 +455,7 @@ class WordPressPreparationService
                 $inlineSize = \hexa_core\Models\Setting::getValue('wp_inline_photo_size', 'medium_large');
                 $sizes = $uploadResult['data']['sizes'] ?? [];
                 $sizedUrl = $sizes[$inlineSize] ?? $sizes['medium_large'] ?? $sizes['large'] ?? $uploadResult['data']['media_url'];
-                $imageMap[$imgUrl] = $sizedUrl;
+                $imageMap[$rawImgUrl] = $sizedUrl;
                 $wpImg = array_merge($uploadResult['data'], [
                     'source_url'  => $imgUrl,
                     'inline_url'  => $sizedUrl,
@@ -757,9 +763,8 @@ class WordPressPreparationService
      */
     private function buildUrlVariants(string $originalUrl): array
     {
-        $variants = [
-            ['label' => 'Direct URL', 'url' => $originalUrl],
-        ];
+        $originalUrl = $this->normalizeMediaSourceUrl($originalUrl);
+        $variants = [];
 
         $parsed = parse_url($originalUrl);
         $host = $parsed['host'] ?? '';
@@ -772,21 +777,26 @@ class WordPressPreparationService
             || str_contains($host, 'pixabay') || str_contains($host, 'cdn.');
 
         if ($isCdn) {
-            // Strip resize/transform params, keep the base image path
-            if ($query) {
-                $variants[] = ['label' => 'Strip CDN params', 'url' => $scheme . $path];
-            }
             // Source-specific format variants
             if (str_contains($host, 'pexels')) {
-                $variants[] = ['label' => 'Pexels compress only', 'url' => $scheme . $path . '?auto=compress'];
                 $variants[] = ['label' => 'Pexels small', 'url' => $scheme . $path . '?auto=compress&cs=tinysrgb&w=1200'];
+                $variants[] = ['label' => 'Pexels compress only', 'url' => $scheme . $path . '?auto=compress'];
             } elseif (str_contains($host, 'unsplash')) {
                 $variants[] = ['label' => 'Unsplash JPG', 'url' => $scheme . $path . '?fm=jpg&q=80&w=1200'];
                 $variants[] = ['label' => 'Unsplash raw', 'url' => $scheme . $path . '?fm=jpg&q=90'];
             } elseif (str_contains($host, 'pixabay')) {
                 $variants[] = ['label' => 'Pixabay direct', 'url' => $scheme . $path];
             }
+
+            // Strip resize/transform params, keep the base image path
+            if ($query) {
+                $variants[] = ['label' => 'Strip CDN params', 'url' => $scheme . $path];
+            }
+
+            $variants[] = ['label' => 'Direct URL', 'url' => $originalUrl];
         } else {
+            $variants[] = ['label' => 'Direct URL', 'url' => $originalUrl];
+
             // Non-CDN: strip query params + try alternate extensions
             if ($query) {
                 $variants[] = ['label' => 'Strip query params', 'url' => $scheme . $path];
@@ -801,7 +811,12 @@ class WordPressPreparationService
             }
         }
 
-        return $variants;
+        $unique = [];
+        foreach ($variants as $variant) {
+            $unique[$variant['url']] = $variant;
+        }
+
+        return array_values($unique);
     }
 
     private function buildExistingUploadMap(array $existingUploads): array
@@ -813,16 +828,36 @@ class WordPressPreparationService
                 continue;
             }
 
-            if (!empty($existingUpload['source_url'])) $map[$existingUpload['source_url']] = $existingUpload;
-            if (!empty($existingUpload['media_url'])) $map[$existingUpload['media_url']] = $existingUpload;
-            if (!empty($existingUpload['inline_url'])) $map[$existingUpload['inline_url']] = $existingUpload;
+            $this->rememberExistingUploadUrl($map, $existingUpload, $existingUpload['source_url'] ?? null);
+            $this->rememberExistingUploadUrl($map, $existingUpload, $existingUpload['media_url'] ?? null);
+            $this->rememberExistingUploadUrl($map, $existingUpload, $existingUpload['inline_url'] ?? null);
 
             foreach ($existingUpload['sizes'] ?? [] as $sizeUrl) {
-                if (is_string($sizeUrl)) $map[$sizeUrl] = $existingUpload;
+                $this->rememberExistingUploadUrl($map, $existingUpload, $sizeUrl);
             }
         }
 
         return $map;
+    }
+
+    private function rememberExistingUploadUrl(array &$map, array $existingUpload, mixed $url): void
+    {
+        if (!is_string($url) || trim($url) === '') {
+            return;
+        }
+
+        $raw = trim($url);
+        $map[$raw] = $existingUpload;
+
+        $normalized = $this->normalizeMediaSourceUrl($raw);
+        if ($normalized !== '') {
+            $map[$normalized] = $existingUpload;
+        }
+    }
+
+    private function normalizeMediaSourceUrl(string $url): string
+    {
+        return trim(html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
     }
 
     private function emitProgress(callable $send, string $type, string $message, string $stage, string $substage, array $extra = []): void

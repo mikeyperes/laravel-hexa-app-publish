@@ -212,6 +212,9 @@
                         this.siteConn.status = true;
                         this.siteConn.message = 'Connected';
                         this.completeStep(2);
+                        if (!this.siteConn.authors.length) {
+                            this.loadSiteAuthors(this.selectedSiteId);
+                        }
                     } else {
                         this.siteConn.status = false;
                         this.siteConn.message = this.selectedSite.status === 'error' ? 'Connection error' : 'Not connected';
