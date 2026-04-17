@@ -7,6 +7,7 @@ use hexa_core\Models\Setting;
 use hexa_core\Models\User;
 use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishSite;
+use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Publishing\Campaigns\Services\NewsDiscoveryOptionsService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
@@ -400,12 +401,12 @@ class PipelineController extends Controller
         $catalog = app(AiModelCatalog::class);
         $model = (string) $request->input('model', ($catalog->defaultSearchModel() ?: 'claude-haiku-4-5-20251001'));
         $topic = $request->input('topic');
-        $count = $request->input('count', 4);
+        $count = min((int) $request->input('count', 4), 6);
         $provider = $catalog->providerForModel($model);
 
         $searchPrompt = "Search the web for {$count} recent news articles about: {$topic}. "
             . "Find real, published articles from different reputable news sources. "
-            . "For each article return the exact URL, the article title, and a 1-2 sentence description. "
+            . "For each article return the exact URL, the article title, and a brief description under 20 words. "
             . "Return ONLY a JSON array of objects with keys: url, title, description. No other text.";
 
         if ($provider === 'grok') {
@@ -447,12 +448,75 @@ class PipelineController extends Controller
             $result = $anthropic->searchArticles($topic, $count, $model ?: null);
         }
 
+        if (!$result['success'] || empty($result['data']['articles'])) {
+            $fallback = $this->fallbackArticleSearch($topic, (int) $count, (string) ($result['message'] ?? 'AI article search failed.'));
+            if ($fallback['success']) {
+                $result = $fallback;
+            }
+        }
+
         if ($result['success'] && !empty($result['data']['usage'])) {
             $usedModel = $result['data']['model'] ?? $model;
             $result['data']['cost'] = round($catalog->calculateCost($usedModel, (array) $result['data']['usage']), 6);
         }
 
         return response()->json($result);
+    }
+
+    /**
+     * Deterministic fallback for article discovery using configured news providers.
+     *
+     * @return array{success: bool, message: string, data: array|null}
+     */
+    private function fallbackArticleSearch(string $topic, int $count, string $reason): array
+    {
+        $fallback = app(SourceDiscoveryService::class)->searchArticles($topic, [
+            'per_page' => max(2, min(10, $count)),
+            'sources' => ['gnews', 'newsdata', 'currents_news'],
+        ]);
+
+        if (!$fallback['success'] || empty($fallback['data']['articles'])) {
+            $errors = $fallback['data']['errors'] ?? [];
+            $suffix = !empty($errors) ? ' Fallback search errors: ' . implode(' | ', $errors) : '';
+
+            return [
+                'success' => false,
+                'message' => $reason . $suffix,
+                'data' => null,
+            ];
+        }
+
+        $articles = array_slice((array) ($fallback['data']['articles'] ?? []), 0, $count);
+        $providers = array_keys(array_filter((array) ($fallback['data']['totals'] ?? [])));
+
+        return [
+            'success' => true,
+            'message' => count($articles) . ' article(s) found via reliable news search fallback.',
+            'data' => [
+                'articles' => $articles,
+                'search_backend' => 'deterministic_news_fallback',
+                'search_backend_label' => $this->formatSearchProviderLabels($providers),
+                'fallback_reason' => $reason,
+                'fallback_from_model' => null,
+            ],
+        ];
+    }
+
+    /**
+     * @param array<int, string> $providers
+     */
+    private function formatSearchProviderLabels(array $providers): string
+    {
+        $labels = [
+            'google-news-rss' => 'Google News RSS',
+            'gnews' => 'GNews',
+            'newsdata' => 'NewsData',
+            'currents_news' => 'Currents',
+        ];
+
+        $mapped = array_values(array_filter(array_map(static fn (string $provider): ?string => $labels[$provider] ?? null, $providers)));
+
+        return empty($mapped) ? 'News providers' : implode(', ', $mapped);
     }
 
     /**
