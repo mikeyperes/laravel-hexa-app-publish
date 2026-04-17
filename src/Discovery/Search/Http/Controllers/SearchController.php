@@ -146,7 +146,7 @@ class SearchController extends Controller
         if (!$result && $useSerp && class_exists(\hexa_package_serpapi\Services\SerpApiService::class)) {
             $serp = app(\hexa_package_serpapi\Services\SerpApiService::class);
             $t0 = microtime(true);
-            $result = $serp->searchImages($query, $perPage, $start);
+            $result = $serp->searchImages($query, $perPage, $start, 'photo');
             $timing = round((microtime(true) - $t0) * 1000);
             $provider = 'serpapi';
 
