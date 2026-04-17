@@ -137,7 +137,7 @@
                     <template x-if="!completedSteps.includes(2)"><span>2</span></template>
                 </span>
                 <span class="font-semibold text-gray-800">Article Configuration</span>
-                <span x-show="selectedSite" x-cloak class="text-sm" :class="siteConn.status === true ? 'text-green-600' : 'text-gray-500'" x-text="selectedSite?.name"></span>
+                <span x-show="selectedSite" x-cloak class="text-sm text-green-600" x-text="selectedSite?.name"></span>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(2) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
