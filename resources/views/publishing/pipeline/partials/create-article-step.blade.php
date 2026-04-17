@@ -385,7 +385,7 @@
                                     </div>
                                     {{-- Info + metadata --}}
                                     <div class="flex-1 min-w-0 space-y-1.5">
-                                        <p class="text-sm font-medium text-purple-700 break-words" x-text="ps.search_term"></p>
+                                        <input type="text" x-model="photoSuggestions[idx].search_term" @change="queueAutoSaveDraft(300)" class="text-sm font-medium text-purple-700 break-words bg-transparent border-0 border-b border-transparent hover:border-gray-300 focus:border-purple-400 focus:ring-0 px-0 py-0 w-full" />
                                         <p x-show="ps.loadError" x-cloak class="text-[11px] text-red-500 break-words" x-text="ps.loadError"></p>
                                         <p x-show="ps.thumbError" x-cloak class="text-[11px] text-red-500 break-words" x-text="ps.thumbError"></p>
                                         <div x-show="ps.autoPhoto" x-cloak class="flex items-center gap-2 text-[11px]">
