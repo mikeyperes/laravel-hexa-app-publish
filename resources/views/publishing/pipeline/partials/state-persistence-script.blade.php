@@ -685,6 +685,10 @@
                     }
                 }
 
+                if (this.selectedSiteId && (!Array.isArray(this.siteConn.authors) || this.siteConn.authors.length === 0)) {
+                    this.loadSiteAuthors(this.selectedSiteId);
+                }
+
                 this.syncDeferredEnrichmentState('restore_complete', { log: false });
                 this.hydrateResolvedPhotoPlaceholders('restore_complete');
                 this.scheduleThumbStateReconcile('restore_complete');
@@ -831,6 +835,11 @@
             // Site connection (nested, not in persistentFields)
             this.$watch('siteConn.status', () => this.queuePipelineStateSave());
             this.$watch('siteConn.authors', () => this.queuePipelineStateSave());
+            this.$watch('selectedSiteId', siteId => {
+                if (!this._restoring && siteId && (!Array.isArray(this.siteConn.authors) || this.siteConn.authors.length === 0)) {
+                    this.loadSiteAuthors(siteId);
+                }
+            });
             // Reset prepare state when photos change after prepare is complete
             // NOTE: don't watch editorContent — it changes on every TinyMCE sync
             const invalidatePrepare = () => { if (this.prepareComplete && !this._restoring && !this.preparing) { this.prepareComplete = false; } };
