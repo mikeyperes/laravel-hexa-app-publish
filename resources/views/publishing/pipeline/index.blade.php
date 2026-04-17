@@ -848,15 +848,15 @@
             @include('app-publish::publishing.pipeline.partials.press-release-validate-step')
             <div x-show="currentArticleType !== 'press-release'" x-cloak>
             {{-- Extraction Options --}}
-            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-                <div class="grid grid-cols-6 gap-3 items-end">
+            <div class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-3 mb-4">
+                <div class="flex flex-wrap items-end gap-2">
                     <div>
-                        <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Method</label>
-                        <select x-model="extractMethod" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
+                        <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Method</label>
+                        <select x-model="extractMethod" class="border border-gray-300 rounded px-2 py-1 text-xs">
                             <option value="auto">Auto</option>
                             <option value="readability">Readability</option>
-                            <option value="structured">Structured Data</option>
-                            <option value="heuristic">DOM Heuristic</option>
+                            <option value="structured">Structured</option>
+                            <option value="heuristic">Heuristic</option>
                             <option value="css">CSS Selector</option>
                             <option value="regex">Regex</option>
                             <option value="jina">Jina Reader</option>
@@ -867,45 +867,43 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">User Agent</label>
-                        <select x-model="checkUserAgent" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
+                        <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">User Agent</label>
+                        <select x-model="checkUserAgent" class="border border-gray-300 rounded px-2 py-1 text-xs">
                             <option value="chrome">Chrome Desktop</option>
-                            <option value="firefox">Firefox Desktop</option>
-                            <option value="safari">Safari macOS</option>
-                            <option value="mobile">Mobile Chrome</option>
+                            <option value="firefox">Firefox</option>
+                            <option value="safari">Safari</option>
+                            <option value="mobile">Mobile</option>
                             <option value="googlebot">Googlebot</option>
                             <option value="bingbot">Bingbot</option>
                             <option value="bot">HWS Bot</option>
                         </select>
                     </div>
-                    <div class="grid grid-cols-3 gap-2 col-span-2">
-                        <div>
-                            <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Retries</label>
-                            <select x-model="extractRetries" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
-                                <option value="0">0</option>
-                                <option value="1" selected>1</option>
-                                <option value="2">2</option>
-                                <option value="3">3</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Timeout</label>
-                            <select x-model="extractTimeout" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
-                                <option value="10">10s</option>
-                                <option value="20" selected>20s</option>
-                                <option value="30">30s</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Min Words</label>
-                            <input type="number" x-model="extractMinWords" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs" min="10" max="1000">
-                        </div>
+                    <div>
+                        <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Retries</label>
+                        <select x-model="extractRetries" class="border border-gray-300 rounded px-2 py-1 text-xs w-14">
+                            <option value="0">0</option>
+                            <option value="1" selected>1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                        </select>
                     </div>
-                    <label class="flex items-center gap-1.5 text-xs text-gray-600 pb-0.5">
-                        <input type="checkbox" x-model="extractAutoFallback" class="rounded border-gray-300 text-blue-600">
+                    <div>
+                        <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Timeout</label>
+                        <select x-model="extractTimeout" class="border border-gray-300 rounded px-2 py-1 text-xs w-16">
+                            <option value="10">10s</option>
+                            <option value="20" selected>20s</option>
+                            <option value="30">30s</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Min Words</label>
+                        <input type="number" x-model="extractMinWords" class="border border-gray-300 rounded px-2 py-1 text-xs w-16" min="10" max="1000">
+                    </div>
+                    <label class="flex items-center gap-1 text-xs text-gray-500 pb-0.5">
+                        <input type="checkbox" x-model="extractAutoFallback" class="rounded border-gray-300 text-blue-600 w-3.5 h-3.5">
                         Auto-fallback
                     </label>
-                    <button @click.stop="checkAllSources()" :disabled="checking" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center justify-center gap-1.5">
+                    <button @click.stop="checkAllSources()" :disabled="checking" class="bg-blue-600 text-white px-4 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1.5 ml-auto">
                         <svg x-show="checking" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         <span x-text="checking ? 'Extracting...' : 'Get Articles'"></span>
                     </button>
