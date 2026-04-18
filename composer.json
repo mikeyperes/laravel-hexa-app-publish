@@ -11,7 +11,6 @@
         "hexawebsystems/laravel-hexa-package-anthropic": "*",
         "hexawebsystems/laravel-hexa-package-chatgpt": "*",
         "hexawebsystems/laravel-hexa-package-brevo": "*",
-        "hexawebsystems/laravel-hexa-package-stripe": "*",
         "hexawebsystems/laravel-hexa-package-telegram": "*",
         "hexawebsystems/laravel-hexa-package-unsplash": "*",
         "hexawebsystems/laravel-hexa-package-pexels": "*",
