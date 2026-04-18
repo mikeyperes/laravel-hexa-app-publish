@@ -23,37 +23,6 @@ use Illuminate\View\View;
 class AccountController extends Controller
 {
     /**
-     * List all users with publishing stats.
-     *
-     * @param Request $request
-     * @return View
-     */
-    public function index(Request $request): View
-    {
-        $query = User::query();
-
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
-            });
-        }
-
-        $users = $query->orderBy('name')->get()->map(function ($user) {
-            $user->sites_count = PublishSite::where('user_id', $user->id)->count();
-            $user->campaigns_count = PublishCampaign::where('user_id', $user->id)->count();
-            $user->articles_count = PublishArticle::where('user_id', $user->id)->count();
-            $user->cpanel_count = HostingAccount::whereHas('users', fn($q) => $q->where('users.id', $user->id))->count();
-            return $user;
-        });
-
-        return view('app-publish::publishing.accounts.index', [
-            'users' => $users,
-        ]);
-    }
-
-    /**
      * Show a user's publishing profile.
      *
      * @param int $id

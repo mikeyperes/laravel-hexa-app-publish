@@ -76,7 +76,6 @@ class AppPublishServiceProvider extends ServiceProvider
             $registry->registerSidebarLink('publish.smart-edits.index', 'AI Smart Edit Templates', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', 'Article', 'app-publish', 15);
 
             // Content (16)
-            $registry->registerSidebarLink('publish.accounts.index', 'Users', 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4', 'Content', 'app-publish', 16);
             $registry->registerSidebarLink('publish.sites.index', 'Sites', 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9', 'Content', 'app-publish', 17);
             $registry->registerSidebarLink('campaigns.index', 'Campaigns', 'M13 10V3L4 14h7v7l9-11h-7z', 'Campaigns', 'app-publish', 18);
             $registry->registerSidebarLink('campaigns.create', 'Create Campaign', 'M12 4v16m8-8H4', 'Campaigns', 'app-publish', 19);
@@ -149,7 +148,6 @@ class AppPublishServiceProvider extends ServiceProvider
         $viewerExisting = config('hws.role_permissions.viewer', []);
         config([
             'hws.role_permissions.viewer' => array_merge($viewerExisting, [
-                'publish.accounts.index',
                 'publish.accounts.show',
                 'publish.sites.index',
                 'publish.articles.index',

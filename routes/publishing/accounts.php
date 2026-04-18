@@ -2,7 +2,6 @@
 
 use hexa_app_publish\Publishing\Accounts\Http\Controllers\AccountController;
 
-Route::get('/publish/users', [AccountController::class, 'index'])->name('publish.accounts.index');
 Route::get('/publish/users/{id}', [AccountController::class, 'show'])->name('publish.accounts.show');
 Route::post('/publish/users/{id}/attach-account', [AccountController::class, 'attachAccount'])->name('publish.accounts.attach');
 Route::delete('/publish/users/{id}/detach-account/{accountId}', [AccountController::class, 'detachAccount'])->name('publish.accounts.detach');
