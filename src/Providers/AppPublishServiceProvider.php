@@ -12,6 +12,7 @@ use hexa_core\CronManager\Services\CronManagerService;
 use hexa_core\Forms\Services\FormRegistryService;
 use hexa_core\ListRegistry\Services\ListService;
 use hexa_core\Services\PackageRegistryService;
+use hexa_app_publish\Publishing\Accounts\Services\UserProfileDataService;
 use Illuminate\Support\ServiceProvider;
 
 class AppPublishServiceProvider extends ServiceProvider
@@ -108,6 +109,25 @@ class AppPublishServiceProvider extends ServiceProvider
             $factory->startPush('scripts',
                 view('app-publish::settings.partials.integrations-scripts')->render());
         });
+
+        // Merge the publishing profile into core's canonical user profile page.
+        // Also back-fills data for the legacy /publish/users/{id} view since both render the same partial.
+        view()->composer('app-publish::publishing.partials.user-profile-sections', function ($view) {
+            $user = $view->getData()['user'] ?? null;
+            if (!$user) return;
+            $view->with(app(UserProfileDataService::class)->forUser($user));
+        });
+
+        // Register as a section on core's /settings/users/{id} profile page.
+        if (class_exists(PackageRegistryService::class)) {
+            app(PackageRegistryService::class)->registerUserProfileSection(
+                'publish.profile',
+                'Publishing Profile',
+                'app-publish::publishing.partials.user-profile-sections',
+                'app-publish',
+                40
+            );
+        }
     }
 
     /**

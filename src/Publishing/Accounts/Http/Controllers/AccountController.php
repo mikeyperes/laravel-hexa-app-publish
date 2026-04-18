@@ -11,6 +11,7 @@ use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
 use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Publishing\Articles\Models\PublishBookmark;
+use hexa_app_publish\Publishing\Accounts\Services\UserProfileDataService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -61,87 +62,9 @@ class AccountController extends Controller
     public function show(int $id): View
     {
         $user = User::findOrFail($id);
+        $data = app(UserProfileDataService::class)->forUser($user);
 
-        // Get attached cPanel accounts via WHM package relationship
-        $attachedAccounts = HostingAccount::with('whmServer')
-            ->whereHas('users', fn($q) => $q->where('users.id', $user->id))
-            ->get()
-            ->map(function ($acct) {
-                $acct->is_reseller = $acct->isReseller();
-                $acct->child_count = $acct->is_reseller ? $acct->getChildAccountCount() : 0;
-                return $acct;
-            });
-
-        $attachedIds = $attachedAccounts->pluck('id')->toArray();
-
-        // Available accounts (not attached, active)
-        $availableAccounts = HostingAccount::with('whmServer')
-            ->whereNotIn('id', $attachedIds)
-            ->where('status', 'active')
-            ->orderBy('domain')
-            ->get()
-            ->map(function ($acct) {
-                $acct->is_reseller = $acct->isReseller();
-                $acct->child_count = $acct->is_reseller ? $acct->getChildAccountCount() : 0;
-                return $acct;
-            });
-
-        $sites = PublishSite::where('user_id', $user->id)->get();
-        $campaigns = PublishCampaign::where('user_id', $user->id)->with('site')->get();
-        $templates = PublishTemplate::where('user_id', $user->id)->get();
-        $presets = PublishPreset::where('user_id', $user->id)->get();
-        $drafts = PublishArticle::where('user_id', $user->id)->where('status', 'draft')->orderByDesc('updated_at')->limit(20)->get();
-        $bookmarks = PublishBookmark::where('user_id', $user->id)->orderByDesc('created_at')->limit(20)->get();
-
-        $articleStats = [
-            'total' => PublishArticle::where('user_id', $user->id)->count(),
-            'published' => PublishArticle::where('user_id', $user->id)->where('status', 'published')->count(),
-            'completed' => PublishArticle::where('user_id', $user->id)->where('status', 'completed')->count(),
-            'review' => PublishArticle::where('user_id', $user->id)->where('status', 'review')->count(),
-            'drafting' => PublishArticle::where('user_id', $user->id)->whereIn('status', ['sourcing', 'drafting', 'spinning'])->count(),
-        ];
-
-        $defaultPreset = $presets->where('is_default', true)->first();
-        $defaultSiteId = $defaultPreset ? $defaultPreset->default_site_id : null;
-
-        // Pre-map for Alpine JS arrays (arrow functions in @json break Blade)
-        $attachedAccountsJson = $attachedAccounts->map(function ($a) {
-            return ['id' => $a->id, 'domain' => $a->domain, 'username' => $a->username, 'hostname' => $a->whmServer->hostname ?? ''];
-        })->values();
-
-        $availableAccountsJson = $availableAccounts->map(function ($a) {
-            return ['id' => $a->id, 'domain' => $a->domain, 'username' => $a->username, 'hostname' => $a->whmServer->hostname ?? ''];
-        })->values();
-
-        $sitesJson = $sites->map(function ($s) {
-            return [
-                'id' => $s->id,
-                'name' => $s->name,
-                'url' => $s->url,
-                'default_author' => $s->default_author,
-                'status' => $s->status,
-                'connection_type' => $s->connection_type,
-                'wp_username' => $s->wp_username,
-                'last_connected_at' => $s->last_connected_at?->toISOString(),
-            ];
-        })->values();
-
-        return view('app-publish::publishing.accounts.show', [
-            'user' => $user,
-            'attachedAccounts' => $attachedAccounts,
-            'availableAccounts' => $availableAccounts,
-            'sites' => $sites,
-            'campaigns' => $campaigns,
-            'templates' => $templates,
-            'presets' => $presets,
-            'drafts' => $drafts,
-            'bookmarks' => $bookmarks,
-            'articleStats' => $articleStats,
-            'defaultSiteId' => $defaultSiteId,
-            'attachedAccountsJson' => $attachedAccountsJson,
-            'availableAccountsJson' => $availableAccountsJson,
-            'sitesJson' => $sitesJson,
-        ]);
+        return view('app-publish::publishing.accounts.show', array_merge(['user' => $user], $data));
     }
 
     /**
