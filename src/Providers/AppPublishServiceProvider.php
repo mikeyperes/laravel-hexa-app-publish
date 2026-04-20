@@ -60,6 +60,18 @@ class AppPublishServiceProvider extends ServiceProvider
     {
         if (!config('hexa.app_controls_sidebar', false)) {
             $registry = app(PackageRegistryService::class);
+            // HWS-SIDEBAR-MENU-3L-BEGIN
+            $registry->registerDomainGroup('Publishing', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', 10);
+            $registry->registerDomainGroup('Discovery', 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z', 20);
+            $registry->registerSectionGroup('Article', 'Publishing', '', 10);
+            $registry->registerSectionGroup('Campaigns', 'Publishing', '', 10);
+            $registry->registerSectionGroup('Content', 'Discovery', '', 20);
+            $registry->registerSectionGroup('Prompts', 'Publishing', '', 10);
+            $registry->registerSectionGroup('Publishing', 'Publishing', '', 10);
+            $registry->registerSectionGroup('Schedule', 'Publishing', '', 10);
+            $registry->registerSectionGroup('Search', 'Discovery', '', 20);
+            // HWS-SIDEBAR-MENU-3L-END
+
 
             // Search (10)
             $registry->registerSidebarLink('publish.search.images', 'Images', 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z', 'Search', 'app-publish', 10);
