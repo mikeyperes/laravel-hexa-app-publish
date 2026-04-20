@@ -20,5 +20,6 @@ Route::put('/campaigns/{id}', [CampaignController::class, 'update'])->name('camp
 Route::post('/campaigns/{id}/activate', [CampaignController::class, 'activate'])->name('campaigns.activate');
 Route::post('/campaigns/{id}/pause', [CampaignController::class, 'pause'])->name('campaigns.pause');
 Route::post('/campaigns/{id}/duplicate', [CampaignController::class, 'duplicate'])->name('campaigns.duplicate');
+Route::post('/campaigns/{id}/start-operation', [CampaignController::class, 'startOperation'])->name('campaigns.start-operation');
 Route::post('/campaigns/{id}/run-now', [CampaignController::class, 'runNow'])->name('campaigns.run-now');
 Route::delete('/campaigns/{id}', [CampaignController::class, 'destroy'])->name('campaigns.destroy');

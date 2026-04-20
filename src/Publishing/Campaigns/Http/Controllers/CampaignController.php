@@ -7,9 +7,13 @@ use hexa_core\Services\GenericService;
 use hexa_app_publish\Publishing\Accounts\Models\PublishAccount;
 use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
 use hexa_app_publish\Publishing\Campaigns\Services\CampaignEligibilityService;
+use hexa_app_publish\Publishing\Campaigns\Services\CampaignChecklistService;
 use hexa_app_publish\Publishing\Campaigns\Services\CampaignModeResolver;
+use hexa_app_publish\Publishing\Campaigns\Services\CampaignRunOperationService;
 use hexa_app_publish\Publishing\Campaigns\Services\CampaignScheduleService;
 use hexa_app_publish\Publishing\Campaigns\Services\CampaignSettingsResolver;
+use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineOperation;
+use hexa_app_publish\Publishing\Pipeline\Services\PipelineOperationService;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
 use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
@@ -28,6 +32,9 @@ class CampaignController extends Controller
     protected CampaignModeResolver $modeResolver;
     protected CampaignScheduleService $scheduleService;
     protected CampaignSettingsResolver $settingsResolver;
+    protected CampaignChecklistService $checklistService;
+    protected CampaignRunOperationService $runOperationService;
+    protected PipelineOperationService $pipelineOperationService;
 
     /**
      * @param GenericService $generic
@@ -39,7 +46,10 @@ class CampaignController extends Controller
         CampaignEligibilityService $eligibility,
         CampaignModeResolver $modeResolver,
         CampaignScheduleService $scheduleService,
-        CampaignSettingsResolver $settingsResolver
+        CampaignSettingsResolver $settingsResolver,
+        CampaignChecklistService $checklistService,
+        CampaignRunOperationService $runOperationService,
+        PipelineOperationService $pipelineOperationService
     )
     {
         $this->generic = $generic;
@@ -48,6 +58,9 @@ class CampaignController extends Controller
         $this->modeResolver = $modeResolver;
         $this->scheduleService = $scheduleService;
         $this->settingsResolver = $settingsResolver;
+        $this->checklistService = $checklistService;
+        $this->runOperationService = $runOperationService;
+        $this->pipelineOperationService = $pipelineOperationService;
     }
 
     /**
@@ -249,6 +262,36 @@ class CampaignController extends Controller
             'campaign' => $campaign,
             'runLogs' => $runLogs,
             'resolvedSettings' => $resolvedSettings,
+            'checklistDefinitions' => [
+                'draft-local' => $this->checklistService->definitions('draft-local'),
+                'draft-wordpress' => $this->checklistService->definitions('draft-wordpress'),
+                'auto-publish' => $this->checklistService->definitions('auto-publish'),
+            ],
+        ]);
+    }
+
+    public function startOperation(int $id, Request $request): JsonResponse
+    {
+        $campaign = PublishCampaign::findOrFail($id);
+        $mode = $this->modeResolver->normalizeDeliveryMode($request->input('mode', 'draft-wordpress'));
+
+        try {
+            $started = $this->runOperationService->start($campaign, $mode);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $mode === 'auto-publish' ? 'Instant publish started.' : 'Instant draft started.',
+            'mode' => $mode,
+            'checklist' => $this->checklistService->definitions($mode),
+            'article_id' => $started['article']->id,
+            'article_url' => route('publish.articles.show', $started['article']->id),
+            'operation' => $this->serializeOperation($started['operation']),
         ]);
     }
 
@@ -276,6 +319,38 @@ class CampaignController extends Controller
             'article_id' => $result['article']->id ?? null,
             'article_url' => $result['article'] ? route('publish.articles.show', $result['article']->id) : null,
         ]);
+    }
+
+    private function serializeOperation(PublishPipelineOperation $operation): array
+    {
+        return [
+            'id' => $operation->id,
+            'draft_id' => $operation->publish_article_id,
+            'site_id' => $operation->publish_site_id,
+            'operation_type' => $operation->operation_type,
+            'status' => $operation->status,
+            'workflow_type' => $operation->workflow_type,
+            'transport' => $operation->transport,
+            'queue_connection' => $operation->queue_connection,
+            'queue_name' => $operation->queue_name,
+            'client_trace' => $operation->client_trace,
+            'trace_id' => $operation->trace_id,
+            'debug_enabled' => $operation->debug_enabled,
+            'event_sequence' => $operation->event_sequence,
+            'total_events' => $operation->total_events,
+            'last_stage' => $operation->last_stage,
+            'last_substage' => $operation->last_substage,
+            'last_message' => $operation->last_message,
+            'error_message' => $operation->error_message,
+            'request_summary' => $operation->request_summary,
+            'result_payload' => $operation->result_payload,
+            'started_at' => optional($operation->started_at)->toIso8601String(),
+            'completed_at' => optional($operation->completed_at)->toIso8601String(),
+            'last_event_at' => optional($operation->last_event_at)->toIso8601String(),
+            'stream_supported' => $this->pipelineOperationService->supportsLiveStream(),
+            'show_url' => route('publish.pipeline.operations.show', ['operation' => $operation->id]),
+            'stream_url' => route('publish.pipeline.operations.stream', ['operation' => $operation->id]),
+        ];
     }
 
     /**

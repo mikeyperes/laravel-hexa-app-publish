@@ -2,7 +2,7 @@
 
 namespace hexa_app_publish\Publishing\Delivery\Services;
 
-use hexa_app_publish\Models\PublishSite;
+use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
 use hexa_package_wordpress\Services\WordPressService;

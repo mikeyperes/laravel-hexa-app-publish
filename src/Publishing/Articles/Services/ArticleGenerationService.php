@@ -149,6 +149,8 @@ class ArticleGenerationService
         $content = $featuredImage['html'];
         $metadata = $this->extractMetadata($content);
         $content = $metadata['html'];
+        $content = $this->stripLeadingTitleHeading($content, (string) ($metadata['data']['titles'][0] ?? ''));
+        $content = $this->stripLeadingSectionHeading($content);
 
         $content = trim($content);
         $plainText = strip_tags($content);
@@ -403,9 +405,11 @@ class ArticleGenerationService
         foreach ($sourceTexts as $i => $src) {
             $num = $i + 1;
             $title = is_array($src) ? ($src['title'] ?? '') : '';
+            $url = is_array($src) ? ($src['url'] ?? '') : '';
             $text = is_array($src) ? ($src['text'] ?? $src) : $src;
             $str .= "\n=== Source {$num} ===\n";
             if ($title) $str .= "Title: {$title}\n";
+            if ($url) $str .= "Source URL: {$url}\n";
             $str .= Str::limit($text, 3000) . "\n";
         }
         return $str;
@@ -524,7 +528,6 @@ class ArticleGenerationService
                 ];
                 $placeholder = '<div class="photo-placeholder" contenteditable="false" data-idx="' . $i . '" data-search="' . htmlspecialchars($searchTerm) . '" data-caption="' . htmlspecialchars($altText) . '" style="border:2px dashed #a78bfa;background:#f5f3ff;border-radius:8px;padding:12px 16px;margin:16px 0;cursor:pointer;text-align:center;color:#7c3aed;font-size:14px;">'
                     . '<div style="display:inline-block;width:20px;height:20px;border:2px solid #a78bfa;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;"></div>'
-                    . '<style>@keyframes spin{to{transform:rotate(360deg)}}</style>'
                     . '<span style="font-size:13px;margin-left:8px;">Loading photo...</span>'
                     . '</div>';
                 $content = preg_replace('/<!--\s*PHOTO:\s*' . preg_quote($match[1], '/') . '\s*-->/', $placeholder, $content, 1);
@@ -570,6 +573,29 @@ class ArticleGenerationService
             $content = preg_replace('/<!--\s*METADATA:\s*\{.+?\}\s*-->/s', '', $content);
         }
         return ['html' => $content, 'data' => $data];
+    }
+
+    private function stripLeadingTitleHeading(string $content, string $title): string
+    {
+        $content = trim($content);
+        $title = trim(html_entity_decode(strip_tags($title), ENT_QUOTES, 'UTF-8'));
+        if ($content === '' || $title === '') {
+            return $content;
+        }
+
+        if (preg_match('/^\s*<h2[^>]*>(.*?)<\/h2>\s*/is', $content, $match)) {
+            $headingText = trim(html_entity_decode(strip_tags($match[1]), ENT_QUOTES, 'UTF-8'));
+            if ($headingText !== '' && Str::lower($headingText) === Str::lower($title)) {
+                $content = preg_replace('/^\s*<h2[^>]*>.*?<\/h2>\s*/is', '', $content, 1) ?? $content;
+            }
+        }
+
+        return trim($content);
+    }
+
+    private function stripLeadingSectionHeading(string $content): string
+    {
+        return trim((string) preg_replace('/^\s*<h2[^>]*>.*?<\/h2>\s*/is', '', trim($content), 1));
     }
 
     /**

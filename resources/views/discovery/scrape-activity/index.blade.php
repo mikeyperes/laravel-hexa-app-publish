@@ -11,10 +11,10 @@
             <h3 class="text-lg font-bold text-gray-800">Source Domains</h3>
             <div class="flex items-center gap-3">
                 <label class="inline-flex items-center gap-2 text-sm">
-                    <input type="checkbox" onchange="window.location.href = this.checked ? '?failures_only=1' : '?'" {{ request('failures_only') ? 'checked' : '' }} class="rounded border-gray-300 text-red-600">
+                    <input type="checkbox" onchange="const url = new URL(window.location.href); if (this.checked) { url.searchParams.set('failures_only', '1'); } else { url.searchParams.delete('failures_only'); } window.location.href = url.toString();" {{ request('failures_only') ? 'checked' : '' }} class="rounded border-gray-300 text-red-600">
                     Failures only
                 </label>
-                <select onchange="if(this.value) window.location.href='?domain='+this.value; else window.location.href='?';" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+                <select onchange="const url = new URL(window.location.href); if (this.value) { url.searchParams.set('domain', this.value); } else { url.searchParams.delete('domain'); } window.location.href = url.toString();" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
                     <option value="">All domains</option>
                     @foreach($domainStats as $ds)
                         <option value="{{ $ds->domain }}" {{ $filterDomain === $ds->domain ? 'selected' : '' }}>{{ $ds->domain }} ({{ $ds->fails }} fails / {{ $ds->total }})</option>
@@ -72,40 +72,259 @@
 
     {{-- Activity Log --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-        <h3 class="text-lg font-bold text-gray-800 mb-4">
-            Fetch Log
-            @if($filterDomain) <span class="text-sm font-normal text-gray-500">— {{ $filterDomain }}</span> @endif
-            <span class="text-sm font-normal text-gray-400">({{ $logs->total() }} entries)</span>
-        </h3>
-        <div class="space-y-2">
+        <div class="flex items-center justify-between gap-4 mb-4">
+            <h3 class="text-lg font-bold text-gray-800">
+                Fetch Log
+                @if($filterDomain) <span class="text-sm font-normal text-gray-500">— {{ $filterDomain }}</span> @endif
+                <span class="text-sm font-normal text-gray-400">({{ $logs->total() }} entries)</span>
+            </h3>
+            @if($filterDomain)
+                <span class="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-3 py-1">Detailed mode: request logs expanded</span>
+            @endif
+        </div>
+        <div class="space-y-3">
             @forelse($logs as $log)
-            <div class="flex items-start gap-3 py-3 border-b border-gray-100 text-sm {{ $log->success ? '' : 'bg-red-50 rounded-lg px-3 -mx-3' }}">
-                <div class="flex-shrink-0 pt-0.5">
-                    @if($log->success)
-                        <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    @else
-                        <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    @endif
-                </div>
-                <div class="flex-1 min-w-0">
-                    <p class="font-mono text-xs text-gray-500 break-all">{{ $log->url }}</p>
-                    <div class="flex flex-wrap gap-3 mt-1 text-xs text-gray-500">
-                        <span>{{ $log->created_at->format('M j, g:ia') }}</span>
-                        <span>Method: <strong>{{ $log->method ?? 'auto' }}</strong></span>
-                        <span>UA: <strong>{{ $log->user_agent ?? 'chrome' }}</strong></span>
-                        @if($log->http_status) <span>HTTP: <strong>{{ $log->http_status }}</strong></span> @endif
-                        @if($log->response_time_ms) <span>Time: <strong>{{ $log->response_time_ms }}ms</strong></span> @endif
-                        @if($log->word_count) <span>Words: <strong>{{ $log->word_count }}</strong></span> @endif
-                        @if($log->fallback_used) <span class="text-orange-600">Fallback: {{ $log->fallback_used }}</span> @endif
+            @php
+                $requestMeta = is_array($log->request_meta) ? $log->request_meta : [];
+                $responseMeta = is_array($log->response_meta) ? $log->response_meta : [];
+                $attemptLog = is_array($log->attempt_log) ? $log->attempt_log : [];
+                $requestHeaders = is_array($log->request_headers) ? $log->request_headers : [];
+                $responseHeaders = is_array($log->response_headers) ? $log->response_headers : [];
+                $fetchInfo = is_array($log->fetch_info) ? $log->fetch_info : [];
+                $jsonFlags = JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
+                $detailsOpen = !empty($filterDomain);
+            @endphp
+            <details class="border border-gray-200 rounded-xl overflow-hidden {{ $log->success ? 'bg-white' : 'bg-red-50 border-red-200' }}" {{ $detailsOpen ? 'open' : '' }}>
+                <summary class="list-none cursor-pointer px-4 py-4">
+                    <div class="flex items-start gap-3 text-sm">
+                        <div class="flex-shrink-0 pt-0.5">
+                            @if($log->success)
+                                <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            @else
+                                <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            @endif
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-mono text-xs text-gray-500 break-all">{{ $log->url }}</p>
+                            <div class="flex flex-wrap gap-3 mt-1 text-xs text-gray-500">
+                                <span>{{ $log->created_at->format('M j, Y g:ia') }}</span>
+                                <span>Extractor: <strong>{{ $log->method ?? 'auto' }}</strong></span>
+                                <span>HTTP Method: <strong>{{ $log->http_method ?? 'GET' }}</strong></span>
+                                <span>UA: <strong>{{ $log->user_agent ?? 'chrome' }}</strong></span>
+                                @if($log->http_status) <span>HTTP: <strong>{{ $log->http_status }}</strong></span> @endif
+                                @if($log->response_reason) <span>Reason: <strong>{{ $log->response_reason }}</strong></span> @endif
+                                @if($log->response_time_ms) <span>Time: <strong>{{ $log->response_time_ms }}ms</strong></span> @endif
+                                @if($log->word_count) <span>Words: <strong>{{ $log->word_count }}</strong></span> @endif
+                                @if($log->fallback_used) <span class="text-orange-600">Fallback: {{ $log->fallback_used }}</span> @endif
+                                @if(!empty($attemptLog)) <span>Attempts: <strong>{{ count($attemptLog) }}</strong></span> @endif
+                            </div>
+                            @if(!$log->success && $log->error_message)
+                                <p class="text-xs text-red-600 mt-1 break-words">{{ $log->error_message }}</p>
+                            @endif
+                        </div>
+                        <div class="flex-shrink-0 text-right">
+                            <span class="font-mono text-xs text-gray-400">{{ $log->domain }}</span>
+                            <p class="text-[11px] text-blue-600 mt-1">{{ $detailsOpen ? 'Expanded' : 'Show request details' }}</p>
+                        </div>
                     </div>
-                    @if(!$log->success && $log->error_message)
-                        <p class="text-xs text-red-600 mt-1 break-words">{{ $log->error_message }}</p>
-                    @endif
+                </summary>
+
+                <div class="border-t border-gray-200 px-4 py-4 grid grid-cols-1 xl:grid-cols-2 gap-4 text-sm bg-white">
+                    <div class="space-y-4">
+                        <div class="rounded-lg border border-gray-200 p-4">
+                            <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Request</h4>
+                            <dl class="space-y-2 text-sm">
+                                <div>
+                                    <dt class="text-xs text-gray-500">Logged At</dt>
+                                    <dd class="text-gray-800">{{ $log->created_at->format('M j, Y g:ia T') }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-xs text-gray-500">Requested URL</dt>
+                                    <dd class="font-mono text-xs text-gray-700 break-all">{{ $log->url }}</dd>
+                                </div>
+                                @if($log->effective_url)
+                                <div>
+                                    <dt class="text-xs text-gray-500">Effective URL</dt>
+                                    <dd class="font-mono text-xs text-gray-700 break-all">{{ $log->effective_url }}</dd>
+                                </div>
+                                @endif
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <dt class="text-xs text-gray-500">Extractor</dt>
+                                        <dd class="text-gray-800">{{ $log->method ?? 'auto' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-xs text-gray-500">HTTP Method</dt>
+                                        <dd class="text-gray-800">{{ $log->http_method ?? 'GET' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-xs text-gray-500">User Agent Preset</dt>
+                                        <dd class="text-gray-800">{{ $log->user_agent ?? 'chrome' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-xs text-gray-500">Source</dt>
+                                        <dd class="text-gray-800">{{ $log->source ?? 'pipeline' }}</dd>
+                                    </div>
+                                </div>
+                                @if(!empty($requestMeta['resolved_user_agent']))
+                                <div>
+                                    <dt class="text-xs text-gray-500">Resolved User Agent</dt>
+                                    <dd class="font-mono text-xs text-gray-700 break-all">{{ $requestMeta['resolved_user_agent'] }}</dd>
+                                </div>
+                                @endif
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <dt class="text-xs text-gray-500">Timeout</dt>
+                                        <dd class="text-gray-800">{{ $log->timeout ? $log->timeout . 's' : '—' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-xs text-gray-500">Retries</dt>
+                                        <dd class="text-gray-800">{{ $log->retries ?? '—' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-xs text-gray-500">Attempts</dt>
+                                        <dd class="text-gray-800">{{ $requestMeta['attempts'] ?? (count($attemptLog) ?: '—') }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-xs text-gray-500">Follow Redirects</dt>
+                                        <dd class="text-gray-800">
+                                            @if(array_key_exists('follow_redirects', $requestMeta))
+                                                {{ $requestMeta['follow_redirects'] ? 'Yes' : 'No' }}
+                                            @else
+                                                —
+                                            @endif
+                                        </dd>
+                                    </div>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <div class="rounded-lg border border-gray-200 p-4">
+                            <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Response</h4>
+                            <dl class="space-y-2 text-sm">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <dt class="text-xs text-gray-500">HTTP Status</dt>
+                                        <dd class="text-gray-800">{{ $log->http_status ?? '—' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-xs text-gray-500">Reason</dt>
+                                        <dd class="text-gray-800">{{ $log->response_reason ?? ($responseMeta['reason'] ?? '—') }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-xs text-gray-500">Response Time</dt>
+                                        <dd class="text-gray-800">{{ $log->response_time_ms ? $log->response_time_ms . 'ms' : '—' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-xs text-gray-500">Word Count</dt>
+                                        <dd class="text-gray-800">{{ $log->word_count ?: '—' }}</dd>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <dt class="text-xs text-gray-500">Content Type</dt>
+                                        <dd class="text-gray-800 break-all">{{ $responseMeta['content_type'] ?? '—' }}</dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-xs text-gray-500">Content Length</dt>
+                                        <dd class="text-gray-800">{{ $responseMeta['content_length'] ?? '—' }}</dd>
+                                    </div>
+                                </div>
+                                @if(!empty($responseMeta['failure_reason']))
+                                <div>
+                                    <dt class="text-xs text-gray-500">Failure Reason</dt>
+                                    <dd class="text-red-700">{{ $responseMeta['failure_reason'] }}</dd>
+                                </div>
+                                @endif
+                                @if(!empty($responseMeta['suggestion']))
+                                <div>
+                                    <dt class="text-xs text-gray-500">Suggested Next Action</dt>
+                                    <dd class="text-orange-700">{{ $responseMeta['suggestion'] }}</dd>
+                                </div>
+                                @endif
+                                @if(!empty($responseMeta['fallback_source']) || $log->fallback_used)
+                                <div>
+                                    <dt class="text-xs text-gray-500">Fallback</dt>
+                                    <dd class="text-orange-700">{{ $log->fallback_used ?? $responseMeta['fallback_source'] }}</dd>
+                                </div>
+                                @endif
+                            </dl>
+                        </div>
+
+                        @if(!empty($attemptLog))
+                        <div class="rounded-lg border border-gray-200 p-4">
+                            <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Attempt History</h4>
+                            <div class="space-y-3">
+                                @foreach($attemptLog as $attempt)
+                                    @php($attemptResponseHeaders = is_array($attempt['response_headers'] ?? null) ? $attempt['response_headers'] : [])
+                                    <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                                        <div class="flex flex-wrap items-center gap-3 text-xs text-gray-600 mb-2">
+                                            <span class="font-semibold text-gray-800">Attempt {{ $attempt['attempt'] ?? ($loop->index + 1) }}</span>
+                                            @if(!empty($attempt['started_at'])) <span>{{ $attempt['started_at'] }}</span> @endif
+                                            @if(array_key_exists('status', $attempt)) <span>HTTP {{ $attempt['status'] ?: '—' }}</span> @endif
+                                            @if(!empty($attempt['reason'])) <span>{{ $attempt['reason'] }}</span> @endif
+                                            @if(!empty($attempt['response_time_ms'])) <span>{{ $attempt['response_time_ms'] }}ms</span> @endif
+                                        </div>
+                                        @if(!empty($attempt['request_url']))
+                                            <p class="font-mono text-xs text-gray-600 break-all">{{ $attempt['request_url'] }}</p>
+                                        @endif
+                                        @if(!empty($attempt['effective_url']) && $attempt['effective_url'] !== ($attempt['request_url'] ?? null))
+                                            <p class="font-mono text-xs text-blue-700 break-all mt-1">Effective: {{ $attempt['effective_url'] }}</p>
+                                        @endif
+                                        @if(!empty($attempt['error']))
+                                            <p class="text-xs text-red-700 mt-2 break-words">{{ $attempt['error'] }}</p>
+                                        @endif
+                                        @if(!empty($attempt['content_type']) || !empty($attempt['content_length']))
+                                            <p class="text-xs text-gray-500 mt-2">
+                                                @if(!empty($attempt['content_type'])) Type: {{ $attempt['content_type'] }} @endif
+                                                @if(!empty($attempt['content_length']))<span class="ml-3">Length: {{ $attempt['content_length'] }}</span>@endif
+                                            </p>
+                                        @endif
+                                        @if(!empty($attemptResponseHeaders) || !empty($attempt['body_snippet']))
+                                            <details class="mt-2">
+                                                <summary class="text-xs text-blue-600 cursor-pointer">Attempt headers and snippet</summary>
+                                                @if(!empty($attemptResponseHeaders))
+                                                    <pre class="mt-2 bg-gray-900 text-gray-100 rounded-lg p-3 text-[11px] overflow-x-auto whitespace-pre-wrap break-all">{{ json_encode($attemptResponseHeaders, $jsonFlags) }}</pre>
+                                                @endif
+                                                @if(!empty($attempt['body_snippet']))
+                                                    <pre class="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-3 text-[11px] text-gray-700 overflow-x-auto whitespace-pre-wrap break-all">{{ $attempt['body_snippet'] }}</pre>
+                                                @endif
+                                            </details>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                        @endif
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="rounded-lg border border-gray-200 p-4">
+                            <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Headers</h4>
+                            <div class="space-y-3">
+                                <div>
+                                    <p class="text-xs text-gray-500 mb-1">Request Headers</p>
+                                    <pre class="bg-gray-900 text-gray-100 rounded-lg p-3 text-[11px] overflow-x-auto whitespace-pre-wrap break-all">{{ !empty($requestHeaders) ? json_encode($requestHeaders, $jsonFlags) : 'No request headers captured.' }}</pre>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-gray-500 mb-1">Response Headers</p>
+                                    <pre class="bg-gray-900 text-gray-100 rounded-lg p-3 text-[11px] overflow-x-auto whitespace-pre-wrap break-all">{{ !empty($responseHeaders) ? json_encode($responseHeaders, $jsonFlags) : 'No response headers captured.' }}</pre>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-lg border border-gray-200 p-4">
+                            <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Response Body Snippet</h4>
+                            <pre class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-[11px] text-gray-700 overflow-x-auto whitespace-pre-wrap break-all">{{ $log->response_body_snippet ?: 'No response body snippet captured.' }}</pre>
+                        </div>
+
+                        <div class="rounded-lg border border-gray-200 p-4">
+                            <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Raw Diagnostics</h4>
+                            <pre class="bg-gray-900 text-gray-100 rounded-lg p-3 text-[11px] overflow-x-auto whitespace-pre-wrap break-all">{{ !empty($fetchInfo) ? json_encode($fetchInfo, $jsonFlags) : 'No raw fetch diagnostics captured.' }}</pre>
+                        </div>
+                    </div>
                 </div>
-                <div class="flex-shrink-0">
-                    <span class="font-mono text-xs text-gray-400">{{ $log->domain }}</span>
-                </div>
-            </div>
+            </details>
             @empty
             <p class="text-sm text-gray-400 py-4">No scrape activity logged yet.</p>
             @endforelse
