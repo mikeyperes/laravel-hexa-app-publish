@@ -52,6 +52,7 @@ class ArticleGenerationService
         $model = $options['model'] ?? 'claude-sonnet-4-6';
         $templateId = $options['template_id'] ?? null;
         $presetId = $options['preset_id'] ?? null;
+        $articleType = $this->resolveArticleType($options['article_type'] ?? null, $templateId);
         $promptSlug = $options['prompt_slug'] ?? null;
         $customPrompt = $options['custom_prompt'] ?? null;
         $supportingUrlType = $options['supporting_url_type'] ?? 'matching_content_type';
@@ -68,7 +69,8 @@ class ArticleGenerationService
             $changeRequest,
             $prSubjectContext,
             false,
-            $promptSlug
+            $promptSlug,
+            $articleType
         );
 
         // Inject web research instruction if requested
@@ -148,6 +150,7 @@ class ArticleGenerationService
         $featuredImage = $this->extractFeaturedImage($content);
         $content = $featuredImage['html'];
         $metadata = $this->extractMetadata($content);
+        $metadata['data'] = $this->normalizeMetadataForArticleType($metadata['data'], $articleType, $sourceTexts);
         $content = $metadata['html'];
         $content = $this->stripLeadingTitleHeading($content, (string) ($metadata['data']['titles'][0] ?? ''));
         $content = $this->stripLeadingSectionHeading($content);
@@ -202,6 +205,7 @@ class ArticleGenerationService
      * @param string|null $prSubjectContext
      * @param bool $withLog Whether to return resolution log alongside the prompt
      * @param string|null $promptSlug
+     * @param string|null $articleType
      * @return string|array Returns string normally, or ['prompt' => ..., 'log' => [...]] when $withLog is true
      */
     public function buildPrompt(
@@ -212,7 +216,8 @@ class ArticleGenerationService
         ?string $changeRequest,
         ?string $prSubjectContext = null,
         bool $withLog = false,
-        ?string $promptSlug = null
+        ?string $promptSlug = null,
+        ?string $articleType = null
     ): string|array
     {
         $log = [];
@@ -272,17 +277,21 @@ class ArticleGenerationService
         $templateConfig = '';
         $photoCount = '2-4';
         $template = null;
+        $resolvedArticleType = $articleType;
         if ($templateId) {
             $template = PublishTemplate::find($templateId);
             if ($template) {
                 $parts = [];
+                $resolvedArticleType = $resolvedArticleType ?: $template->article_type;
                 if ($template->ai_prompt) $parts[] = $template->ai_prompt;
                 if ($template->tone) $parts[] = "Tone: " . (is_array($template->tone) ? implode(', ', $template->tone) : $template->tone);
-                if ($template->article_type) $parts[] = "Article type: {$template->article_type}";
+                if ($resolvedArticleType) $parts[] = "Article type: {$resolvedArticleType}";
                 if ($template->word_count_min || $template->word_count_max) $parts[] = "Target words: {$template->word_count_min}-{$template->word_count_max}";
                 $templateConfig = implode("\n", $parts);
                 if ($template->photos_per_article) $photoCount = (string) $template->photos_per_article;
             }
+        } elseif ($resolvedArticleType) {
+            $templateConfig = "Article type: {$resolvedArticleType}";
         }
 
         // Dynamic metadata counts — pull from preset, fall back to defaults
@@ -377,6 +386,11 @@ class ArticleGenerationService
         }
 
         $result = preg_replace("/\n{3,}/", "\n\n", trim($prompt));
+        $articleTypeContract = $this->articleTypeInstruction($resolvedArticleType);
+        if ($articleTypeContract !== '') {
+            $result .= "\n\n=== ARTICLE TYPE CONTRACT ===\n" . $articleTypeContract;
+            $log[] = ['shortcode' => '(article type)', 'source' => $resolvedArticleType ?: 'Empty', 'value' => $articleTypeContract];
+        }
         $result .= "\n\n" . $this->hardLinkSafetyRules() . "\n\n" . $this->hardStockPhotoRules();
 
         $log[] = ['shortcode' => '(link safety)', 'source' => 'Hardcoded safeguard', 'value' => 'Require live canonical supporting URLs only.'];
@@ -436,6 +450,20 @@ class ArticleGenerationService
     private function hardStockPhotoRules(): string
     {
         return "STOCK PHOTO RULES: For PHOTO and FEATURED metadata, describe only what a generic stock photo visibly shows. Do not use article-specific names or identities unless the image source itself clearly identifies that exact real person.";
+    }
+
+    private function articleTypeInstruction(?string $articleType): string
+    {
+        return match ($articleType) {
+            'editorial' => 'This article must read as an editorial analysis, not a source roundup. Build one coherent thesis from the source material. The title must sound like a clear analytical angle or argument, not a pasted source headline. Do not reuse source titles verbatim, do not mention publisher names in the title, and do not output list-like or stitched headlines.',
+            'opinion' => 'This article must read as opinion. Lead with a clear point of view, defend it with evidence, and make the stance obvious in both the title and opening. Do not drift into neutral roundup language.',
+            'news-report' => 'This article must read as straight news reporting. The title and opening paragraph must center on the concrete development, identify what happened, and avoid feature-style thesis language or opinion framing.',
+            'local-news' => 'This article must read as local news. The headline and lede must clearly ground the story in the place, people, and immediate development. Avoid generic national-analysis framing.',
+            'expert-article' => 'This article must read as expert analysis. The title should signal expertise and a clear angle. The body should explain, interpret, and advise rather than merely summarize sources.',
+            'press-release' => 'This article must read as a formal press release with announcement framing, not as an editorial or news digest.',
+            'pr-full-feature' => 'This article must read as a polished feature with a coherent narrative arc, not as a stitched source summary.',
+            default => '',
+        };
     }
 
     /**
@@ -573,6 +601,132 @@ class ArticleGenerationService
             $content = preg_replace('/<!--\s*METADATA:\s*\{.+?\}\s*-->/s', '', $content);
         }
         return ['html' => $content, 'data' => $data];
+    }
+
+    private function normalizeMetadataForArticleType(array $metadata, ?string $articleType, array $sourceTexts): array
+    {
+        $titles = collect((array) ($metadata['titles'] ?? []))
+            ->map(fn ($title) => $this->normalizeTitleText((string) $title))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($titles === []) {
+            $metadata['titles'] = [];
+            return $metadata;
+        }
+
+        $sourceTitles = collect($sourceTexts)
+            ->map(fn ($src) => is_array($src) ? $this->normalizeTitleText((string) ($src['title'] ?? '')) : '')
+            ->filter()
+            ->values()
+            ->all();
+
+        $selectedIndex = 0;
+        foreach ($titles as $index => $candidate) {
+            if ($this->titleMatchesArticleType($candidate, $articleType, $sourceTitles)) {
+                $selectedIndex = $index;
+                break;
+            }
+        }
+
+        if ($selectedIndex !== 0) {
+            $selected = $titles[$selectedIndex];
+            unset($titles[$selectedIndex]);
+            array_unshift($titles, $selected);
+            $titles = array_values($titles);
+        }
+
+        $metadata['titles'] = $titles;
+        $metadata['description'] = trim((string) ($metadata['description'] ?? ''));
+
+        return $metadata;
+    }
+
+    private function normalizeTitleText(string $title): string
+    {
+        $title = html_entity_decode(strip_tags($title), ENT_QUOTES, 'UTF-8');
+        $title = preg_replace('/\s+/', ' ', $title);
+        return trim((string) $title);
+    }
+
+    private function titleMatchesArticleType(string $title, ?string $articleType, array $sourceTitles): bool
+    {
+        if ($title === '') {
+            return false;
+        }
+
+        if (mb_strlen($title) < 24 || mb_strlen($title) > 120) {
+            return false;
+        }
+
+        if (str_contains($title, '...') || preg_match('/\.\.\.$/', $title)) {
+            return false;
+        }
+
+        if (preg_match('/\b(source|sources|round-?up|live updates?)\b/i', $title)) {
+            return false;
+        }
+
+        foreach ($sourceTitles as $sourceTitle) {
+            if ($this->titlesAreTooSimilar($title, $sourceTitle)) {
+                return false;
+            }
+        }
+
+        if (in_array($articleType, ['editorial', 'opinion'], true) && preg_match('/^(breaking|live|watch)\b/i', $title)) {
+            return false;
+        }
+
+        if (in_array($articleType, ['news-report', 'local-news'], true) && str_contains($title, '?')) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function titlesAreTooSimilar(string $left, string $right): bool
+    {
+        $left = Str::of(Str::lower($left))->replaceMatches('/[^a-z0-9\s]/', ' ')->replaceMatches('/\s+/', ' ')->trim()->value();
+        $right = Str::of(Str::lower($right))->replaceMatches('/[^a-z0-9\s]/', ' ')->replaceMatches('/\s+/', ' ')->trim()->value();
+
+        if ($left === '' || $right === '') {
+            return false;
+        }
+
+        if ($left === $right) {
+            return true;
+        }
+
+        similar_text($left, $right, $percent);
+        if ($percent >= 72.0) {
+            return true;
+        }
+
+        $leftTokens = array_values(array_filter(explode(' ', $left)));
+        $rightTokens = array_values(array_filter(explode(' ', $right)));
+        if ($leftTokens === [] || $rightTokens === []) {
+            return false;
+        }
+
+        $intersection = count(array_intersect($leftTokens, $rightTokens));
+        $union = count(array_unique(array_merge($leftTokens, $rightTokens)));
+
+        return $union > 0 && ($intersection / $union) >= 0.8;
+    }
+
+    private function resolveArticleType(?string $articleType, ?int $templateId): ?string
+    {
+        if (is_string($articleType) && trim($articleType) !== '') {
+            return trim($articleType);
+        }
+
+        if ($templateId) {
+            return PublishTemplate::find($templateId)?->article_type;
+        }
+
+        return null;
     }
 
     private function stripLeadingTitleHeading(string $content, string $title): string

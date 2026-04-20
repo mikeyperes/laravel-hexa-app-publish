@@ -232,6 +232,13 @@ class CampaignExecutionService
             'stage' => 'discovery',
             'substage' => 'complete',
         ]);
+        foreach ($sourceUrls as $index => $sourceUrl) {
+            $emit('info', 'Source URL ' . ($index + 1) . ': ' . $sourceUrl, [
+                'stage' => 'discovery',
+                'substage' => 'url',
+                'url' => $sourceUrl,
+            ]);
+        }
 
         $article->update(['status' => 'sourcing']);
         $emit('step', 'Extracting article content...', [
@@ -244,7 +251,7 @@ class CampaignExecutionService
             'draft_id' => $article->id,
         ]);
         foreach ($sourceTexts as $src) {
-            $emit('success', 'Extracted: ' . Str::limit($src['title'] ?: $src['url'], 60), [
+            $emit('success', 'Source extracted: ' . Str::limit($src['title'] ?: $src['url'], 60), [
                 'stage' => 'extraction',
                 'substage' => 'source_ok',
                 'url' => $src['url'] ?? null,
@@ -327,6 +334,39 @@ class CampaignExecutionService
                 'cost=$' . ($spinResult['cost'] ?? 0),
             ])),
         ]);
+
+        $emit('info', ucfirst(str_replace('-', ' ', (string) ($resolved['article_type'] ?? 'article'))) . ' title: ' . ($spinResult['title'] ?? 'Untitled'), [
+            'stage' => 'generation',
+            'substage' => 'title',
+        ]);
+        if (!empty($spinResult['metadata']['titles'])) {
+            $emit('info', 'Title options confirmed.', [
+                'stage' => 'generation',
+                'substage' => 'title_options',
+                'details' => implode(' | ', array_slice((array) $spinResult['metadata']['titles'], 0, 5)),
+            ]);
+        }
+        if (!empty($spinResult['categories'])) {
+            $emit('info', 'Categories chosen.', [
+                'stage' => 'generation',
+                'substage' => 'categories',
+                'details' => implode(', ', array_slice((array) $spinResult['categories'], 0, 10)),
+            ]);
+        }
+        if (!empty($spinResult['tags'])) {
+            $emit('info', 'Tags chosen.', [
+                'stage' => 'generation',
+                'substage' => 'tags',
+                'details' => implode(', ', array_slice((array) $spinResult['tags'], 0, 12)),
+            ]);
+        }
+        if (!empty($spinResult['description'])) {
+            $emit('info', 'Meta description confirmed.', [
+                'stage' => 'generation',
+                'substage' => 'description',
+                'details' => (string) $spinResult['description'],
+            ]);
+        }
 
         $emit('step', 'Selecting featured and inline photos...', [
             'stage' => 'photos',
@@ -522,6 +562,7 @@ class CampaignExecutionService
             'model' => $model,
             'template_id' => $resolved['publish_template_id'] ?? null,
             'preset_id' => $resolved['preset_id'] ?? null,
+            'article_type' => $resolved['article_type'] ?? null,
             'custom_prompt' => $resolved['ai_instructions'] ?? null,
             'agent' => 'campaign-spin',
         ]);

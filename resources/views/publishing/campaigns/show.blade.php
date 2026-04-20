@@ -36,7 +36,11 @@
                 </button>
             </div>
         </div>
-        <div x-show="runResult" x-cloak class="mt-3 p-3 rounded-lg text-sm border" :class="runSuccess ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'" x-text="runResult"></div>
+        <div x-show="runResult" x-cloak class="mt-3 p-3 rounded-lg text-sm border" :class="{
+            'bg-blue-50 border-blue-200 text-blue-800': runState === 'info',
+            'bg-green-50 border-green-200 text-green-800': runState === 'success',
+            'bg-red-50 border-red-200 text-red-800': runState === 'error'
+        }" x-text="runResult"></div>
         @if(!empty($resolvedSettings['error']))
             <div class="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
                 Resolved settings warning: {{ $resolvedSettings['error'] }}
@@ -55,6 +59,7 @@
                 <div class="text-right text-xs text-gray-500 space-y-1">
                     <p x-show="operationStatus" x-text="'Status: ' + operationStatus + (operationTransport ? ' via ' + operationTransport.replace('_', ' ') : '')"></p>
                     <p x-show="operationTraceId" x-text="'Trace: ' + operationTraceId"></p>
+                    <p x-show="operationStartedAt || running" x-text="'Elapsed: ' + operationElapsedText()"></p>
                     <p x-show="campaignChecklist.length > 0" x-text="checklistProgressText()"></p>
                 </div>
             </div>
@@ -93,6 +98,11 @@
                                   x-text="item.status"></span>
                         </div>
                         <p class="text-xs text-gray-500 mt-1" x-text="item.live_detail || item.detail"></p>
+                        <div x-show="(item.event_lines || []).length > 0" x-cloak class="mt-2 space-y-1">
+                            <template x-for="(line, lineIdx) in item.event_lines" :key="item.key + '-line-' + lineIdx">
+                                <p class="text-[11px] text-gray-500 break-words font-mono" x-text="line"></p>
+                            </template>
+                        </div>
                     </div>
                 </div>
             </template>
@@ -214,9 +224,11 @@ function campaignShow() {
         preset_schema: @json(\hexa_app_publish\Publishing\Presets\Models\PublishPreset::getFieldSchema()),
         ...presetFieldsMethods,
 
-        running: false, runResult: '', runSuccess: false,
+        running: false, runResult: '', runSuccess: false, runState: '',
         runLog: [],
+        seenEventKeys: [],
         runningMode: '',
+        lastEventSequence: 0,
         operationId: null,
         operationStatus: '',
         operationTransport: '',
@@ -227,6 +239,9 @@ function campaignShow() {
         operationStreamUrl: '',
         operationStreamController: null,
         operationPollTimer: null,
+        operationStartedAt: '',
+        operationCompletedAt: '',
+        elapsedTimer: null,
         campaignChecklistByMode: checklistDefinitions,
         campaignChecklist: [],
 
@@ -243,12 +258,53 @@ function campaignShow() {
 
         cloneChecklist(mode) {
             const definitions = this.campaignChecklistByMode?.[mode] || [];
-            return JSON.parse(JSON.stringify(definitions));
+            return JSON.parse(JSON.stringify(definitions)).map((item) => ({
+                ...item,
+                live_detail: item.live_detail || '',
+                event_lines: [],
+            }));
+        },
+
+        operationElapsedText() {
+            const startedAt = this.operationStartedAt ? new Date(this.operationStartedAt) : null;
+            if (!startedAt || Number.isNaN(startedAt.getTime())) {
+                return '00:00';
+            }
+
+            const endedAt = this.operationCompletedAt ? new Date(this.operationCompletedAt) : new Date();
+            const seconds = Math.max(0, Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000));
+            const minutesPart = String(Math.floor(seconds / 60)).padStart(2, '0');
+            const secondsPart = String(seconds % 60).padStart(2, '0');
+
+            return minutesPart + ':' + secondsPart;
+        },
+
+        syncElapsedTimer() {
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+                this.elapsedTimer = null;
+            }
+
+            if (!this.operationStartedAt || this.operationCompletedAt) {
+                return;
+            }
+
+            this.elapsedTimer = setInterval(() => {
+                if (this.operationCompletedAt) {
+                    clearInterval(this.elapsedTimer);
+                    this.elapsedTimer = null;
+                    return;
+                }
+
+                this.operationStartedAt = this.operationStartedAt;
+            }, 1000);
         },
 
         resetOperationState() {
             this.running = false;
             this.runningMode = '';
+            this.seenEventKeys = [];
+            this.lastEventSequence = 0;
             this.operationId = null;
             this.operationStatus = '';
             this.operationTransport = '';
@@ -257,6 +313,8 @@ function campaignShow() {
             this.operationLabel = '';
             this.operationShowUrl = '';
             this.operationStreamUrl = '';
+            this.operationStartedAt = '';
+            this.operationCompletedAt = '';
             if (this.operationStreamController) {
                 try { this.operationStreamController.abort(); } catch (e) {}
             }
@@ -265,9 +323,65 @@ function campaignShow() {
                 clearTimeout(this.operationPollTimer);
             }
             this.operationPollTimer = null;
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+            }
+            this.elapsedTimer = null;
+        },
+
+        appendChecklistLine(item, line) {
+            const normalized = (line || '').trim();
+            if (!normalized) return;
+
+            item.event_lines = Array.isArray(item.event_lines) ? item.event_lines : [];
+            if (item.event_lines[item.event_lines.length - 1] === normalized) {
+                return;
+            }
+
+            item.event_lines.push(normalized);
+            if (item.event_lines.length > 12) {
+                item.event_lines = item.event_lines.slice(-12);
+            }
+        },
+
+        recordChecklistEvent(item, entry) {
+            this.appendChecklistLine(item, (entry.message || '') + (entry.details ? ' — ' + entry.details : ''));
+
+            [
+                ['url', 'URL'],
+                ['source', 'Source'],
+                ['search_term', 'Search'],
+                ['author', 'Author'],
+                ['hostname', 'Host'],
+                ['connection_label', 'Connection'],
+                ['connection_mode', 'Mode'],
+                ['source_domain', 'Domain'],
+                ['source_type', 'Type'],
+                ['alt_text', 'Alt'],
+                ['caption', 'Caption'],
+                ['wp_url', 'WP URL'],
+                ['media_id', 'Media ID'],
+            ].forEach(([key, label]) => {
+                const value = entry?.[key];
+                if (value !== undefined && value !== null && String(value).trim() !== '') {
+                    this.appendChecklistLine(item, label + ': ' + value);
+                }
+            });
         },
 
         pushRunLog(entry) {
+            const sequence = Number(entry.id || entry.sequence_no || 0);
+            const eventKey = entry.client_event_id || [sequence, entry.stage || '', entry.substage || '', entry.message || ''].join('|');
+            if (this.seenEventKeys.includes(eventKey)) {
+                return;
+            }
+            this.seenEventKeys.push(eventKey);
+            if (this.seenEventKeys.length > 1200) {
+                this.seenEventKeys = this.seenEventKeys.slice(-800);
+            }
+            if (sequence > this.lastEventSequence) {
+                this.lastEventSequence = sequence;
+            }
             this.runLog.push({
                 time: entry.time || entry.captured_at || new Date().toLocaleTimeString(),
                 type: entry.type || 'info',
@@ -305,6 +419,7 @@ function campaignShow() {
             item.live_detail = entry.details
                 ? (entry.message + ' — ' + entry.details)
                 : entry.message;
+            this.recordChecklistEvent(item, entry);
 
             if (entry.type === 'error') {
                 item.status = 'failed';
@@ -328,9 +443,12 @@ function campaignShow() {
             this.operationTraceId = operation.trace_id || '';
             this.operationShowUrl = operation.show_url || '';
             this.operationStreamUrl = operation.stream_url || '';
+            this.operationStartedAt = operation.started_at || this.operationStartedAt || new Date().toISOString();
+            this.operationCompletedAt = operation.completed_at || '';
             this.operationCurrent = operation.last_stage
                 ? ('Current: ' + operation.last_stage.replace(/_/g, ' ') + (operation.last_message ? ' — ' + operation.last_message : ''))
                 : (operation.last_message || '');
+            this.syncElapsedTimer();
         },
 
         finishChecklist(success, message, resultPayload = null) {
@@ -343,12 +461,22 @@ function campaignShow() {
                 });
             }
             this.runSuccess = success;
+            this.runState = success ? 'success' : 'error';
+            this.operationCompletedAt = this.operationCompletedAt || new Date().toISOString();
             this.runResult = message || (success ? 'Campaign run complete.' : 'Campaign run failed.');
             if (resultPayload?.article_url) {
                 this.runResult += ' — Article: ' + resultPayload.article_url;
             }
             if (resultPayload?.wp_post_url) {
                 this.runResult += ' — WP: ' + resultPayload.wp_post_url;
+            }
+            if (this.operationPollTimer) {
+                clearTimeout(this.operationPollTimer);
+                this.operationPollTimer = null;
+            }
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+                this.elapsedTimer = null;
             }
         },
 
@@ -359,9 +487,13 @@ function campaignShow() {
             this.runningMode = mode;
             this.runResult = '';
             this.runSuccess = false;
+            this.runState = '';
             this.runLog = [];
             this.operationLabel = label;
             this.campaignChecklist = this.cloneChecklist(mode);
+            this.operationStartedAt = new Date().toISOString();
+            this.operationCompletedAt = '';
+            this.syncElapsedTimer();
             try {
                 const r = await fetch('{{ route("campaigns.start-operation", $campaign->id) }}', { method: 'POST', headers, body: JSON.stringify({ mode }) });
                 const d = await r.json();
@@ -370,10 +502,14 @@ function campaignShow() {
                 }
                 this.campaignChecklist = d.checklist || this.campaignChecklist;
                 this.applyOperation(d.operation);
+                this.runSuccess = true;
+                this.runState = 'info';
                 this.runResult = d.message || '';
+                this.pollOperation(1000);
                 await this.startStreaming();
             } catch(e) {
                 this.runSuccess = false;
+                this.runState = 'error';
                 this.runResult = 'Error: ' + e.message;
                 this.running = false;
             }
@@ -453,26 +589,29 @@ function campaignShow() {
             if (this.operationPollTimer) clearTimeout(this.operationPollTimer);
             this.operationPollTimer = setTimeout(async () => {
                 try {
-                    const resp = await fetch(this.operationShowUrl, { headers: { 'Accept': 'application/json' } });
+                    const pollUrl = new URL(this.operationShowUrl, window.location.origin);
+                    if (this.lastEventSequence > 0) {
+                        pollUrl.searchParams.set('after_sequence', String(this.lastEventSequence));
+                    }
+                    pollUrl.searchParams.set('limit', '200');
+                    const resp = await fetch(pollUrl.toString(), { headers: { 'Accept': 'application/json' } });
                     const data = await resp.json();
                     if (!data.success) throw new Error(data.message || 'Polling failed');
                     if (data.operation) this.applyOperation(data.operation);
                     (data.events || []).forEach((event) => {
-                        if (!this.runLog.find(existing => existing.message === event.message && existing.stage === event.stage && existing.time === event.captured_at)) {
-                            this.pushRunLog(event);
-                            this.updateChecklistFromEvent(event);
-                        }
+                        this.pushRunLog(event);
+                        this.updateChecklistFromEvent(event);
                     });
                     if (['completed', 'failed'].includes(this.operationStatus)) {
                         const resultPayload = data.operation?.result_payload || {};
                         this.finishChecklist(this.operationStatus === 'completed', resultPayload.message || this.runResult, resultPayload);
                         return;
                     }
-                    this.pollOperation(1000);
+                    this.pollOperation(1500);
                 } catch (e) {
-                    this.running = false;
-                    this.runSuccess = false;
-                    this.runResult = 'Polling error: ' + e.message;
+                    this.runState = 'info';
+                    this.runResult = 'Waiting for live updates… ' + e.message;
+                    this.pollOperation(2500);
                 }
             }, delay);
         },
