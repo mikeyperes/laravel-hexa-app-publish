@@ -3,10 +3,11 @@
 namespace hexa_app_publish\Publishing\Schedule\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_app_publish\Publishing\Sites\Models\PublishSite;
+use hexa_package_calendar\Calendar\Feeds\Data\CalendarFeedRequest;
+use hexa_package_calendar\Calendar\Feeds\Services\CalendarFeedService;
+use hexa_package_calendar\Calendar\UI\Services\CalendarPageBuilderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Illuminate\View\View;
 
 /**
@@ -19,13 +20,16 @@ class ScheduleController extends Controller
      *
      * @return View
      */
-    public function index(): View
+    public function index(CalendarPageBuilderService $pages): View
     {
-        $sites = PublishSite::orderBy('name')->get();
-
-        return view('app-publish::publishing.schedule.index', [
-            'sites' => $sites,
-        ]);
+        return view('app-publish::publishing.schedule.index', $pages->build('publish.schedule', [
+            'page_title' => 'Schedule',
+            'page_header' => 'Schedule - All Scheduled Posts',
+            'feed_url' => route('publish.schedule.fetch'),
+            'feed_method' => 'POST',
+            'fetch_label' => 'Fetch Scheduled Posts',
+            'info_banner_html' => 'Connect WordPress sites in the <a href="' . route('publish.sites.index') . '" class="underline font-medium">Sites</a> section to view scheduled posts here.',
+        ]));
     }
 
     /**
@@ -34,43 +38,10 @@ class ScheduleController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function fetchScheduled(Request $request): JsonResponse
+    public function fetchScheduled(Request $request, CalendarFeedService $feeds): JsonResponse
     {
-        $sites = PublishSite::whereNotNull('url')->get();
-        $scheduled = [];
+        $payload = $feeds->fetch('publish.schedule', CalendarFeedRequest::fromHttpRequest('publish.schedule', $request));
 
-        foreach ($sites as $site) {
-            try {
-                $apiUrl = rtrim($site->url, '/') . '/wp-json/wp/v2/posts?status=future&per_page=50';
-
-                $response = Http::withHeaders([
-                    'Authorization' => 'Basic ' . base64_encode($site->username . ':' . $site->app_password),
-                ])->timeout(10)->get($apiUrl);
-
-                if ($response->successful()) {
-                    $posts = $response->json();
-                    foreach ($posts as $post) {
-                        $scheduled[] = [
-                            'site_name'  => $site->name,
-                            'site_id'    => $site->id,
-                            'title'      => $post['title']['rendered'] ?? 'Untitled',
-                            'date'       => $post['date'] ?? null,
-                            'status'     => $post['status'] ?? 'future',
-                            'link'       => $post['link'] ?? '#',
-                            'wp_post_id' => $post['id'] ?? null,
-                        ];
-                    }
-                }
-            } catch (\Exception $e) {
-                // Skip sites that fail to connect
-                continue;
-            }
-        }
-
-        return response()->json([
-            'success'   => true,
-            'scheduled' => $scheduled,
-            'count'     => count($scheduled),
-        ]);
+        return response()->json($payload, $payload['success'] ? 200 : 422);
     }
 }

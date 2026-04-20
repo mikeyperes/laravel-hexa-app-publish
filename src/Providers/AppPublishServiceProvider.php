@@ -3,11 +3,13 @@
 namespace hexa_app_publish\Providers;
 
 use hexa_app_publish\Console\RunCampaignsCommand;
+use hexa_app_publish\Publishing\Schedule\Feeds\PublishScheduleCalendarFeed;
 use hexa_app_publish\Publishing\Uploads\Console\CleanupOrphanUploadsCommand;
 use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
 use hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm;
 use hexa_app_publish\Support\PublishListCatalog;
 use hexa_app_publish\Services\PublishService;
+use hexa_package_calendar\Calendar\Registry\Services\CalendarRegistryService;
 use hexa_core\CronManager\Services\CronManagerService;
 use hexa_core\Forms\Services\FormRegistryService;
 use hexa_core\ListRegistry\Services\ListService;
@@ -40,6 +42,8 @@ class AppPublishServiceProvider extends ServiceProvider
 
         $this->registerSidebarItems();
 
+        $this->registerCalendarSources();
+
         $this->registerPermissions();
 
         $this->registerListCategories();
@@ -51,6 +55,23 @@ class AppPublishServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([RunCampaignsCommand::class, CleanupOrphanUploadsCommand::class]);
         }
+    }
+
+    private function registerCalendarSources(): void
+    {
+        if (!class_exists(CalendarRegistryService::class)) {
+            return;
+        }
+
+        app(CalendarRegistryService::class)->register('publish.schedule', [
+            'label' => 'Publishing Schedule',
+            'title' => 'Schedule - All Scheduled Posts',
+            'description' => 'Connected WordPress scheduled posts across publishing sites.',
+            'provider' => PublishScheduleCalendarFeed::class,
+            'color' => '#3b82f6',
+            'empty_state' => 'No scheduled posts found. Click "Fetch Scheduled Posts" to check connected WordPress sites.',
+            'sort_order' => 10,
+        ]);
     }
 
     /**
