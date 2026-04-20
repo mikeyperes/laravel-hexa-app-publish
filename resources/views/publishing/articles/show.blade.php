@@ -80,17 +80,75 @@
         </div>
     </article>
 
+    {{-- Generation Breakdown —  AI usage, article, WordPress, source links --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200" x-data="{ open: true }">
-        <button @click="open = !open" class="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 rounded-xl"><h3 class="font-semibold text-gray-700">Publishing Details</h3><svg class="w-5 h-5 text-gray-400 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg></button>
-        <div x-show="open" x-cloak class="px-5 pb-5 grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
-            <div class="flex gap-2"><span class="text-gray-400 w-24">Article ID</span><span class="text-gray-800 font-mono">#{{ $article->id }} / {{ $article->article_id }}</span></div>
-            <div class="flex gap-2"><span class="text-gray-400 w-24">WP Post ID</span><span class="text-gray-800 font-mono">{{ $article->wp_post_id ?? '—' }}</span></div>
-            <div class="flex gap-2"><span class="text-gray-400 w-24">WP URL</span>@if($article->wp_post_url)<a href="{{ $article->wp_post_url }}" target="_blank" class="text-blue-600 hover:underline break-all">{{ $article->wp_post_url }}</a>@else —@endif</div>
-            <div class="flex gap-2"><span class="text-gray-400 w-24">Created By</span><span class="text-gray-800">{{ $article->creator?->name ?? '—' }}</span></div>
-            <div class="flex gap-2"><span class="text-gray-400 w-24">Created</span><span class="text-gray-800">{{ $article->created_at ? $article->created_at->setTimezone($tz)->format('M j, Y g:i A') : '—' }}</span></div>
-            <div class="flex gap-2"><span class="text-gray-400 w-24">Published</span><span class="text-gray-800">{{ $article->published_at ? $article->published_at->setTimezone($tz)->format('M j, Y g:i A') : '—' }}</span></div>
-            <div class="flex gap-2"><span class="text-gray-400 w-24">IP</span><span class="text-gray-800 font-mono">{{ $article->user_ip ?? '—' }}</span></div>
-            <div class="flex gap-2"><span class="text-gray-400 w-24">Delivery</span><span class="text-gray-800">{{ $article->delivery_mode ?? '—' }}</span></div>
+        <button @click="open = !open" class="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 rounded-xl">
+            <div class="flex items-center gap-2">
+                <h3 class="font-semibold text-gray-700">Generation Breakdown</h3>
+                @if($article->ai_cost)<span class="text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5">${{ number_format($article->ai_cost, 4) }}</span>@endif
+                @if($article->ai_engine_used)<span class="text-[10px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-100 rounded px-1.5 py-0.5">{{ $article->ai_engine_used }}</span>@endif
+            </div>
+            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div x-show="open" x-cloak class="px-5 pb-5 space-y-5">
+
+            {{-- AI Generation --}}
+            <div>
+                <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-gray-100">AI Generation</div>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-3 text-xs">
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Provider</div><div class="text-gray-800 font-medium mt-0.5 break-words">{{ $article->ai_provider ?? '—' }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Model</div><div class="text-gray-800 font-medium mt-0.5 font-mono break-words">{{ $article->ai_engine_used ?? '—' }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Input Tokens</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->ai_tokens_input ? number_format($article->ai_tokens_input) : '—' }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Output Tokens</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->ai_tokens_output ? number_format($article->ai_tokens_output) : '—' }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Cost</div><div class="text-emerald-700 font-semibold mt-0.5 font-mono">{{ $article->ai_cost ? '$' . number_format($article->ai_cost, 4) : '—' }}</div></div>
+                </div>
+            </div>
+
+            {{-- Article --}}
+            <div>
+                <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-gray-100">Article</div>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-3 text-xs">
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Article ID</div><div class="text-gray-800 font-medium mt-0.5 font-mono">#{{ $article->id }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Public Ref</div><div class="text-gray-800 font-medium mt-0.5 font-mono break-words">{{ $article->article_id ?? '—' }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Type</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->article_type ?? '—' }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Status</div><div class="text-gray-800 font-medium mt-0.5">{{ ucfirst($article->status ?? '—') }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Word Count</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->word_count ? number_format($article->word_count) : '—' }}</div></div>
+                </div>
+            </div>
+
+            {{-- WordPress --}}
+            <div>
+                <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-gray-100">WordPress</div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-xs">
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Delivery Mode</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->delivery_mode ?? '—' }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">WP Post ID</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->wp_post_id ?? '—' }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">WP Status</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->wp_status ?? '—' }}</div></div>
+                    <div class="min-w-0 md:col-span-1"><div class="text-gray-400 text-[11px]">Published</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->published_at ? $article->published_at->setTimezone($tz)->format('M j, Y g:i A') : '—' }}</div></div>
+                    <div class="min-w-0 col-span-2 md:col-span-4"><div class="text-gray-400 text-[11px]">WP URL</div><div class="text-gray-800 font-medium mt-0.5 break-all">@if($article->wp_post_url)<a href="{{ $article->wp_post_url }}" target="_blank" class="text-blue-600 hover:underline">{{ $article->wp_post_url }}</a>@else —@endif</div></div>
+                </div>
+            </div>
+
+            {{-- Source links --}}
+            <div>
+                <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-gray-100">Source</div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-xs">
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Site</div><div class="text-gray-800 font-medium mt-0.5 break-words">@if($article->site)<a href="{{ $article->site->url }}" target="_blank" class="text-blue-600 hover:underline">{{ $article->site->name }}</a>@else —@endif</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Campaign</div><div class="text-gray-800 font-medium mt-0.5">@if($article->publish_campaign_id)<a href="{{ route('campaigns.show', $article->publish_campaign_id) }}" class="text-blue-600 hover:underline">#{{ $article->publish_campaign_id }}</a>@else —@endif</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Template</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->publish_template_id ? '#' . $article->publish_template_id : '—' }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Preset</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->preset_id ? '#' . $article->preset_id : '—' }}</div></div>
+                </div>
+            </div>
+
+            {{-- Audit --}}
+            <div>
+                <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-gray-100">Audit</div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-xs">
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Created By</div><div class="text-gray-800 font-medium mt-0.5 break-words">{{ $article->creator?->name ?? $article->author ?? '—' }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Created</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->created_at ? $article->created_at->setTimezone($tz)->format('M j, Y g:i A') : '—' }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Updated</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->updated_at ? $article->updated_at->setTimezone($tz)->format('M j, Y g:i A') : '—' }}</div></div>
+                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">IP Address</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->user_ip ?? '—' }}</div></div>
+                </div>
+            </div>
         </div>
     </div>
 
