@@ -212,6 +212,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
                     body: JSON.stringify({
+                        draft_id: this.draftId || null,
                         source_texts: sourceTexts,
                         template_id: this.selectedTemplateId || null,
                         preset_id: this.selectedPresetId || null,
@@ -336,6 +337,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
                     body: JSON.stringify({
+                        draft_id: this.draftId || null,
                         source_texts: [currentContent],
                         template_id: this.selectedTemplateId || null,
                         preset_id: this.selectedPresetId || null,

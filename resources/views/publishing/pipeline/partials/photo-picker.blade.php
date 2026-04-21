@@ -11,6 +11,11 @@
 
 <div data-photo-picker x-data="{
     pickerId: '{{ $pickerId }}',
+    draftId: (() => {
+        const root = document.querySelector('[data-publish-draft-id]');
+        const raw = root ? root.getAttribute('data-publish-draft-id') : '';
+        return raw && raw !== '0' ? raw : null;
+    })(),
     stockQuery: '',
     googleQuery: '',
     stockResults: [],
@@ -41,7 +46,7 @@
             const resp = await fetch('{{ route('publish.search.images.post') }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
-                body: JSON.stringify({ query: this.stockQuery, per_page: 4, page: this.stockPage, sources: ['pexels', 'unsplash', 'pixabay'] })
+                body: JSON.stringify({ query: this.stockQuery, per_page: 4, page: this.stockPage, sources: ['pexels', 'unsplash', 'pixabay'], draft_id: this.draftId })
             });
             const data = await resp.json();
             const photos = data.data?.photos || [];
@@ -64,7 +69,7 @@
             const resp = await fetch('{{ route('publish.search.google-images') }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
-                body: JSON.stringify({ query: this.googleQuery, per_page: 12, start: (this.googlePage - 1) * 12 })
+                body: JSON.stringify({ query: this.googleQuery, per_page: 12, start: (this.googlePage - 1) * 12, draft_id: this.draftId })
             });
             const data = await resp.json();
             this.googleTiming = Date.now() - start;

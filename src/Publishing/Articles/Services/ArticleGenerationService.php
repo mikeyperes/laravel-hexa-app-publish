@@ -3,6 +3,7 @@
 namespace hexa_app_publish\Publishing\Articles\Services;
 
 use hexa_app_publish\Quality\Detection\Models\AiActivityLog;
+use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Publishing\Settings\Models\PublishMasterSetting;
 use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
@@ -50,6 +51,12 @@ class ArticleGenerationService
     public function generate(array $sourceTexts, array $options = []): array
     {
         $model = $options['model'] ?? 'claude-sonnet-4-6';
+        $fallbackModels = collect((array) ($options['fallback_models'] ?? []))
+            ->map(fn ($candidate) => trim((string) $candidate))
+            ->filter()
+            ->reject(fn ($candidate) => $candidate === $model)
+            ->values()
+            ->all();
         $templateId = $options['template_id'] ?? null;
         $presetId = $options['preset_id'] ?? null;
         $articleType = $this->resolveArticleType($options['article_type'] ?? null, $templateId);
@@ -59,6 +66,7 @@ class ArticleGenerationService
         $changeRequest = $options['change_request'] ?? null;
         $prSubjectContext = $options['pr_subject_context'] ?? null;
         $agent = $options['agent'] ?? 'spin';
+        $articleId = isset($options['article_id']) ? (int) $options['article_id'] : null;
 
         // Build the system prompt
         $systemPrompt = $this->buildPrompt(
@@ -83,59 +91,58 @@ class ArticleGenerationService
             $systemPrompt .= "\n\n" . $supportingUrlInstruction;
         }
 
-        // Call AI — route to correct provider
         $catalog = app(AiModelCatalog::class);
         $provider = $catalog->providerForModel($model);
+        $result = null;
+        $lastError = null;
+        $attemptedModels = [];
 
-        if ($provider === 'grok') {
-            if (!class_exists(\hexa_package_grok\Services\GrokService::class)) {
-                return [
-                    'success' => false,
-                    'message' => 'Grok package not available',
-                    'html' => '', 'text' => '', 'word_count' => 0, 'usage' => [],
-                    'model' => $model, 'cost' => 0, 'photo_suggestions' => [],
-                    'featured_image' => null, 'metadata' => [], 'resolved_prompt' => $systemPrompt,
-                ];
+        foreach (array_values(array_unique(array_merge([$model], $fallbackModels))) as $candidateModel) {
+            $attemptedModels[] = $candidateModel;
+            $provider = $catalog->providerForModel($candidateModel);
+            $result = $this->callProvider($provider, $candidateModel, $systemPrompt, !empty($options['web_research']));
+            app(ArticleActivityService::class)->record($articleId, [
+                'activity_group' => 'ai:' . ($agent ?: 'spin'),
+                'activity_type' => 'ai',
+                'stage' => 'generation',
+                'substage' => (($result['success'] ?? false) ? 'attempt_ok' : 'attempt_failed'),
+                'status' => (($result['success'] ?? false) ? 'success' : 'failed'),
+                'provider' => $provider,
+                'model' => $candidateModel,
+                'agent' => $agent,
+                'method' => 'chat',
+                'attempt_no' => count($attemptedModels),
+                'is_retry' => count($attemptedModels) > 1,
+                'success' => (bool) ($result['success'] ?? false),
+                'message' => $result['message'] ?? null,
+                'request_payload' => [
+                    'prompt' => $systemPrompt,
+                    'web_research' => !empty($options['web_research']),
+                    'supporting_url_type' => $supportingUrlType,
+                    'fallback_models' => $fallbackModels,
+                ],
+                'response_payload' => [
+                    'usage' => $result['data']['usage'] ?? [],
+                    'model' => $result['data']['model'] ?? $candidateModel,
+                    'content_preview' => Str::limit((string) ($result['data']['content'] ?? ''), 4000, ''),
+                ],
+            ]);
+            if (($result['success'] ?? false) === true) {
+                $model = $candidateModel;
+                break;
             }
-            $grok = app(\hexa_package_grok\Services\GrokService::class);
-            $result = $grok->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
-        } elseif ($provider === 'openai') {
-            if (!class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)) {
-                return [
-                    'success' => false,
-                    'message' => 'ChatGPT package not available',
-                    'html' => '', 'text' => '', 'word_count' => 0, 'usage' => [],
-                    'model' => $model, 'cost' => 0, 'photo_suggestions' => [],
-                    'featured_image' => null, 'metadata' => [], 'resolved_prompt' => $systemPrompt,
-                ];
-            }
-            $chatgpt = app(\hexa_package_chatgpt\Services\ChatGptService::class);
-            $result = $chatgpt->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
-        } elseif ($provider === 'gemini') {
-            if (!class_exists(\hexa_package_gemini\Services\GeminiService::class)) {
-                return [
-                    'success' => false,
-                    'message' => 'Gemini package not available',
-                    'html' => '', 'text' => '', 'word_count' => 0, 'usage' => [],
-                    'model' => $model, 'cost' => 0, 'photo_suggestions' => [],
-                    'featured_image' => null, 'metadata' => [], 'resolved_prompt' => $systemPrompt,
-                ];
-            }
-            $gemini = app(\hexa_package_gemini\Services\GeminiService::class);
-            $result = !empty($options['web_research'])
-                ? $gemini->chatWithGoogleSearch($systemPrompt, 'Generate the article now.', $model, 0.7, 8192)
-                : $gemini->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
-        } else {
-            $result = $this->anthropic->chat($systemPrompt, 'Generate the article now.', $model, 8192);
+
+            $lastError = $result['message'] ?? 'AI call failed';
         }
 
-        if (!$result['success']) {
+        if (!$result || !$result['success']) {
             return [
                 'success' => false,
-                'message' => $result['message'] ?? 'AI call failed',
+                'message' => $lastError ?? ($result['message'] ?? 'AI call failed'),
                 'html' => '', 'text' => '', 'word_count' => 0, 'usage' => [],
                 'model' => $model, 'cost' => 0, 'photo_suggestions' => [],
                 'featured_image' => null, 'metadata' => [], 'resolved_prompt' => $systemPrompt,
+                'attempted_models' => $attemptedModels,
             ];
         }
 
@@ -161,7 +168,7 @@ class ArticleGenerationService
         $cost = $this->calculateCost($model, $usage);
 
         // Log AI activity
-        $this->logActivity($model, $agent, $systemPrompt, $content, $usage);
+        $this->logActivity($model, $agent, $systemPrompt, $content, $usage, $articleId);
 
         return [
             'success'          => true,
@@ -178,6 +185,7 @@ class ArticleGenerationService
             'featured_meta'    => $featuredImage['featured_meta'] ?? null,
             'metadata'         => $metadata['data'],
             'resolved_prompt'  => $systemPrompt,
+            'attempted_models' => $attemptedModels,
         ];
     }
 
@@ -275,7 +283,7 @@ class ArticleGenerationService
 
         // Template config
         $templateConfig = '';
-        $photoCount = '2-4';
+        $photoCount = '2-3';
         $template = null;
         $resolvedArticleType = $articleType;
         if ($templateId) {
@@ -284,11 +292,15 @@ class ArticleGenerationService
                 $parts = [];
                 $resolvedArticleType = $resolvedArticleType ?: $template->article_type;
                 if ($template->ai_prompt) $parts[] = $template->ai_prompt;
+                if ($template->headline_rules) $parts[] = "Headline rules: {$template->headline_rules}";
                 if ($template->tone) $parts[] = "Tone: " . (is_array($template->tone) ? implode(', ', $template->tone) : $template->tone);
                 if ($resolvedArticleType) $parts[] = "Article type: {$resolvedArticleType}";
                 if ($template->word_count_min || $template->word_count_max) $parts[] = "Target words: {$template->word_count_min}-{$template->word_count_max}";
+                if ($template->h2_notation) $parts[] = "H2 notation: {$template->h2_notation}";
                 $templateConfig = implode("\n", $parts);
-                if ($template->photos_per_article) $photoCount = (string) $template->photos_per_article;
+                $photoMin = max(1, (int) ($template->inline_photo_min ?: 2));
+                $photoMax = max($photoMin, (int) ($template->inline_photo_max ?: ($template->photos_per_article ?: 3)));
+                $photoCount = $photoMin === $photoMax ? (string) $photoMax : ($photoMin . '-' . $photoMax);
             }
         } elseif ($resolvedArticleType) {
             $templateConfig = "Article type: {$resolvedArticleType}";
@@ -343,7 +355,7 @@ class ArticleGenerationService
             ],
             '{photo_count}' => [
                 'value' => $photoCount,
-                'source' => $template && $template->photos_per_article ? "Template: {$template->name} → photos_per_article = {$photoCount}" : 'Default (2-4)',
+                'source' => $template ? "Template: {$template->name} → inline photos = {$photoCount}" : 'Default (2-3)',
             ],
             '{title_count}' => [
                 'value' => (string) $titleCount,
@@ -391,7 +403,9 @@ class ArticleGenerationService
             $result .= "\n\n=== ARTICLE TYPE CONTRACT ===\n" . $articleTypeContract;
             $log[] = ['shortcode' => '(article type)', 'source' => $resolvedArticleType ?: 'Empty', 'value' => $articleTypeContract];
         }
-        $result .= "\n\n" . $this->hardLinkSafetyRules() . "\n\n" . $this->hardStockPhotoRules();
+        $result .= "\n\n" . $this->h2NotationInstruction($template?->h2_notation ?? null)
+            . "\n\n" . $this->hardLinkSafetyRules()
+            . "\n\n" . $this->hardStockPhotoRules();
 
         $log[] = ['shortcode' => '(link safety)', 'source' => 'Hardcoded safeguard', 'value' => 'Require live canonical supporting URLs only.'];
         $log[] = ['shortcode' => '(stock photo safety)', 'source' => 'Hardcoded safeguard', 'value' => 'Never use article-specific names for generic stock photos.'];
@@ -439,7 +453,7 @@ class ArticleGenerationService
      */
     private function defaultPrompt(): string
     {
-        return "You are a professional content writer. Rewrite the provided source articles into a single new unique article.\n\n{custom_instructions}\n\n{wordpress_guidelines}\n\n{spinning_guidelines}\n\n{preset_config}\n\n{template_config}\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include the article title anywhere in the body — no <h1> and no title-like <h2> at the top. The title is handled separately. Start the body directly with the first paragraph of content. Use <h2> ONLY for section subheadings within the article, not as a title. Use <p> for paragraphs. Use <strong> and <em> for emphasis. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links. Do NOT output markdown.\n\nSUPPORTING LINKS: Include up to 3-5 relevant external links only when you can use real live canonical URLs. Never invent a URL, never guess a slug, and never use homepages, search pages, topic pages, category pages, author pages, archive pages, or redirect/tracking links. If you are not sure a supporting URL is real and live, omit it.\n\nPHOTO PLACEMENT: Insert HTML comments for photos at natural breaking points. Use this EXACT format:\n<!-- PHOTO: stock photo search term | alt text describing what the stock photo shows | caption describing the photo scene and how it relates to the topic | seo-filename -->\n\nIMPORTANT: These are STOCK PHOTOS, not real photos of the people in the article. The alt text and caption must describe the visual content of the stock photo, NOT name or reference specific people from the article unless the stock image source clearly identifies that exact real person.\n\nPlace {photo_count} photo markers.\n\nFEATURED IMAGE: Output one line:\n<!-- FEATURED: stock photo search term | alt text describing the stock photo | caption describing the photo scene | seo-filename -->\n\nMETADATA: At the very end of your response, output a JSON block:\n<!-- METADATA: {\"titles\":[\"title1\",\"title2\",...{title_count} titles],\"categories\":[\"cat1\",\"cat2\",...{category_count} categories],\"tags\":[\"tag1\",\"tag2\",...{tag_count} tags],\"description\":\"A 1-2 sentence SEO meta description summarizing the article\"} -->\n\nThe titles should be compelling and SEO-friendly. Categories are broad topics. Tags are specific keywords. Description is a concise meta description for SEO (under 160 characters).\n\n{source_articles}";
+        return "You are a professional content writer. Rewrite the provided source articles into a single new unique article.\n\n{custom_instructions}\n\n{wordpress_guidelines}\n\n{spinning_guidelines}\n\n{preset_config}\n\n{template_config}\n\nCRITICAL OUTPUT FORMAT: You MUST output valid HTML only. Do NOT include the article title anywhere in the body — no <h1> and no title-like <h2> at the top. The title is handled separately. Start the body directly with the first paragraph of content. Use <h2> ONLY for section subheadings within the article, not as a title. Use <p> for paragraphs. Use <strong> and <em> for emphasis. Use <ul>/<ol>/<li> for lists. Use <blockquote> for quotes. Use <a href=\"\"> for links. Do NOT output markdown.\n\nSUPPORTING LINKS: Include up to 3-5 relevant external links only when you can use real live canonical URLs. Never invent a URL, never guess a slug, and never use homepages, search pages, topic pages, category pages, author pages, archive pages, or redirect/tracking links. If you are not sure a supporting URL is real and live, omit it.\n\nPHOTO PLACEMENT: Insert HTML comments for photos at natural breaking points. Use this EXACT format:\n<!-- PHOTO: stock photo search term | alt text describing what the stock photo shows | caption describing the photo scene and how it relates to the topic | seo-filename -->\n\nIMPORTANT: These are STOCK PHOTOS, not real photos of the people in the article. The alt text and caption must describe the visual content of the stock photo, NOT name or reference specific people from the article unless the stock image source clearly identifies that exact real person.\n\nPlace {photo_count} photo markers.\n\nFEATURED IMAGE: Output one line:\n<!-- FEATURED: stock photo search term | alt text describing the stock photo | caption describing the photo scene | seo-filename -->\n\nMETADATA: At the very end of your response, output a JSON block:\n<!-- METADATA: {\"titles\":[\"title1\",\"title2\",...{title_count} titles],\"categories\":[\"cat1\",\"cat2\",...{category_count} categories],\"tags\":[\"tag1\",\"tag2\",...{tag_count} tags],\"description\":\"Short SEO summary of the article\"} -->\n\nThe titles should be compelling and SEO-friendly. Categories are broad topics. Tags are specific keywords. Description must be clean SEO copy only. Do not include instructions, parenthetical notes, or character-count reminders. Keep it under 160 characters.\n\n{source_articles}";
     }
 
     private function hardLinkSafetyRules(): string
@@ -449,13 +463,22 @@ class ArticleGenerationService
 
     private function hardStockPhotoRules(): string
     {
-        return "STOCK PHOTO RULES: For PHOTO and FEATURED metadata, describe only what a generic stock photo visibly shows. Do not use article-specific names or identities unless the image source itself clearly identifies that exact real person.";
+        return "STOCK PHOTO RULES: FEATURED IMAGE must always be suitable for Google image search. INLINE PHOTOS may be generic stock or Google image results. For PHOTO and FEATURED metadata, describe only what a generic stock photo visibly shows. Do not use article-specific names or identities unless the image source itself clearly identifies that exact real person.";
+    }
+
+    private function h2NotationInstruction(?string $notation): string
+    {
+        return match ($notation) {
+            'sentence_case' => 'H2 RULES: All H2 subheadings must use sentence case.',
+            'title_case' => 'H2 RULES: All H2 subheadings must use title case.',
+            default => 'H2 RULES: All H2 subheadings must use Capital Case.',
+        };
     }
 
     private function articleTypeInstruction(?string $articleType): string
     {
         return match ($articleType) {
-            'editorial' => 'This article must read as an editorial analysis, not a source roundup. Build one coherent thesis from the source material. The title must sound like a clear analytical angle or argument, not a pasted source headline. Do not reuse source titles verbatim, do not mention publisher names in the title, and do not output list-like or stitched headlines.',
+            'editorial' => 'This article must read as an editorial analysis, not a source roundup. Build one coherent thesis from the source material. If the sources are broad or partially mismatched, ignore outlier details and focus on the strongest shared development or argument instead of forcing every source into the same piece. The title must sound like a clear analytical angle or argument, not a pasted source headline. Do not reuse source titles verbatim, do not mention publisher names in the title, and do not output list-like or stitched headlines.',
             'opinion' => 'This article must read as opinion. Lead with a clear point of view, defend it with evidence, and make the stance obvious in both the title and opening. Do not drift into neutral roundup language.',
             'news-report' => 'This article must read as straight news reporting. The title and opening paragraph must center on the concrete development, identify what happened, and avoid feature-style thesis language or opinion framing.',
             'local-news' => 'This article must read as local news. The headline and lede must clearly ground the story in the place, people, and immediate development. Avoid generic national-analysis framing.',
@@ -464,6 +487,39 @@ class ArticleGenerationService
             'pr-full-feature' => 'This article must read as a polished feature with a coherent narrative arc, not as a stitched source summary.',
             default => '',
         };
+    }
+
+    private function callProvider(string $provider, string $model, string $systemPrompt, bool $webResearch): array
+    {
+        if ($provider === 'grok') {
+            if (!class_exists(\hexa_package_grok\Services\GrokService::class)) {
+                return ['success' => false, 'message' => 'Grok package not available'];
+            }
+
+            return app(\hexa_package_grok\Services\GrokService::class)->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
+        }
+
+        if ($provider === 'openai') {
+            if (!class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)) {
+                return ['success' => false, 'message' => 'ChatGPT package not available'];
+            }
+
+            return app(\hexa_package_chatgpt\Services\ChatGptService::class)->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
+        }
+
+        if ($provider === 'gemini') {
+            if (!class_exists(\hexa_package_gemini\Services\GeminiService::class)) {
+                return ['success' => false, 'message' => 'Gemini package not available'];
+            }
+
+            $gemini = app(\hexa_package_gemini\Services\GeminiService::class);
+
+            return $webResearch
+                ? $gemini->chatWithGoogleSearch($systemPrompt, 'Generate the article now.', $model, 0.7, 8192)
+                : $gemini->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
+        }
+
+        return $this->anthropic->chat($systemPrompt, 'Generate the article now.', $model, 8192);
     }
 
     /**
@@ -554,9 +610,8 @@ class ArticleGenerationService
                     'suggestedFilename' => $seoFilename,
                     'position' => $i,
                 ];
-                $placeholder = '<div class="photo-placeholder" contenteditable="false" data-idx="' . $i . '" data-search="' . htmlspecialchars($searchTerm) . '" data-caption="' . htmlspecialchars($altText) . '" style="border:2px dashed #a78bfa;background:#f5f3ff;border-radius:8px;padding:12px 16px;margin:16px 0;cursor:pointer;text-align:center;color:#7c3aed;font-size:14px;">'
-                    . '<div style="display:inline-block;width:20px;height:20px;border:2px solid #a78bfa;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;"></div>'
-                    . '<span style="font-size:13px;margin-left:8px;">Loading photo...</span>'
+                $placeholder = '<div class="photo-placeholder" contenteditable="false" data-idx="' . $i . '" data-search="' . htmlspecialchars($searchTerm) . '" data-caption="' . htmlspecialchars($altText) . '" style="border:2px dashed #a78bfa;background:#f5f3ff;border-radius:8px;padding:12px 16px;margin:16px 0;cursor:pointer;text-align:center;color:#7c3aed;font-size:13px;">'
+                    . 'Loading photo...'
                     . '</div>';
                 $content = preg_replace('/<!--\s*PHOTO:\s*' . preg_quote($match[1], '/') . '\s*-->/', $placeholder, $content, 1);
             }
@@ -639,7 +694,7 @@ class ArticleGenerationService
         }
 
         $metadata['titles'] = $titles;
-        $metadata['description'] = trim((string) ($metadata['description'] ?? ''));
+        $metadata['description'] = $this->normalizeDescriptionText((string) ($metadata['description'] ?? ''));
 
         return $metadata;
     }
@@ -649,6 +704,34 @@ class ArticleGenerationService
         $title = html_entity_decode(strip_tags($title), ENT_QUOTES, 'UTF-8');
         $title = preg_replace('/\s+/', ' ', $title);
         return trim((string) $title);
+    }
+
+    private function normalizeDescriptionText(string $description): string
+    {
+        $description = html_entity_decode(strip_tags($description), ENT_QUOTES, 'UTF-8');
+        $description = preg_replace('/\bseo meta description\b[:\s-]*/i', '', $description);
+        $description = preg_replace('/\(\s*under\s*\d+\s*characters?\s*\)/i', '', $description);
+        $description = preg_replace('/\(\s*max(?:imum)?\s*\d+\s*characters?\s*\)/i', '', $description);
+        $description = preg_replace('/\bunder\s*\d+\s*characters?\b/i', '', $description);
+        $description = preg_replace('/\b(?:a|an)\s+1-?2 sentence SEO meta description summarizing the article\b/i', '', $description);
+        $description = preg_replace('/\s+/', ' ', (string) $description);
+        $description = trim((string) $description, " \t\n\r\0\x0B\"'()-");
+
+        if ($description === '') {
+            return '';
+        }
+
+        if (mb_strlen($description) <= 160) {
+            return $description;
+        }
+
+        $truncated = mb_substr($description, 0, 160);
+        $lastSpace = mb_strrpos($truncated, ' ');
+        if ($lastSpace !== false && $lastSpace >= 80) {
+            $truncated = mb_substr($truncated, 0, $lastSpace);
+        }
+
+        return trim($truncated, " \t\n\r\0\x0B,;:-");
     }
 
     private function titleMatchesArticleType(string $title, ?string $articleType, array $sourceTitles): bool
@@ -774,7 +857,7 @@ class ArticleGenerationService
      * @param array $usage
      * @return void
      */
-    private function logActivity(string $model, string $agent, string $systemPrompt, string $content, array $usage): void
+    private function logActivity(string $model, string $agent, string $systemPrompt, string $content, array $usage, ?int $articleId = null): void
     {
         $catalog = app(AiModelCatalog::class);
         $provider = $catalog->providerForModel($model);
@@ -788,6 +871,7 @@ class ArticleGenerationService
         };
 
         AiActivityLog::logCall([
+            'publish_article_id'  => $articleId,
             'provider'          => $provider,
             'model'             => $model,
             'agent'             => $agent,

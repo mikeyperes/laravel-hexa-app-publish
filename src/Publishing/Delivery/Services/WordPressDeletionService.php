@@ -3,6 +3,7 @@
 namespace hexa_app_publish\Publishing\Delivery\Services;
 
 use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
+use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
@@ -19,13 +20,15 @@ use Illuminate\Support\Facades\Http;
 class WordPressDeletionService
 {
     protected WpToolkitService $wptoolkit;
+    protected ArticleActivityService $activities;
 
     /**
      * @param WpToolkitService $wptoolkit
      */
-    public function __construct(WpToolkitService $wptoolkit)
+    public function __construct(WpToolkitService $wptoolkit, ArticleActivityService $activities)
     {
         $this->wptoolkit = $wptoolkit;
+        $this->activities = $activities;
     }
 
     /**
@@ -77,17 +80,42 @@ class WordPressDeletionService
             }
         }
 
-        // Delete from local DB
-        $log[] = ['type' => 'step', 'message' => 'Deleting local article #' . $article->id . '...'];
-        $article->delete();
-        $log[] = ['type' => 'success', 'message' => 'Article deleted from database.'];
+        // Move article to deleted/archive state instead of removing the DB row.
+        $log[] = ['type' => 'step', 'message' => 'Archiving local article #' . $article->id . '...'];
+        $beforeStatus = $article->status;
+        $article->update([
+            'status' => 'deleted',
+            'wp_status' => $hasWpContent ? 'deleted' : $article->wp_status,
+            'notes' => trim(implode("\n\n", array_filter([
+                (string) $article->notes,
+                '[Archived ' . now()->toDateTimeString() . '] Article removed from active listings and kept for audit history.',
+            ]))),
+        ]);
+        $this->activities->record($article, [
+            'activity_group' => 'lifecycle:' . ($article->article_id ?: $article->id),
+            'activity_type' => 'lifecycle',
+            'stage' => 'article',
+            'substage' => 'archived',
+            'status' => 'deleted',
+            'success' => true,
+            'title' => $article->title,
+            'url' => $postUrl,
+            'message' => 'Article moved to deleted archive.',
+            'meta' => [
+                'before_status' => $beforeStatus,
+                'after_status' => $article->status,
+                'had_wordpress_content' => $hasWpContent,
+                'deleted_urls' => $deletedUrls,
+            ],
+        ]);
+        $log[] = ['type' => 'success', 'message' => 'Article moved to deleted archive and preserved for audits.'];
 
         // Add deleted URLs for verification
         if (!empty($deletedUrls)) {
             $log[] = ['type' => 'info', 'message' => 'Deleted URLs — click to verify 404:', 'urls' => $deletedUrls];
         }
 
-        hexaLog('publish', 'article_deleted', 'Article #' . $article->id . ' deleted' . ($hasWpContent ? ' (including WP content)' : ''));
+        hexaLog('publish', 'article_deleted', 'Article #' . $article->id . ' archived' . ($hasWpContent ? ' (including WP content)' : ''));
 
         return ['success' => true, 'log' => $log];
     }

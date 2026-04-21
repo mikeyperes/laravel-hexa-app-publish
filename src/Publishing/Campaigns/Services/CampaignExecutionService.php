@@ -5,12 +5,14 @@ namespace hexa_app_publish\Publishing\Campaigns\Services;
 use Carbon\Carbon;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
+use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
 use hexa_app_publish\Publishing\Articles\Services\ArticlePersistenceService;
 use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
 use hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService;
 use hexa_app_publish\Publishing\Delivery\Services\WordPressPreparationService;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
 /**
@@ -32,7 +34,8 @@ class CampaignExecutionService
         protected CampaignDiscoveryService $discoveryService,
         protected CampaignScheduleService $scheduleService,
         protected CampaignModeResolver $modeResolver,
-        protected CampaignPhotoAutomationService $photoAutomation
+        protected CampaignPhotoAutomationService $photoAutomation,
+        protected ArticleActivityService $activities,
     ) {
     }
 
@@ -79,9 +82,26 @@ class CampaignExecutionService
         ?callable $onProgress
     ): array {
         $log = [];
-        $emit = function (string $type, string $message, array $extra = []) use (&$log, $onProgress): void {
+        $trackedArticle = $article;
+        $emit = function (string $type, string $message, array $extra = []) use (&$log, $onProgress, &$trackedArticle): void {
             $entry = array_merge($this->entry($type, $message), $extra);
             $log[] = $entry;
+            if ($trackedArticle) {
+                $this->activities->record($trackedArticle, [
+                    'activity_group' => 'campaign-run:' . ($trackedArticle->article_id ?: $trackedArticle->id),
+                    'activity_type' => 'operation',
+                    'stage' => $extra['stage'] ?? 'campaign',
+                    'substage' => $extra['substage'] ?? null,
+                    'status' => $type,
+                    'success' => !in_array($type, ['error'], true),
+                    'title' => $extra['title'] ?? null,
+                    'url' => $extra['url'] ?? null,
+                    'message' => $message,
+                    'request_payload' => Arr::only($extra, ['title', 'description', 'url', 'status_code', 'checked_via', 'provider', 'model', 'method_used', 'fallback_used', 'search_backend_label', 'selected_anchor_title']),
+                    'response_payload' => Arr::except($entry, ['time']),
+                    'meta' => Arr::except($extra, ['title', 'description', 'url']),
+                ]);
+            }
             if ($onProgress) {
                 $onProgress($type, $message, $extra);
             }
@@ -115,9 +135,13 @@ class CampaignExecutionService
             'stage' => 'settings',
             'substage' => 'resolved',
             'details' => implode(' | ', array_filter([
+                'campaign_preset=' . ($resolved['campaign_preset']?->name ?? '—'),
+                'article_preset=' . ($resolved['article_preset']?->name ?? '—'),
                 'article_type=' . ($resolved['article_type'] ?? '—'),
                 'delivery_mode=' . $resolvedMode,
-                'ai_engine=' . ($resolved['ai_engine'] ?? '—'),
+                'spin=' . (($resolved['spin_model_primary'] ?? '—') . ' -> ' . ($resolved['spin_model_fallback'] ?? '—')),
+                'search=' . (($resolved['online_search_model_primary'] ?? '—') . ' -> ' . ($resolved['online_search_model_fallback'] ?? '—')),
+                'scrape=' . (($resolved['scrape_ai_model_primary'] ?? '—') . ' -> ' . ($resolved['scrape_ai_model_fallback'] ?? '—')),
             ])),
         ]);
 
@@ -148,7 +172,7 @@ class CampaignExecutionService
             'publish_account_id' => $site->publish_account_id ?: null,
             'publish_campaign_id' => $campaign->id,
             'publish_template_id' => $resolved['publish_template_id'],
-            'preset_id' => $resolved['preset_id'],
+            'preset_id' => null,
             'user_id' => $campaign->user_id,
             'created_by' => $campaign->created_by,
             'author' => $resolved['author'],
@@ -165,13 +189,30 @@ class CampaignExecutionService
             'publish_account_id' => $site->publish_account_id ?: null,
             'publish_campaign_id' => $campaign->id,
             'publish_template_id' => $resolved['publish_template_id'],
-            'preset_id' => $resolved['preset_id'],
+            'preset_id' => null,
             'user_id' => $campaign->user_id,
             'created_by' => $campaign->created_by,
             'author' => $resolved['author'],
             'article_type' => $resolved['article_type'],
             'ai_engine_used' => $resolved['ai_engine'],
             'scheduled_for' => $scheduledFor,
+        ]);
+        $trackedArticle = $article;
+        $this->activities->record($article, [
+            'activity_group' => 'campaign-run:' . ($article->article_id ?: $article->id),
+            'activity_type' => 'lifecycle',
+            'stage' => 'settings',
+            'substage' => 'resolved_settings',
+            'status' => 'success',
+            'success' => true,
+            'message' => 'Campaign settings resolved and article bound to campaign run.',
+            'meta' => [
+                'campaign_id' => $campaign->id,
+                'delivery_mode' => $resolvedMode,
+                'resolved' => Arr::except($resolved, ['campaign_preset', 'article_preset', 'template']),
+                'campaign_preset' => $resolved['campaign_preset']?->only(['id', 'name']),
+                'article_preset' => $resolved['article_preset']?->only(['id', 'name']),
+            ],
         ]);
 
         $emit('success', "Article record ready: {$article->article_id}", [
@@ -198,7 +239,7 @@ class CampaignExecutionService
                 'stage' => 'discovery',
                 'substage' => 'search',
             ]);
-            $discovery = $this->discoveryService->discoverUrls($campaign, $resolved);
+            $discovery = $this->discoveryService->discoverUrls($campaign, $resolved, 3, $article->id);
             $sourceUrls = $discovery['urls'];
             $emit('info', 'Discovery query: ' . ($discovery['context']['query'] ?: 'latest news'), [
                 'stage' => 'discovery',
@@ -214,6 +255,57 @@ class CampaignExecutionService
                 $emit('info', 'Discovery category: ' . $discovery['context']['category'], [
                     'stage' => 'discovery',
                     'substage' => 'query',
+                ]);
+            }
+            if (!empty($discovery['details']['search_backend_label'])) {
+                $emit('info', 'Discovery backend: ' . $discovery['details']['search_backend_label'], [
+                    'stage' => 'discovery',
+                    'substage' => 'backend',
+                    'search_backend_label' => $discovery['details']['search_backend_label'],
+                ]);
+            }
+            foreach ((array) ($discovery['details']['attempts'] ?? []) as $attempt) {
+                $emit(
+                    !empty($attempt['success']) && (($attempt['kept'] ?? 0) > 0) ? 'success' : 'warning',
+                    'Discovery model attempt: ' . ($attempt['model'] ?? 'unknown'),
+                    [
+                        'stage' => 'discovery',
+                        'substage' => 'attempt',
+                        'details' => implode(' | ', array_filter([
+                            'provider=' . ($attempt['provider'] ?? '—'),
+                            'kept=' . (($attempt['kept'] ?? 0) . '/' . ($attempt['checked'] ?? 0)),
+                            !empty($attempt['coherent_kept']) ? ('coherent=' . $attempt['coherent_kept']) : null,
+                            !empty($attempt['coherence_mode']) ? ('coherence=' . $attempt['coherence_mode']) : null,
+                            !empty($attempt['message']) ? ('note=' . $attempt['message']) : null,
+                        ])),
+                    ]
+                );
+            }
+
+            foreach ((array) ($discovery['details']['articles'] ?? []) as $index => $candidate) {
+                $emit('info', 'Selected source candidate ' . ($index + 1) . ': ' . ($candidate['title'] ?? $candidate['url'] ?? 'Untitled'), [
+                    'stage' => 'discovery',
+                    'substage' => 'candidate',
+                    'title' => $candidate['title'] ?? null,
+                    'description' => $candidate['description'] ?? null,
+                    'url' => $candidate['url'] ?? null,
+                    'status_code' => $candidate['status_code'] ?? null,
+                    'checked_via' => $candidate['checked_via'] ?? null,
+                ]);
+            }
+
+            if (!empty($discovery['details']['coherence'])) {
+                $coherence = (array) $discovery['details']['coherence'];
+                $emit('info', 'Source coherence resolved.', [
+                    'stage' => 'discovery',
+                    'substage' => 'coherence',
+                    'selected_anchor_title' => $coherence['anchor_title'] ?? null,
+                    'details' => implode(' | ', array_filter([
+                        'mode=' . ($coherence['mode'] ?? '—'),
+                        isset($coherence['kept']) ? ('kept=' . $coherence['kept']) : null,
+                        isset($coherence['top_similarity']) ? ('top_similarity=' . $coherence['top_similarity']) : null,
+                        !empty($coherence['dropped_titles']) ? ('dropped=' . implode('; ', (array) $coherence['dropped_titles'])) : null,
+                    ])),
                 ]);
             }
         }
@@ -244,18 +336,80 @@ class CampaignExecutionService
         $emit('step', 'Extracting article content...', [
             'stage' => 'extraction',
             'substage' => 'start',
+            'details' => implode(' | ', array_filter([
+                'method=auto',
+                'user_agent=chrome -> googlebot',
+                'ai=' . (($resolved['scrape_ai_model_primary'] ?? '—') . ' -> ' . ($resolved['scrape_ai_model_fallback'] ?? '—')),
+            ])),
         ]);
-        $sourceTexts = $this->sourceExtraction->extractTexts($sourceUrls, [
-            'method' => 'auto',
-            'source' => 'campaign',
-            'draft_id' => $article->id,
-        ]);
-        foreach ($sourceTexts as $src) {
-            $emit('success', 'Source extracted: ' . Str::limit($src['title'] ?: $src['url'], 60), [
+        $sourceTexts = [];
+        foreach ($sourceUrls as $index => $sourceUrl) {
+            $emit('info', 'Extraction attempt ' . ($index + 1) . ': ' . $sourceUrl, [
                 'stage' => 'extraction',
-                'substage' => 'source_ok',
-                'url' => $src['url'] ?? null,
+                'substage' => 'attempt',
+                'url' => $sourceUrl,
             ]);
+
+            $result = $this->sourceExtraction->extract($sourceUrl, [
+                'method' => 'auto',
+                'source' => 'campaign',
+                'draft_id' => $article->id,
+                'ai_fallback_models' => array_values(array_filter([
+                    $resolved['scrape_ai_model_primary'] ?? null,
+                    $resolved['scrape_ai_model_fallback'] ?? null,
+                ])),
+            ]);
+
+            if (!empty($result['success']) && !empty($result['text'])) {
+                $sourceTexts[] = [
+                    'url' => $result['url'],
+                    'title' => $result['title'],
+                    'text' => $result['text'],
+                    'word_count' => $result['word_count'] ?? 0,
+                    'method_used' => $result['method_used'] ?? null,
+                    'fetch_info' => $result['fetch_info'] ?? null,
+                ];
+
+                $emit('success', 'Source extracted: ' . Str::limit($result['title'] ?: $result['url'], 80), [
+                    'stage' => 'extraction',
+                    'substage' => 'source_ok',
+                    'title' => $result['title'] ?? null,
+                    'url' => $result['url'] ?? null,
+                    'method_used' => $result['method_used'] ?? null,
+                    'word_count' => $result['word_count'] ?? null,
+                    'status_code' => $result['http_status'] ?? null,
+                    'fallback_used' => $result['fallback_tried'] ?? null,
+                    'provider' => $result['fetch_info']['provider'] ?? null,
+                    'model' => $result['fetch_info']['model'] ?? null,
+                    'details' => implode(' | ', array_filter([
+                        'method=' . ($result['method_used'] ?? 'auto'),
+                        isset($result['word_count']) ? ('words=' . $result['word_count']) : null,
+                        isset($result['http_status']) ? ('status=' . $result['http_status']) : null,
+                        !empty($result['fetch_info']['provider']) ? ('provider=' . $result['fetch_info']['provider']) : null,
+                        !empty($result['fetch_info']['model']) ? ('model=' . $result['fetch_info']['model']) : null,
+                        !empty($result['fallback_tried']) ? ('fallback=' . $result['fallback_tried']) : null,
+                    ])),
+                ]);
+            } else {
+                $emit('warning', 'Extraction failed: ' . Str::limit($sourceUrl, 100), [
+                    'stage' => 'extraction',
+                    'substage' => 'source_failed',
+                    'url' => $sourceUrl,
+                    'method_used' => $result['method_used'] ?? null,
+                    'status_code' => $result['http_status'] ?? null,
+                    'fallback_used' => $result['fallback_tried'] ?? null,
+                    'provider' => $result['fetch_info']['provider'] ?? null,
+                    'model' => $result['fetch_info']['model'] ?? null,
+                    'details' => implode(' | ', array_filter([
+                        !empty($result['message']) ? ('reason=' . $result['message']) : null,
+                        !empty($result['method_used']) ? ('method=' . $result['method_used']) : null,
+                        isset($result['http_status']) ? ('status=' . $result['http_status']) : null,
+                        !empty($result['fallback_tried']) ? ('fallback=' . $result['fallback_tried']) : null,
+                        !empty($result['fetch_info']['provider']) ? ('provider=' . $result['fetch_info']['provider']) : null,
+                        !empty($result['fetch_info']['model']) ? ('model=' . $result['fetch_info']['model']) : null,
+                    ])),
+                ]);
+            }
         }
 
         $failedCount = count($sourceUrls) - count($sourceTexts);
@@ -287,7 +441,7 @@ class CampaignExecutionService
         ]);
 
         try {
-            $spinResult = $this->spinArticle($resolved, $sourceTexts);
+            $spinResult = $this->spinArticle($resolved, $sourceTexts, $article->id);
             if (!$spinResult['success']) {
                 $emit('error', 'Spin failed: ' . ($spinResult['message'] ?? 'unknown'), [
                     'stage' => 'generation',
@@ -331,6 +485,7 @@ class CampaignExecutionService
             'details' => implode(' | ', array_filter([
                 'title=' . ($spinResult['title'] ?? 'Untitled'),
                 'provider=' . ($spinResult['provider'] ?? $resolved['ai_engine'] ?? 'ai'),
+                'models=' . implode(' -> ', (array) ($spinResult['attempted_models'] ?? [])),
                 'cost=$' . ($spinResult['cost'] ?? 0),
             ])),
         ]);
@@ -371,6 +526,12 @@ class CampaignExecutionService
         $emit('step', 'Selecting featured and inline photos...', [
             'stage' => 'photos',
             'substage' => 'start',
+            'details' => implode(' | ', array_filter([
+                'featured=google_only',
+                'inline=' . (($resolved['inline_photo_min'] ?? 2) . '-' . ($resolved['inline_photo_max'] ?? 3)),
+                'landscape=' . (($resolved['featured_image_must_be_landscape'] ?? true) ? 'required' : 'optional'),
+                'blacklist=on',
+            ])),
         ]);
         $media = $this->photoAutomation->hydrate(
             (string) ($article->body ?? ''),
@@ -380,6 +541,7 @@ class CampaignExecutionService
             (array) ($resolved['photo_sources'] ?? []),
             (string) ($article->title ?? ''),
             (string) ($article->body ?? ''),
+            $article->id,
             function (string $type, string $message, array $extra = []) use ($emit): void {
                 $emit($type, $message, $extra);
             }
@@ -394,6 +556,28 @@ class CampaignExecutionService
             ],
             'featured_image_search' => $spinResult['featured_image'] ?? null,
         ]);
+
+        $inlineMinimum = max(0, (int) ($resolved['inline_photo_min'] ?? 0));
+        if (($resolved['featured_image_required'] ?? true) && empty($media['featured_photo'])) {
+            $emit('error', 'Featured image required but none passed automation.', [
+                'stage' => 'photos',
+                'substage' => 'featured_required_failed',
+            ]);
+            $this->persistence->markFailed($article);
+
+            return $this->failure($log, $article, 'photos', 'Featured image required but none passed automation.');
+        }
+
+        if (($media['inline_count'] ?? 0) < $inlineMinimum) {
+            $emit('error', 'Inline photo minimum not met.', [
+                'stage' => 'photos',
+                'substage' => 'inline_min_failed',
+                'details' => 'required=' . $inlineMinimum . ' | actual=' . ($media['inline_count'] ?? 0),
+            ]);
+            $this->persistence->markFailed($article);
+
+            return $this->failure($log, $article, 'photos', 'Inline photo minimum not met.');
+        }
 
         $emit('success', 'Photo automation complete.', [
             'stage' => 'html_media',
@@ -554,16 +738,21 @@ class CampaignExecutionService
      * @param array<int, array<string, mixed>> $sourceTexts
      * @return array<string, mixed>
      */
-    private function spinArticle(array $resolved, array $sourceTexts): array
+    private function spinArticle(array $resolved, array $sourceTexts, ?int $articleId = null): array
     {
         $model = $resolved['ai_engine'] ?? 'claude-sonnet-4-6';
 
         $result = $this->articleGeneration->generate($sourceTexts, [
-            'model' => $model,
+            'article_id' => $articleId,
+            'model' => $resolved['spin_model_primary'] ?? $model,
+            'fallback_models' => array_values(array_filter([
+                $resolved['spin_model_fallback'] ?? null,
+            ])),
             'template_id' => $resolved['publish_template_id'] ?? null,
-            'preset_id' => $resolved['preset_id'] ?? null,
+            'preset_id' => null,
             'article_type' => $resolved['article_type'] ?? null,
             'custom_prompt' => $resolved['ai_instructions'] ?? null,
+            'web_research' => $resolved['search_online_for_additional_context'] ?? true,
             'agent' => 'campaign-spin',
         ]);
 
@@ -587,6 +776,7 @@ class CampaignExecutionService
             'photo_suggestions' => $result['photo_suggestions'] ?? [],
             'featured_image' => $result['featured_image'] ?? null,
             'featured_meta' => $result['featured_meta'] ?? null,
+            'attempted_models' => $result['attempted_models'] ?? [$resolved['spin_model_primary'] ?? $model],
         ];
     }
 

@@ -5,11 +5,9 @@
 @section('content')
 <div class="max-w-4xl mx-auto space-y-6" x-data="campaignPresets()">
 
-    {{-- Create / Edit form --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6" x-show="showForm" x-cloak>
-        <h3 class="font-semibold text-gray-800 mb-4" x-text="editId ? 'Edit Preset' : 'New Campaign Preset'"></h3>
+        <h3 class="font-semibold text-gray-800 mb-4" x-text="editId ? 'Edit Campaign Preset' : 'New Campaign Preset'"></h3>
 
-        {{-- User (admin section) --}}
         <div class="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
             <p class="text-xs font-semibold text-yellow-700 mb-2">Admin — Assign to User</p>
             <div class="max-w-md"
@@ -29,94 +27,45 @@
         </div>
 
         <div class="space-y-4">
-            {{-- Name --}}
             <div>
                 <label class="block text-xs text-gray-500 mb-1">Preset Name</label>
-                <input type="text" x-model="form.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Tech News Daily">
+                <input type="text" x-model="form.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Her Forward Celebrity Breaking">
             </div>
 
-            {{-- Final Article Method --}}
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Final Article Method</label>
-                <select x-model="form.final_article_method" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-                    @foreach($finalArticleMethods as $method)
-                        <option value="{{ $method }}">{{ ucwords(str_replace('-', ' ', $method)) }}</option>
-                    @endforeach
-                </select>
+                <label class="block text-xs text-gray-500 mb-1">Search Queries <span class="text-gray-400">(one per line)</span></label>
+                <textarea x-model="searchQueriesText" rows="5" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="celebrity breaking news&#10;celebrity legal filing&#10;celebrity business launch"></textarea>
             </div>
 
-            {{-- Search terms --}}
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Search Terms / Prompts <span class="text-gray-400">(one per line, one is chosen at random per run)</span></label>
-                <textarea x-model="keywordsText" rows="5" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Find breaking news in entertainment&#10;Latest AI startup funding news&#10;Trending local education stories"></textarea>
+                <label class="block text-xs text-gray-500 mb-1">Campaign Instructions</label>
+                <textarea x-model="form.campaign_instructions" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Prioritize stories with a real news peg, not gossip filler."></textarea>
             </div>
 
-            {{-- Local preference --}}
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Local News Preference <span class="text-gray-400">(city or state)</span></label>
-                <input type="text" x-model="form.local_preference" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md" placeholder="e.g. New York, California">
-            </div>
-
-            {{-- Source method --}}
-            <div>
-                <label class="block text-xs text-gray-500 mb-2">Default Source Method</label>
-                <div class="flex gap-4">
-                    @foreach($discoveryModes as $mode)
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" x-model="form.source_method" value="{{ $mode }}" class="text-blue-600">
-                            <span class="text-sm">{{ ucwords(str_replace('-', ' ', $mode)) }}</span>
-                        </label>
-                    @endforeach
-                </div>
-            </div>
-
-            {{-- Genre --}}
-            <div x-show="form.source_method === 'genre'">
-                <label class="block text-xs text-gray-500 mb-1">Genre</label>
-                <select x-model="form.genre" class="border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-                    <option value="">Select genre...</option>
-                    @foreach($newsCategories as $cat)
-                        <option value="{{ $cat }}">{{ ucfirst($cat) }}</option>
-                    @endforeach
-                </select>
-            </div>
-
-            {{-- Trending categories --}}
-            <div x-show="form.source_method === 'trending'">
-                <label class="block text-xs text-gray-500 mb-2">Trending Categories</label>
-                <div class="flex flex-wrap gap-2">
-                    @foreach($newsCategories as $cat)
-                        <button type="button" @click="toggleTrendingCat('{{ $cat }}')"
-                            class="px-3 py-1 rounded-full text-xs font-medium transition-colors"
-                            :class="form.trending_categories.includes('{{ $cat }}') ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'">
-                            {{ ucfirst($cat) }}
-                        </button>
-                    @endforeach
-                </div>
-            </div>
-
-            {{-- Auto-select toggle --}}
-            <div class="flex items-center justify-between">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                    <p class="text-sm font-medium text-gray-700">Automatically Publish</p>
-                    <p class="text-xs text-gray-400">System handles everything: topics, articles, photos, spinning, publishing. No manual steps.</p>
+                    <label class="block text-xs text-gray-500 mb-1">Posts Per Run</label>
+                    <input type="number" x-model="form.posts_per_run" min="1" max="50" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                 </div>
-                <button @click="form.auto_select_sources = !form.auto_select_sources" type="button"
-                    class="relative inline-flex h-7 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-                    :class="form.auto_select_sources ? 'bg-green-500' : 'bg-gray-300'"
-                    role="switch" :aria-checked="form.auto_select_sources">
-                    <span class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                        :class="form.auto_select_sources ? 'translate-x-7' : 'translate-x-0'"></span>
-                </button>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Frequency</label>
+                    <select x-model="form.frequency" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="hourly">Hourly</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Run At</label>
+                    <input type="time" x-model="form.run_at_time" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Drip Minutes</label>
+                    <input type="number" x-model="form.drip_minutes" min="1" max="1440" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
             </div>
 
-            {{-- AI Instructions --}}
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Additional Instructions (AI feed)</label>
-                <textarea x-model="form.ai_instructions" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Custom AI instructions that will be fed into the prompt when this campaign runs..."></textarea>
-            </div>
-
-            {{-- Save --}}
             <div class="flex gap-3">
                 <button @click="savePreset()" :disabled="saving" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
                     <svg x-show="saving" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -129,7 +78,6 @@
         </div>
     </div>
 
-    {{-- List --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
         <div class="flex items-center justify-between p-4 border-b border-gray-200">
             <h3 class="font-semibold text-gray-800">Presets ({{ $presets->total() }})</h3>
@@ -140,19 +88,20 @@
             <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-gray-800 break-words">{{ $preset->name }}</p>
                 <p class="text-xs text-gray-500 mt-0.5">
-                    Method: <span class="font-medium">{{ ucfirst(str_replace('-', ' ', $preset->source_method)) }}</span>
-                    @if($preset->final_article_method) &middot; Output: {{ ucwords(str_replace('-', ' ', $preset->final_article_method)) }} @endif
-                    @if($preset->genre) &middot; Genre: {{ ucfirst($preset->genre) }} @endif
-                    @if($preset->local_preference) &middot; Local: {{ $preset->local_preference }} @endif
+                    {{ ($preset->posts_per_run ?? 1) }} post(s) / {{ ucfirst($preset->frequency ?? 'daily') }}
+                    @if($preset->run_at_time) &middot; {{ $preset->run_at_time }} @endif
+                    &middot; Drip {{ $preset->drip_minutes ?? 60 }} min
                     @if($preset->user) &middot; User: {{ $preset->user->name }} @endif
-                    @if($preset->auto_select_sources) &middot; <span class="text-green-600">Auto-select</span> @endif
                 </p>
-                @if($preset->keywords && count($preset->keywords) > 0)
+                @if($preset->search_queries && count($preset->search_queries) > 0)
                     <div class="flex flex-wrap gap-1 mt-1">
-                        @foreach($preset->keywords as $kw)
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700">{{ $kw }}</span>
+                        @foreach($preset->search_queries as $query)
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700">{{ $query }}</span>
                         @endforeach
                     </div>
+                @endif
+                @if($preset->campaign_instructions)
+                    <p class="text-xs text-gray-500 mt-2 break-words">{{ \Illuminate\Support\Str::limit($preset->campaign_instructions, 180) }}</p>
                 @endif
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
@@ -175,12 +124,24 @@
 function campaignPresets() {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
+
     return {
         showForm: false,
         editId: null,
-        saving: false, saveResult: '', saveSuccess: false,
-        keywordsText: '',
-        form: { user_id: null, name: '', final_article_method: 'news-search', keywords: [], local_preference: '', source_method: 'keyword', genre: '', trending_categories: [], auto_select_sources: false, ai_instructions: '' },
+        saving: false,
+        saveResult: '',
+        saveSuccess: false,
+        searchQueriesText: '',
+        form: {
+            user_id: null,
+            name: '',
+            search_queries: [],
+            campaign_instructions: '',
+            posts_per_run: 1,
+            frequency: 'daily',
+            run_at_time: '09:00',
+            drip_minutes: 60,
+        },
 
         init() {
             @if(isset($editPreset) && $editPreset)
@@ -188,43 +149,50 @@ function campaignPresets() {
             @endif
         },
 
-        toggleTrendingCat(cat) {
-            const idx = this.form.trending_categories.indexOf(cat);
-            if (idx === -1) this.form.trending_categories.push(cat);
-            else this.form.trending_categories.splice(idx, 1);
-        },
-
         resetFormFields() {
-            this.form = { user_id: null, name: '', final_article_method: 'news-search', keywords: [], local_preference: '', source_method: 'keyword', genre: '', trending_categories: [], auto_select_sources: false, ai_instructions: '' };
-            this.keywordsText = '';
+            this.form = {
+                user_id: null,
+                name: '',
+                search_queries: [],
+                campaign_instructions: '',
+                posts_per_run: 1,
+                frequency: 'daily',
+                run_at_time: '09:00',
+                drip_minutes: 60,
+            };
+            this.searchQueriesText = '';
             this.saveResult = '';
         },
 
-        resetForm() { this.showForm = false; this.editId = null; this.resetFormFields(); },
+        resetForm() {
+            this.showForm = false;
+            this.editId = null;
+            this.resetFormFields();
+        },
 
         editPreset(preset) {
             this.editId = preset.id;
             this.form = {
                 user_id: preset.user_id,
-                name: preset.name,
-                final_article_method: preset.final_article_method || 'news-search',
-                keywords: preset.keywords || [],
-                local_preference: preset.local_preference || '',
-                source_method: preset.source_method || 'keyword',
-                genre: preset.genre || '',
-                trending_categories: preset.trending_categories || [],
-                auto_select_sources: preset.auto_select_sources || false,
-                ai_instructions: preset.ai_instructions || '',
+                name: preset.name || '',
+                search_queries: preset.search_queries || preset.keywords || [],
+                campaign_instructions: preset.campaign_instructions || preset.ai_instructions || '',
+                posts_per_run: preset.posts_per_run || 1,
+                frequency: preset.frequency || 'daily',
+                run_at_time: preset.run_at_time || '09:00',
+                drip_minutes: preset.drip_minutes || 60,
             };
-            this.keywordsText = (preset.keywords || []).join('\n');
+            this.searchQueriesText = (this.form.search_queries || []).join('\n');
             this.showForm = true;
         },
 
         async savePreset() {
-            this.saving = true; this.saveResult = '';
-            this.form.keywords = this.keywordsText.split('\n').map(k => k.trim()).filter(k => k);
+            this.saving = true;
+            this.saveResult = '';
+            this.form.search_queries = this.searchQueriesText.split('\n').map(v => v.trim()).filter(Boolean);
             const url = this.editId ? '/campaigns/presets/' + this.editId : '{{ route("campaigns.presets.store") }}';
             const method = this.editId ? 'PUT' : 'POST';
+
             try {
                 const r = await fetch(url, { method, headers, body: JSON.stringify(this.form) });
                 const d = await r.json();
@@ -232,9 +200,13 @@ function campaignPresets() {
                 this.saveResult = d.message || (d.success ? 'Saved.' : 'Error.');
                 if (d.success && d.preset?.id) {
                     history.replaceState(null, '', '{{ route("campaigns.presets.index") }}?id=' + d.preset.id);
-                    setTimeout(() => location.reload(), 800);
+                    setTimeout(() => location.reload(), 600);
                 }
-            } catch(e) { this.saveSuccess = false; this.saveResult = 'Error: ' + e.message; }
+            } catch (e) {
+                this.saveSuccess = false;
+                this.saveResult = 'Error: ' + e.message;
+            }
+
             this.saving = false;
         },
 
@@ -244,7 +216,9 @@ function campaignPresets() {
                 const r = await fetch('/campaigns/presets/' + id, { method: 'DELETE', headers });
                 const d = await r.json();
                 if (d.success) location.reload();
-            } catch(e) { alert('Error: ' + e.message); }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
         },
 
         async toggleDefault(id) {
@@ -252,7 +226,9 @@ function campaignPresets() {
                 const r = await fetch('/campaigns/presets/' + id + '/toggle-default', { method: 'POST', headers });
                 const d = await r.json();
                 if (d.success) location.reload();
-            } catch(e) { alert('Error: ' + e.message); }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
         },
     };
 }

@@ -121,7 +121,7 @@
                     'text-gray-400': entry.type === 'step'
                 }">
                     <span class="text-gray-500" x-text="entry.time || entry.captured_at || ''"></span>
-                    <span class="ml-2" x-text="entry.message"></span>
+                    <span class="ml-2" x-text="entry.message + (entry.details ? ' — ' + entry.details : '')"></span>
                 </div>
             </template>
         </div>
@@ -133,12 +133,11 @@
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">User</span><p class="text-sm text-gray-800">{{ $campaign->user->name ?? '—' }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Site</span><p class="text-sm text-gray-800">{{ $campaign->site->name ?? '—' }} @if($campaign->site)<span class="text-xs text-gray-400">({{ $campaign->site->url }})</span>@endif</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Campaign Preset</span><p class="text-sm text-gray-800">{{ $campaign->campaignPreset->name ?? '—' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">AI Template</span><p class="text-sm text-gray-800">{{ $campaign->template->name ?? '—' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">WP Preset</span><p class="text-sm text-gray-800">{{ $campaign->wpPreset->name ?? '—' }}</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Article Preset</span><p class="text-sm text-gray-800">{{ $campaign->template->name ?? '—' }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Article Type</span><p class="text-sm text-gray-800">{{ $resolvedSettings['article_type'] ? ucwords(str_replace('-', ' ', $resolvedSettings['article_type'])) : '—' }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Delivery</span><p class="text-sm text-gray-800">{{ ucwords(str_replace('-', ' ', $resolvedSettings['delivery_mode'] ?? 'draft-local')) }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Discovery</span><p class="text-sm text-gray-800">{{ ucwords(str_replace('-', ' ', $resolvedSettings['source_method'] ?? 'keyword')) }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Search Terms</span><p class="text-sm text-gray-800">{{ count($resolvedSettings['search_terms'] ?? []) }} term(s)</p></div>
+        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">AI Flow</span><p class="text-sm text-gray-800">Search {{ $resolvedSettings['online_search_model_primary'] ?? '—' }} → {{ $resolvedSettings['online_search_model_fallback'] ?? '—' }} | Scrape {{ $resolvedSettings['scrape_ai_model_primary'] ?? '—' }} → {{ $resolvedSettings['scrape_ai_model_fallback'] ?? '—' }} | Spin {{ $resolvedSettings['spin_model_primary'] ?? '—' }} → {{ $resolvedSettings['spin_model_fallback'] ?? '—' }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Author</span><p class="text-sm text-gray-800">{{ $campaign->author ?? '—' }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Post Status</span><p class="text-sm text-gray-800">{{ ucfirst($campaign->post_status ?? 'draft') }}</p></div>
         <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Schedule</span><p class="text-sm text-gray-800">{{ $campaign->articles_per_interval }} post(s) / {{ $campaign->interval_unit }}{{ $campaign->run_at_time ? ' at ' . $campaign->run_at_time : '' }}</p></div>
@@ -151,8 +150,7 @@
     </div>
 
     {{-- Preset Settings (expandable) --}}
-    @include('app-publish::partials.preset-fields', ['prefix' => 'template', 'label' => 'AI Template Settings'])
-    @include('app-publish::partials.preset-fields', ['prefix' => 'preset', 'label' => 'WordPress Preset Settings'])
+    @include('app-publish::partials.preset-fields', ['prefix' => 'template', 'label' => 'Article Preset Settings'])
 
     {{-- Campaign History (articles) --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
@@ -214,14 +212,11 @@ function campaignShow() {
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
 
     const templateData = @json($campaign->template);
-    const presetData = @json($campaign->wpPreset);
     const checklistDefinitions = @json($checklistDefinitions ?? []);
 
     return {
         ...presetFieldsMixin('template'),
-        ...presetFieldsMixin('preset'),
         template_schema: @json(\hexa_app_publish\Publishing\Templates\Models\PublishTemplate::getFieldSchema()),
-        preset_schema: @json(\hexa_app_publish\Publishing\Presets\Models\PublishPreset::getFieldSchema()),
         ...presetFieldsMethods,
 
         running: false, runResult: '', runSuccess: false, runState: '',
@@ -247,7 +242,6 @@ function campaignShow() {
 
         init() {
             if (templateData) this.loadPresetFields('template', templateData);
-            if (presetData) this.loadPresetFields('preset', presetData);
         },
 
         checklistProgressText() {
@@ -339,8 +333,8 @@ function campaignShow() {
             }
 
             item.event_lines.push(normalized);
-            if (item.event_lines.length > 12) {
-                item.event_lines = item.event_lines.slice(-12);
+            if (item.event_lines.length > 24) {
+                item.event_lines = item.event_lines.slice(-24);
             }
         },
 
@@ -350,17 +344,38 @@ function campaignShow() {
             [
                 ['url', 'URL'],
                 ['source', 'Source'],
+                ['source_url', 'Source URL'],
                 ['search_term', 'Search'],
+                ['title', 'Title'],
+                ['description', 'Description'],
                 ['author', 'Author'],
                 ['hostname', 'Host'],
                 ['connection_label', 'Connection'],
                 ['connection_mode', 'Mode'],
                 ['source_domain', 'Domain'],
                 ['source_type', 'Type'],
+                ['checked_via', 'Checked Via'],
+                ['status_code', 'HTTP Status'],
+                ['word_count', 'Words'],
+                ['method_used', 'Method'],
+                ['fallback_used', 'Fallback'],
                 ['alt_text', 'Alt'],
                 ['caption', 'Caption'],
                 ['wp_url', 'WP URL'],
                 ['media_id', 'Media ID'],
+                ['model', 'Model'],
+                ['provider', 'Provider'],
+                ['width', 'Width'],
+                ['height', 'Height'],
+                ['aspect_ratio', 'Aspect'],
+                ['file_size_bytes', 'Bytes'],
+                ['mime_type', 'Mime'],
+                ['quality_score', 'Quality'],
+                ['quality_pass', 'Quality Pass'],
+                ['search_backend_label', 'Backend'],
+                ['selected_anchor_title', 'Anchor'],
+                ['post_id', 'Post ID'],
+                ['post_url', 'Post URL'],
             ].forEach(([key, label]) => {
                 const value = entry?.[key];
                 if (value !== undefined && value !== null && String(value).trim() !== '') {

@@ -151,7 +151,7 @@ class DraftController extends Controller
 
         return response()->json([
             'success' => $result['success'],
-            'message' => 'Article deleted.',
+            'message' => 'Article moved to deleted archive.',
             'log'     => $result['log'],
         ]);
     }
@@ -182,7 +182,7 @@ class DraftController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => count($validated['ids']) . ' article(s) deleted.',
+            'message' => count($validated['ids']) . ' article(s) moved to deleted archive.',
             'logs'    => $allLogs,
         ]);
     }

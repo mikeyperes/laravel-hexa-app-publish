@@ -3,6 +3,7 @@
 namespace hexa_app_publish\Discovery\Media\Services;
 
 use hexa_core\Models\Setting;
+use hexa_core\Services\ImageCopyrightBlacklistService;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -25,9 +26,18 @@ class MediaSearchService
      * @param array $sources Provider names (pexels, unsplash, pixabay)
      * @param int $perPage Results per provider
      * @param int $page Page number
+     * @param string $qualityContext featured|inline|general
+     * @param bool $probeQuality Whether to probe top candidates for file type/size
      * @return array{success: bool, photos: array, totals: array, errors: array, timings: array, total_ms: int, message: string}
      */
-    public function searchPhotos(string $query, array $sources = ['pexels', 'unsplash', 'pixabay'], int $perPage = 15, int $page = 1): array
+    public function searchPhotos(
+        string $query,
+        array $sources = ['pexels', 'unsplash', 'pixabay'],
+        int $perPage = 15,
+        int $page = 1,
+        string $qualityContext = 'inline',
+        bool $probeQuality = false
+    ): array
     {
         $result = $this->searchPhotosBatch([
             [
@@ -36,7 +46,7 @@ class MediaSearchService
                 'per_page' => $perPage,
                 'page' => $page,
             ],
-        ], $sources);
+        ], $sources, $qualityContext, $probeQuality);
 
         $single = $result['results']['single'] ?? [
             'success' => false,
@@ -63,13 +73,20 @@ class MediaSearchService
      *
      * @param array<int, array{key?: string, query?: string, per_page?: int, page?: int}> $queries
      * @param array<int, string> $sources
+     * @param string $qualityContext featured|inline|general
+     * @param bool $probeQuality Whether to probe top candidates for file type/size
      * @return array{success: bool, results: array<string, array>, total_ms: int}
      */
-    public function searchPhotosBatch(array $queries, array $sources = ['pexels', 'unsplash', 'pixabay']): array
+    public function searchPhotosBatch(
+        array $queries,
+        array $sources = ['pexels', 'unsplash', 'pixabay'],
+        string $qualityContext = 'inline',
+        bool $probeQuality = false
+    ): array
     {
         $normalizedSources = collect($sources)
             ->map(fn ($source) => strtolower((string) $source))
-            ->filter(fn ($source) => in_array($source, ['pexels', 'unsplash', 'pixabay'], true))
+            ->filter(fn ($source) => in_array($source, ['pexels', 'unsplash', 'pixabay', 'google', 'serpapi', 'google-cse'], true))
             ->values()
             ->all();
 
@@ -108,42 +125,62 @@ class MediaSearchService
         }
 
         $requestDefinitions = [];
+        $serviceDefinitions = [];
         foreach ($normalizedQueries as $item) {
             foreach ($normalizedSources as $source) {
-                $definition = $this->requestDefinition($source, $item['query'], $item['per_page'], $item['page']);
-                if ($definition === null) {
+                if ($this->usesHttpPool($source)) {
+                    $definition = $this->requestDefinition($source, $item['query'], $item['per_page'], $item['page']);
+                    if ($definition === null) {
+                        $results[$item['key']]['errors'][] = ucfirst($source) . ': Not configured.';
+                        continue;
+                    }
+
+                    $alias = $item['key'] . ':' . $source;
+                    $requestDefinitions[$alias] = $definition + [
+                        'key' => $item['key'],
+                        'source' => $source,
+                    ];
+                    continue;
+                }
+
+                if (!$this->providerConfigured($source)) {
                     $results[$item['key']]['errors'][] = ucfirst($source) . ': Not configured.';
                     continue;
                 }
 
-                $alias = $item['key'] . ':' . $source;
-                $requestDefinitions[$alias] = $definition + [
+                $serviceDefinitions[] = [
                     'key' => $item['key'],
                     'source' => $source,
+                    'query' => $item['query'],
+                    'per_page' => $item['per_page'],
+                    'page' => $item['page'],
                 ];
             }
         }
 
         $startedAt = microtime(true);
 
-        $responses = Http::pool(function (Pool $pool) use ($requestDefinitions) {
-            $requests = [];
-            foreach ($requestDefinitions as $alias => $definition) {
-                $request = $pool
-                    ->as($alias)
-                    ->connectTimeout(self::CONNECT_TIMEOUT_SECONDS)
-                    ->timeout(self::REQUEST_TIMEOUT_SECONDS)
-                    ->acceptJson();
+        $responses = [];
+        if (!empty($requestDefinitions)) {
+            $responses = Http::pool(function (Pool $pool) use ($requestDefinitions) {
+                $requests = [];
+                foreach ($requestDefinitions as $alias => $definition) {
+                    $request = $pool
+                        ->as($alias)
+                        ->connectTimeout(self::CONNECT_TIMEOUT_SECONDS)
+                        ->timeout(self::REQUEST_TIMEOUT_SECONDS)
+                        ->acceptJson();
 
-                if (!empty($definition['headers'])) {
-                    $request = $request->withHeaders($definition['headers']);
+                    if (!empty($definition['headers'])) {
+                        $request = $request->withHeaders($definition['headers']);
+                    }
+
+                    $requests[$alias] = $request->get($definition['url'], $definition['query']);
                 }
 
-                $requests[$alias] = $request->get($definition['url'], $definition['query']);
-            }
-
-            return $requests;
-        });
+                return $requests;
+            });
+        }
 
         $totalMs = (int) round((microtime(true) - $startedAt) * 1000);
 
@@ -171,7 +208,36 @@ class MediaSearchService
             unset($bucket);
         }
 
+        foreach ($serviceDefinitions as $definition) {
+            $parsed = $this->searchServiceProvider(
+                $definition['source'],
+                $definition['query'],
+                $definition['per_page'],
+                $definition['page']
+            );
+            $bucket = &$results[$definition['key']];
+
+            if (!empty($parsed['photos'])) {
+                $bucket['photos'] = array_merge($bucket['photos'], $parsed['photos']);
+            }
+
+            if (isset($parsed['total'])) {
+                $bucket['totals'][$definition['source']] = $parsed['total'];
+            }
+
+            if (isset($parsed['timing_ms'])) {
+                $bucket['timings'][$definition['source']] = $parsed['timing_ms'];
+            }
+
+            if (!empty($parsed['error'])) {
+                $bucket['errors'][] = ucfirst($definition['source']) . ': ' . $parsed['error'];
+            }
+
+            unset($bucket);
+        }
+
         foreach ($results as &$bucket) {
+            $bucket['photos'] = $this->rankPhotos($bucket['photos'], $qualityContext, $probeQuality);
             $bucket['success'] = count($bucket['photos']) > 0;
             $bucket['message'] = count($bucket['photos']) . ' photos found across ' . count($bucket['totals']) . ' source(s).';
         }
@@ -184,6 +250,50 @@ class MediaSearchService
         ];
     }
 
+    /**
+     * Rank and enrich photo candidates for auto-selection.
+     *
+     * @param array<int, array<string, mixed>> $photos
+     * @return array<int, array<string, mixed>>
+     */
+    public function rankPhotos(array $photos, string $qualityContext = 'inline', bool $probeQuality = false): array
+    {
+        $context = $this->normalizeQualityContext($qualityContext);
+        $enriched = array_map(fn (array $photo) => $this->enrichPhoto($photo, $context), $photos);
+
+        usort($enriched, fn (array $a, array $b) => ($b['quality_score'] ?? 0) <=> ($a['quality_score'] ?? 0));
+
+        if ($probeQuality) {
+            $probeLimit = max(1, (int) config('hws-publish.photo_quality.probe_top_candidates', 4));
+            $topCount = min(count($enriched), $probeLimit);
+
+            for ($i = 0; $i < $topCount; $i++) {
+                $probe = $this->probePhotoAsset((string) ($enriched[$i]['url_large'] ?? $enriched[$i]['url_full'] ?? $enriched[$i]['url'] ?? ''));
+                if (!empty($probe)) {
+                    $enriched[$i]['file_size_bytes'] = $probe['file_size_bytes'] ?? ($enriched[$i]['file_size_bytes'] ?? null);
+                    $enriched[$i]['mime_type'] = $probe['mime_type'] ?? ($enriched[$i]['mime_type'] ?? null);
+                    $enriched[$i] = $this->enrichPhoto($enriched[$i], $context);
+                }
+            }
+        }
+
+        usort($enriched, function (array $a, array $b) {
+            $passCmp = (($b['quality_pass'] ?? false) <=> ($a['quality_pass'] ?? false));
+            if ($passCmp !== 0) {
+                return $passCmp;
+            }
+
+            $scoreCmp = (($b['quality_score'] ?? 0) <=> ($a['quality_score'] ?? 0));
+            if ($scoreCmp !== 0) {
+                return $scoreCmp;
+            }
+
+            return (($b['width'] ?? 0) * ($b['height'] ?? 0)) <=> (($a['width'] ?? 0) * ($a['height'] ?? 0));
+        });
+
+        return array_values($enriched);
+    }
+
     private function requestDefinition(string $source, string $query, int $perPage, int $page): ?array
     {
         return match ($source) {
@@ -191,6 +301,22 @@ class MediaSearchService
             'unsplash' => $this->unsplashRequestDefinition($query, $perPage, $page),
             'pixabay' => $this->pixabayRequestDefinition($query, $perPage, $page),
             default => null,
+        };
+    }
+
+    private function usesHttpPool(string $source): bool
+    {
+        return in_array($source, ['pexels', 'unsplash', 'pixabay'], true);
+    }
+
+    private function providerConfigured(string $source): bool
+    {
+        return match ($source) {
+            'google-cse' => Setting::getValue('use_google_image_search', '0') === '1'
+                && class_exists(\hexa_package_google_cse\Services\GoogleCseService::class),
+            'google', 'serpapi' => Setting::getValue('use_serpapi_search', '0') === '1'
+                && class_exists(\hexa_package_serpapi\Services\SerpApiService::class),
+            default => false,
         };
     }
 
@@ -343,5 +469,239 @@ class MediaSearchService
         }
 
         return (int) round($stats->getTransferTime() * 1000);
+    }
+
+    private function normalizeQualityContext(string $context): string
+    {
+        return in_array($context, ['featured', 'inline'], true) ? $context : 'inline';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function qualityProfile(string $context): array
+    {
+        return (array) config('hws-publish.photo_quality.' . $this->normalizeQualityContext($context), []);
+    }
+
+    /**
+     * @param array<string, mixed> $photo
+     * @return array<string, mixed>
+     */
+    private function enrichPhoto(array $photo, string $qualityContext): array
+    {
+        $profile = $this->qualityProfile($qualityContext);
+        $url = (string) ($photo['url_large'] ?? $photo['url_full'] ?? $photo['url'] ?? $photo['url_thumb'] ?? '');
+        $sourceUrl = (string) ($photo['source_url'] ?? '');
+        $sourceDomain = strtolower((string) ($photo['domain'] ?? parse_url($sourceUrl, PHP_URL_HOST) ?: parse_url($url, PHP_URL_HOST) ?: ''));
+        $extension = strtolower(pathinfo(parse_url($url, PHP_URL_PATH) ?: '', PATHINFO_EXTENSION));
+        $mimeType = strtolower((string) ($photo['mime_type'] ?? ''));
+        $width = (int) ($photo['width'] ?? 0);
+        $height = (int) ($photo['height'] ?? 0);
+        $aspectRatio = ($width > 0 && $height > 0) ? round($width / max($height, 1), 3) : null;
+        $landscape = $width > 0 && $height > 0 && $width >= $height;
+        $fileSizeBytes = isset($photo['file_size_bytes']) && is_numeric($photo['file_size_bytes'])
+            ? (int) $photo['file_size_bytes']
+            : null;
+
+        $blacklist = app(ImageCopyrightBlacklistService::class)->match($url, $sourceDomain);
+        $copyrightFlag = (bool) ($photo['copyright_flag'] ?? false) || (bool) ($blacklist['flagged'] ?? false);
+        $allowedExtensions = array_map('strtolower', (array) ($profile['allowed_extensions'] ?? []));
+        $allowedMimeTypes = array_map('strtolower', (array) ($profile['allowed_mime_types'] ?? []));
+        $preferredSources = array_map('strtolower', (array) ($profile['preferred_sources'] ?? []));
+        $source = strtolower((string) ($photo['source'] ?? ''));
+
+        $fileTypeOk = null;
+        if ($extension !== '' || $mimeType !== '') {
+            $fileTypeOk = ($extension !== '' && in_array($extension, $allowedExtensions, true))
+                || ($mimeType !== '' && in_array($mimeType, $allowedMimeTypes, true));
+        }
+
+        $fileSizeOk = $fileSizeBytes !== null
+            ? $fileSizeBytes >= (int) ($profile['min_bytes'] ?? 0)
+            : null;
+
+        $dimensionsOk = $width >= (int) ($profile['min_width'] ?? 0)
+            && $height >= (int) ($profile['min_height'] ?? 0);
+        $aspectOk = $landscape
+            && $aspectRatio !== null
+            && $aspectRatio >= (float) ($profile['min_aspect_ratio'] ?? 1.0)
+            && $aspectRatio <= (float) ($profile['max_aspect_ratio'] ?? 3.0);
+        $sourceOk = !$copyrightFlag;
+        $preferredSource = in_array($source, $preferredSources, true);
+
+        $qualityPass = $dimensionsOk
+            && $aspectOk
+            && $sourceOk
+            && $fileTypeOk !== false
+            && $fileSizeOk !== false;
+
+        $score = 0;
+        $score += $sourceOk ? 220 : -1200;
+        $score += $preferredSource ? 70 : 0;
+        $score += $dimensionsOk ? 140 : -120;
+        $score += $aspectOk ? 120 : -90;
+        $score += $fileTypeOk === true ? 80 : ($fileTypeOk === false ? -120 : 0);
+        $score += $fileSizeOk === true ? 60 : ($fileSizeOk === false ? -80 : 0);
+        $score += min(140, (int) floor(($width * $height) / 200000));
+
+        $photo['domain'] = $sourceDomain;
+        $photo['file_extension'] = $extension;
+        $photo['mime_type'] = $mimeType !== '' ? $mimeType : null;
+        $photo['file_size_bytes'] = $fileSizeBytes;
+        $photo['aspect_ratio'] = $aspectRatio;
+        $photo['copyright_flag'] = $copyrightFlag;
+        $photo['copyright_reason'] = $photo['copyright_reason'] ?? ($blacklist['reason'] ?? null);
+        $photo['quality_context'] = $qualityContext;
+        $photo['quality_pass'] = $qualityPass;
+        $photo['quality_score'] = $score;
+        $photo['quality_checklist'] = [
+            'dimensions' => [
+                'ok' => $dimensionsOk,
+                'width' => $width,
+                'height' => $height,
+                'min_width' => (int) ($profile['min_width'] ?? 0),
+                'min_height' => (int) ($profile['min_height'] ?? 0),
+            ],
+            'file_size' => [
+                'ok' => $fileSizeOk,
+                'bytes' => $fileSizeBytes,
+                'min_bytes' => (int) ($profile['min_bytes'] ?? 0),
+            ],
+            'file_type' => [
+                'ok' => $fileTypeOk,
+                'extension' => $extension !== '' ? $extension : null,
+                'mime_type' => $mimeType !== '' ? $mimeType : null,
+                'allowed_extensions' => $allowedExtensions,
+                'allowed_mime_types' => $allowedMimeTypes,
+            ],
+            'aspect_ratio' => [
+                'ok' => $aspectOk,
+                'ratio' => $aspectRatio,
+                'landscape' => $landscape,
+                'min' => (float) ($profile['min_aspect_ratio'] ?? 1.0),
+                'max' => (float) ($profile['max_aspect_ratio'] ?? 3.0),
+            ],
+            'source' => [
+                'ok' => $sourceOk,
+                'provider' => $source,
+                'domain' => $sourceDomain,
+                'preferred' => $preferredSource,
+                'blacklisted' => $copyrightFlag,
+            ],
+        ];
+
+        return $photo;
+    }
+
+    /**
+     * @return array{photos: array<int, array<string, mixed>>, total?: int, timing_ms?: int, error?: string}
+     */
+    private function searchServiceProvider(string $source, string $query, int $perPage, int $page): array
+    {
+        $startedAt = microtime(true);
+
+        try {
+            $result = match ($source) {
+                'google-cse' => $this->searchGoogleCse($query, $perPage, $page),
+                'google', 'serpapi' => $this->searchSerp($query, $perPage, $page),
+                default => ['success' => false, 'message' => 'Unsupported source.', 'data' => null],
+            };
+        } catch (\Throwable $e) {
+            return [
+                'photos' => [],
+                'error' => $e->getMessage(),
+                'timing_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ];
+        }
+
+        $timingMs = (int) round((microtime(true) - $startedAt) * 1000);
+
+        if (!($result['success'] ?? false)) {
+            return [
+                'photos' => [],
+                'error' => (string) ($result['message'] ?? 'Request failed.'),
+                'timing_ms' => $timingMs,
+            ];
+        }
+
+        return [
+            'photos' => array_values((array) ($result['data']['photos'] ?? [])),
+            'total' => $result['data']['total'] ?? count((array) ($result['data']['photos'] ?? [])),
+            'timing_ms' => $timingMs,
+        ];
+    }
+
+    private function searchGoogleCse(string $query, int $perPage, int $page): array
+    {
+        if (!class_exists(\hexa_package_google_cse\Services\GoogleCseService::class)) {
+            return ['success' => false, 'message' => 'Google CSE package not available.', 'data' => null];
+        }
+
+        $service = app(\hexa_package_google_cse\Services\GoogleCseService::class);
+        if ($service->isQuotaExhausted()) {
+            return ['success' => false, 'message' => 'Google CSE quota exhausted.', 'data' => null];
+        }
+
+        $start = (($page - 1) * max($perPage, 1)) + 1;
+        return $service->searchImages($query, $perPage, $start);
+    }
+
+    private function searchSerp(string $query, int $perPage, int $page): array
+    {
+        if (!class_exists(\hexa_package_serpapi\Services\SerpApiService::class)) {
+            return ['success' => false, 'message' => 'SerpAPI package not available.', 'data' => null];
+        }
+
+        $start = ($page - 1) * max($perPage, 1);
+        return app(\hexa_package_serpapi\Services\SerpApiService::class)->searchImages($query, $perPage, $start, 'photo');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function probePhotoAsset(string $url): array
+    {
+        if ($url === '') {
+            return [];
+        }
+
+        try {
+            $response = Http::connectTimeout(3)
+                ->timeout(5)
+                ->withHeaders(['Accept' => 'image/*'])
+                ->head($url);
+
+            if (!$response->successful()) {
+                $response = Http::connectTimeout(3)
+                    ->timeout(5)
+                    ->withHeaders([
+                        'Accept' => 'image/*',
+                        'Range' => 'bytes=0-0',
+                    ])
+                    ->get($url);
+            }
+
+            if (!$response->successful()) {
+                return [];
+            }
+
+            $contentType = $response->header('Content-Type');
+            if (is_array($contentType)) {
+                $contentType = $contentType[0] ?? null;
+            }
+
+            $contentLength = $response->header('Content-Length');
+            if (is_array($contentLength)) {
+                $contentLength = $contentLength[0] ?? null;
+            }
+
+            return [
+                'mime_type' => $contentType ? strtolower(trim(explode(';', $contentType)[0])) : null,
+                'file_size_bytes' => is_numeric($contentLength) ? (int) $contentLength : null,
+            ];
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 }

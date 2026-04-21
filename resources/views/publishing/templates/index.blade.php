@@ -1,7 +1,7 @@
 {{-- Templates list --}}
 @extends('layouts.app')
-@section('title', 'Article Templates')
-@section('header', 'Article Templates')
+@section('title', 'Article Presets')
+@section('header', 'Article Presets')
 
 @section('content')
 <div class="space-y-4">
@@ -22,14 +22,14 @@
             </select>
             <button type="submit" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Filter</button>
         </form>
-        <a href="{{ route('publish.templates.create') }}" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">+ New Template</a>
+        <a href="{{ route('publish.templates.create') }}" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">+ New Preset</a>
     </div>
 
-    <p class="text-sm text-gray-500">{{ $templates->count() }} template(s)</p>
+    <p class="text-sm text-gray-500">{{ $templates->count() }} preset(s)</p>
 
     @if($templates->isEmpty())
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-            <p class="text-gray-500">No templates created yet.</p>
+            <p class="text-gray-500">No article presets created yet.</p>
         </div>
     @else
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

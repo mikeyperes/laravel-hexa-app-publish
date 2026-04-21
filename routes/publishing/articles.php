@@ -9,6 +9,7 @@ Route::get('/publish/articles', [ArticleController::class, 'index'])->name('publ
 Route::get('/publish/articles/create', [ArticleController::class, 'create'])->name('publish.articles.create');
 Route::post('/publish/articles', [ArticleController::class, 'store'])->name('publish.articles.store');
 Route::get('/publish/articles/{id}', [ArticleController::class, 'show'])->name('publish.articles.show');
+Route::get('/publish/articles/{id}/audit', [ArticleController::class, 'audit'])->name('publish.articles.audit');
 Route::get('/publish/articles/{id}/edit', [ArticleController::class, 'edit'])->name('publish.articles.edit');
 Route::put('/publish/articles/{id}', [ArticleController::class, 'update'])->name('publish.articles.update');
 Route::post('/publish/articles/{id}/publish', [ArticleController::class, 'publish'])->name('publish.articles.publish');

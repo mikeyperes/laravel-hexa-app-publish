@@ -114,7 +114,7 @@
                 const resp = await fetch('{{ route("publish.pipeline.metadata") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ article_html: html })
+                    body: JSON.stringify({ article_html: html, draft_id: this.draftId || null })
                 });
                 const data = await resp.json();
                 if (data.success) {
@@ -288,7 +288,14 @@
                 const resp = await fetch('{{ route("publish.search.images.post") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ query: this.photoSearch, per_page: 15 })
+                    body: JSON.stringify({
+                        query: this.photoSearch,
+                        draft_id: this.draftId || null,
+                        per_page: 15,
+                        sources: ['google', 'pexels', 'pixabay'],
+                        quality_context: 'inline',
+                        probe_quality: true,
+                    })
                 });
                 const data = await resp.json();
                 this.photoResults = data.data?.photos || [];
@@ -304,10 +311,16 @@
             this.featuredThumbError = '';
             this.featuredResults = [];
             try {
-                const resp = await fetch('{{ route("publish.search.images.post") }}', {
+                const resp = await fetch('{{ route("publish.search.google-images") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ query: this.featuredImageSearch, per_page: 8, sources: ['pexels', 'pixabay'] })
+                    body: JSON.stringify({
+                        query: this.featuredImageSearch,
+                        draft_id: this.draftId || null,
+                        per_page: 8,
+                        quality_context: 'featured',
+                        probe_quality: true,
+                    })
                 });
                 const data = await resp.json();
                 const photos = data.data?.photos || [];
@@ -497,7 +510,9 @@
                             query: this.photoSuggestions[idx]?.search_term || '',
                             per_page: 12,
                         })),
-                        sources: ['pexels', 'pixabay'],
+                        sources: ['google', 'pexels', 'pixabay'],
+                        quality_context: 'inline',
+                        probe_quality: true,
                     }),
                 });
                 const data = await resp.json();
@@ -856,7 +871,7 @@
                 const resp = await fetch('{{ route("publish.search.images.post") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ query: ps.search_term, per_page: 20 })
+                    body: JSON.stringify({ query: ps.search_term, per_page: 20, draft_id: this.draftId || null })
                 });
                 const data = await resp.json();
                 this.photoSuggestions[idx].searchResults = data.data?.photos || [];

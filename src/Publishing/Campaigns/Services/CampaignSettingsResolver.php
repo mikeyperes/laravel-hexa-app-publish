@@ -4,14 +4,15 @@ namespace hexa_app_publish\Publishing\Campaigns\Services;
 
 use hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset;
 use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
-use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
+use hexa_app_publish\Support\AiModelCatalog;
 
 class CampaignSettingsResolver
 {
     public function __construct(
         protected CampaignEligibilityService $eligibility,
         protected CampaignModeResolver $modeResolver,
+        protected AiModelCatalog $catalog,
     ) {
     }
 
@@ -20,44 +21,58 @@ class CampaignSettingsResolver
      */
     public function resolve(PublishCampaign $campaign): array
     {
-        $campaign->loadMissing(['campaignPreset', 'template', 'wpPreset', 'site']);
+        $campaign->loadMissing(['campaignPreset', 'template', 'site']);
 
         $campaignPreset = $campaign->campaignPreset ?: $this->defaultCampaignPreset($campaign);
         $template = $campaign->template ?: $this->defaultTemplate($campaign);
-        $wpPreset = $campaign->wpPreset ?: $this->defaultWpPreset($campaign);
 
         $articleType = $campaign->article_type
             ?: ($template?->article_type ?: config('hws-publish.campaign_supported_article_types.0'));
-        $deliveryMode = $campaign->delivery_mode
-            ?: ($wpPreset?->default_publish_action ? $this->mapWpPresetAction($wpPreset->default_publish_action) : 'draft-local');
+        $deliveryMode = $campaign->delivery_mode ?: 'draft-local';
         $normalizedDeliveryMode = $this->modeResolver->normalizeDeliveryMode($deliveryMode);
+        $onlineSearchPrimary = $template?->searching_agent ?: $this->catalog->defaultSearchModel();
+        $onlineSearchFallback = $template?->online_search_model_fallback ?: ($this->catalog->defaultSearchFallbackModel($onlineSearchPrimary) ?: $onlineSearchPrimary);
+        $scrapeAiPrimary = $template?->scraping_agent ?: $this->catalog->defaultSearchModel();
+        $scrapeAiFallback = $template?->scrape_ai_model_fallback ?: ($this->catalog->defaultSearchFallbackModel($scrapeAiPrimary) ?: $scrapeAiPrimary);
+        $spinPrimary = $template?->spinning_agent ?: ($template?->ai_engine ?: $this->catalog->defaultSpinModel());
+        $spinFallback = $template?->spin_model_fallback ?: ($this->catalog->defaultSpinFallbackModel($spinPrimary) ?: $spinPrimary);
+        $inlinePhotoMin = max(1, (int) ($template?->inline_photo_min ?: 2));
+        $inlinePhotoMax = max($inlinePhotoMin, (int) ($template?->inline_photo_max ?: max(3, $inlinePhotoMin)));
 
         $resolved = [
             'article_type' => $articleType,
             'delivery_mode' => $normalizedDeliveryMode,
             'execution_mode' => $this->modeResolver->toExecutionMode($deliveryMode),
-            'final_article_method' => $campaignPreset?->final_article_method ?: 'news-search',
-            'source_method' => $campaignPreset?->source_method ?: 'keyword',
             'search_terms' => $this->resolveSearchTerms($campaign, $campaignPreset),
             'topic' => trim((string) ($campaign->topic ?: '')),
-            'genre' => $campaignPreset?->genre,
-            'trending_categories' => array_values((array) ($campaignPreset?->trending_categories ?: [])),
-            'local_preference' => trim((string) ($campaignPreset?->local_preference ?: '')),
             'article_sources' => $this->normalizeArticleSources($campaign->article_sources),
             'photo_sources' => $this->resolvePhotoSources($campaign, $template),
             'max_links_per_article' => $campaign->max_links_per_article ?: ($template?->max_links ?: config('hws-publish.defaults.max_links_per_article', 5)),
-            'ai_engine' => $campaign->ai_engine ?: ($template?->ai_engine ?: 'claude-sonnet-4-6'),
+            'ai_engine' => $campaign->ai_engine ?: $spinPrimary,
+            'spin_model_primary' => $spinPrimary,
+            'spin_model_fallback' => $spinFallback,
+            'search_online_for_additional_context' => $template?->search_online_for_additional_context ?? true,
+            'online_search_model_primary' => $onlineSearchPrimary,
+            'online_search_model_fallback' => $onlineSearchFallback,
+            'scrape_ai_model_primary' => $scrapeAiPrimary,
+            'scrape_ai_model_fallback' => $scrapeAiFallback,
+            'headline_rules' => trim((string) ($template?->headline_rules ?: '')),
+            'h2_notation' => trim((string) ($template?->h2_notation ?: 'capital_case')),
+            'inline_photo_min' => $inlinePhotoMin,
+            'inline_photo_max' => $inlinePhotoMax,
+            'featured_image_required' => $template?->featured_image_required ?? true,
+            'featured_image_must_be_landscape' => $template?->featured_image_must_be_landscape ?? true,
             'publish_template_id' => $campaign->publish_template_id ?: $template?->id,
-            'preset_id' => $campaign->preset_id ?: $wpPreset?->id,
             'post_status' => $this->resolvePostStatus($normalizedDeliveryMode, $campaign->post_status),
-            'author' => $campaign->author,
+            'author' => $campaign->author ?: $campaign->site?->default_author,
             'ai_instructions' => $this->combineInstructions(
+                $campaignPreset?->campaign_instructions,
                 $campaignPreset?->ai_instructions,
                 $campaign->ai_instructions ?: $campaign->notes
             ),
             'campaign_preset' => $campaignPreset,
+            'article_preset' => $template,
             'template' => $template,
-            'wp_preset' => $wpPreset,
         ];
 
         $this->eligibility->assertArticleTypeAllowed($resolved['article_type']);
@@ -73,7 +88,7 @@ class CampaignSettingsResolver
     {
         $terms = $campaign->keywords;
         if (empty($terms) && $campaignPreset) {
-            $terms = $campaignPreset->keywords;
+            $terms = $campaignPreset->search_queries ?: $campaignPreset->keywords;
         }
 
         return collect((array) $terms)
@@ -170,29 +185,6 @@ class CampaignSettingsResolver
         }
 
         return PublishTemplate::where('is_default', true)->first();
-    }
-
-    private function defaultWpPreset(PublishCampaign $campaign): ?PublishPreset
-    {
-        if ($campaign->user_id) {
-            $preset = PublishPreset::where('user_id', $campaign->user_id)
-                ->where('is_default', true)
-                ->first();
-            if ($preset) {
-                return $preset;
-            }
-        }
-
-        return PublishPreset::where('is_default', true)->first();
-    }
-
-    private function mapWpPresetAction(string $action): string
-    {
-        return match ($action) {
-            'publish_immediate' => 'auto-publish',
-            'draft_wordpress' => 'draft-wordpress',
-            default => 'draft-local',
-        };
     }
 
     private function resolvePostStatus(string $deliveryMode, ?string $postStatus): string

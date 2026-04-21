@@ -7,7 +7,10 @@ use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
 
 class CampaignDiscoveryService
 {
-    public function __construct(protected SourceDiscoveryService $sourceDiscovery)
+    public function __construct(
+        protected SourceDiscoveryService $sourceDiscovery,
+        protected CampaignArticleSearchService $articleSearch
+    )
     {
     }
 
@@ -19,28 +22,24 @@ class CampaignDiscoveryService
     {
         $terms = array_values((array) ($resolved['search_terms'] ?? []));
         $selectedTerm = !empty($terms) ? $terms[array_rand($terms)] : null;
-        $sourceMode = (string) ($resolved['source_method'] ?? 'keyword');
+        $sourceMode = 'google_via_ai';
         $category = null;
         $query = trim((string) ($selectedTerm ?: ($resolved['topic'] ?? '')));
 
-        if ($sourceMode === 'local') {
-            $localPreference = trim((string) ($resolved['local_preference'] ?? ''));
-            $query = trim($query ?: $campaign->topic ?: 'local news');
-            if ($localPreference !== '' && stripos($query, $localPreference) === false) {
-                $query = trim($query . ' ' . $localPreference);
+        $allSingleWordTerms = !empty($terms) && collect($terms)->every(function ($term) {
+            return str_word_count(trim((string) $term)) <= 1;
+        });
+
+        if ($allSingleWordTerms && count($terms) > 1) {
+            $query = trim(implode(' ', array_slice($terms, 0, 3)));
+        } elseif ($query !== '' && str_word_count($query) <= 1 && count($terms) > 1) {
+            $companions = array_values(array_filter($terms, fn ($term) => trim((string) $term) !== trim((string) $selectedTerm)));
+            if (!empty($companions)) {
+                $query = trim($query . ' ' . $companions[0]);
             }
         }
 
-        if ($sourceMode === 'trending') {
-            $categories = array_values((array) ($resolved['trending_categories'] ?? []));
-            $category = !empty($categories) ? $categories[array_rand($categories)] : null;
-        }
-
-        if ($sourceMode === 'genre') {
-            $category = trim((string) ($resolved['genre'] ?? '')) ?: null;
-        }
-
-        if ($sourceMode === 'keyword' && $query === '') {
+        if ($query === '') {
             $query = trim((string) ($campaign->topic ?: 'latest news'));
         }
 
@@ -54,22 +53,43 @@ class CampaignDiscoveryService
 
     /**
      * @param array<string, mixed> $resolved
-     * @return array{urls: array<int, string>, context: array<string, mixed>}
+     * @return array{urls: array<int, string>, context: array<string, mixed>, details: array<string, mixed>}
      */
-    public function discoverUrls(PublishCampaign $campaign, array $resolved, int $limit = 3): array
+    public function discoverUrls(PublishCampaign $campaign, array $resolved, int $limit = 3, ?int $articleId = null): array
     {
         $context = $this->buildSearchContext($campaign, $resolved);
+        $details = [
+            'search_backend' => 'php_discovery',
+            'search_backend_label' => 'PHP discovery',
+            'attempts' => [],
+        ];
+
+        if (($resolved['search_online_for_additional_context'] ?? true) === true) {
+            $search = $this->articleSearch->search($context['query'], $limit, [
+                $resolved['online_search_model_primary'] ?? null,
+                $resolved['online_search_model_fallback'] ?? null,
+            ], $articleId);
+
+            $details = array_merge($details, (array) ($search['details'] ?? []));
+            if ($search['success'] && !empty($search['urls'])) {
+                return [
+                    'urls' => $search['urls'],
+                    'context' => $context,
+                    'details' => $details,
+                ];
+            }
+        }
 
         $urls = $this->sourceDiscovery->discoverUrls($context['query'], [
-            'mode' => $context['source_mode'],
+            'mode' => 'keyword',
             'category' => $context['category'],
-            'genre' => $resolved['genre'] ?? null,
             'sources' => $resolved['article_sources'] ?? [],
         ], $limit);
 
         return [
             'urls' => $urls,
             'context' => $context,
+            'details' => $details,
         ];
     }
 }

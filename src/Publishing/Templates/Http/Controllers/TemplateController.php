@@ -112,6 +112,12 @@ class TemplateController extends Controller
         $validated = $this->formValidation->validate($payload, $form, ['mode' => 'create', 'context' => 'create']);
         $data = $this->formHydration->dehydrate($form, $validated);
         $data['status'] = $this->validatedStatus($request, 'draft');
+        $data['ai_engine'] = $data['spinning_agent'] ?? ($data['ai_engine'] ?? null);
+        $data['photos_per_article'] = max(
+            (int) ($data['inline_photo_min'] ?? 2),
+            (int) ($data['inline_photo_max'] ?? 3)
+        );
+        $data['photo_sources'] = array_values((array) ($data['photo_sources'] ?? config('hws-publish.photo_sources', [])));
 
         if (!empty($data['is_default'])) {
             PublishTemplate::where('publish_account_id', $data['publish_account_id'])->update(['is_default' => false]);
@@ -182,6 +188,12 @@ class TemplateController extends Controller
         ]);
         $data = $this->formHydration->dehydrate($form, $validated);
         $data['status'] = $this->validatedStatus($request, $template->status ?? 'draft');
+        $data['ai_engine'] = $data['spinning_agent'] ?? ($data['ai_engine'] ?? $template->ai_engine);
+        $data['photos_per_article'] = max(
+            (int) ($data['inline_photo_min'] ?? $template->inline_photo_min ?? 2),
+            (int) ($data['inline_photo_max'] ?? $template->inline_photo_max ?? 3)
+        );
+        $data['photo_sources'] = array_values((array) ($data['photo_sources'] ?? $template->photo_sources ?? config('hws-publish.photo_sources', [])));
 
         if (!empty($data['is_default'])) {
             $accountId = $data['publish_account_id'] ?? $template->publish_account_id;
@@ -284,6 +296,7 @@ class TemplateController extends Controller
                     'article_type',
                     'description',
                     'ai_prompt',
+                    'headline_rules',
                     'ai_engine',
                     'tone',
                     'word_count_min',
@@ -291,6 +304,15 @@ class TemplateController extends Controller
                     'photos_per_article',
                     'photo_sources',
                     'max_links',
+                    'search_online_for_additional_context',
+                    'online_search_model_fallback',
+                    'scrape_ai_model_fallback',
+                    'spin_model_fallback',
+                    'h2_notation',
+                    'inline_photo_min',
+                    'inline_photo_max',
+                    'featured_image_required',
+                    'featured_image_must_be_landscape',
                     'structure',
                     'rules',
                     'searching_agent',

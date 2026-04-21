@@ -7,7 +7,7 @@
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <label class="block text-xs text-gray-500 mb-1">Campaign Name</label>
-        <input type="text" x-model="form.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Daily Entertainment News">
+        <input type="text" x-model="form.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Her Forward Celebrity Breaking">
     </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -21,6 +21,7 @@
             <x-hexa-smart-search url="{{ route('api.search.users') }}" name="user_id" placeholder="Search users..." display-field="name" subtitle-field="email" value-field="id" id="campaign-user" show-id
                 :selected="$selectedUser" />
         </div>
+        <p class="text-xs text-gray-400 mt-2">Campaign runs use the selected user’s timezone automatically.</p>
     </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
@@ -37,91 +38,48 @@
 
         <div x-show="selectedPreset()" x-cloak class="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 space-y-2">
             <div class="flex flex-wrap gap-4">
-                <p><span class="text-blue-600">Output:</span> <span x-text="formatLabel(selectedPreset()?.final_article_method)"></span></p>
-                <p><span class="text-blue-600">Discovery:</span> <span x-text="formatLabel(selectedPreset()?.source_method)"></span></p>
-                <p><span class="text-blue-600">Search Terms:</span> <span x-text="(selectedPreset()?.keywords || []).length"></span></p>
+                <p><span class="text-blue-600">Queries:</span> <span x-text="(selectedPreset()?.search_queries || selectedPreset()?.keywords || []).length"></span></p>
+                <p><span class="text-blue-600">Posts Per Run:</span> <span x-text="selectedPreset()?.posts_per_run || 1"></span></p>
+                <p><span class="text-blue-600">Frequency:</span> <span x-text="formatLabel(selectedPreset()?.frequency || 'daily')"></span></p>
             </div>
-            <p x-show="selectedPreset()?.genre"><span class="text-blue-600">Genre:</span> <span x-text="selectedPreset()?.genre"></span></p>
-            <p x-show="selectedPreset()?.local_preference"><span class="text-blue-600">Local Preference:</span> <span x-text="selectedPreset()?.local_preference"></span></p>
-            <p x-show="selectedPreset()?.ai_instructions"><span class="text-blue-600">Preset AI Instructions:</span> <span x-text="selectedPreset()?.ai_instructions"></span></p>
+            <p x-show="selectedPreset()?.run_at_time"><span class="text-blue-600">Run At:</span> <span x-text="selectedPreset()?.run_at_time"></span></p>
+            <p x-show="selectedPreset()?.campaign_instructions || selectedPreset()?.ai_instructions"><span class="text-blue-600">Instructions:</span> <span x-text="selectedPreset()?.campaign_instructions || selectedPreset()?.ai_instructions"></span></p>
         </div>
     </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
-        <h3 class="font-semibold text-gray-800">Discovery</h3>
-        <div>
-            <label class="block text-xs text-gray-500 mb-1">Search Terms / Prompts <span class="text-gray-400">(one per line, one is chosen at random per run)</span></label>
-            <textarea x-model="termsText" rows="6" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Find breaking news in entertainment&#10;Latest local education policy updates&#10;Breaking startup funding news"></textarea>
-            <p class="text-xs text-gray-400 mt-1">Leave blank to use the selected campaign preset's search terms.</p>
+        <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-gray-800">Article Preset</h3>
+            <a href="{{ route('publish.templates.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage Presets</a>
         </div>
+        <select x-model="form.publish_template_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
+            <option value="">-- Default Article Preset --</option>
+            @foreach($aiTemplates as $template)
+                <option value="{{ $template->id }}">{{ $template->name }}</option>
+            @endforeach
+        </select>
 
-        <div>
-            <label class="block text-xs text-gray-500 mb-1">Fallback Topic / Query</label>
-            <input type="text" x-model="form.topic" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Used when no search terms are available">
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Article Type</label>
-                <select x-model="form.article_type" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="">-- Template Default --</option>
-                    @foreach($articleTypes as $type)
-                        <option value="{{ $type }}">{{ ucwords(str_replace('-', ' ', $type)) }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Article Sources</label>
-                <div class="flex flex-wrap gap-2 pt-2">
-                    @foreach(config('hws-publish.article_sources', []) as $source)
-                        <label class="inline-flex items-center gap-2 text-xs text-gray-600">
-                            <input type="checkbox" :checked="form.article_sources.includes('{{ $source }}')" @change="toggleArray(form.article_sources, '{{ $source }}')" class="rounded border-gray-300 text-blue-600">
-                            {{ ucwords(str_replace(['-', '_'], ' ', $source)) }}
-                        </label>
-                    @endforeach
-                </div>
-            </div>
+        <div x-show="selectedTemplate()" x-cloak class="rounded-lg border border-gray-100 bg-gray-50 p-4 text-xs text-gray-700 space-y-1">
+            <p x-show="selectedTemplate()?.article_type"><span class="text-gray-500">Type:</span> <span x-text="formatLabel(selectedTemplate()?.article_type)"></span></p>
+            <p><span class="text-gray-500">Words:</span> <span x-text="(selectedTemplate()?.word_count_min || '—') + ' - ' + (selectedTemplate()?.word_count_max || '—')"></span></p>
+            <p><span class="text-gray-500">Search:</span> <span x-text="(selectedTemplate()?.searching_agent || defaultSearchModel || '—') + ' -> ' + (selectedTemplate()?.online_search_model_fallback || defaultSearchFallback || defaultSearchModel || '—')"></span></p>
+            <p><span class="text-gray-500">Scrape:</span> <span x-text="(selectedTemplate()?.scraping_agent || defaultSearchModel || '—') + ' -> ' + (selectedTemplate()?.scrape_ai_model_fallback || defaultSearchFallback || defaultSearchModel || '—')"></span></p>
+            <p><span class="text-gray-500">Spin:</span> <span x-text="(selectedTemplate()?.spinning_agent || selectedTemplate()?.ai_engine || defaultSpinModel || '—') + ' -> ' + (selectedTemplate()?.spin_model_fallback || defaultSpinFallback || defaultSpinModel || '—')"></span></p>
+            <p><span class="text-gray-500">Photos:</span> Featured image is always Google searched. Inline photos are Google searched or stock.</p>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
-            <div class="flex items-center justify-between">
-                <h3 class="font-semibold text-gray-800">AI Template</h3>
-                <a href="{{ route('publish.templates.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
-            </div>
-            <select x-model="form.publish_template_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <option value="">-- Default Template --</option>
-                @foreach($aiTemplates as $template)
-                    <option value="{{ $template->id }}">{{ $template->name }}</option>
-                @endforeach
-            </select>
-            <div x-show="selectedTemplate()" x-cloak class="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs text-gray-700">
-                <p x-show="selectedTemplate()?.article_type"><span class="text-gray-500">Type:</span> <span x-text="formatLabel(selectedTemplate()?.article_type)"></span></p>
-                <p x-show="selectedTemplate()?.ai_engine"><span class="text-gray-500">AI Model:</span> <span x-text="selectedTemplate()?.ai_engine"></span></p>
-                <p x-show="selectedTemplate()?.word_count_min || selectedTemplate()?.word_count_max"><span class="text-gray-500">Word Count:</span> <span x-text="(selectedTemplate()?.word_count_min || '—') + ' - ' + (selectedTemplate()?.word_count_max || '—')"></span></p>
-            </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+        <h3 class="font-semibold text-gray-800">Discovery And Angle</h3>
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Search Queries <span class="text-gray-400">(one per line)</span></label>
+            <textarea x-model="termsText" rows="6" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="celebrity breaking news&#10;celebrity legal filing&#10;celebrity business launch"></textarea>
+            <p class="text-xs text-gray-400 mt-1">Leave blank to use the selected campaign preset queries.</p>
         </div>
 
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
-            <div class="flex items-center justify-between">
-                <h3 class="font-semibold text-gray-800">WordPress Preset</h3>
-                <a href="{{ route('publish.presets.index') }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800">Manage</a>
-            </div>
-            <select x-model="form.preset_id" @change="applyWpPresetDefaults()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <option value="">-- Default Preset --</option>
-                @foreach($wpPresets as $preset)
-                    <option value="{{ $preset->id }}">{{ $preset->name }}</option>
-                @endforeach
-            </select>
-            <div>
-                <label class="block text-xs text-gray-500 mb-1">Delivery Mode</label>
-                <select x-model="form.delivery_mode" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    @foreach($deliveryModes as $mode)
-                        <option value="{{ $mode }}">{{ ucwords(str_replace('-', ' ', $mode)) }}</option>
-                    @endforeach
-                </select>
-            </div>
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Campaign Instructions</label>
+            <textarea x-model="form.ai_instructions" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Prioritize real news pegs, not gossip filler."></textarea>
         </div>
     </div>
 
@@ -162,10 +120,10 @@
     </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
-        <h3 class="font-semibold text-gray-800">Scheduling</h3>
+        <h3 class="font-semibold text-gray-800">Schedule And Default Run Mode</h3>
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-                <label class="block text-xs text-gray-500 mb-1">Posts per Batch</label>
+                <label class="block text-xs text-gray-500 mb-1">Posts Per Run</label>
                 <input type="number" x-model="form.articles_per_interval" min="1" max="50" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div>
@@ -186,19 +144,15 @@
                 <input type="number" x-model="form.drip_interval_minutes" min="1" max="1440" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
         </div>
-        <div>
-            <label class="block text-xs text-gray-500 mb-1">Timezone</label>
-            <select x-model="form.timezone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md">
-                @foreach($timezones as $tz)
-                    <option value="{{ $tz }}">{{ $tz }}</option>
+
+        <div class="max-w-md">
+            <label class="block text-xs text-gray-500 mb-1">Default Run Mode</label>
+            <select x-model="form.delivery_mode" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                @foreach($deliveryModes as $mode)
+                    <option value="{{ $mode }}">{{ ucwords(str_replace('-', ' ', $mode)) }}</option>
                 @endforeach
             </select>
         </div>
-    </div>
-
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <label class="block text-xs text-gray-500 mb-1">Campaign AI Instructions</label>
-        <textarea x-model="form.ai_instructions" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Extra instructions for the AI when this campaign runs."></textarea>
     </div>
 
     <div class="flex gap-3">
@@ -219,6 +173,7 @@
 
     <div class="flex gap-4 text-xs text-gray-400">
         <a href="{{ route('campaigns.presets.index') }}" class="hover:text-blue-600">Campaign Presets</a>
+        <a href="{{ route('publish.templates.index') }}" class="hover:text-blue-600">Article Presets</a>
         @if(Route::has('publish.schedule.index'))
             <a href="{{ route('publish.schedule.index') }}" class="hover:text-blue-600">Cron Schedule</a>
         @endif
@@ -229,11 +184,14 @@
 @include('app-publish::partials.site-connection-mixin')
 <script>
 function campaignCreate() {
+    const defaultSearchModel = @json(app(\hexa_app_publish\Support\AiModelCatalog::class)->defaultSearchModel());
+    const defaultSearchFallback = @json(app(\hexa_app_publish\Support\AiModelCatalog::class)->defaultSearchFallbackModel(app(\hexa_app_publish\Support\AiModelCatalog::class)->defaultSearchModel()));
+    const defaultSpinModel = @json(app(\hexa_app_publish\Support\AiModelCatalog::class)->defaultSpinModel());
+    const defaultSpinFallback = @json(app(\hexa_app_publish\Support\AiModelCatalog::class)->defaultSpinFallbackModel(app(\hexa_app_publish\Support\AiModelCatalog::class)->defaultSpinModel()));
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
     const presets = @json($campaignPresets);
     const aiTemplates = @json($aiTemplates);
-    const wpPresets = @json($wpPresets);
 
     @if(isset($editCampaign) && $editCampaign)
         @php
@@ -241,23 +199,19 @@ function campaignCreate() {
                 'user_id' => $editCampaign->user_id,
                 'campaign_preset_id' => $editCampaign->campaign_preset_id ?? '',
                 'publish_template_id' => $editCampaign->publish_template_id ?? '',
-                'preset_id' => $editCampaign->preset_id ?? '',
                 'publish_site_id' => $editCampaign->publish_site_id ?? '',
                 'name' => $editCampaign->name ?? '',
                 'description' => $editCampaign->description ?? '',
                 'ai_instructions' => $editCampaign->ai_instructions ?? $editCampaign->notes ?? '',
-                'topic' => $editCampaign->topic ?? '',
                 'keywords' => $editCampaign->keywords ?? [],
-                'article_type' => $editCampaign->article_type ?? '',
                 'delivery_mode' => $editCampaign->delivery_mode ?? 'draft-local',
                 'author' => $editCampaign->author ?? '',
                 'articles_per_interval' => $editCampaign->articles_per_interval ?? 1,
                 'interval_unit' => $editCampaign->interval_unit ?? 'daily',
-                'timezone' => $editCampaign->timezone ?? 'America/New_York',
                 'run_at_time' => $editCampaign->run_at_time ?? '09:00',
                 'drip_interval_minutes' => $editCampaign->drip_interval_minutes ?? 60,
-                'article_sources' => $editCampaign->article_sources ?? [],
             ];
+            $editData['delivery_mode'] = app(\hexa_app_publish\Publishing\Campaigns\Services\CampaignModeResolver::class)->normalizeDeliveryMode($editData['delivery_mode']);
         @endphp
         const initialForm = {!! json_encode($editData) !!};
     @else
@@ -265,22 +219,17 @@ function campaignCreate() {
             user_id: null,
             campaign_preset_id: '',
             publish_template_id: '',
-            preset_id: '',
             publish_site_id: '',
             name: '',
             description: '',
             ai_instructions: '',
-            topic: '',
             keywords: [],
-            article_type: '',
-            delivery_mode: 'draft-local',
+            delivery_mode: 'draft-wordpress',
             author: '',
             articles_per_interval: 1,
             interval_unit: 'daily',
-            timezone: 'America/New_York',
             run_at_time: '09:00',
             drip_interval_minutes: 60,
-            article_sources: [],
         };
     @endif
 
@@ -292,6 +241,10 @@ function campaignCreate() {
         saveSuccess: false,
         runningNow: false,
         loadingPresets: false,
+        defaultSearchModel,
+        defaultSearchFallback,
+        defaultSpinModel,
+        defaultSpinFallback,
         form: initialForm,
         termsText: (initialForm.keywords || []).join('\n'),
         _saveTimer: null,
@@ -313,10 +266,6 @@ function campaignCreate() {
             if (defaultPreset && !this.form.campaign_preset_id) {
                 this.form.campaign_preset_id = String(defaultPreset.id);
                 this.applyPresetDefaults();
-            }
-
-            if (this.form.preset_id) {
-                this.applyWpPresetDefaults();
             }
 
             if (this.form.publish_site_id) {
@@ -347,45 +296,33 @@ function campaignCreate() {
             return aiTemplates.find(item => String(item.id) === String(this.form.publish_template_id)) || null;
         },
 
-        selectedWpPreset() {
-            return wpPresets.find(item => String(item.id) === String(this.form.preset_id)) || null;
-        },
-
-        toggleArray(arr, value) {
-            const index = arr.indexOf(value);
-            if (index === -1) arr.push(value);
-            else arr.splice(index, 1);
-        },
-
         applyPresetDefaults() {
             const preset = this.selectedPreset();
             if (!preset) return;
 
-            if (!this.termsText.trim() && Array.isArray(preset.keywords) && preset.keywords.length > 0) {
-                this.termsText = preset.keywords.join('\n');
+            const presetQueries = preset.search_queries || preset.keywords || [];
+            if (!this.termsText.trim() && Array.isArray(presetQueries) && presetQueries.length > 0) {
+                this.termsText = presetQueries.join('\n');
             }
 
-            if (!this.form.ai_instructions && preset.ai_instructions) {
-                this.form.ai_instructions = preset.ai_instructions;
+            if (!this.form.ai_instructions && (preset.campaign_instructions || preset.ai_instructions)) {
+                this.form.ai_instructions = preset.campaign_instructions || preset.ai_instructions;
             }
 
-            if (!this.form.topic && preset.local_preference && preset.source_method === 'local') {
-                this.form.topic = preset.local_preference + ' local news';
+            if (!this.form.articles_per_interval || this.form.articles_per_interval === 1) {
+                this.form.articles_per_interval = preset.posts_per_run || this.form.articles_per_interval || 1;
             }
-        },
 
-        applyWpPresetDefaults() {
-            const preset = this.selectedWpPreset();
-            if (!preset) return;
+            if (!this.form.interval_unit || this.form.interval_unit === 'daily') {
+                this.form.interval_unit = preset.frequency || this.form.interval_unit || 'daily';
+            }
 
-            if (preset.default_publish_action) {
-                const actionMap = {
-                    publish_immediate: 'auto-publish',
-                    draft_wordpress: 'draft-wordpress',
-                    draft_local: 'draft-local',
-                    schedule: 'draft-local',
-                };
-                this.form.delivery_mode = actionMap[preset.default_publish_action] || 'draft-local';
+            if ((!this.form.run_at_time || this.form.run_at_time === '09:00') && preset.run_at_time) {
+                this.form.run_at_time = preset.run_at_time;
+            }
+
+            if ((!this.form.drip_interval_minutes || this.form.drip_interval_minutes === 60) && preset.drip_minutes) {
+                this.form.drip_interval_minutes = preset.drip_minutes;
             }
         },
 
@@ -404,13 +341,13 @@ function campaignCreate() {
             if (!userId) return;
             this.loadingPresets = true;
             try {
-                const presetsResp = await fetch('{{ route("publish.presets.index") }}?user_id=' + userId + '&format=json', { headers: { Accept: 'application/json' } });
-                const presetsData = await presetsResp.json();
-                const userPresets = presetsData.data || presetsData || [];
-                const defaultWp = userPresets.find(item => item.is_default);
-                if (defaultWp && !this.form.preset_id) {
-                    this.form.preset_id = String(defaultWp.id);
-                    this.applyWpPresetDefaults();
+                const campaignPresetsResp = await fetch('{{ route("campaigns.presets.index") }}?user_id=' + userId, { headers: { Accept: 'application/json' } });
+                const campaignPresetsData = await campaignPresetsResp.json();
+                const userCampaignPresets = campaignPresetsData.data?.data || campaignPresetsData.data || [];
+                const defaultCampaignPreset = userCampaignPresets.find(item => item.is_default);
+                if (defaultCampaignPreset && !this.form.campaign_preset_id) {
+                    this.form.campaign_preset_id = String(defaultCampaignPreset.id);
+                    this.applyPresetDefaults();
                 }
 
                 const templatesResp = await fetch('{{ route("publish.templates.index") }}?user_id=' + userId + '&format=json', { headers: { Accept: 'application/json' } });
@@ -463,7 +400,7 @@ function campaignCreate() {
                 const response = await fetch('/campaigns/' + this.editId + '/run-now', {
                     method: 'POST',
                     headers,
-                    body: JSON.stringify({ mode: this.form.delivery_mode || 'draft-local' }),
+                    body: JSON.stringify({ mode: this.form.delivery_mode || 'draft-wordpress' }),
                 });
                 const data = await response.json();
                 this.saveSuccess = data.success;

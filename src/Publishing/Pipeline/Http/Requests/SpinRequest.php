@@ -7,6 +7,7 @@ class SpinRequest extends PipelineRequest
     public function rules(): array
     {
         return [
+            'draft_id' => 'nullable|integer|exists:publish_articles,id',
             'source_texts' => 'required|array|min:1',
             'source_texts.*' => 'required|string',
             'template_id' => 'nullable|integer|exists:publish_templates,id',

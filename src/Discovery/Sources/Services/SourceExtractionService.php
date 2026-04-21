@@ -3,6 +3,8 @@
 namespace hexa_app_publish\Discovery\Sources\Services;
 
 use hexa_app_publish\Discovery\Sources\Models\ScrapeLog;
+use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
+use hexa_app_publish\Support\AiModelCatalog;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -27,6 +29,7 @@ class SourceExtractionService
      *     @type int    $timeout    Request timeout in seconds (default: 20)
      *     @type int    $min_words  Minimum word count for pass (default: 50)
      *     @type bool   $auto_fallback Retry with googlebot UA on failure (default: true)
+     *     @type array<int, string> $ai_fallback_models AI extraction fallbacks after local extraction fails
      * }
      * @return array{success: bool, message: string, url: string, title: string, text: string, word_count: int, formatted_html: string, fetch_info: array|null}
      */
@@ -39,6 +42,12 @@ class SourceExtractionService
         $timeout = $options['timeout'] ?? 20;
         $minWords = $options['min_words'] ?? 50;
         $autoFallback = $options['auto_fallback'] ?? true;
+        $aiFallbackModels = collect((array) ($options['ai_fallback_models'] ?? []))
+            ->map(fn ($model) => trim((string) $model))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
         $source = (string) ($options['source'] ?? 'pipeline');
         $draftId = isset($options['draft_id']) ? (int) $options['draft_id'] : null;
         $normalization = $this->normalizeSourceUrl($requestedUrl, $timeout);
@@ -85,7 +94,33 @@ class SourceExtractionService
 
                 $fallbackResult = $this->attachNormalizationMeta($fallbackResult, $requestedUrl, $url, $normalizationMeta);
                 $this->logScrape($url, $method, 'googlebot', $timeout, $retries, $fallbackResult, $source, $draftId);
+                if ($fallbackResult['success']) {
+                    return $fallbackResult;
+                }
+
+                foreach ($aiFallbackModels as $aiModel) {
+                    $aiResult = $this->extractWithAiModel($url, $aiModel, $minWords);
+                    $aiResult = $this->attachNormalizationMeta($aiResult, $requestedUrl, $url, $normalizationMeta);
+                    $this->logScrape($url, 'ai-fallback', 'ai', $timeout, $retries, $aiResult, $source, $draftId);
+                    if ($aiResult['success']) {
+                        $aiResult['message'] = 'Extracted via AI fallback (' . $aiModel . '). ' . ($aiResult['message'] ?? '');
+                        return $aiResult;
+                    }
+                }
+
                 return $fallbackResult;
+            }
+
+            if (!$primaryResult['success']) {
+                foreach ($aiFallbackModels as $aiModel) {
+                    $aiResult = $this->extractWithAiModel($url, $aiModel, $minWords);
+                    $aiResult = $this->attachNormalizationMeta($aiResult, $requestedUrl, $url, $normalizationMeta);
+                    $this->logScrape($url, 'ai-fallback', 'ai', $timeout, $retries, $aiResult, $source, $draftId);
+                    if ($aiResult['success']) {
+                        $aiResult['message'] = 'Extracted via AI fallback (' . $aiModel . '). ' . ($aiResult['message'] ?? '');
+                        return $aiResult;
+                    }
+                }
             }
 
             return $primaryResult;
@@ -231,6 +266,45 @@ class SourceExtractionService
                 'fetch_info'       => $fetchInfo,
                 'source'           => $source,
                 'draft_id'         => $draftId,
+                'publish_article_id' => $draftId,
+            ]);
+
+            app(ArticleActivityService::class)->record($draftId, [
+                'activity_group' => 'scrape:' . md5($url),
+                'activity_type' => 'scrape',
+                'stage' => 'extraction',
+                'substage' => $result['success'] ? 'attempt_ok' : 'attempt_failed',
+                'status' => $result['success'] ? 'success' : 'failed',
+                'provider' => $fetchInfo['provider'] ?? null,
+                'model' => $fetchInfo['model'] ?? null,
+                'method' => $result['method_used'] ?? $method,
+                'attempt_no' => is_array($fetchInfo['attempt_log'] ?? null) ? count((array) $fetchInfo['attempt_log']) : null,
+                'is_retry' => in_array($userAgent, ['googlebot', 'ai'], true) || str_contains((string) $method, 'fallback'),
+                'success' => (bool) ($result['success'] ?? false),
+                'title' => $result['title'] ?? null,
+                'url' => $url,
+                'message' => $result['message'] ?? null,
+                'request_payload' => [
+                    'source' => $source,
+                    'user_agent' => $userAgent,
+                    'timeout' => $timeout,
+                    'retries' => $retries,
+                    'request_headers' => $fetchInfo['request_headers'] ?? null,
+                    'request_meta' => $this->buildRequestMeta($url, $method, $userAgent, $timeout, $retries, $fetchInfo),
+                ],
+                'response_payload' => [
+                    'effective_url' => $fetchInfo['effective_url'] ?? null,
+                    'http_status' => $result['http_status'] ?? null,
+                    'response_reason' => $fetchInfo['response_reason'] ?? null,
+                    'response_headers' => $fetchInfo['response_headers'] ?? null,
+                    'response_body_snippet' => Str::limit((string) ($fetchInfo['body_snippet'] ?? ''), 8000, ''),
+                    'word_count' => $result['word_count'] ?? null,
+                    'fallback_used' => $result['fallback_tried'] ?? null,
+                ],
+                'meta' => [
+                    'fetch_info' => $fetchInfo,
+                    'attempt_log' => $fetchInfo['attempt_log'] ?? null,
+                ],
             ]);
         } catch (\Throwable $e) {
             Log::warning('[ScrapeLog] Failed to log: ' . $e->getMessage());
@@ -286,6 +360,21 @@ class SourceExtractionService
      */
     private function extractWithAi(string $url, string $provider, int $minWords = 50): array
     {
+        $catalog = app(AiModelCatalog::class);
+        $model = match ($provider) {
+            'claude' => 'claude-haiku-4-5-20251001',
+            'gpt' => 'gpt-4o',
+            'grok' => $catalog->firstModelForProvider('grok') ?: $catalog->defaultSearchModel(),
+            'gemini' => 'gemini-2.5-flash',
+            default => $catalog->defaultSearchModel(),
+        };
+
+        return $this->extractWithAiModel($url, $model, $minWords);
+    }
+
+    private function extractWithAiModel(string $url, string $model, int $minWords = 50): array
+    {
+        $provider = app(AiModelCatalog::class)->providerForModel($model);
         $systemPrompt = "You are an article content extractor. Given a URL, use web search to fetch the full article content from that page. "
             . "Return a JSON object with: title (the article headline), text (the full article body as plain text), html (the article body as clean HTML with paragraphs). "
             . "Extract ONLY the article content — no navigation, ads, sidebars, or comments. "
@@ -294,13 +383,11 @@ class SourceExtractionService
         $userMessage = "Extract the full article content from this URL: {$url}";
 
         try {
-            if ($provider === 'claude') {
+            if ($provider === 'anthropic') {
                 if (!class_exists(\hexa_package_anthropic\Services\AnthropicService::class)) {
                     return $this->fail($url, 'Anthropic package not available.');
                 }
-                $ai = app(\hexa_package_anthropic\Services\AnthropicService::class);
 
-                // Use web search tool for Claude
                 $key = \hexa_core\Models\Setting::getValue('anthropic_api_key');
                 if (!$key) {
                     return $this->fail($url, 'No Anthropic API key configured.');
@@ -311,7 +398,7 @@ class SourceExtractionService
                     'anthropic-version' => '2023-06-01',
                     'Content-Type' => 'application/json',
                 ])->timeout(120)->post('https://api.anthropic.com/v1/messages', [
-                    'model' => 'claude-haiku-4-5-20251001',
+                    'model' => $model,
                     'max_tokens' => 4096,
                     'system' => $systemPrompt,
                     'tools' => [['type' => 'web_search_20250305', 'name' => 'web_search', 'max_uses' => 5]],
@@ -331,24 +418,22 @@ class SourceExtractionService
                     }
                 }
             } elseif ($provider === 'grok') {
-                // Grok — use chat via xAI API
                 if (!class_exists(\hexa_package_grok\Services\GrokService::class)) {
                     return $this->fail($url, 'Grok package not available.');
                 }
-                $ai = app(\hexa_package_grok\Services\GrokService::class);
-                $result = $ai->chat($systemPrompt, $userMessage, 'grok-3-mini', 0.3, 4096);
 
+                $result = app(\hexa_package_grok\Services\GrokService::class)->chat($systemPrompt, $userMessage, $model, 0.3, 4096);
                 if (!$result['success']) {
                     return $this->fail($url, $result['message']);
                 }
+
                 $textContent = $result['data']['content'] ?? '';
             } elseif ($provider === 'gemini') {
                 if (!class_exists(\hexa_package_gemini\Services\GeminiService::class)) {
                     return $this->fail($url, 'Gemini package not available.');
                 }
-                $ai = app(\hexa_package_gemini\Services\GeminiService::class);
-                $result = $ai->extractArticle($url, 'gemini-2.5-flash');
 
+                $result = app(\hexa_package_gemini\Services\GeminiService::class)->extractArticle($url, $model);
                 if (!$result['success']) {
                     return $this->fail($url, $result['message']);
                 }
@@ -359,8 +444,8 @@ class SourceExtractionService
                 $html = (string) ($parsed['html'] ?? ('<p>' . nl2br(e($text)) . '</p>'));
                 $wordCount = str_word_count($text);
 
-                if ($wordCount < $minWords) {
-                    return [
+                return $wordCount < $minWords
+                    ? [
                         'success' => false,
                         'message' => "AI extracted only {$wordCount} words (minimum: {$minWords}).",
                         'url' => $url,
@@ -368,35 +453,31 @@ class SourceExtractionService
                         'text' => $text,
                         'word_count' => $wordCount,
                         'formatted_html' => $html,
-                        'fetch_info' => ['method' => $provider],
+                        'fetch_info' => ['method' => 'ai', 'method_used' => 'ai', 'provider' => $provider, 'model' => $model],
+                    ]
+                    : [
+                        'success' => true,
+                        'message' => "Extracted {$wordCount} words via {$provider}.",
+                        'url' => $url,
+                        'title' => $title,
+                        'text' => $text,
+                        'word_count' => $wordCount,
+                        'formatted_html' => $html,
+                        'fetch_info' => ['method' => 'ai', 'method_used' => 'ai', 'provider' => $provider, 'model' => $model],
                     ];
-                }
-
-                return [
-                    'success' => true,
-                    'message' => "Extracted {$wordCount} words via {$provider}.",
-                    'url' => $url,
-                    'title' => $title,
-                    'text' => $text,
-                    'word_count' => $wordCount,
-                    'formatted_html' => $html,
-                    'fetch_info' => ['method' => $provider],
-                ];
             } else {
-                // GPT — use chat (no native web search, but can process URL context)
                 if (!class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)) {
                     return $this->fail($url, 'ChatGPT package not available.');
                 }
-                $ai = app(\hexa_package_chatgpt\Services\ChatGptService::class);
-                $result = $ai->chat($systemPrompt, $userMessage, 'gpt-4o', 0.3, 4096);
 
+                $result = app(\hexa_package_chatgpt\Services\ChatGptService::class)->chat($systemPrompt, $userMessage, $model, 0.3, 4096);
                 if (!$result['success']) {
                     return $this->fail($url, $result['message']);
                 }
+
                 $textContent = $result['data']['content'] ?? '';
             }
 
-            // Parse JSON from AI response
             $parsed = null;
             if (preg_match('/\{.*\}/s', $textContent, $matches)) {
                 $parsed = json_decode($matches[0], true);
@@ -411,8 +492,8 @@ class SourceExtractionService
             $html = $parsed['html'] ?? '<p>' . nl2br(e($text)) . '</p>';
             $wordCount = str_word_count($text);
 
-            if ($wordCount < $minWords) {
-                return [
+            return $wordCount < $minWords
+                ? [
                     'success'        => false,
                     'message'        => "AI extracted only {$wordCount} words (minimum: {$minWords}).",
                     'url'            => $url,
@@ -420,20 +501,18 @@ class SourceExtractionService
                     'text'           => $text,
                     'word_count'     => $wordCount,
                     'formatted_html' => $html,
-                    'fetch_info'     => ['method' => $provider],
+                    'fetch_info'     => ['method' => 'ai', 'method_used' => 'ai', 'provider' => $provider, 'model' => $model],
+                ]
+                : [
+                    'success'        => true,
+                    'message'        => "Extracted {$wordCount} words via {$provider}.",
+                    'url'            => $url,
+                    'title'          => $title,
+                    'text'           => $text,
+                    'word_count'     => $wordCount,
+                    'formatted_html' => $html,
+                    'fetch_info'     => ['method' => 'ai', 'method_used' => 'ai', 'provider' => $provider, 'model' => $model],
                 ];
-            }
-
-            return [
-                'success'        => true,
-                'message'        => "Extracted {$wordCount} words via {$provider}.",
-                'url'            => $url,
-                'title'          => $title,
-                'text'           => $text,
-                'word_count'     => $wordCount,
-                'formatted_html' => $html,
-                'fetch_info'     => ['method' => $provider],
-            ];
         } catch (\Exception $e) {
             Log::warning("[SourceExtraction] AI extraction failed for {$url}: " . $e->getMessage());
             return $this->fail($url, 'AI extraction error: ' . $e->getMessage());

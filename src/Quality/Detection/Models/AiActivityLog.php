@@ -19,6 +19,7 @@ use hexa_app_publish\Quality\Detection\Models\AiDetectionLog;
 use hexa_app_publish\Quality\SmartEdits\Models\AiSmartEditTemplate;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Tracks every AI API request (Anthropic, OpenAI) with cost and content.
@@ -46,6 +47,7 @@ class AiActivityLog extends Model
 
     protected $fillable = [
         'user_id',
+        'publish_article_id',
         'provider',
         'model',
         'agent',
@@ -89,6 +91,7 @@ class AiActivityLog extends Model
 
         return static::create([
             'user_id'          => $data['user_id'] ?? auth()->id(),
+            'publish_article_id' => $data['publish_article_id'] ?? null,
             'provider'         => $data['provider'] ?? 'anthropic',
             'model'            => $model,
             'agent'            => $data['agent'] ?? 'unknown',
@@ -114,5 +117,10 @@ class AiActivityLog extends Model
     {
         $userModel = config('hws.user_model', \hexa_core\Models\User::class);
         return $this->belongsTo($userModel);
+    }
+
+    public function article(): BelongsTo
+    {
+        return $this->belongsTo(PublishArticle::class, 'publish_article_id');
     }
 }

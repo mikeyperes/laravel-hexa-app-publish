@@ -32,7 +32,7 @@ class CampaignRunOperationService
             'publish_account_id' => $campaign->publish_account_id ?: null,
             'publish_campaign_id' => $campaign->id,
             'publish_template_id' => $resolved['publish_template_id'] ?? $campaign->publish_template_id,
-            'preset_id' => $resolved['preset_id'] ?? $campaign->preset_id,
+            'preset_id' => null,
             'user_id' => $campaign->user_id,
             'created_by' => auth()->id() ?: $campaign->created_by,
             'ai_engine_used' => $resolved['ai_engine'] ?? $campaign->ai_engine,
@@ -49,7 +49,7 @@ class CampaignRunOperationService
             'mode' => $resolvedMode,
             'site_id' => $campaign->publish_site_id,
             'template_id' => $resolved['publish_template_id'] ?? null,
-            'preset_id' => $resolved['preset_id'] ?? null,
+            'campaign_preset_id' => $campaign->campaign_preset_id,
         ];
 
         $operation = $this->operationService->create($article, PublishPipelineOperation::TYPE_PUBLISH, $requestSummary, [

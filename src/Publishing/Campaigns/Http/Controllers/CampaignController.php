@@ -16,7 +16,6 @@ use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineOperation;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineOperationService;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
-use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Services\PublishService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -127,10 +126,10 @@ class CampaignController extends Controller
                     'publish_account_id' => $site ? ($site->publish_account_id ?: null) : null,
                     'publish_site_id' => $site ? $site->id : null,
                     'status' => 'draft',
-                    'delivery_mode' => 'draft-local',
+                    'delivery_mode' => 'draft-wordpress',
                     'articles_per_interval' => 1,
                     'interval_unit' => 'daily',
-                    'timezone' => 'America/New_York',
+                    'timezone' => auth()->user()?->timezone ?: config('hws.timezone', 'America/New_York'),
                     'run_at_time' => '09:00',
                     'drip_interval_minutes' => 60,
                     'created_by' => auth()->id(),
@@ -143,24 +142,16 @@ class CampaignController extends Controller
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
         $campaignPresets = \hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset::orderBy('name')->get();
         $aiTemplates = PublishTemplate::orderBy('name')->get();
-        $wpPresets = PublishPreset::orderBy('name')->get();
         $editCampaign = PublishCampaign::with('user')->find($request->input('id'));
         if ($editCampaign) {
             $editCampaign->delivery_mode = $this->modeResolver->normalizeDeliveryMode($editCampaign->delivery_mode);
-            $editCampaign->article_sources = collect((array) $editCampaign->article_sources)
-                ->map(fn ($source) => $source === 'currents_news' ? 'currents' : $source)
-                ->values()
-                ->all();
         }
-        $timezones = \DateTimeZone::listIdentifiers(\DateTimeZone::ALL);
 
         return view('app-publish::publishing.campaigns.create', [
             'sites' => $sites,
             'campaignPresets' => $campaignPresets,
             'aiTemplates' => $aiTemplates,
-            'wpPresets' => $wpPresets,
             'editCampaign' => $editCampaign,
-            'timezones' => $timezones,
             'deliveryModes' => $this->eligibility->supportedDeliveryModes(),
             'articleTypes' => $this->eligibility->supportedArticleTypes(),
         ]);
@@ -181,7 +172,6 @@ class CampaignController extends Controller
             'publish_site_id' => 'required|exists:publish_sites,id',
             'publish_template_id' => 'nullable|exists:publish_templates,id',
             'campaign_preset_id' => 'nullable|integer',
-            'preset_id' => 'nullable|integer',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'ai_instructions' => 'nullable|string',
@@ -189,15 +179,11 @@ class CampaignController extends Controller
             'keywords' => 'nullable|array',
             'article_type' => ['nullable', 'string', Rule::in($this->eligibility->supportedArticleTypes())],
             'ai_engine' => 'nullable|string|max:100',
-            'article_sources' => 'nullable|array',
-            'photo_sources' => 'nullable|array',
-            'max_links_per_article' => 'nullable|integer|min:0|max:50',
             'author' => 'nullable|string|max:255',
             'post_status' => 'nullable|in:publish,draft,pending',
             'delivery_mode' => ['nullable', 'string', Rule::in($this->eligibility->supportedDeliveryModes())],
             'articles_per_interval' => 'required|integer|min:1|max:50',
             'interval_unit' => 'required|in:hourly,daily,weekly,monthly',
-            'timezone' => 'nullable|string|max:50',
             'run_at_time' => 'nullable|string|max:10',
             'drip_interval_minutes' => 'nullable|integer|min:1|max:1440',
         ]);
@@ -208,6 +194,7 @@ class CampaignController extends Controller
         $validated['auto_publish'] = ($validated['delivery_mode'] ?? 'draft-local') === 'auto-publish';
         $validated['delivery_mode'] = $this->modeResolver->normalizeDeliveryMode($validated['delivery_mode'] ?? 'draft-local');
         $validated['drip_interval_minutes'] = $validated['drip_interval_minutes'] ?? 60;
+        $validated['timezone'] = $this->resolveCampaignTimezone($validated['user_id'] ?? null, null);
 
         // Get publish_account_id from site (nullable FK — never set to 0)
         $site = PublishSite::find($validated['publish_site_id']);
@@ -233,7 +220,7 @@ class CampaignController extends Controller
     public function show(int $id): View
     {
         $campaign = PublishCampaign::with([
-            'account', 'site', 'template', 'creator', 'user', 'campaignPreset', 'wpPreset',
+            'account', 'site', 'template', 'creator', 'user', 'campaignPreset',
             'articles' => function ($q) {
                 $q->orderByDesc('created_at');
             },
@@ -252,8 +239,7 @@ class CampaignController extends Controller
             $resolvedSettings = [
                 'article_type' => $campaign->article_type,
                 'delivery_mode' => $this->modeResolver->normalizeDeliveryMode($campaign->delivery_mode),
-                'source_method' => $campaign->campaignPreset?->source_method,
-                'search_terms' => (array) ($campaign->keywords ?? $campaign->campaignPreset?->keywords ?? []),
+                'search_terms' => (array) ($campaign->keywords ?? $campaign->campaignPreset?->search_queries ?? $campaign->campaignPreset?->keywords ?? []),
                 'error' => $e->getMessage(),
             ];
         }
@@ -400,7 +386,6 @@ class CampaignController extends Controller
             'publish_site_id' => 'nullable|integer',
             'publish_template_id' => 'nullable|integer',
             'campaign_preset_id' => 'nullable|integer',
-            'preset_id' => 'nullable|integer',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'ai_instructions' => 'nullable|string',
@@ -408,15 +393,11 @@ class CampaignController extends Controller
             'keywords' => 'nullable|array',
             'article_type' => ['nullable', 'string', Rule::in($this->eligibility->supportedArticleTypes())],
             'ai_engine' => 'nullable|string|max:100',
-            'article_sources' => 'nullable|array',
-            'photo_sources' => 'nullable|array',
-            'max_links_per_article' => 'nullable|integer|min:0|max:50',
             'author' => 'nullable|string|max:255',
             'post_status' => 'nullable|in:publish,draft,pending',
             'delivery_mode' => ['nullable', 'string', Rule::in($this->eligibility->supportedDeliveryModes())],
             'articles_per_interval' => 'nullable|integer|min:1|max:50',
             'interval_unit' => 'nullable|in:hourly,daily,weekly,monthly',
-            'timezone' => 'nullable|string|max:50',
             'run_at_time' => 'nullable|string|max:10',
             'drip_interval_minutes' => 'nullable|integer|min:1|max:1440',
         ]);
@@ -431,6 +412,11 @@ class CampaignController extends Controller
             $validated['delivery_mode'] = $this->modeResolver->normalizeDeliveryMode($validated['delivery_mode']);
             $validated['auto_publish'] = $validated['delivery_mode'] === 'auto-publish';
         }
+
+        $validated['timezone'] = $this->resolveCampaignTimezone(
+            $validated['user_id'] ?? $campaign->user_id,
+            $campaign->timezone
+        );
 
         $campaign->update(array_filter($validated, fn($v) => $v !== null));
 
@@ -532,7 +518,6 @@ class CampaignController extends Controller
             'publish_site_id',
             'publish_template_id',
             'campaign_preset_id',
-            'preset_id',
             'description',
             'ai_instructions',
             'topic',
@@ -541,12 +526,23 @@ class CampaignController extends Controller
             'author',
             'post_status',
             'delivery_mode',
-            'timezone',
             'run_at_time',
         ] as $field) {
             if ($request->exists($field) && $request->input($field) === '') {
                 $request->merge([$field => null]);
             }
         }
+    }
+
+    private function resolveCampaignTimezone(?int $userId, ?string $fallback = null): string
+    {
+        if ($userId) {
+            $user = \hexa_core\Models\User::find($userId);
+            if ($user && !empty($user->timezone)) {
+                return (string) $user->timezone;
+            }
+        }
+
+        return $fallback ?: config('hws.timezone', 'America/New_York');
     }
 }

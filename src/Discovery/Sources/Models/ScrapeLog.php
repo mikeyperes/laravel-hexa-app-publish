@@ -14,7 +14,7 @@ class ScrapeLog extends Model
         'http_status', 'response_reason', 'response_headers', 'response_meta',
         'response_time_ms', 'word_count', 'success', 'error_message',
         'response_body_snippet', 'fallback_used', 'attempt_log', 'fetch_info',
-        'source', 'draft_id',
+        'source', 'draft_id', 'publish_article_id',
     ];
 
     protected $casts = [

@@ -11,6 +11,7 @@ use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Publishing\Campaigns\Services\NewsDiscoveryOptionsService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
+use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Publishing\Articles\Services\MetadataGenerationService;
 use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Publishing\Pipeline\Jobs\PreparePipelineOperationJob;
@@ -52,6 +53,7 @@ class PipelineController extends Controller
     protected PipelineStateService $pipelineState;
     protected PipelineDraftSessionService $draftSession;
     protected PipelineWorkflowRegistry $workflowRegistry;
+    protected ArticleActivityService $articleActivity;
 
     /**
      * @param SourceExtractionService $sourceExtraction
@@ -61,7 +63,8 @@ class PipelineController extends Controller
         NewsDiscoveryOptionsService $newsOptions,
         PipelineStateService $pipelineState,
         PipelineDraftSessionService $draftSession,
-        PipelineWorkflowRegistry $workflowRegistry
+        PipelineWorkflowRegistry $workflowRegistry,
+        ArticleActivityService $articleActivity
     )
     {
         $this->sourceExtraction = $sourceExtraction;
@@ -69,6 +72,7 @@ class PipelineController extends Controller
         $this->pipelineState = $pipelineState;
         $this->draftSession = $draftSession;
         $this->workflowRegistry = $workflowRegistry;
+        $this->articleActivity = $articleActivity;
     }
 
     public function index(Request $request)
@@ -209,11 +213,10 @@ class PipelineController extends Controller
             'wpPresetForm'      => $wpPresetForm,
             'filenamePattern'   => \hexa_core\Models\Setting::getValue('wp_photo_filename_pattern', 'hexa_{draft_id}_{seo_name}'),
             'aiDetectors'       => $aiDetectors,
-            'grokModels'        => class_exists(\hexa_package_grok\Services\GrokService::class) ? app(\hexa_package_grok\Services\GrokService::class)->listModels() : [],
             'aiModelGroups'     => $aiCatalog->groupedSelectOptions(),
             'pipelineDefaults'  => [
-                'search_model' => $aiCatalog->defaultSearchModel() ?: 'grok-3-mini',
-                'spin_model' => $aiCatalog->defaultSpinModel() ?: 'grok-3',
+                'search_model' => $aiCatalog->defaultSearchModel(),
+                'spin_model' => $aiCatalog->defaultSpinModel(),
             ],
             'pipelinePayload'   => $pipelinePayload,
             'latestCompletedPrepareHtml' => $latestCompletedPrepareHtml ?: '',
@@ -412,16 +415,20 @@ class PipelineController extends Controller
             'topic' => 'required|string|min:3|max:500',
             'count' => 'nullable|integer|min:2|max:10',
             'model' => 'nullable|string|max:100',
+            'draft_id' => 'nullable|integer|exists:publish_articles,id',
             'exclude_urls' => 'nullable|array|max:50',
             'exclude_urls.*' => 'string|max:2000',
         ]);
 
         $catalog = app(AiModelCatalog::class);
-        $model = (string) $request->input('model', ($catalog->defaultSearchModel() ?: 'grok-3-mini'));
+        $model = (string) $request->input('model', ($catalog->defaultSearchModel() ?: ''));
         $topic = $request->input('topic');
         $count = min((int) $request->input('count', 4), 6);
         $provider = $catalog->providerForModel($model);
         $excludeUrls = array_filter((array) $request->input('exclude_urls', []));
+        $draft = $request->filled('draft_id')
+            ? $this->resolveAuthorizedDraft((int) $request->input('draft_id'))
+            : null;
 
         $searchPrompt = "Search the web for {$count} recent news articles about: {$topic}. "
             . "Return only LIVE, canonical article pages from reputable publishers. "
@@ -508,6 +515,32 @@ class PipelineController extends Controller
         }
 
         if (empty($articles)) {
+            $this->articleActivity->record($draft, [
+                'activity_group' => 'search:' . md5($topic),
+                'activity_type' => 'search',
+                'stage' => 'discovery',
+                'substage' => 'failed',
+                'status' => 'failed',
+                'provider' => $provider,
+                'model' => $model,
+                'agent' => 'pipeline-search',
+                'method' => 'ai_search_articles',
+                'success' => false,
+                'message' => (string) (($fallbackResult['message'] ?? null) ?: ($result['message'] ?? 'No live articles found.')),
+                'request_payload' => [
+                    'topic' => $topic,
+                    'count' => $count,
+                    'exclude_urls' => array_values($excludeUrls),
+                    'prompt' => $searchPrompt,
+                ],
+                'response_payload' => [
+                    'verification' => [
+                        'primary' => $verifiedPrimary['stats'],
+                        'fallback' => $fallbackStats,
+                    ],
+                    'backend' => data_get($result, 'data.search_backend', $provider),
+                ],
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => (string) (($fallbackResult['message'] ?? null) ?: ($result['message'] ?? 'No live articles found.')),
@@ -524,6 +557,36 @@ class PipelineController extends Controller
             data_get($result, 'data.search_backend_label') ?: ucfirst($provider),
             $fallbackUsed ? (data_get($fallbackResult, 'data.search_backend_label') ?: 'News providers') : null,
         ]));
+
+        $this->articleActivity->record($draft, [
+            'activity_group' => 'search:' . md5($topic),
+            'activity_type' => 'search',
+            'stage' => 'discovery',
+            'substage' => $fallbackUsed ? 'complete_with_fallback' : 'complete',
+            'status' => 'success',
+            'provider' => $provider,
+            'model' => $model,
+            'agent' => 'pipeline-search',
+            'method' => 'ai_search_articles',
+            'success' => true,
+            'message' => count($articles) . ' live article(s) verified.',
+            'request_payload' => [
+                'topic' => $topic,
+                'count' => $count,
+                'exclude_urls' => array_values($excludeUrls),
+                'prompt' => $searchPrompt,
+            ],
+            'response_payload' => [
+                'articles' => array_slice($articles, 0, $count),
+                'search_backend' => $fallbackUsed ? 'hybrid_live_verification' : (data_get($result, 'data.search_backend') ?: $provider),
+                'search_backend_label' => !empty($backendLabels) ? implode(' + ', $backendLabels) : 'Live article verification',
+                'fallback_reason' => $fallbackUsed ? data_get($fallbackResult, 'data.fallback_reason') : null,
+                'verification' => [
+                    'primary' => $verifiedPrimary['stats'],
+                    'fallback' => $fallbackStats,
+                ],
+            ],
+        ]);
 
         return response()->json([
             'success' => true,
@@ -556,8 +619,8 @@ class PipelineController extends Controller
             'sources' => ['gnews', 'newsdata', 'currents_news'],
         ]);
 
-        if (!$fallback['success'] || empty($fallback['data']['articles'])) {
-            $errors = $fallback['data']['errors'] ?? [];
+        if (!(bool) data_get($fallback, 'success', false) || empty(data_get($fallback, 'data.articles', []))) {
+            $errors = (array) data_get($fallback, 'data.errors', []);
             $suffix = !empty($errors) ? ' Fallback search errors: ' . implode(' | ', $errors) : '';
 
             return [
@@ -986,6 +1049,7 @@ class PipelineController extends Controller
         $result = app(ArticleGenerationService::class)->generate(
             $validated['source_texts'],
             [
+                'article_id'         => $validated['draft_id'] ?? null,
                 'model'              => $validated['model'],
                 'template_id'        => $validated['template_id'] ?? null,
                 'preset_id'          => $validated['preset_id'] ?? null,
@@ -1021,7 +1085,11 @@ class PipelineController extends Controller
     {
         $validated = $request->validated();
 
-        $result = app(MetadataGenerationService::class)->generate($validated['article_html']);
+        $draft = !empty($validated['draft_id'])
+            ? $this->resolveAuthorizedDraft((int) $validated['draft_id'])
+            : null;
+
+        $result = app(MetadataGenerationService::class)->generate($validated['article_html'], 'claude-haiku-4-5-20251001', $draft?->id);
 
         return response()->json($result);
     }

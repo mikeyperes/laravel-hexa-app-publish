@@ -13,6 +13,8 @@ use hexa_app_publish\Publishing\Articles\Http\Requests\SearchDiscoveryRequest;
 use hexa_app_publish\Publishing\Articles\Http\Requests\SpinArticleRequest;
 use hexa_app_publish\Publishing\Articles\Http\Requests\StoreArticleRequest;
 use hexa_app_publish\Publishing\Articles\Http\Requests\UpdateArticleRequest;
+use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
+use hexa_app_publish\Publishing\Articles\Services\ArticlePersistenceService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Discovery\Media\Services\MediaSearchService;
@@ -149,6 +151,20 @@ class ArticleController extends Controller
         $validated['word_count'] = $validated['body'] ? str_word_count(strip_tags($validated['body'])) : 0;
 
         $article = PublishArticle::create($validated);
+        app(ArticleActivityService::class)->record($article, [
+            'activity_group' => 'lifecycle:' . ($article->article_id ?: $article->id),
+            'activity_type' => 'lifecycle',
+            'stage' => 'article',
+            'substage' => 'created',
+            'status' => $article->status,
+            'success' => true,
+            'title' => $article->title,
+            'message' => 'Standalone article created.',
+            'meta' => [
+                'delivery_mode' => $article->delivery_mode,
+                'article_type' => $article->article_type,
+            ],
+        ]);
 
         hexaLog('publish', 'article_created', "Article created: {$article->title} ({$article->article_id})");
 
@@ -174,6 +190,21 @@ class ArticleController extends Controller
 
         return view('app-publish::publishing.articles.show', [
             'article' => $article,
+        ]);
+    }
+
+    public function audit(int $id): JsonResponse
+    {
+        $article = PublishArticle::with([
+            'account', 'site', 'campaign', 'template', 'creator', 'usedSources',
+        ])->findOrFail($id);
+
+        $service = app(ArticleActivityService::class);
+
+        return response()->json([
+            'success' => true,
+            'data' => $service->buildAuditDump($article),
+            'pretty_text' => $service->buildPrettyAuditText($article),
         ]);
     }
 
@@ -213,6 +244,19 @@ class ArticleController extends Controller
         }
 
         $article->update($validated);
+        app(ArticleActivityService::class)->record($article, [
+            'activity_group' => 'lifecycle:' . ($article->article_id ?: $article->id),
+            'activity_type' => 'lifecycle',
+            'stage' => 'article',
+            'substage' => 'updated',
+            'status' => $article->status,
+            'success' => true,
+            'title' => $article->title,
+            'message' => 'Article updated manually.',
+            'meta' => [
+                'changed_fields' => array_keys($validated),
+            ],
+        ]);
 
         hexaLog('publish', 'article_updated', "Article updated: {$article->title} ({$article->article_id})");
 
@@ -238,7 +282,7 @@ class ArticleController extends Controller
         $result = $delivery->createPost($site, $article->title, $article->body ?? '', $wpStatus);
 
         if (!$result['success']) {
-            $article->update(['status' => 'failed']);
+            app(ArticlePersistenceService::class)->markFailed($article);
             hexaLog('publish', 'article_publish_failed', "Article publish failed: {$article->title} ({$article->article_id}) — {$result['message']}");
             return response()->json($result);
         }
@@ -349,6 +393,25 @@ class ArticleController extends Controller
 
         if (!$result['success']) {
             $article->update(['status' => 'review']);
+            app(ArticleActivityService::class)->record($article, [
+                'activity_group' => 'manual-spin:' . ($article->article_id ?: $article->id),
+                'activity_type' => 'ai',
+                'stage' => 'generation',
+                'substage' => 'manual_spin_failed',
+                'status' => 'failed',
+                'provider' => $validated['ai_engine'],
+                'agent' => 'manual-spin',
+                'success' => false,
+                'title' => $article->title,
+                'message' => (string) ($result['message'] ?? 'Spin failed'),
+                'request_payload' => [
+                    'instruction' => $instruction,
+                    'article_type' => $articleType,
+                    'tone' => $tone,
+                    'body' => $body,
+                ],
+                'response_payload' => $result,
+            ]);
             hexaLog('publish', 'article_spin_failed', "Spin failed: {$article->article_id} — {$result['message']}");
             return response()->json($result);
         }
@@ -360,6 +423,32 @@ class ArticleController extends Controller
             'body' => $newBody,
             'word_count' => $wordCount,
             'status' => 'review',
+        ]);
+        app(ArticleActivityService::class)->record($article, [
+            'activity_group' => 'manual-spin:' . ($article->article_id ?: $article->id),
+            'activity_type' => 'ai',
+            'stage' => 'generation',
+            'substage' => 'manual_spin_complete',
+            'status' => 'success',
+            'provider' => $validated['ai_engine'],
+            'agent' => 'manual-spin',
+            'success' => true,
+            'title' => $article->title,
+            'message' => 'Manual spin completed.',
+            'request_payload' => [
+                'instruction' => $instruction,
+                'article_type' => $articleType,
+                'tone' => $tone,
+                'body' => $body,
+            ],
+            'response_payload' => [
+                'content' => $newBody,
+                'usage' => $result['data']['usage'] ?? null,
+                'provider_response' => $result,
+            ],
+            'meta' => [
+                'word_count' => $wordCount,
+            ],
         ]);
 
         hexaLog('publish', 'article_spun', "Article spun: {$article->article_id} via {$validated['ai_engine']} ({$wordCount} words)");

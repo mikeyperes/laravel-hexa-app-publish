@@ -2,7 +2,7 @@
 
 return [
 
-    'version' => '18.15.1',
+    'version' => '18.16.0',
 
     /*
     |--------------------------------------------------------------------------
@@ -242,6 +242,39 @@ return [
         'word_count_max' => 1500,
         'photos_per_article' => 2,
         'max_links_per_article' => 5,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Auto-Photo Quality Rules
+    |--------------------------------------------------------------------------
+    |
+    | Internal thresholds used when the system auto-selects featured or inline
+    | images. These are not user-facing preset knobs right now.
+    |
+    */
+    'photo_quality' => [
+        'probe_top_candidates' => 4,
+        'featured' => [
+            'min_width' => 1200,
+            'min_height' => 630,
+            'min_bytes' => 50000,
+            'min_aspect_ratio' => 1.3,
+            'max_aspect_ratio' => 2.4,
+            'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp'],
+            'allowed_mime_types' => ['image/jpeg', 'image/png', 'image/webp'],
+            'preferred_sources' => ['google-cse', 'google', 'serpapi'],
+        ],
+        'inline' => [
+            'min_width' => 900,
+            'min_height' => 600,
+            'min_bytes' => 30000,
+            'min_aspect_ratio' => 1.0,
+            'max_aspect_ratio' => 2.4,
+            'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp'],
+            'allowed_mime_types' => ['image/jpeg', 'image/png', 'image/webp'],
+            'preferred_sources' => ['google-cse', 'google', 'serpapi', 'pexels', 'unsplash', 'pixabay'],
+        ],
     ],
 
     /*

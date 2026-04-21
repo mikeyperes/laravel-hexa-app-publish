@@ -3,13 +3,15 @@
 namespace hexa_app_publish\Publishing\Campaigns\Services;
 
 use hexa_app_publish\Discovery\Media\Services\MediaSearchService;
+use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_core\Models\Setting;
 use Illuminate\Support\Str;
 
 class CampaignPhotoAutomationService
 {
     public function __construct(
-        private MediaSearchService $mediaSearch
+        private MediaSearchService $mediaSearch,
+        private ArticleActivityService $activities,
     ) {}
 
     /**
@@ -34,6 +36,7 @@ class CampaignPhotoAutomationService
         array $preferredSources,
         string $articleTitle,
         string $articleText,
+        ?int $articleId = null,
         ?callable $onProgress = null
     ): array {
         $send = $onProgress ?? static function (): void {
@@ -56,13 +59,17 @@ class CampaignPhotoAutomationService
                 'search_term' => $searchTerm,
             ]);
 
-            $selected = $this->pickPhoto($searchTerm, $preferredSources, $usedUrls);
+            $selected = $this->pickPhoto($searchTerm, $preferredSources, $usedUrls, 'inline', $articleId);
             if (!$selected) {
                 $warning = "No usable inline photo found for: {$searchTerm}";
                 $warnings[] = $warning;
                 $this->emit($send, 'warning', $warning, 'photos', 'inline_missing', [
                     'photo_index' => $idx + 1,
                     'search_term' => $searchTerm,
+                ]);
+                $this->recordPhotoActivity($articleId, 'inline_missing', false, $searchTerm, null, [
+                    'quality_context' => 'inline',
+                    'preferred_sources' => array_values($preferredSources),
                 ]);
                 $hydratedSuggestions[] = $suggestion;
                 continue;
@@ -90,12 +97,24 @@ class CampaignPhotoAutomationService
             $html = $this->replacePlaceholder($html, (int) ($suggestion['position'] ?? $idx), $selected, $meta);
             $hydratedSuggestions[] = $hydrated;
             $inlineCount++;
+            $this->recordPhotoActivity($articleId, 'inline_selected', true, $searchTerm, $selected, [
+                'quality_context' => 'inline',
+                'meta' => $meta,
+            ]);
 
             $this->emit($send, 'success', "Inline photo selected via {$selected['source']}", 'photos', 'inline_selected', [
                 'photo_index' => $idx + 1,
                 'search_term' => $searchTerm,
                 'source' => $selected['source'] ?? '',
                 'url' => $selected['url_large'] ?? $selected['url'] ?? '',
+                'source_url' => $selected['source_url'] ?? '',
+                'width' => $selected['width'] ?? null,
+                'height' => $selected['height'] ?? null,
+                'aspect_ratio' => $selected['aspect_ratio'] ?? null,
+                'file_size_bytes' => $selected['file_size_bytes'] ?? null,
+                'mime_type' => $selected['mime_type'] ?? null,
+                'quality_score' => $selected['quality_score'] ?? null,
+                'quality_pass' => $selected['quality_pass'] ?? null,
             ]);
         }
 
@@ -108,7 +127,7 @@ class CampaignPhotoAutomationService
                 'search_term' => trim((string) $featuredSearch),
             ]);
 
-            $featuredPhoto = $this->pickPhoto((string) $featuredSearch, $preferredSources, $usedUrls);
+            $featuredPhoto = $this->pickPhoto((string) $featuredSearch, $preferredSources, $usedUrls, 'featured', $articleId);
             if ($featuredPhoto) {
                 $featuredUrl = (string) ($featuredPhoto['url_large'] ?? $featuredPhoto['url'] ?? '');
                 $featuredMeta = $this->buildMeta(
@@ -120,20 +139,36 @@ class CampaignPhotoAutomationService
                     $featuredHint['caption'] ?? null,
                     $featuredHint['filename'] ?? null
                 );
+                $this->recordPhotoActivity($articleId, 'featured_selected', true, (string) $featuredSearch, $featuredPhoto, [
+                    'quality_context' => 'featured',
+                    'meta' => $featuredMeta,
+                ]);
 
                 $this->emit($send, 'success', "Featured image selected via {$featuredPhoto['source']}", 'photos', 'featured_selected', [
                     'source' => $featuredPhoto['source'] ?? '',
                     'url' => $featuredUrl,
+                    'source_url' => $featuredPhoto['source_url'] ?? '',
+                    'width' => $featuredPhoto['width'] ?? null,
+                    'height' => $featuredPhoto['height'] ?? null,
+                    'aspect_ratio' => $featuredPhoto['aspect_ratio'] ?? null,
+                    'file_size_bytes' => $featuredPhoto['file_size_bytes'] ?? null,
+                    'mime_type' => $featuredPhoto['mime_type'] ?? null,
+                    'quality_score' => $featuredPhoto['quality_score'] ?? null,
+                    'quality_pass' => $featuredPhoto['quality_pass'] ?? null,
                 ]);
             } else {
                 $warning = 'No usable featured image found.';
                 $warnings[] = $warning;
+                $this->recordPhotoActivity($articleId, 'featured_missing', false, (string) $featuredSearch, null, [
+                    'quality_context' => 'featured',
+                    'preferred_sources' => array_values($preferredSources),
+                ]);
                 $this->emit($send, 'warning', $warning, 'photos', 'featured_missing');
             }
         }
 
         return [
-            'html' => $html,
+            'html' => $this->cleanupHydratedHtml($html),
             'photo_suggestions' => $hydratedSuggestions,
             'featured_photo' => $featuredPhoto,
             'featured_url' => $featuredUrl,
@@ -149,18 +184,23 @@ class CampaignPhotoAutomationService
      * @param array<int, string> $usedUrls
      * @return array<string, mixed>|null
      */
-    private function pickPhoto(string $searchTerm, array $preferredSources, array $usedUrls = []): ?array
+    private function pickPhoto(
+        string $searchTerm,
+        array $preferredSources,
+        array $usedUrls = [],
+        string $qualityContext = 'inline',
+        ?int $articleId = null
+    ): ?array
     {
         $candidates = [];
-        foreach ($this->resolveProviders($preferredSources) as $provider) {
+        foreach ($this->resolveProviders($preferredSources, $qualityContext) as $provider) {
             $photos = $this->searchProvider($provider, $searchTerm);
+            $this->recordProviderSearch($articleId, $provider, $searchTerm, $qualityContext, $photos);
             foreach ($photos as $photo) {
                 $url = (string) ($photo['url_large'] ?? $photo['url'] ?? '');
                 if ($url === '' || in_array($url, $usedUrls, true)) {
                     continue;
                 }
-
-                $photo['_score'] = $this->scorePhoto($photo);
                 $candidates[] = $photo;
             }
         }
@@ -169,18 +209,39 @@ class CampaignPhotoAutomationService
             return null;
         }
 
-        usort($candidates, fn (array $a, array $b) => ($b['_score'] ?? 0) <=> ($a['_score'] ?? 0));
-        $selected = $candidates[0];
-        unset($selected['_score']);
+        $ranked = $this->mediaSearch->rankPhotos($candidates, $qualityContext, true);
+        $this->activities->record($articleId, [
+            'activity_group' => 'campaign-images:' . md5($searchTerm . '|' . $qualityContext),
+            'activity_type' => 'image_search',
+            'stage' => 'images',
+            'substage' => 'ranked_candidates',
+            'status' => 'success',
+            'provider' => implode(',', $this->resolveProviders($preferredSources, $qualityContext)),
+            'method' => 'rankPhotos',
+            'success' => true,
+            'message' => count($ranked) . ' ranked image candidate(s).',
+            'request_payload' => [
+                'query' => $searchTerm,
+                'quality_context' => $qualityContext,
+            ],
+            'response_payload' => [
+                'ranked_candidates' => array_slice($ranked, 0, 12),
+            ],
+        ]);
+        foreach ($ranked as $candidate) {
+            if (!empty($candidate['quality_pass'])) {
+                return $candidate;
+            }
+        }
 
-        return $selected;
+        return $ranked[0] ?? null;
     }
 
     /**
      * @param array<int, string> $preferredSources
      * @return array<int, string>
      */
-    private function resolveProviders(array $preferredSources): array
+    private function resolveProviders(array $preferredSources, string $qualityContext = 'inline'): array
     {
         $providers = [];
 
@@ -190,6 +251,10 @@ class CampaignPhotoAutomationService
 
         if (Setting::getValue('use_serpapi_search', '0') === '1' && class_exists(\hexa_package_serpapi\Services\SerpApiService::class)) {
             $providers[] = 'google';
+        }
+
+        if ($qualityContext === 'featured') {
+            return $providers;
         }
 
         foreach ($preferredSources as $source) {
@@ -252,26 +317,6 @@ class CampaignPhotoAutomationService
     {
         $result = $this->mediaSearch->searchPhotos($searchTerm, [$provider], 8, 1);
         return array_values((array) ($result['photos'] ?? []));
-    }
-
-    /**
-     * Prefer non-flagged, landscape, and larger images.
-     */
-    private function scorePhoto(array $photo): int
-    {
-        $width = (int) ($photo['width'] ?? 0);
-        $height = (int) ($photo['height'] ?? 0);
-        $landscape = $width > 0 && $height > 0 && $width >= $height;
-        $flagged = !empty($photo['copyright_flag']);
-        $source = strtolower((string) ($photo['source'] ?? ''));
-
-        $score = 0;
-        $score += $flagged ? -1000 : 200;
-        $score += $landscape ? 120 : 0;
-        $score += min(80, (int) floor(($width * $height) / 150000));
-        $score += in_array($source, ['google-cse', 'google'], true) ? 50 : 0;
-
-        return $score;
     }
 
     /**
@@ -344,6 +389,16 @@ class CampaignPhotoAutomationService
         return $html;
     }
 
+    private function cleanupHydratedHtml(string $html): string
+    {
+        $html = preg_replace('/<\/figure>\s*<\/div>/i', '</figure>', $html) ?? $html;
+        $html = preg_replace('/<div[^>]*class="[^"]*photo-placeholder[^"]*"[^>]*>.*?<\/div>/is', '', $html) ?? $html;
+        $html = preg_replace('/<span[^>]*>\s*Loading photo\.\.\.\s*<\/span>/i', '', $html) ?? $html;
+        $html = preg_replace('/<p[^>]*>\s*<\/p>/i', '', $html) ?? $html;
+
+        return trim($html);
+    }
+
     private function emit(callable $send, string $type, string $message, string $stage, string $substage, array $extra = []): void
     {
         $send($type, $message, array_merge($extra, [
@@ -368,5 +423,59 @@ class CampaignPhotoAutomationService
         }
 
         return preg_match('/[.!?]$/', $value) ? $value : ($value . '.');
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $photos
+     */
+    private function recordProviderSearch(?int $articleId, string $provider, string $searchTerm, string $qualityContext, array $photos): void
+    {
+        $this->activities->record($articleId, [
+            'activity_group' => 'campaign-images:' . md5($searchTerm . '|' . $qualityContext),
+            'activity_type' => 'image_search',
+            'stage' => 'images',
+            'substage' => 'provider_search',
+            'status' => !empty($photos) ? 'success' : 'empty',
+            'provider' => $provider,
+            'method' => 'searchProvider',
+            'success' => !empty($photos),
+            'message' => count($photos) . ' image candidate(s) returned from ' . $provider . '.',
+            'request_payload' => [
+                'query' => $searchTerm,
+                'quality_context' => $qualityContext,
+                'provider' => $provider,
+            ],
+            'response_payload' => [
+                'photos' => array_slice($photos, 0, 12),
+            ],
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed>|null $photo
+     * @param array<string, mixed> $meta
+     */
+    private function recordPhotoActivity(?int $articleId, string $substage, bool $success, string $searchTerm, ?array $photo, array $meta = []): void
+    {
+        $this->activities->record($articleId, [
+            'activity_group' => 'campaign-images:' . md5($searchTerm . '|' . $substage),
+            'activity_type' => 'image_search',
+            'stage' => 'images',
+            'substage' => $substage,
+            'status' => $success ? 'success' : 'failed',
+            'provider' => $photo['source'] ?? null,
+            'method' => 'pickPhoto',
+            'success' => $success,
+            'title' => $photo['alt'] ?? null,
+            'url' => $photo['url_large'] ?? $photo['url'] ?? $photo['source_url'] ?? null,
+            'message' => $success ? 'Image selected.' : 'Image selection failed.',
+            'request_payload' => [
+                'query' => $searchTerm,
+            ],
+            'response_payload' => [
+                'selected' => $photo,
+            ],
+            'meta' => $meta,
+        ]);
     }
 }

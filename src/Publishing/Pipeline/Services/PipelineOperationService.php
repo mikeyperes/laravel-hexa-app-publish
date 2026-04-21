@@ -3,6 +3,7 @@
 namespace hexa_app_publish\Publishing\Pipeline\Services;
 
 use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
+use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineOperation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Process;
@@ -13,7 +14,8 @@ class PipelineOperationService
     private const DEFAULT_QUEUE = 'publish-pipeline';
 
     public function __construct(
-        private PipelineActivityService $activityService
+        private PipelineActivityService $activityService,
+        private ArticleActivityService $articleActivity
     ) {}
 
     public function activeForArticle(PublishArticle $article, string $operationType): ?PublishPipelineOperation
@@ -189,6 +191,35 @@ class PipelineOperationService
                 $locked->debug_enabled,
                 $locked->created_by
             );
+
+            $this->articleActivity->record($locked->article, [
+                'publish_pipeline_operation_id' => $locked->id,
+                'created_by' => $locked->created_by,
+                'activity_group' => $locked->client_trace,
+                'activity_type' => 'operation',
+                'stage' => $scope,
+                'substage' => $entry['substage'],
+                'status' => $type,
+                'success' => in_array($type, ['success', 'done'], true) ? true : (in_array($type, ['error', 'failed'], true) ? false : null),
+                'method' => $entry['method'],
+                'url' => $entry['url'],
+                'message' => $message,
+                'trace_id' => $entry['trace_id'],
+                'request_payload' => [
+                    'scope' => $scope,
+                    'type' => $type,
+                    'stage' => $entry['stage'],
+                    'substage' => $entry['substage'],
+                ],
+                'response_payload' => [
+                    'details' => $entry['details'],
+                    'payload_preview' => $entry['payload_preview'],
+                    'response_preview' => $entry['response_preview'],
+                    'status_code' => $entry['status'],
+                ],
+                'meta' => $entry['meta'],
+                'happened_at' => $capturedAt,
+            ]);
 
             $locked->forceFill([
                 'event_sequence' => $sequence,

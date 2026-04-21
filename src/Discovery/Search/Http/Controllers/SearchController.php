@@ -5,6 +5,8 @@ namespace hexa_app_publish\Discovery\Search\Http\Controllers;
 use hexa_core\Http\Controllers\Controller;
 use hexa_app_publish\Discovery\Media\Services\MediaSearchService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
+use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
+use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -44,16 +46,53 @@ class SearchController extends Controller
     {
         $request->validate([
             'query'    => 'required|string|max:255',
+            'draft_id' => 'nullable|integer|exists:publish_articles,id',
             'per_page' => 'integer|min:1|max:30',
             'page'     => 'integer|min:1|max:50',
             'sources'  => 'array',
+            'quality_context' => 'nullable|in:inline,featured,general',
+            'probe_quality' => 'nullable|boolean',
         ]);
 
         $query   = $request->input('query');
         $perPage = (int) $request->input('per_page', 10);
         $page    = (int) $request->input('page', 1);
         $selectedSources = $request->input('sources', ['pexels', 'unsplash', 'pixabay']);
-        $result = app(MediaSearchService::class)->searchPhotos($query, $selectedSources, $perPage, $page);
+        $qualityContext = (string) $request->input('quality_context', 'inline');
+        $probeQuality = $request->boolean('probe_quality', false);
+        $draft = $this->resolveDraft($request->input('draft_id'));
+        $result = app(MediaSearchService::class)->searchPhotos(
+            $query,
+            $selectedSources,
+            $perPage,
+            $page,
+            $qualityContext,
+            $probeQuality
+        );
+
+        app(ArticleActivityService::class)->record($draft, [
+            'activity_group' => 'image-search:' . md5($query . '|' . $qualityContext),
+            'activity_type' => 'image_search',
+            'stage' => 'images',
+            'substage' => 'search',
+            'status' => $result['success'] ? 'success' : 'failed',
+            'provider' => implode(',', $selectedSources),
+            'method' => 'searchImages',
+            'success' => (bool) $result['success'],
+            'message' => count($result['photos']) . ' image candidate(s) returned.',
+            'request_payload' => [
+                'query' => $query,
+                'sources' => array_values($selectedSources),
+                'quality_context' => $qualityContext,
+                'probe_quality' => $probeQuality,
+            ],
+            'response_payload' => [
+                'totals' => $result['totals'],
+                'errors' => $result['errors'],
+                'timings' => $result['timings'] ?? [],
+                'photos' => array_slice((array) ($result['photos'] ?? []), 0, 12),
+            ],
+        ]);
 
         return response()->json([
             'success' => $result['success'],
@@ -71,17 +110,44 @@ class SearchController extends Controller
     {
         $request->validate([
             'queries' => 'required|array|min:1|max:20',
+            'draft_id' => 'nullable|integer|exists:publish_articles,id',
             'queries.*.key' => 'nullable|string|max:100',
             'queries.*.query' => 'required|string|max:255',
             'queries.*.per_page' => 'nullable|integer|min:1|max:30',
             'queries.*.page' => 'nullable|integer|min:1|max:50',
             'sources' => 'nullable|array',
+            'quality_context' => 'nullable|in:inline,featured,general',
+            'probe_quality' => 'nullable|boolean',
         ]);
 
+        $draft = $this->resolveDraft($request->input('draft_id'));
         $result = app(MediaSearchService::class)->searchPhotosBatch(
             $request->input('queries', []),
-            $request->input('sources', ['pexels', 'unsplash', 'pixabay'])
+            $request->input('sources', ['pexels', 'unsplash', 'pixabay']),
+            (string) $request->input('quality_context', 'inline'),
+            $request->boolean('probe_quality', false)
         );
+
+        app(ArticleActivityService::class)->record($draft, [
+            'activity_group' => 'image-search-batch:' . md5(json_encode($request->input('queries', []))),
+            'activity_type' => 'image_search',
+            'stage' => 'images',
+            'substage' => 'batch_search',
+            'status' => $result['success'] ? 'success' : 'failed',
+            'provider' => implode(',', (array) $request->input('sources', ['pexels', 'unsplash', 'pixabay'])),
+            'method' => 'searchImagesBatch',
+            'success' => (bool) $result['success'],
+            'message' => 'Batch image search completed.',
+            'request_payload' => [
+                'queries' => $request->input('queries', []),
+                'quality_context' => (string) $request->input('quality_context', 'inline'),
+                'probe_quality' => $request->boolean('probe_quality', false),
+            ],
+            'response_payload' => [
+                'results' => $result['results'],
+                'total_ms' => $result['total_ms'] ?? 0,
+            ],
+        ]);
 
         return response()->json([
             'success' => $result['success'],
@@ -100,16 +166,23 @@ class SearchController extends Controller
     {
         $request->validate([
             'query'    => 'required|string|max:255',
+            'draft_id' => 'nullable|integer|exists:publish_articles,id',
             'per_page' => 'integer|min:1|max:20',
             'start'    => 'integer|min:0|max:100',
+            'quality_context' => 'nullable|in:inline,featured,general',
+            'probe_quality' => 'nullable|boolean',
         ]);
 
         $query = $request->input('query');
         $perPage = (int) $request->input('per_page', 10);
         $start = (int) $request->input('start', 0);
+        $qualityContext = (string) $request->input('quality_context', 'featured');
+        $probeQuality = $request->boolean('probe_quality', true);
+        $draft = $this->resolveDraft($request->input('draft_id'));
         $result = null;
         $provider = null;
         $timing = 0;
+        $mediaSearch = app(MediaSearchService::class);
 
         $useGoogle = \hexa_core\Models\Setting::getValue('use_google_image_search', '0') === '1';
         $useSerp = \hexa_core\Models\Setting::getValue('use_serpapi_search', '0') === '1';
@@ -125,6 +198,12 @@ class SearchController extends Controller
                 $provider = 'google-cse';
 
                 if ($result['success']) {
+                    $this->recordGoogleImageAudit($draft, $query, $qualityContext, $provider, $result);
+                    $result['data']['photos'] = $mediaSearch->rankPhotos(
+                        (array) ($result['data']['photos'] ?? []),
+                        $qualityContext,
+                        $probeQuality
+                    );
                     $result['data']['provider'] = 'google-cse';
                     $result['data']['timing_ms'] = $timing;
                     $result['message'] .= " ({$timing}ms via Google CSE)";
@@ -151,6 +230,12 @@ class SearchController extends Controller
             $provider = 'serpapi';
 
             if ($result['success']) {
+                $this->recordGoogleImageAudit($draft, $query, $qualityContext, $provider, $result);
+                $result['data']['photos'] = $mediaSearch->rankPhotos(
+                    (array) ($result['data']['photos'] ?? []),
+                    $qualityContext,
+                    $probeQuality
+                );
                 $result['data']['provider'] = 'serpapi';
                 $result['data']['timing_ms'] = $timing;
                 $result['message'] .= " ({$timing}ms via SerpAPI)";
@@ -165,6 +250,42 @@ class SearchController extends Controller
         }
 
         return response()->json($result);
+    }
+
+    private function resolveDraft(mixed $draftId): ?PublishArticle
+    {
+        if (!is_numeric($draftId) || (int) $draftId <= 0) {
+            return null;
+        }
+
+        return PublishArticle::find((int) $draftId);
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     */
+    private function recordGoogleImageAudit(?PublishArticle $draft, string $query, string $qualityContext, ?string $provider, array $result): void
+    {
+        app(ArticleActivityService::class)->record($draft, [
+            'activity_group' => 'image-search-google:' . md5($query . '|' . $qualityContext),
+            'activity_type' => 'image_search',
+            'stage' => 'images',
+            'substage' => 'google_search',
+            'status' => ($result['success'] ?? false) ? 'success' : 'failed',
+            'provider' => $provider,
+            'method' => 'searchGoogleImages',
+            'success' => (bool) ($result['success'] ?? false),
+            'message' => $result['message'] ?? null,
+            'request_payload' => [
+                'query' => $query,
+                'quality_context' => $qualityContext,
+            ],
+            'response_payload' => [
+                'provider' => $provider,
+                'timing_ms' => $result['data']['timing_ms'] ?? null,
+                'photos' => array_slice((array) ($result['data']['photos'] ?? []), 0, 12),
+            ],
+        ]);
     }
 
     /**

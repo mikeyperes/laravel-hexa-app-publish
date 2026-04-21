@@ -4,7 +4,7 @@
 @section('header', 'Publish Article — #' . $draftId)
 
 @section('content')
-<div class="space-y-4" x-data="publishPipeline()"
+<div class="space-y-4" x-data="publishPipeline()" data-publish-draft-id="{{ $draftId }}"
      @hexa-form-changed.window="
         if ($event.detail.component_id === 'article-preset-form') { $data.template_overrides[$event.detail.field] = $event.detail.value; $data.template_dirty[$event.detail.field] = true; $data.savePipelineState(); }
      ">
@@ -1465,7 +1465,7 @@ function publishPipeline() {
         uploadedSourceText: '',
         aiSearchTopic: '',
         aiSearchHistory: JSON.parse(localStorage.getItem('hws_search_history') || '[]'),
-        aiSearchModel: @json(($pipelineDefaults['search_model'] ?? 'grok-3-mini')),
+        aiSearchModel: @json(($pipelineDefaults['search_model'] ?? null)),
         aiSearchCount: 4,
         aiSearching: false,
         aiSearchResults: [],
@@ -1498,7 +1498,7 @@ function publishPipeline() {
         editingTemplate: false,
 
         // Step 7 — Model
-        aiModel: @json(($pipelineDefaults['spin_model'] ?? 'grok-3')),
+        aiModel: @json(($pipelineDefaults['spin_model'] ?? null)),
         customPrompt: '',
         supportingUrlType: 'matching_content_type',
 

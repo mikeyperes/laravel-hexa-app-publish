@@ -35,7 +35,10 @@ class ArticlePresetForm
                     'updated_at',
                     'deleted_at',
                     'status',
+                    'description',
+                    'ai_engine',
                     'photos_per_article',
+                    'photo_sources',
                     'structure',
                     'rules',
                 ],
@@ -51,10 +54,10 @@ class ArticlePresetForm
                         'section' => 'account',
                     ]),
 
-                FieldDefinition::make('name', 'text', 'Template Name')
+                FieldDefinition::make('name', 'text', 'Article Preset Name')
                     ->required()
                     ->rules(['required', 'string', 'max:255'])
-                    ->placeholder('e.g. Tech Press Release')
+                    ->placeholder('e.g. Her Forward News Report')
                     ->columns('md:col-span-3')
                     ->contexts(['create', 'edit'])
                     ->meta([
@@ -70,26 +73,23 @@ class ArticlePresetForm
                     ])
                     ->contexts(['create', 'edit']),
 
-                FieldDefinition::make('ai_company', 'select', 'AI Company')
-                    ->default(fn () => self::defaultCompany())
-                    ->options(self::companyOptions())
-                    ->view('app-publish::forms.fields.ai-company-select')
+                FieldDefinition::make('ai_prompt', 'textarea', 'Writing Instructions')
+                    ->rules(['nullable', 'string'])
+                    ->placeholder('Write like a real newsroom. No fluff.')
+                    ->columns('md:col-span-2')
                     ->meta([
-                        'dehydrated' => false,
-                        'empty_label' => 'Select company...',
-                        'section' => 'basic',
+                        'rows' => 5,
+                        'section' => 'copy',
                     ])
-                    ->contexts(['create', 'edit']),
+                    ->contexts(['create', 'edit', 'pipeline']),
 
-                FieldDefinition::make('ai_engine', 'select', 'AI Model')
-                    ->default(fn () => self::defaultEngine())
-                    ->rules(['nullable', 'string', 'max:100'])
-                    ->options(fn () => self::flatModelOptions())
-                    ->view('app-publish::forms.fields.ai-engine-select')
+                FieldDefinition::make('headline_rules', 'textarea', 'Headline Rules')
+                    ->rules(['nullable', 'string'])
+                    ->placeholder('One clear angle. No stitched headlines.')
+                    ->columns('md:col-span-2')
                     ->meta([
-                        'empty_label' => 'Select model...',
-                        'company_models' => self::companyModels(),
-                        'section' => 'basic',
+                        'rows' => 3,
+                        'section' => 'copy',
                     ])
                     ->contexts(['create', 'edit', 'pipeline']),
 
@@ -130,99 +130,103 @@ class ArticlePresetForm
                     ])
                     ->contexts(['create', 'edit', 'pipeline']),
 
-                FieldDefinition::make('photo_sources', 'checkbox_group', 'Photo Sources')
-                    ->multiple()
-                    ->default(fn (array $context = []) => self::defaultPhotoSources($context))
-                    ->rules(['nullable', 'array'])
-                    ->options(self::photoSourceOptions())
+                FieldDefinition::make('search_online_for_additional_context', 'boolean', 'Search Online For Additional Context')
+                    ->default(true)
+                    ->rules(['nullable', 'boolean'])
+                    ->help('Default on. AI search runs first, then its fallback, then PHP/local discovery takes over.')
                     ->columns('md:col-span-2')
                     ->meta([
-                        'section' => 'content',
+                        'section' => 'research',
                     ])
                     ->contexts(['create', 'edit', 'pipeline']),
 
-                FieldDefinition::make('description', 'textarea', 'Description')
-                    ->rules(['nullable', 'string'])
-                    ->placeholder('What this template is for...')
-                    ->columns('md:col-span-2')
-                    ->meta([
-                        'rows' => 2,
-                        'section' => 'copy',
-                    ])
-                    ->contexts(['create', 'edit', 'pipeline']),
-
-                FieldDefinition::make('ai_prompt', 'textarea', 'AI Prompt / Instructions')
-                    ->rules(['nullable', 'string'])
-                    ->placeholder('Custom instructions for the AI when using this template.')
-                    ->columns('md:col-span-2')
-                    ->meta([
-                        'rows' => 5,
-                        'section' => 'copy',
-                    ])
-                    ->contexts(['create', 'edit', 'pipeline']),
-
-                // ── WordPress publishing fields (merged from WP Preset) ──
-                FieldDefinition::make('follow_links', 'select', 'Follow Links')
-                    ->default('follow')
-                    ->rules(['nullable', 'string', 'in:follow,nofollow,sponsored,ugc'])
-                    ->options(['follow' => 'Follow', 'nofollow' => 'Nofollow', 'sponsored' => 'Sponsored', 'ugc' => 'UGC'])
-                    ->meta(['empty_label' => '— Select —', 'section' => 'wordpress'])
-                    ->contexts(['create', 'edit', 'pipeline']),
-
-                FieldDefinition::make('image_preference', 'select', 'Image Preference')
+                FieldDefinition::make('searching_agent', 'select', 'Online Search Primary Model')
+                    ->default(fn () => self::defaultSearchPrimary())
                     ->rules(['nullable', 'string', 'max:100'])
-                    ->options(fn () => self::listItemOptions('image_preferences'))
-                    ->meta(['empty_label' => 'Select preference...', 'section' => 'wordpress'])
+                    ->options(fn () => self::allProviderModelOptions())
+                    ->meta(['empty_label' => 'Select model...', 'section' => 'research'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
-                FieldDefinition::make('default_publish_action', 'select', 'Default Publish Action')
-                    ->rules(['nullable', 'string', 'max:50'])
+                FieldDefinition::make('online_search_model_fallback', 'select', 'Online Search Fallback Model')
+                    ->default(fn () => self::defaultSearchFallback())
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::allProviderModelOptions())
+                    ->meta(['empty_label' => 'Select model...', 'section' => 'research'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('scraping_agent', 'select', 'Scrape AI Primary Model')
+                    ->default(fn () => self::defaultSearchPrimary())
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::allProviderModelOptions())
+                    ->help('PHP auto extraction always runs first. This model is only used after local extraction fails.')
+                    ->meta(['empty_label' => 'Select model...', 'section' => 'research'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('scrape_ai_model_fallback', 'select', 'Scrape AI Fallback Model')
+                    ->default(fn () => self::defaultSearchFallback())
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::allProviderModelOptions())
+                    ->meta(['empty_label' => 'Select model...', 'section' => 'research'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('spinning_agent', 'select', 'Spin Primary Model')
+                    ->default(fn () => self::defaultSpinPrimary())
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::allProviderModelOptions())
+                    ->meta(['empty_label' => 'Select model...', 'section' => 'research'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('spin_model_fallback', 'select', 'Spin Fallback Model')
+                    ->default(fn () => self::defaultSpinFallback())
+                    ->rules(['nullable', 'string', 'max:100'])
+                    ->options(fn () => self::allProviderModelOptions())
+                    ->meta(['empty_label' => 'Select model...', 'section' => 'research'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('h2_notation', 'select', 'H2 Notation')
+                    ->default('capital_case')
+                    ->rules(['nullable', 'string', 'in:capital_case,sentence_case,title_case'])
                     ->options([
-                        'publish_immediate' => 'Publish Immediately',
-                        'draft_local' => 'Save as Local Draft',
-                        'draft_wordpress' => 'Save as WordPress Draft',
-                        'schedule' => 'Schedule for Later',
+                        'capital_case' => 'Capital Case',
+                        'sentence_case' => 'Sentence case',
+                        'title_case' => 'Title Case',
                     ])
-                    ->meta(['empty_label' => 'Select action...', 'section' => 'wordpress'])
+                    ->meta(['empty_label' => 'Select notation...', 'section' => 'media'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
-                FieldDefinition::make('default_category_count', 'number', 'Category Count')
+                FieldDefinition::make('inline_photo_min', 'number', 'Inline Photo Minimum')
+                    ->default(2)
+                    ->rules(['nullable', 'integer', 'min:0', 'max:10'])
+                    ->meta(['section' => 'media'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('inline_photo_max', 'number', 'Inline Photo Maximum')
                     ->default(3)
-                    ->rules(['nullable', 'integer', 'min:0', 'max:20'])
-                    ->placeholder('3')
-                    ->meta(['section' => 'wordpress'])
+                    ->rules(['nullable', 'integer', 'min:0', 'max:10'])
+                    ->meta(['section' => 'media'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
-                FieldDefinition::make('default_tag_count', 'number', 'Tag Count')
-                    ->default(5)
-                    ->rules(['nullable', 'integer', 'min:0', 'max:50'])
-                    ->placeholder('5')
-                    ->meta(['section' => 'wordpress'])
+                FieldDefinition::make('featured_image_required', 'boolean', 'Featured Image Required')
+                    ->default(true)
+                    ->rules(['nullable', 'boolean'])
+                    ->meta(['section' => 'media'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
-                FieldDefinition::make('image_layout', 'select', 'Image Layout')
-                    ->rules(['nullable', 'string', 'max:100'])
-                    ->options(fn () => self::listItemOptions('image_layout_rules'))
-                    ->meta(['empty_label' => 'Select layout...', 'section' => 'wordpress'])
+                FieldDefinition::make('featured_image_must_be_landscape', 'boolean', 'Featured Image Must Be Landscape')
+                    ->default(true)
+                    ->rules(['nullable', 'boolean'])
+                    ->meta(['section' => 'media'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
-                // ── AI Agent fields ──
-                FieldDefinition::make('searching_agent', 'select', 'Searching Agent')
-                    ->rules(['nullable', 'string', 'max:100'])
-                    ->options(fn () => self::allProviderModelOptions())
-                    ->meta(['empty_label' => 'Default (Claude Haiku)', 'section' => 'ai_agents'])
-                    ->contexts(['create', 'edit', 'pipeline']),
-
-                FieldDefinition::make('scraping_agent', 'select', 'Scraping Agent')
-                    ->rules(['nullable', 'string', 'max:100'])
-                    ->options(fn () => self::allProviderModelOptions())
-                    ->meta(['empty_label' => 'Default (Claude Haiku)', 'section' => 'ai_agents'])
-                    ->contexts(['create', 'edit', 'pipeline']),
-
-                FieldDefinition::make('spinning_agent', 'select', 'Spinning Agent')
-                    ->rules(['nullable', 'string', 'max:100'])
-                    ->options(fn () => self::allProviderModelOptions())
-                    ->meta(['empty_label' => 'Default (Claude Opus)', 'section' => 'ai_agents'])
+                FieldDefinition::make('block_blacklisted_photos', 'boolean', 'Block Blacklisted Photos')
+                    ->default(true)
+                    ->disabled()
+                    ->rules(['nullable', 'boolean'])
+                    ->help('Automatic for now. Featured images are Google searched, inline photos are Google searched or stock, and blacklisted sources are always blocked.')
+                    ->meta([
+                        'section' => 'media',
+                        'dehydrated' => false,
+                    ])
                     ->contexts(['create', 'edit', 'pipeline']),
 
                 FieldDefinition::make('is_default', 'boolean', 'Set as default template')
@@ -230,7 +234,7 @@ class ArticlePresetForm
                     ->rules(['nullable', 'boolean'])
                     ->columns('md:col-span-2')
                     ->meta([
-                        'section' => 'wordpress',
+                        'section' => 'system',
                     ])
                     ->contexts(['create', 'edit']),
             ]);
@@ -239,6 +243,7 @@ class ArticlePresetForm
     public static function values(null|PublishTemplate|array $source = null, array $overrides = []): array
     {
         $values = [];
+        $catalog = app(AiModelCatalog::class);
 
         if ($source instanceof PublishTemplate) {
             $values = $source->toArray();
@@ -246,7 +251,19 @@ class ArticlePresetForm
             $values = $source;
         }
 
-        $values['ai_company'] = $values['ai_company'] ?? self::detectCompany($values['ai_engine'] ?? null);
+        $legacyPhotoCount = (int) ($values['photos_per_article'] ?? 0);
+        $values['search_online_for_additional_context'] = $values['search_online_for_additional_context'] ?? true;
+        $values['searching_agent'] = $values['searching_agent'] ?? ($catalog->defaultSearchModel() ?: null);
+        $values['online_search_model_fallback'] = $values['online_search_model_fallback'] ?? ($catalog->defaultSearchFallbackModel($values['searching_agent'] ?? null) ?: ($values['searching_agent'] ?? null));
+        $values['scraping_agent'] = $values['scraping_agent'] ?? ($catalog->defaultSearchModel() ?: null);
+        $values['scrape_ai_model_fallback'] = $values['scrape_ai_model_fallback'] ?? ($catalog->defaultSearchFallbackModel($values['scraping_agent'] ?? null) ?: ($values['scraping_agent'] ?? null));
+        $values['spinning_agent'] = $values['spinning_agent'] ?? ($values['ai_engine'] ?? ($catalog->defaultSpinModel() ?: null));
+        $values['spin_model_fallback'] = $values['spin_model_fallback'] ?? ($catalog->defaultSpinFallbackModel($values['spinning_agent'] ?? null) ?: ($values['spinning_agent'] ?? null));
+        $values['h2_notation'] = $values['h2_notation'] ?? 'capital_case';
+        $values['inline_photo_min'] = $values['inline_photo_min'] ?? ($legacyPhotoCount > 0 ? min($legacyPhotoCount, 2) : 2);
+        $values['inline_photo_max'] = $values['inline_photo_max'] ?? ($legacyPhotoCount > 0 ? $legacyPhotoCount : 3);
+        $values['featured_image_required'] = $values['featured_image_required'] ?? true;
+        $values['featured_image_must_be_landscape'] = $values['featured_image_must_be_landscape'] ?? true;
 
         foreach ($overrides as $key => $value) {
             if ($value === null) {
@@ -405,6 +422,32 @@ class ArticlePresetForm
     protected static function allProviderModelOptions(): array
     {
         return app(AiModelCatalog::class)->selectOptions();
+    }
+
+    protected static function defaultSearchPrimary(): ?string
+    {
+        return app(AiModelCatalog::class)->defaultSearchModel();
+    }
+
+    protected static function defaultSearchFallback(): ?string
+    {
+        $catalog = app(AiModelCatalog::class);
+        $primary = $catalog->defaultSearchModel();
+
+        return $catalog->defaultSearchFallbackModel($primary) ?: $primary;
+    }
+
+    protected static function defaultSpinPrimary(): ?string
+    {
+        return app(AiModelCatalog::class)->defaultSpinModel();
+    }
+
+    protected static function defaultSpinFallback(): ?string
+    {
+        $catalog = app(AiModelCatalog::class);
+        $primary = $catalog->defaultSpinModel();
+
+        return $catalog->defaultSpinFallbackModel($primary) ?: $primary;
     }
 
     protected static function listItemOptions(string $category): array

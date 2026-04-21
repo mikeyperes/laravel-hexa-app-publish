@@ -27,6 +27,9 @@
         <div class="flex items-center gap-2">
             @if($article->wp_post_url)<a href="{{ $article->wp_post_url }}" target="_blank" class="text-xs text-green-600 hover:text-green-800 px-3 py-1.5 border border-green-200 rounded-lg hover:bg-green-50 inline-flex items-center gap-1">View Live <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>@endif
             @if($article->wp_post_id && $article->site)<a href="{{ rtrim($article->site->url, '/') }}/wp-admin/post.php?post={{ $article->wp_post_id }}&action=edit" target="_blank" class="text-xs text-blue-600 hover:text-blue-800 px-3 py-1.5 border border-blue-200 rounded-lg hover:bg-blue-50 inline-flex items-center gap-1">Edit in WP <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>@endif
+            <button @click="copyPrettyAudit()" class="text-xs text-purple-600 hover:text-purple-800 px-3 py-1.5 border border-purple-200 rounded-lg hover:bg-purple-50">Copy Audit Summary</button>
+            <button @click="copyAuditDump()" class="text-xs text-indigo-600 hover:text-indigo-800 px-3 py-1.5 border border-indigo-200 rounded-lg hover:bg-indigo-50">Copy Audit JSON</button>
+            <button @click="downloadAuditJson()" class="text-xs text-gray-600 hover:text-gray-800 px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">Download Audit JSON</button>
             <button @click="confirmDelete = true; $nextTick(() => $refs.deleteSection?.scrollIntoView({ behavior: 'smooth' }))" class="text-xs text-red-400 hover:text-red-600 px-3 py-1.5 border border-red-200 rounded-lg hover:bg-red-50">Delete</button>
         </div>
     </div>
@@ -211,13 +214,74 @@
         </div>
     </div>
 
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" x-data="{ open: false }">
+        <button @click="open = !open; if (open) loadAudit()" class="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 rounded-xl">
+            <div>
+                <h3 class="font-semibold text-gray-700">Audit Trail</h3>
+                <p class="text-xs text-gray-400 mt-1">Stored prompts, URLs, retries, failures, image criteria, and hardcoded audit questions.</p>
+            </div>
+            <svg class="w-5 h-5 text-gray-400 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div x-show="open" x-cloak class="px-5 pb-5 space-y-4">
+            <div class="flex flex-wrap items-center gap-2">
+                <button @click="copyPrettyAudit()" class="text-xs text-purple-600 hover:text-purple-800 px-3 py-1.5 border border-purple-200 rounded-lg hover:bg-purple-50">Copy Summary</button>
+                <button @click="copyAuditDump()" class="text-xs text-indigo-600 hover:text-indigo-800 px-3 py-1.5 border border-indigo-200 rounded-lg hover:bg-indigo-50">Copy JSON</button>
+                <button @click="downloadAuditJson()" class="text-xs text-gray-600 hover:text-gray-800 px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">Download JSON</button>
+                <span x-show="auditLoading" x-cloak class="text-xs text-gray-400">Loading audit...</span>
+                <span x-show="auditStatusMessage" x-cloak class="text-xs text-green-600" x-text="auditStatusMessage"></span>
+            </div>
+
+            <div x-show="auditError" x-cloak class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" x-text="auditError"></div>
+
+            <template x-if="auditData">
+                <div class="space-y-4">
+                    <div class="grid gap-3 md:grid-cols-2">
+                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                            <h4 class="text-sm font-semibold text-gray-700">Hardcoded Audit Questions</h4>
+                            <div class="mt-3 space-y-2">
+                                <template x-for="question in (auditData.audit_questions || [])" :key="question.id">
+                                    <div class="rounded-lg border px-3 py-2" :class="question.status === 'pass' ? 'border-green-200 bg-green-50' : (question.status === 'fail' ? 'border-red-200 bg-red-50' : 'border-yellow-200 bg-yellow-50')">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <p class="text-sm font-medium text-gray-800" x-text="question.question"></p>
+                                            <span class="text-[10px] font-semibold uppercase tracking-wide" :class="question.status === 'pass' ? 'text-green-700' : (question.status === 'fail' ? 'text-red-700' : 'text-yellow-700')" x-text="question.status"></span>
+                                        </div>
+                                        <p class="mt-1 text-xs text-gray-500" x-text="question.evidence"></p>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                            <h4 class="text-sm font-semibold text-gray-700">Quick Counts</h4>
+                            <div class="mt-3 space-y-2 text-xs text-gray-600">
+                                <div class="flex items-center justify-between"><span>Search attempts</span><span class="font-mono" x-text="(auditData.search_attempts || []).length"></span></div>
+                                <div class="flex items-center justify-between"><span>Scrape attempts</span><span class="font-mono" x-text="(auditData.scrape_attempts || []).length"></span></div>
+                                <div class="flex items-center justify-between"><span>AI attempts</span><span class="font-mono" x-text="(auditData.ai_attempts || []).length"></span></div>
+                                <div class="flex items-center justify-between"><span>Image searches</span><span class="font-mono" x-text="(auditData.image_searches || []).length"></span></div>
+                                <div class="flex items-center justify-between"><span>Direct news URLs</span><span class="font-mono" x-text="(auditData.pretty?.direct_news_urls || []).length"></span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="rounded-lg border border-gray-200 bg-gray-900 p-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <h4 class="text-sm font-semibold text-white">Pretty Audit Output</h4>
+                            <button @click="copyPrettyAudit()" class="text-xs text-green-300 hover:text-green-100">Copy</button>
+                        </div>
+                        <pre class="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap break-words text-xs text-green-200" x-text="auditPretty"></pre>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
     {{-- Inline Delete Section --}}
     <div x-ref="deleteSection" x-show="confirmDelete" x-cloak class="bg-red-50 border border-red-200 rounded-xl p-6 space-y-4">
         <div class="flex items-start gap-3">
             <svg class="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
             <div>
                 <h3 class="text-lg font-semibold text-red-700">Delete Article</h3>
-                <p class="text-sm text-gray-600 mt-1">This will permanently delete <strong>{{ $article->article_id }}</strong> from the local database.</p>
+                <p class="text-sm text-gray-600 mt-1">This will move <strong>{{ $article->article_id }}</strong> to the deleted archive and preserve it for audits.</p>
                 @if($article->wp_post_id)
                     <p class="text-sm text-red-600 mt-1 font-medium">WordPress post (ID: {{ $article->wp_post_id }}) on {{ $article->site?->name ?? 'unknown site' }} will also be deleted, along with all uploaded media attachments.</p>
                 @endif
@@ -252,7 +316,7 @@
 
         <div x-show="deleteComplete" x-cloak class="flex items-center gap-3">
             <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-            <span class="text-sm text-green-700 font-medium">Article deleted successfully.</span>
+            <span class="text-sm text-green-700 font-medium">Article moved to deleted archive successfully.</span>
             <a href="{{ route('publish.drafts.index') }}" class="text-sm text-blue-600 hover:underline ml-2">Back to Articles</a>
         </div>
     </div>
@@ -261,11 +325,79 @@
 <script>
 function articleReport() {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+    const auditUrl = '{{ route("publish.articles.audit", $article->id) }}';
     return {
         confirmDelete: false, deleting: false, deleteComplete: false, deleteLog: [],
+        auditLoading: false, auditLoaded: false, auditError: '', auditData: null, auditPretty: '', auditStatusMessage: '',
         _logDel(type, msg) {
             const t = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
             this.deleteLog.push({ type, message: msg, time: t, urls: null });
+        },
+        async loadAudit(force = false) {
+            if (this.auditLoaded && !force) return;
+            this.auditLoading = true;
+            this.auditError = '';
+            try {
+                const resp = await fetch(auditUrl, { headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf } });
+                const data = await resp.json();
+                if (!data.success) throw new Error(data.message || 'Audit load failed');
+                this.auditData = data.data || null;
+                this.auditPretty = data.pretty_text || '';
+                this.auditLoaded = true;
+            } catch (e) {
+                this.auditError = e.message || 'Audit load failed';
+            } finally {
+                this.auditLoading = false;
+            }
+        },
+        async copyText(text, okMessage) {
+            if (!text) {
+                this.auditStatusMessage = 'Nothing to copy.';
+                setTimeout(() => this.auditStatusMessage = '', 2500);
+                return;
+            }
+            try {
+                if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(text);
+                } else {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    ta.remove();
+                }
+                this.auditStatusMessage = okMessage;
+                setTimeout(() => this.auditStatusMessage = '', 2500);
+            } catch (e) {
+                this.auditStatusMessage = 'Copy failed: ' + (e.message || 'unknown error');
+                setTimeout(() => this.auditStatusMessage = '', 4000);
+            }
+        },
+        async copyPrettyAudit() {
+            await this.loadAudit();
+            if (this.auditError) return;
+            await this.copyText(this.auditPretty, 'Audit summary copied.');
+        },
+        async copyAuditDump() {
+            await this.loadAudit();
+            if (this.auditError) return;
+            await this.copyText(JSON.stringify(this.auditData, null, 2), 'Audit JSON copied.');
+        },
+        async downloadAuditJson() {
+            await this.loadAudit();
+            if (this.auditError || !this.auditData) return;
+            const blob = new Blob([JSON.stringify(this.auditData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = '{{ $article->article_id ?: "article-audit" }}-audit.json';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            this.auditStatusMessage = 'Audit JSON downloaded.';
+            setTimeout(() => this.auditStatusMessage = '', 2500);
         },
         async deleteArticle() {
             this.deleting = true;

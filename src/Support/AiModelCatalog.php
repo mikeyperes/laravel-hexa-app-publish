@@ -31,6 +31,8 @@ class AiModelCatalog
 
     private const SEARCH_PRIORITY = [
         'grok-3-mini',
+        'grok-3',
+        'grok-4-1-fast',
         'gemini-2.5-flash',
         'gemini-2.5-flash-lite',
         'claude-haiku-4-5-20251001',
@@ -39,6 +41,7 @@ class AiModelCatalog
 
     private const SPIN_PRIORITY = [
         'grok-3',
+        'grok-4.20-reasoning',
         'claude-sonnet-4-6',
         'claude-sonnet-4-20250514',
         'gemini-2.5-pro',
@@ -145,14 +148,35 @@ class AiModelCatalog
         return $this->preferredModel(self::SEARCH_PRIORITY);
     }
 
+    public function defaultSearchFallbackModel(?string $primary = null): ?string
+    {
+        return $this->preferredModel(self::SEARCH_PRIORITY, [$primary]);
+    }
+
     public function defaultSpinModel(): ?string
     {
         return $this->preferredModel(self::SPIN_PRIORITY);
     }
 
+    public function defaultSpinFallbackModel(?string $primary = null): ?string
+    {
+        return $this->preferredModel(self::SPIN_PRIORITY, [$primary]);
+    }
+
     public function defaultPhotoMetaModel(): ?string
     {
         return $this->preferredModel(self::PHOTO_META_PRIORITY);
+    }
+
+    public function firstModelForProvider(string $provider): ?string
+    {
+        foreach ($this->entries() as $entry) {
+            if ($entry['provider'] === $provider) {
+                return $entry['id'];
+            }
+        }
+
+        return null;
     }
 
     public function detectCompany(?string $model): string
@@ -249,8 +273,18 @@ class AiModelCatalog
     /**
      * @return array<int, array{id: string, name: string}>
      */
-    private function anthropicModels(): array
+    protected function anthropicModels(): array
     {
+        if (class_exists(\hexa_package_anthropic\Services\AnthropicService::class)) {
+            try {
+                return array_values(array_map(
+                    static fn (array $model): array => ['id' => (string) $model['id'], 'name' => (string) $model['name']],
+                    app(\hexa_package_anthropic\Services\AnthropicService::class)->getAvailableModels()
+                ));
+            } catch (\Throwable) {
+            }
+        }
+
         return array_values(array_map(
             static fn (array $model): array => ['id' => (string) $model['id'], 'name' => (string) $model['name']],
             array_filter((array) config('anthropic.models', []), static function (array $model): bool {
@@ -264,8 +298,18 @@ class AiModelCatalog
     /**
      * @return array<int, array{id: string, name: string}>
      */
-    private function openAiModels(): array
+    protected function openAiModels(): array
     {
+        if (class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)) {
+            try {
+                return array_values(array_map(
+                    static fn (array $model): array => ['id' => (string) $model['id'], 'name' => (string) $model['name']],
+                    app(\hexa_package_chatgpt\Services\ChatGptService::class)->getAvailableModels()
+                ));
+            } catch (\Throwable) {
+            }
+        }
+
         return array_values(array_map(
             static fn (array $model): array => ['id' => (string) $model['id'], 'name' => (string) $model['name']],
             (array) config('chatgpt.models', [])
@@ -275,13 +319,13 @@ class AiModelCatalog
     /**
      * @return array<int, array{id: string, name: string}>
      */
-    private function grokModels(): array
+    protected function grokModels(): array
     {
         if (class_exists(\hexa_package_grok\Services\GrokService::class)) {
             try {
                 return array_values(array_map(
                     static fn (array $model): array => ['id' => (string) $model['id'], 'name' => (string) $model['name']],
-                    app(\hexa_package_grok\Services\GrokService::class)->listModels()
+                    app(\hexa_package_grok\Services\GrokService::class)->getAvailableModels()
                 ));
             } catch (\Throwable) {
             }
@@ -296,7 +340,7 @@ class AiModelCatalog
     /**
      * @return array<int, array{id: string, name: string}>
      */
-    private function geminiModels(): array
+    protected function geminiModels(): array
     {
         return array_values(array_map(
             static fn (array $model): array => ['id' => (string) $model['id'], 'name' => (string) $model['name']],
@@ -304,17 +348,24 @@ class AiModelCatalog
         ));
     }
 
-    private function preferredModel(array $priority): ?string
+    private function preferredModel(array $priority, array $exclude = []): ?string
     {
         $available = array_keys($this->selectOptions());
+        $exclude = array_values(array_filter($exclude, static fn ($model) => is_string($model) && $model !== ''));
 
         foreach ($priority as $model) {
-            if (in_array($model, $available, true)) {
+            if (in_array($model, $available, true) && !in_array($model, $exclude, true)) {
                 return $model;
             }
         }
 
-        return $available[0] ?? null;
+        foreach ($available as $model) {
+            if (!in_array($model, $exclude, true)) {
+                return $model;
+            }
+        }
+
+        return null;
     }
 
     private function formatMoney(float $amount): string

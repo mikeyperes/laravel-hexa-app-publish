@@ -1,4 +1,4 @@
-{{-- Template detail --}}
+{{-- Article preset detail --}}
 @extends('layouts.app')
 @section('title', $template->name)
 @section('header', $template->name)

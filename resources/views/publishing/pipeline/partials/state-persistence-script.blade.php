@@ -998,8 +998,8 @@
             this.aiSearchError = '';
             this.aiSearchCost = null;
             this.aiHasSearched = false;
-            this.aiModel = @json(($pipelineDefaults['spin_model'] ?? 'grok-3'));
-            this.aiSearchModel = @json(($pipelineDefaults['search_model'] ?? 'grok-3-mini'));
+            this.aiModel = @json(($pipelineDefaults['spin_model'] ?? null));
+            this.aiSearchModel = @json(($pipelineDefaults['search_model'] ?? null));
             this.spunContent = '';
             this.spunWordCount = 0;
             this.articleTitle = '';

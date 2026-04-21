@@ -32,6 +32,12 @@ class CampaignPreset extends Model
     protected $fillable = [
         'user_id',
         'name',
+        'search_queries',
+        'campaign_instructions',
+        'posts_per_run',
+        'frequency',
+        'run_at_time',
+        'drip_minutes',
         'final_article_method',
         'keywords',
         'local_preference',
@@ -46,8 +52,11 @@ class CampaignPreset extends Model
     ];
 
     protected $casts = [
+        'search_queries' => 'array',
         'keywords' => 'array',
         'trending_categories' => 'array',
+        'posts_per_run' => 'integer',
+        'drip_minutes' => 'integer',
         'auto_select_sources' => 'boolean',
         'is_active' => 'boolean',
         'is_default' => 'boolean',
