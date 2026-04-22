@@ -3,9 +3,8 @@
 namespace hexa_app_publish\Publishing\Presets\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
+use hexa_core\Forms\Runtime\FormRuntimeService;
 use hexa_core\Forms\Services\FormRegistryService;
-use hexa_core\Forms\Services\FormHydrationService;
-use hexa_core\Forms\Services\FormValidationService;
 use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm;
 use Illuminate\Http\JsonResponse;
@@ -24,8 +23,7 @@ class PresetController extends Controller
 
     public function __construct(
         private FormRegistryService $formRegistry,
-        private FormHydrationService $formHydration,
-        private FormValidationService $formValidation
+        private FormRuntimeService $formRuntime
     ) {}
 
     /**
@@ -80,9 +78,8 @@ class PresetController extends Controller
     public function store(Request $request): JsonResponse
     {
         $form = $this->resolveForm('create');
-        $payload = $this->normalizedFormPayload($request, $form);
-        $validated = $this->formValidation->validate($payload, $form, ['mode' => 'create', 'context' => 'create']);
-        $data = $this->formHydration->dehydrate($form, $validated);
+        $validated = $this->formRuntime->validate($form, $request, ['mode' => 'create', 'context' => 'create']);
+        $data = $this->formRuntime->dehydrate($form, $validated, ['mode' => 'create', 'context' => 'create']);
         $data['status'] = $this->validatedStatus($request, 'draft');
         $data['user_id'] = $data['user_id'] ?? auth()->id();
 
@@ -148,13 +145,16 @@ class PresetController extends Controller
     {
         $preset = PublishPreset::findOrFail($id);
         $form = $this->resolveForm('edit', $preset);
-        $payload = $this->normalizedFormPayload($request, $form);
-        $validated = $this->formValidation->validate($payload, $form, [
+        $validated = $this->formRuntime->validate($form, $request, [
             'mode' => 'edit',
             'context' => 'edit',
             'record' => $preset,
         ]);
-        $data = $this->formHydration->dehydrate($form, $validated);
+        $data = $this->formRuntime->dehydrate($form, $validated, [
+            'mode' => 'edit',
+            'context' => 'edit',
+            'record' => $preset,
+        ]);
         $data['status'] = $this->validatedStatus($request, $preset->status ?? 'draft');
 
         if (!empty($data['is_default'])) {
@@ -235,33 +235,6 @@ class PresetController extends Controller
             'context' => $mode,
             'record' => $preset,
         ]);
-    }
-
-    /**
-     * Normalize form payload — handle missing booleans/arrays.
-     * Matches TemplateController::normalizedFormPayload() exactly.
-     *
-     * @param Request $request
-     * @param mixed $form
-     * @return array
-     */
-    protected function normalizedFormPayload(Request $request, $form): array
-    {
-        $payload = $request->all();
-
-        foreach ($form->getFields() as $field) {
-            if (($field->isMultiple() || in_array($field->type(), ['checkbox_group', 'multiselect', 'array'], true))
-                && !$request->has($field->name())
-            ) {
-                $payload[$field->name()] = [];
-            }
-
-            if (in_array($field->type(), ['boolean', 'toggle'], true) && !$request->has($field->name())) {
-                $payload[$field->name()] = false;
-            }
-        }
-
-        return $payload;
     }
 
     /**

@@ -1,7 +1,7 @@
 @php
     /** @var \hexa_core\Forms\Definitions\FormDefinition $form */
     $mode = $mode ?? 'create';
-    $resolvedValues = app(\hexa_core\Forms\Services\FormHydrationService::class)->hydrate(
+    $resolvedValues = app(\hexa_core\Forms\Runtime\FormRuntimeService::class)->hydrate(
         $form,
         $formValues ?? [],
         [],

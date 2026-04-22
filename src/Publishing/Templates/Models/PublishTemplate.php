@@ -18,6 +18,7 @@ use hexa_app_publish\Quality\Detection\Models\AiActivityLog;
 use hexa_app_publish\Quality\Detection\Models\AiDetectionLog;
 use hexa_app_publish\Quality\SmartEdits\Models\AiSmartEditTemplate;
 use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
+use hexa_core\Forms\Runtime\FormRuntimeService;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -75,7 +76,10 @@ class PublishTemplate extends Model
      */
     public static function getFieldSchema(string $context = 'pipeline'): array
     {
-        return ArticlePresetForm::schema($context);
+        return app(FormRuntimeService::class)->schema(ArticlePresetForm::FORM_KEY, $context, [
+            'context' => $context,
+            'mode' => $context,
+        ]);
     }
 
     /**

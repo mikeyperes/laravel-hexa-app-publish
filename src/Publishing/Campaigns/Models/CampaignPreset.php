@@ -20,7 +20,9 @@ use hexa_app_publish\Quality\Detection\Models\AiDetectionLog;
 use hexa_app_publish\Quality\SmartEdits\Models\AiSmartEditTemplate;
 
 use Illuminate\Database\Eloquent\Model;
+use hexa_core\Forms\Runtime\FormRuntimeService;
 use hexa_core\Models\User;
+use hexa_app_publish\Publishing\Campaigns\Forms\CampaignPresetForm;
 
 /**
  * CampaignPreset — defines automated article sourcing preferences for campaigns.
@@ -76,5 +78,16 @@ class CampaignPreset extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Return field schema for pipeline-style preset rendering.
+     */
+    public static function getFieldSchema(string $context = 'pipeline'): array
+    {
+        return app(FormRuntimeService::class)->schema(CampaignPresetForm::FORM_KEY, $context, [
+            'context' => $context,
+            'mode' => $context,
+        ]);
     }
 }

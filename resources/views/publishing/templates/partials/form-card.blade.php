@@ -1,7 +1,7 @@
 @php
     /** @var \hexa_core\Forms\Definitions\FormDefinition $form */
     $mode = $mode ?? 'create';
-    $resolvedValues = app(\hexa_core\Forms\Services\FormHydrationService::class)->hydrate(
+    $resolvedValues = app(\hexa_core\Forms\Runtime\FormRuntimeService::class)->hydrate(
         $form,
         $formValues ?? [],
         [],
@@ -22,14 +22,14 @@
     $sectionTitles = [
         'additional' => 'Additional Fields',
     ];
-    $engineField = $form->getField('ai_engine');
-    $companyModels = $engineField?->metaValue('company_models', []) ?? [];
+    $spinningAgentField = $form->getField('spinning_agent');
+    $companyModels = $spinningAgentField?->metaValue('company_models', []) ?? [];
 @endphp
 
 <div class="max-w-3xl" x-data="articlePresetFormPage(@js([
     'companyModels' => $companyModels,
-    'selectedCompany' => $resolvedValues['ai_company'] ?? '',
-    'aiEngine' => $resolvedValues['ai_engine'] ?? '',
+    'selectedCompany' => $resolvedValues['selected_ai_company'] ?? '',
+    'aiEngine' => $resolvedValues['spinning_agent'] ?? '',
     'mode' => $mode,
 ]))">
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-5">

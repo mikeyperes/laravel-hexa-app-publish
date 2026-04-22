@@ -233,7 +233,7 @@
                 </div>
                 <div x-show="selectedTemplate && !templatesLoading" x-cloak>
                     <x-hexa-reactive-form
-                        :fields-json="json_encode($articlePresetForm->toClientPayload('pipeline'))"
+                        :fields-json="json_encode($articlePresetFields)"
                         values="{}"
                         id="article-preset-form"
                         label="Article Preset Settings"

@@ -2,6 +2,7 @@
 
 namespace hexa_app_publish\Publishing\Pipeline\Http\Controllers;
 
+use hexa_core\Forms\Runtime\FormRuntimeService;
 use hexa_core\Http\Controllers\Controller;
 use hexa_core\Models\Setting;
 use hexa_core\Models\User;
@@ -54,6 +55,7 @@ class PipelineController extends Controller
     protected PipelineDraftSessionService $draftSession;
     protected PipelineWorkflowRegistry $workflowRegistry;
     protected ArticleActivityService $articleActivity;
+    protected FormRuntimeService $formRuntime;
 
     /**
      * @param SourceExtractionService $sourceExtraction
@@ -64,7 +66,8 @@ class PipelineController extends Controller
         PipelineStateService $pipelineState,
         PipelineDraftSessionService $draftSession,
         PipelineWorkflowRegistry $workflowRegistry,
-        ArticleActivityService $articleActivity
+        ArticleActivityService $articleActivity,
+        FormRuntimeService $formRuntime
     )
     {
         $this->sourceExtraction = $sourceExtraction;
@@ -73,6 +76,7 @@ class PipelineController extends Controller
         $this->draftSession = $draftSession;
         $this->workflowRegistry = $workflowRegistry;
         $this->articleActivity = $articleActivity;
+        $this->formRuntime = $formRuntime;
     }
 
     public function index(Request $request)
@@ -211,6 +215,8 @@ class PipelineController extends Controller
             'presetSchema'      => \hexa_app_publish\Publishing\Presets\Models\PublishPreset::getFieldSchema(),
             'articlePresetForm' => $articlePresetForm,
             'wpPresetForm'      => $wpPresetForm,
+            'articlePresetFields' => $this->formRuntime->clientPayload($articlePresetForm, 'pipeline', ['mode' => 'pipeline', 'context' => 'pipeline']),
+            'wpPresetFields' => $this->formRuntime->clientPayload($wpPresetForm, 'pipeline', ['mode' => 'pipeline', 'context' => 'pipeline']),
             'filenamePattern'   => \hexa_core\Models\Setting::getValue('wp_photo_filename_pattern', 'hexa_{draft_id}_{seo_name}'),
             'aiDetectors'       => $aiDetectors,
             'aiModelGroups'     => $aiCatalog->groupedSelectOptions(),

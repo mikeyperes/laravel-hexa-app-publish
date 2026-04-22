@@ -20,6 +20,8 @@ use hexa_app_publish\Quality\SmartEdits\Models\AiSmartEditTemplate;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm;
+use hexa_core\Forms\Runtime\FormRuntimeService;
 use hexa_core\Models\User;
 
 /**
@@ -82,7 +84,10 @@ class PublishPreset extends Model
      */
     public static function getFieldSchema(string $context = 'pipeline'): array
     {
-        return \hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm::schema($context);
+        return app(FormRuntimeService::class)->schema(WordPressPresetForm::FORM_KEY, $context, [
+            'context' => $context,
+            'mode' => $context,
+        ]);
     }
 
     /**

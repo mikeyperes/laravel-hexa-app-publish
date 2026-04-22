@@ -3,9 +3,8 @@
 namespace hexa_app_publish\Publishing\Templates\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
-use hexa_core\Forms\Services\FormHydrationService;
+use hexa_core\Forms\Runtime\FormRuntimeService;
 use hexa_core\Forms\Services\FormRegistryService;
-use hexa_core\Forms\Services\FormValidationService;
 use hexa_core\Services\GenericService;
 use hexa_app_publish\Publishing\Accounts\Models\PublishAccount;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
@@ -24,8 +23,7 @@ class TemplateController extends Controller
     protected GenericService $generic;
     protected PublishService $publishService;
     protected FormRegistryService $formRegistry;
-    protected FormValidationService $formValidation;
-    protected FormHydrationService $formHydration;
+    protected FormRuntimeService $formRuntime;
 
     /**
      */
@@ -33,15 +31,13 @@ class TemplateController extends Controller
         GenericService $generic,
         PublishService $publishService,
         FormRegistryService $formRegistry,
-        FormValidationService $formValidation,
-        FormHydrationService $formHydration
+        FormRuntimeService $formRuntime
     )
     {
         $this->generic = $generic;
         $this->publishService = $publishService;
         $this->formRegistry = $formRegistry;
-        $this->formValidation = $formValidation;
-        $this->formHydration = $formHydration;
+        $this->formRuntime = $formRuntime;
     }
 
     /**
@@ -108,9 +104,8 @@ class TemplateController extends Controller
     public function store(Request $request): JsonResponse
     {
         $form = $this->resolveArticlePresetForm('create');
-        $payload = $this->normalizedFormPayload($request, $form);
-        $validated = $this->formValidation->validate($payload, $form, ['mode' => 'create', 'context' => 'create']);
-        $data = $this->formHydration->dehydrate($form, $validated);
+        $validated = $this->formRuntime->validate($form, $request, ['mode' => 'create', 'context' => 'create']);
+        $data = $this->formRuntime->dehydrate($form, $validated, ['mode' => 'create', 'context' => 'create']);
         $data['status'] = $this->validatedStatus($request, 'draft');
         $data['ai_engine'] = $data['spinning_agent'] ?? ($data['ai_engine'] ?? null);
         $data['photos_per_article'] = max(
@@ -180,13 +175,16 @@ class TemplateController extends Controller
     {
         $template = PublishTemplate::findOrFail($id);
         $form = $this->resolveArticlePresetForm('edit', $template);
-        $payload = $this->normalizedFormPayload($request, $form);
-        $validated = $this->formValidation->validate($payload, $form, [
+        $validated = $this->formRuntime->validate($form, $request, [
             'mode' => 'edit',
             'context' => 'edit',
             'record' => $template,
         ]);
-        $data = $this->formHydration->dehydrate($form, $validated);
+        $data = $this->formRuntime->dehydrate($form, $validated, [
+            'mode' => 'edit',
+            'context' => 'edit',
+            'record' => $template,
+        ]);
         $data['status'] = $this->validatedStatus($request, $template->status ?? 'draft');
         $data['ai_engine'] = $data['spinning_agent'] ?? ($data['ai_engine'] ?? $template->ai_engine);
         $data['photos_per_article'] = max(
@@ -242,25 +240,6 @@ class TemplateController extends Controller
             'context' => $mode,
             'record' => $template,
         ]);
-    }
-
-    protected function normalizedFormPayload(Request $request, $form): array
-    {
-        $payload = $request->all();
-
-        foreach ($form->getFields() as $field) {
-            if (($field->isMultiple() || in_array($field->type(), ['checkbox_group', 'multiselect', 'array'], true))
-                && !$request->has($field->name())
-            ) {
-                $payload[$field->name()] = [];
-            }
-
-            if (in_array($field->type(), ['boolean', 'toggle'], true) && !$request->has($field->name())) {
-                $payload[$field->name()] = false;
-            }
-        }
-
-        return $payload;
     }
 
     protected function validatedStatus(Request $request, string $default = 'draft'): string

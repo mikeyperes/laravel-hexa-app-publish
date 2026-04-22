@@ -7,6 +7,7 @@ use hexa_app_publish\Publishing\Schedule\Feeds\PublishScheduleCalendarFeed;
 use hexa_app_publish\Publishing\Uploads\Console\CleanupOrphanUploadsCommand;
 use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
 use hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm;
+use hexa_app_publish\Publishing\Campaigns\Forms\CampaignPresetForm;
 use hexa_app_publish\Support\PublishListCatalog;
 use hexa_app_publish\Services\PublishService;
 use hexa_package_calendar\Calendar\Registry\Services\CalendarRegistryService;
@@ -202,6 +203,11 @@ class AppPublishServiceProvider extends ServiceProvider
         app(FormRegistryService::class)->register(
             WordPressPresetForm::FORM_KEY,
             fn (array $context = []) => WordPressPresetForm::make($context)
+        );
+
+        app(FormRegistryService::class)->register(
+            CampaignPresetForm::FORM_KEY,
+            fn (array $context = []) => CampaignPresetForm::make($context)
         );
     }
 

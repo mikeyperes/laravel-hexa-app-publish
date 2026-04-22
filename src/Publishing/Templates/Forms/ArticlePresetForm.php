@@ -7,7 +7,7 @@ use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
 use hexa_app_publish\Support\AiModelCatalog;
 use hexa_core\Forms\Definitions\FieldDefinition;
 use hexa_core\Forms\Definitions\FormDefinition;
-use hexa_core\Forms\Services\FormRegistryService;
+use hexa_core\Forms\Runtime\FormRuntimeService;
 use hexa_core\ListRegistry\Models\ListItem;
 
 class ArticlePresetForm
@@ -278,38 +278,10 @@ class ArticlePresetForm
 
     public static function schema(string $context = 'pipeline'): array
     {
-        /** @var FormRegistryService $registry */
-        $registry = app(FormRegistryService::class);
-        $form = $registry->resolve(self::FORM_KEY, [
-            'mode' => $context,
+        return app(FormRuntimeService::class)->schema(self::FORM_KEY, $context, [
             'context' => $context,
+            'mode' => $context,
         ]);
-
-        $schema = [];
-        foreach ($form->fieldsForContext($context) as $field) {
-            if ($field->metaValue('dehydrated', true) === false) {
-                continue;
-            }
-
-            $type = match ($field->type()) {
-                'checkbox_group' => 'checkbox',
-                default => $field->type(),
-            };
-
-            $entry = ['type' => $type];
-            $options = $field->resolveOptions([
-                'context' => $context,
-                'mode' => $context,
-            ]);
-
-            if (!empty($options)) {
-                $entry['options'] = $options;
-            }
-
-            $schema[$field->name()] = $entry;
-        }
-
-        return $schema;
     }
 
     public static function detectCompany(?string $engine): string
