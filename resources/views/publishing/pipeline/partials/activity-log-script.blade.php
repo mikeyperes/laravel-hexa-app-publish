@@ -877,15 +877,16 @@
                 return response;
             } catch (error) {
                 const durationMs = Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt));
+                const aborted = error?.name === 'AbortError' || error?.code === 20;
 
-                this._logActivity('network', 'error', method + ' ' + normalizedUrl + ' failed: ' + (error.message || 'Request failed'), {
+                this._logActivity('network', aborted ? 'step' : 'error', method + ' ' + normalizedUrl + (aborted ? ' cancelled' : ' failed: ' + (error.message || 'Request failed')), {
                     trace_id: traceId,
                     method,
                     url: normalizedUrl,
                     duration_ms: durationMs,
                     stage: 'http',
-                    substage: 'exception',
-                    debug_only: false,
+                    substage: aborted ? 'aborted' : 'exception',
+                    debug_only: aborted || !this.pipelineDebugEnabled,
                 });
 
                 throw error;

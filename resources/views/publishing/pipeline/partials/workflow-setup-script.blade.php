@@ -1,8 +1,8 @@
         // ── Navigation ────────────────────────────────────
         isStepAccessible(step) {
             if (step === 1) return true;
-            // Step 2 (Article Config) unlocks as soon as a user is set or preloaded
-            if (step === 2 && this.selectedUser) return true;
+            // Step 2 (Article Config) unlocks as soon as a user is set, preloaded, or present on the draft payload
+            if (step === 2 && (this.selectedUser || this.draftState?.selectedUser)) return true;
             // Step 4 (Fetch) requires at least one source selected
             if (step === 4 && this.sources.length === 0 && !this.isGenerateMode) return false;
             return this.completedSteps.includes(step - 1) || this.completedSteps.includes(step);

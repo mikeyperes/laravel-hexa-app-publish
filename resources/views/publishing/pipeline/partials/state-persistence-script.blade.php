@@ -662,7 +662,7 @@
                 const restoredStateSignature = this._stableSignature(this.buildPipelineStateSnapshot());
                 this._lastLocalPipelineStateSignature = restoredStateSignature;
                 this._lastServerPipelineStateSignature = restoredStateSignature;
-                localStorage.setItem(this.pipelineStateKey, JSON.stringify(this.buildPipelineStateSnapshot()));
+                this._safePipelineStateWrite(this.pipelineStateKey, JSON.stringify(this.buildPipelineStateSnapshot()));
                 localStorage.removeItem('publishPipelineState');
                 this._restoring = false;
                 // Auto-select PR source if press-release type and only one source
@@ -927,6 +927,45 @@
             }, delay);
         },
 
+        _safePipelineStateWrite(key, value) {
+            try {
+                localStorage.setItem(key, value);
+                return true;
+            } catch (e) {
+                const isQuota = e?.name === 'QuotaExceededError'
+                    || e?.code === 22
+                    || e?.code === 1014
+                    || /quota/i.test(String(e?.message || e));
+                if (!isQuota) {
+                    this._logDebug('state', 'Local pipeline state write failed', {
+                        stage: 'state', substage: 'write_error', error: String(e?.message || e),
+                    });
+                    return false;
+                }
+                try {
+                    const prefix = 'publishPipelineState:';
+                    const orphans = [];
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const k = localStorage.key(i);
+                        if (k && k.startsWith(prefix) && k !== key && k !== 'publishPipelineState') {
+                            orphans.push(k);
+                        }
+                    }
+                    orphans.forEach(k => localStorage.removeItem(k));
+                    localStorage.setItem(key, value);
+                    this._logDebug('state', 'Local pipeline state write succeeded after sweeping orphans', {
+                        stage: 'state', substage: 'quota_recovered', swept: orphans.length,
+                    });
+                    return true;
+                } catch (e2) {
+                    this._logDebug('state', 'Local pipeline state write dropped (quota exceeded)', {
+                        stage: 'state', substage: 'quota_dropped', error: String(e2?.message || e2),
+                    });
+                    return false;
+                }
+            }
+        },
+
         savePipelineState() {
             if (this._draftSessionConflictActive) return;
             if (this._suspendPipelineStateSave) {
@@ -948,7 +987,7 @@
             }
 
             this._lastLocalPipelineStateSignature = signature;
-            localStorage.setItem(this.pipelineStateKey, JSON.stringify(state));
+            this._safePipelineStateWrite(this.pipelineStateKey, JSON.stringify(state));
             localStorage.removeItem('publishPipelineState');
             this._logDebug('state', 'Local pipeline state persisted', {
                 stage: 'state',
