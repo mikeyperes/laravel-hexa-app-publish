@@ -1415,8 +1415,8 @@ function publishPipeline() {
             return this.currentStepLabels();
         },
 
-        // Step 1 — User
-        selectedUser: null,
+        // Step 1 — User (preloaded from draft if user_id is set so Step 2 unlocks without a manual re-select)
+        selectedUser: @json(isset($draftUser) && $draftUser ? ['id' => $draftUser->id, 'name' => $draftUser->name] : null),
 
         // Step 2 — Preset + Website
         presets: [],
