@@ -110,48 +110,45 @@ class CampaignController extends Controller
      */
     public function create(Request $request): View|\Illuminate\Http\RedirectResponse
     {
-        // {id_in_url}: reuse existing untitled draft or create one
-        if (!$request->filled('id')) {
-            $campaign = PublishCampaign::where('created_by', auth()->id())
-                ->where('status', 'draft')
-                ->where('name', 'Untitled Campaign')
-                ->orderByDesc('id')
-                ->first();
+        if ($request->filled('id')) {
+            PublishCampaign::findOrFail($request->integer('id'));
 
-            if (!$campaign) {
-                $site = PublishSite::where('status', 'connected')->first();
-                $campaign = PublishCampaign::create([
-                    'name' => 'Untitled Campaign',
-                    'campaign_id' => PublishCampaign::generateCampaignId(),
-                    'publish_account_id' => $site ? ($site->publish_account_id ?: null) : null,
-                    'publish_site_id' => $site ? $site->id : null,
-                    'status' => 'draft',
-                    'delivery_mode' => 'draft-wordpress',
-                    'articles_per_interval' => 1,
-                    'interval_unit' => 'daily',
-                    'timezone' => auth()->user()?->timezone ?: config('hws.timezone', 'America/New_York'),
-                    'run_at_time' => '09:00',
-                    'drip_interval_minutes' => 60,
-                    'created_by' => auth()->id(),
-                ]);
-            }
+            return redirect()->route('campaigns.show', ['id' => $request->integer('id')]);
+        }
 
-            return redirect()->route('campaigns.create', ['id' => $campaign->id]);
+        $campaign = PublishCampaign::where('created_by', auth()->id())
+            ->where('status', 'draft')
+            ->where('name', 'Untitled Campaign')
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$campaign) {
+            $site = PublishSite::where('status', 'connected')->first();
+            $campaign = PublishCampaign::create([
+                'name' => 'Untitled Campaign',
+                'campaign_id' => PublishCampaign::generateCampaignId(),
+                'publish_account_id' => $site ? ($site->publish_account_id ?: null) : null,
+                'publish_site_id' => $site ? $site->id : null,
+                'status' => 'draft',
+                'delivery_mode' => 'draft-wordpress',
+                'articles_per_interval' => 1,
+                'interval_unit' => 'daily',
+                'timezone' => auth()->user()?->timezone ?: config('hws.timezone', 'America/New_York'),
+                'run_at_time' => '09:00',
+                'drip_interval_minutes' => 60,
+                'created_by' => auth()->id(),
+            ]);
         }
 
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
         $campaignPresets = \hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset::orderBy('name')->get();
         $aiTemplates = PublishTemplate::orderBy('name')->get();
-        $editCampaign = PublishCampaign::with('user')->find($request->input('id'));
-        if ($editCampaign) {
-            $editCampaign->delivery_mode = $this->modeResolver->normalizeDeliveryMode($editCampaign->delivery_mode);
-        }
 
         return view('app-publish::publishing.campaigns.create', [
             'sites' => $sites,
             'campaignPresets' => $campaignPresets,
             'aiTemplates' => $aiTemplates,
-            'editCampaign' => $editCampaign,
+            'editCampaign' => $campaign,
             'deliveryModes' => $this->eligibility->supportedDeliveryModes(),
             'articleTypes' => $this->eligibility->supportedArticleTypes(),
         ]);
@@ -220,7 +217,12 @@ class CampaignController extends Controller
     public function show(int $id): View
     {
         $campaign = PublishCampaign::with([
-            'account', 'site', 'template', 'creator', 'user', 'campaignPreset',
+            'account',
+            'site',
+            'template',
+            'creator',
+            'user',
+            'campaignPreset',
             'articles' => function ($q) {
                 $q->orderByDesc('created_at');
             },
@@ -244,10 +246,93 @@ class CampaignController extends Controller
             ];
         }
 
+        $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
+        $campaignPresets = \hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset::with('user')->orderBy('name')->get();
+        $aiTemplates = PublishTemplate::with('account')->orderBy('name')->get();
+        $cronJob = \DB::table('cron_jobs')->where('command', 'publish:run-campaigns')->first();
+        $lastArticle = $campaign->articles->first();
+
+        /** @var \hexa_core\Forms\Services\FormRegistryService $formRegistry */
+        $formRegistry = app(\hexa_core\Forms\Services\FormRegistryService::class);
+
+        $campaignPresetForm = $formRegistry->resolve(\hexa_app_publish\Publishing\Campaigns\Forms\CampaignPresetForm::FORM_KEY, [
+            'mode' => 'edit',
+            'context' => 'edit',
+            'record' => $campaign->campaignPreset,
+        ]);
+
+        $articlePresetForm = $formRegistry->resolve(\hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm::FORM_KEY, [
+            'mode' => 'edit',
+            'context' => 'edit',
+            'record' => $campaign->template,
+        ]);
+
+        $campaignPresetItems = $campaignPresets->map(function ($preset) {
+            return [
+                'id' => $preset->id,
+                'name' => $preset->name,
+                'form_values' => \hexa_app_publish\Publishing\Campaigns\Forms\CampaignPresetForm::values($preset),
+                'record' => $preset->toArray(),
+            ];
+        })->values();
+
+        $aiTemplateItems = $aiTemplates->map(function ($template) {
+            return [
+                'id' => $template->id,
+                'name' => $template->name,
+                'form_values' => \hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm::values($template),
+                'record' => $template->toArray(),
+            ];
+        })->values();
+
+        $campaignForm = [
+            'user_id' => $campaign->user_id,
+            'campaign_preset_id' => $campaign->campaign_preset_id ? (string) $campaign->campaign_preset_id : '',
+            'publish_template_id' => $campaign->publish_template_id ? (string) $campaign->publish_template_id : '',
+            'publish_site_id' => $campaign->publish_site_id ? (string) $campaign->publish_site_id : '',
+            'name' => $campaign->name ?? '',
+            'description' => $campaign->description ?? '',
+            'topic' => $campaign->topic ?? '',
+            'ai_instructions' => $campaign->ai_instructions ?? $campaign->notes ?? '',
+            'ai_engine' => '',
+            'keywords' => array_values((array) ($campaign->keywords ?? [])),
+            'delivery_mode' => $this->modeResolver->normalizeDeliveryMode($campaign->delivery_mode ?? 'draft-wordpress'),
+            'article_type' => $campaign->article_type ?? '',
+            'author' => $campaign->author ?? '',
+            'articles_per_interval' => $campaign->articles_per_interval ?? 1,
+            'interval_unit' => $campaign->interval_unit ?? 'daily',
+            'run_at_time' => $campaign->run_at_time ?? '09:00',
+            'drip_interval_minutes' => $campaign->drip_interval_minutes ?? 60,
+        ];
+
         return view('app-publish::publishing.campaigns.show', [
             'campaign' => $campaign,
             'runLogs' => $runLogs,
             'resolvedSettings' => $resolvedSettings,
+            'sites' => $sites,
+            'campaignPresets' => $campaignPresets,
+            'campaignPresetItems' => $campaignPresetItems,
+            'aiTemplates' => $aiTemplates,
+            'aiTemplateItems' => $aiTemplateItems,
+            'deliveryModes' => $this->eligibility->supportedDeliveryModes(),
+            'articleTypes' => $this->eligibility->supportedArticleTypes(),
+            'campaignForm' => $campaignForm,
+            'campaignPresetFields' => $campaignPresetForm->toClientPayload('edit', [
+                'mode' => 'edit',
+                'context' => 'edit',
+                'record' => $campaign->campaignPreset,
+            ]),
+            'campaignPresetValues' => \hexa_app_publish\Publishing\Campaigns\Forms\CampaignPresetForm::values($campaign->campaignPreset),
+            'articlePresetFields' => $articlePresetForm->toClientPayload('edit', [
+                'mode' => 'edit',
+                'context' => 'edit',
+                'record' => $campaign->template,
+            ]),
+            'articlePresetValues' => \hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm::values($campaign->template),
+            'campaignPresetSchema' => \hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset::getFieldSchema('edit'),
+            'articlePresetSchema' => \hexa_app_publish\Publishing\Templates\Models\PublishTemplate::getFieldSchema('edit'),
+            'cronJob' => $cronJob,
+            'lastArticle' => $lastArticle,
             'checklistDefinitions' => [
                 'draft-local' => $this->checklistService->definitions('draft-local'),
                 'draft-wordpress' => $this->checklistService->definitions('draft-wordpress'),
@@ -255,6 +340,7 @@ class CampaignController extends Controller
             ],
         ]);
     }
+
 
     public function startOperation(int $id, Request $request): JsonResponse
     {
@@ -293,19 +379,26 @@ class CampaignController extends Controller
         $campaign = PublishCampaign::findOrFail($id);
         $mode = $this->modeResolver->normalizeDeliveryMode($request->input('mode', $campaign->delivery_mode ?: 'draft-local'));
 
-        $runService = app(\hexa_app_publish\Publishing\Campaigns\Services\CampaignExecutionService::class);
-        $result = $runService->run($campaign, $mode);
+        try {
+            $started = $this->runOperationService->start($campaign, $mode);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
 
         return response()->json([
-            'success' => $result['success'],
-            'message' => $result['success']
-                ? "Campaign ran successfully. Article: " . ($result['article']->article_id ?? '—')
-                : "Campaign run failed.",
-            'log' => $result['log'],
-            'article_id' => $result['article']->id ?? null,
-            'article_url' => $result['article'] ? route('publish.articles.show', $result['article']->id) : null,
+            'success' => true,
+            'message' => $mode === 'auto-publish' ? 'Campaign run started.' : 'Campaign draft run started.',
+            'mode' => $mode,
+            'checklist' => $this->checklistService->definitions($mode),
+            'article_id' => $started['article']->id,
+            'article_url' => route('publish.articles.show', $started['article']->id),
+            'operation' => $this->serializeOperation($started['operation']),
         ]);
     }
+
 
     private function serializeOperation(PublishPipelineOperation $operation): array
     {
@@ -366,8 +459,9 @@ class CampaignController extends Controller
     {
         PublishCampaign::findOrFail($id);
 
-        return redirect()->route('campaigns.create', ['id' => $id]);
+        return redirect()->route('campaigns.show', ['id' => $id]);
     }
+
 
     /**
      * Update a campaign.
@@ -418,7 +512,7 @@ class CampaignController extends Controller
             $campaign->timezone
         );
 
-        $campaign->update(array_filter($validated, fn($v) => $v !== null));
+        $campaign->update(array_filter($validated, fn($value, $key) => $value !== null || $request->exists($key), ARRAY_FILTER_USE_BOTH));
 
         hexaLog('campaigns', 'campaign_updated', "Campaign updated: {$campaign->name}");
 

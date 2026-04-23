@@ -1,637 +1,443 @@
 @extends('layouts.app')
-@section('title', $campaign->name . ' — Campaign')
-@section('header', 'Campaign: ' . $campaign->name)
+@section('title', 'Campaign — ' . ($campaign->name ?: 'Untitled'))
+@section('header', $campaign->name ?: 'Untitled Campaign')
 
 @section('content')
-<div class="max-w-5xl mx-auto space-y-4" x-data="campaignShow()">
+<div class="max-w-6xl mx-auto space-y-6" x-data="campaignDashboard()" x-init="init()">
 
-    {{-- Header --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div class="flex flex-wrap items-start justify-between gap-4">
-            <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <p class="text-xs font-mono text-gray-400">{{ $campaign->campaign_id }}</p>
-                    @if($campaign->status === 'active')
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">Active</span>
-                    @elseif($campaign->status === 'paused')
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700">Paused</span>
-                    @else
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500">{{ ucfirst($campaign->status) }}</span>
-                    @endif
-                    @if($campaign->auto_publish)
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700">Auto-Publish</span>
-                    @endif
-                </div>
-                <h2 class="text-xl font-semibold text-gray-800">{{ $campaign->name }}</h2>
+    {{-- ════════════════════════════════════════════════════
+         1. Header strip — name, status, actions
+         ════════════════════════════════════════════════════ --}}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
+        <div class="flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-[280px]">
+                <input type="text" x-model="form.name"
+                    class="w-full text-lg font-semibold border-0 focus:ring-0 focus:outline-none focus:border-b-2 focus:border-blue-500 px-0 bg-transparent"
+                    placeholder="Untitled Campaign">
+                <p class="text-xs text-gray-400 font-mono mt-0.5">{{ $campaign->campaign_id ?? ('#' . $campaign->id) }}</p>
             </div>
+
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium"
+                :class="{
+                    'bg-green-100 text-green-800': campaignStatus === 'active',
+                    'bg-yellow-100 text-yellow-800': campaignStatus === 'paused',
+                    'bg-gray-100 text-gray-700': campaignStatus === 'draft',
+                    'bg-red-100 text-red-700': campaignStatus === 'archived',
+                }" x-text="formatLabel(campaignStatus)"></span>
+
             <div class="flex items-center gap-2">
-                <a href="{{ route('campaigns.create', ['id' => $campaign->id]) }}" class="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 px-3 py-1.5 rounded-lg">Edit</a>
-                <button @click="startOperation('draft-wordpress', 'Instant draft')" :disabled="running" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1">
-                    <svg x-show="running && runningMode === 'draft-wordpress'" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    Instant Draft
+                <button @click="runNow()" :disabled="runningNow"
+                    class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    <span x-show="!runningNow">Run Now</span>
+                    <span x-show="runningNow" x-cloak>Running…</span>
                 </button>
-                <button @click="startOperation('auto-publish', 'Instant publish')" :disabled="running" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 disabled:opacity-50 inline-flex items-center gap-1">
-                    <svg x-show="running && runningMode === 'auto-publish'" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    Instant Publish
-                </button>
+                <button x-show="campaignStatus === 'active'" x-cloak @click="pauseCampaign()"
+                    class="bg-yellow-500 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-yellow-600">Pause</button>
+                <button x-show="campaignStatus !== 'active'" x-cloak @click="activateCampaign()"
+                    class="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-green-700">Activate</button>
+                <button @click="duplicateCampaign()" class="border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50">Duplicate</button>
+                <button @click="deleteCampaign()" class="border border-red-200 text-red-600 px-3 py-1.5 rounded-lg text-sm hover:bg-red-50">Delete</button>
             </div>
         </div>
-        <div x-show="runResult" x-cloak class="mt-3 p-3 rounded-lg text-sm border" :class="{
-            'bg-blue-50 border-blue-200 text-blue-800': runState === 'info',
-            'bg-green-50 border-green-200 text-green-800': runState === 'success',
-            'bg-red-50 border-red-200 text-red-800': runState === 'error'
-        }" x-text="runResult"></div>
-        @if(!empty($resolvedSettings['error']))
-            <div class="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
-                Resolved settings warning: {{ $resolvedSettings['error'] }}
-            </div>
-        @endif
+
+        <div class="mt-2 flex items-center gap-2 text-xs">
+            <span x-show="saving" x-cloak class="text-gray-400 inline-flex items-center gap-1">
+                <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                Saving…
+            </span>
+            <span x-show="!saving && saveResult" x-cloak :class="saveSuccess ? 'text-green-600' : 'text-red-500'" x-text="saveResult"></span>
+        </div>
     </div>
 
-    {{-- Instant Checklist --}}
-    <div x-show="campaignChecklist.length > 0 || operationStatus" x-cloak class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <h3 class="font-semibold text-gray-900">Campaign Checklist</h3>
-                    <p class="text-xs text-gray-500 mt-1" x-text="operationLabel || 'Run an instant draft or publish to stream the full checklist.'"></p>
+    {{-- ════════════════════════════════════════════════════
+         2. Timing & Cadence
+         ════════════════════════════════════════════════════ --}}
+    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-4">
+        <h3 class="text-base font-semibold text-gray-900">Timing &amp; Cadence</h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="md:col-span-2">
+                <label class="block text-xs text-gray-500 mb-1">User</label>
+                <div class="max-w-md"
+                    @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-user') form.user_id = $event.detail.item.id"
+                    @hexa-search-cleared.window="if ($event.detail.component_id === 'campaign-user') form.user_id = null">
+                    @php
+                        $currentUser = $campaign->user ? ['id' => $campaign->user->id, 'name' => $campaign->user->name, 'email' => $campaign->user->email] : null;
+                    @endphp
+                    <x-hexa-smart-search url="{{ route('api.search.users') }}" name="user_id" placeholder="Search users..." display-field="name" subtitle-field="email" value-field="id" id="campaign-user" show-id :selected="$currentUser" />
                 </div>
-                <div class="text-right text-xs text-gray-500 space-y-1">
-                    <p x-show="operationStatus" x-text="'Status: ' + operationStatus + (operationTransport ? ' via ' + operationTransport.replace('_', ' ') : '')"></p>
-                    <p x-show="operationTraceId" x-text="'Trace: ' + operationTraceId"></p>
-                    <p x-show="operationStartedAt || running" x-text="'Elapsed: ' + operationElapsedText()"></p>
-                    <p x-show="campaignChecklist.length > 0" x-text="checklistProgressText()"></p>
+                <p class="text-xs text-gray-400 mt-1">Timezone: {{ $campaign->timezone ?? 'America/New_York' }} — set by selected user.</p>
+            </div>
+
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Frequency</label>
+                <select x-model="form.interval_unit" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="hourly">Hourly</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Posts per run</label>
+                <input type="number" min="1" max="50" x-model.number="form.articles_per_interval" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Run at time</label>
+                <input type="time" x-model="form.run_at_time" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Drip interval <span class="text-gray-400">(minutes between posts in a run)</span></label>
+                <input type="number" min="1" max="1440" x-model.number="form.drip_interval_minutes" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+
+            <div class="md:col-span-2 flex flex-wrap gap-6 text-sm text-gray-600 pt-2 border-t border-gray-100">
+                <span><span class="text-gray-400">Last run:</span> {{ $campaign->last_run_at ? $campaign->last_run_at->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A T') : 'Never' }}</span>
+                <span><span class="text-gray-400">Next run:</span> {{ $campaign->next_run_at ? $campaign->next_run_at->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A T') : '—' }}</span>
+            </div>
+        </div>
+    </section>
+
+    {{-- ════════════════════════════════════════════════════
+         3. Content Source — Campaign Preset + queries + instructions
+         ════════════════════════════════════════════════════ --}}
+    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-4">
+        <div class="flex items-center justify-between gap-4">
+            <h3 class="text-base font-semibold text-gray-900">Content Source</h3>
+            <div class="flex items-center gap-4 text-xs">
+                <a x-show="campaignPresetEditUrl" x-cloak :href="campaignPresetEditUrl" target="_blank" rel="noopener" class="text-blue-600 hover:text-blue-800 inline-flex items-center gap-1">
+                    Edit preset
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                </a>
+                <a href="{{ route('campaigns.presets.index') }}" target="_blank" rel="noopener" class="text-gray-500 hover:text-gray-700">Manage presets</a>
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Campaign preset</label>
+            <select x-model="form.campaign_preset_id" @change="onCampaignPresetChange()" class="w-full max-w-md border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">— No preset —</option>
+                @foreach($campaignPresets as $cp)
+                    <option value="{{ $cp->id }}">{{ $cp->name }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        @include('app-publish::partials.preset-fields', ['prefix' => 'campaignPreset', 'label' => 'Campaign Preset Fields'])
+
+        <div class="pt-4 border-t border-gray-100 space-y-3">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Search queries <span class="text-gray-400">(one per line — overrides preset)</span></label>
+                <textarea x-model="termsText" rows="5" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" placeholder="Leave blank to use preset queries"></textarea>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Campaign instructions</label>
+                <textarea x-model="form.ai_instructions" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+            </div>
+        </div>
+    </section>
+
+    {{-- ════════════════════════════════════════════════════
+         4. Article Generation — Article Preset + article-type override
+         ════════════════════════════════════════════════════ --}}
+    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-4">
+        <div class="flex items-center justify-between gap-4">
+            <h3 class="text-base font-semibold text-gray-900">Article Generation</h3>
+            <div class="flex items-center gap-4 text-xs">
+                <a x-show="articlePresetEditUrl" x-cloak :href="articlePresetEditUrl" target="_blank" rel="noopener" class="text-blue-600 hover:text-blue-800 inline-flex items-center gap-1">
+                    Edit preset
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                </a>
+                <a href="{{ route('publish.templates.index') }}" target="_blank" rel="noopener" class="text-gray-500 hover:text-gray-700">Manage presets</a>
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Article preset</label>
+            <select x-model="form.publish_template_id" @change="onArticlePresetChange()" class="w-full max-w-md border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">— No preset —</option>
+                @foreach($aiTemplates as $t)
+                    <option value="{{ $t->id }}">{{ $t->name }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Article type override <span class="text-gray-400">(leave blank to use preset)</span></label>
+            <select x-model="form.article_type" class="w-full md:w-1/2 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">— Use preset's article type —</option>
+                @foreach($articleTypes as $at)
+                    <option value="{{ $at }}">{{ ucwords(str_replace('-', ' ', $at)) }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        @include('app-publish::partials.preset-fields', ['prefix' => 'template', 'label' => 'Article Preset Fields'])
+    </section>
+
+    {{-- ════════════════════════════════════════════════════
+         5. Publishing Target
+         ════════════════════════════════════════════════════ --}}
+    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-4">
+        <h3 class="text-base font-semibold text-gray-900">Publishing Target</h3>
+
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">WordPress site</label>
+            <select x-model="form.publish_site_id" @change="doTestSite()" class="w-full max-w-md border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">— Select site —</option>
+                @foreach($sites as $s)
+                    <option value="{{ $s->id }}">{{ $s->name }} ({{ $s->url }})</option>
+                @endforeach
+            </select>
+
+            <div x-show="form.publish_site_id" x-cloak class="mt-2">
+                <div class="flex items-center gap-2 text-xs rounded-lg px-3 py-2" :class="siteConn.status === true ? 'bg-green-50 text-green-800' : (siteConn.status === false ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-600')">
+                    <span x-show="siteConn.testing" x-cloak>Testing…</span>
+                    <span x-show="!siteConn.testing" x-cloak x-text="siteConn.message || 'Click Test to verify site access.'"></span>
+                    <button @click="doTestSite()" class="ml-auto text-blue-600 hover:text-blue-800">Test</button>
                 </div>
             </div>
-            <div x-show="operationCurrent" x-cloak class="mt-3 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2" x-text="operationCurrent"></div>
         </div>
-        <div class="px-6 py-4 space-y-3">
-            <template x-for="item in campaignChecklist" :key="item.key">
-                <div class="flex items-start gap-3 border border-gray-100 rounded-lg px-4 py-3">
-                    <div class="w-5 h-5 mt-0.5 flex-shrink-0">
-                        <template x-if="item.status === 'done'">
-                            <div class="w-5 h-5 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-[11px] font-bold">✓</div>
-                        </template>
-                        <template x-if="item.status === 'failed'">
-                            <div class="w-5 h-5 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-[11px] font-bold">!</div>
-                        </template>
-                        <template x-if="item.status === 'running'">
-                            <div class="w-5 h-5 rounded-full border-2 border-blue-500 border-t-transparent animate-spin"></div>
-                        </template>
-                        <template x-if="item.status === 'pending'">
-                            <div class="w-5 h-5 rounded-full border border-gray-300 bg-white"></div>
-                        </template>
-                        <template x-if="item.status === 'skipped'">
-                            <div class="w-5 h-5 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-[11px] font-bold">-</div>
-                        </template>
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <h4 class="text-sm font-medium text-gray-900" x-text="item.label"></h4>
-                            <span class="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full"
-                                  :class="{
-                                      'bg-green-100 text-green-700': item.status === 'done',
-                                      'bg-red-100 text-red-700': item.status === 'failed',
-                                      'bg-blue-100 text-blue-700': item.status === 'running',
-                                      'bg-gray-100 text-gray-500': item.status === 'pending' || item.status === 'skipped'
-                                  }"
-                                  x-text="item.status"></span>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Author</label>
+                <input type="text" x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Delivery mode</label>
+                <select x-model="form.delivery_mode" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    @foreach($deliveryModes as $m)
+                        <option value="{{ $m }}">{{ ucwords(str_replace('-', ' ', $m)) }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Post status</label>
+                <select x-model="form.post_status" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="draft">Draft</option>
+                    <option value="pending">Pending</option>
+                    <option value="publish">Publish</option>
+                </select>
+            </div>
+        </div>
+    </section>
+
+    {{-- ════════════════════════════════════════════════════
+         6. Article History
+         ════════════════════════════════════════════════════ --}}
+    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between">
+            <h3 class="text-base font-semibold text-gray-900">Recent Articles</h3>
+            <span class="text-sm text-gray-500">{{ min($campaign->articles->count(), 8) }} of {{ $campaign->articles->count() }}</span>
+        </div>
+        <div class="mt-4 space-y-3">
+            @forelse($campaign->articles->take(8) as $article)
+                <div class="rounded-xl border border-gray-200 px-4 py-3">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium text-gray-900">{{ $article->title ?: 'Untitled Article' }}</p>
+                            <div class="mt-1 flex flex-wrap gap-3 text-xs text-gray-500">
+                                <span>{{ $article->article_id }}</span>
+                                <span>{{ $article->status }}</span>
+                                <span>{{ $article->created_at?->timezone(config('app.timezone'))->format('M j, g:i A') }}</span>
+                                <span>{{ $article->ai_engine_used ?: '—' }}</span>
+                                <span>{{ $article->wp_status ?: '—' }}</span>
+                            </div>
                         </div>
-                        <p class="text-xs text-gray-500 mt-1" x-text="item.live_detail || item.detail"></p>
-                        <div x-show="(item.event_lines || []).length > 0" x-cloak class="mt-2 space-y-1">
-                            <template x-for="(line, lineIdx) in item.event_lines" :key="item.key + '-line-' + lineIdx">
-                                <p class="text-[11px] text-gray-500 break-words font-mono" x-text="line"></p>
-                            </template>
+                        <div class="flex flex-col items-end gap-2 text-xs">
+                            <a href="{{ route('publish.articles.show', $article->id) }}" class="text-blue-600 hover:text-blue-800">Open</a>
+                            @if($article->wp_post_url)
+                                <a href="{{ $article->wp_post_url }}" target="_blank" rel="noopener" class="text-gray-500 hover:text-gray-800">WP Draft</a>
+                            @endif
                         </div>
                     </div>
                 </div>
-            </template>
+            @empty
+                <div class="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-400">No articles produced yet.</div>
+            @endforelse
         </div>
-        <div x-show="runLog.length > 0" x-cloak class="border-t border-gray-200 bg-gray-950 px-6 py-4 max-h-72 overflow-y-auto" x-ref="campaignLogContainer">
-            <div class="flex items-center justify-between mb-3">
-                <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-300">Live Activity</h4>
-                <span class="text-[10px] text-gray-500" x-text="runLog.length + ' entries'"></span>
-            </div>
-            <template x-for="(entry, idx) in runLog" :key="idx">
-                <div class="py-1.5 text-xs font-mono" :class="{
-                    'text-green-400': entry.type === 'success' || entry.type === 'done',
-                    'text-red-400': entry.type === 'error',
-                    'text-yellow-400': entry.type === 'warning',
-                    'text-blue-400': entry.type === 'info',
-                    'text-gray-400': entry.type === 'step'
-                }">
-                    <span class="text-gray-500" x-text="entry.time || entry.captured_at || ''"></span>
-                    <span class="ml-2" x-text="entry.message + (entry.details ? ' — ' + entry.details : '')"></span>
+    </section>
+
+    {{-- ════════════════════════════════════════════════════
+         7. Activity / Runs
+         ════════════════════════════════════════════════════ --}}
+    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between">
+            <h3 class="text-base font-semibold text-gray-900">Campaign Activity</h3>
+            <span class="text-sm text-gray-500">Latest 50 logs</span>
+        </div>
+        <div class="mt-4 space-y-2 max-h-[28rem] overflow-auto">
+            @forelse($runLogs as $log)
+                <div class="rounded-lg border border-gray-200 px-4 py-2">
+                    <div class="flex items-center justify-between gap-3 text-xs text-gray-400">
+                        <span>{{ \Illuminate\Support\Carbon::parse($log->created_at)->timezone(config('app.timezone'))->format('M j, g:i:s A') }}</span>
+                        <span>{{ $log->action }}</span>
+                    </div>
+                    <p class="mt-1 text-sm text-gray-700">{{ $log->message }}</p>
                 </div>
-            </template>
+            @empty
+                <div class="rounded-lg border border-dashed border-gray-200 px-4 py-4 text-sm text-gray-400">No campaign activity logged.</div>
+            @endforelse
         </div>
-    </div>
+    </section>
 
-    {{-- Details (row layout) --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-2">
-        <h3 class="font-semibold text-gray-800 mb-3">Details</h3>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">User</span><p class="text-sm text-gray-800">{{ $campaign->user->name ?? '—' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Site</span><p class="text-sm text-gray-800">{{ $campaign->site->name ?? '—' }} @if($campaign->site)<span class="text-xs text-gray-400">({{ $campaign->site->url }})</span>@endif</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Campaign Preset</span><p class="text-sm text-gray-800">{{ $campaign->campaignPreset->name ?? '—' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Article Preset</span><p class="text-sm text-gray-800">{{ $campaign->template->name ?? '—' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Article Type</span><p class="text-sm text-gray-800">{{ $resolvedSettings['article_type'] ? ucwords(str_replace('-', ' ', $resolvedSettings['article_type'])) : '—' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Delivery</span><p class="text-sm text-gray-800">{{ ucwords(str_replace('-', ' ', $resolvedSettings['delivery_mode'] ?? 'draft-local')) }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Search Terms</span><p class="text-sm text-gray-800">{{ count($resolvedSettings['search_terms'] ?? []) }} term(s)</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">AI Flow</span><p class="text-sm text-gray-800">Search {{ $resolvedSettings['online_search_model_primary'] ?? '—' }} → {{ $resolvedSettings['online_search_model_fallback'] ?? '—' }} | Scrape {{ $resolvedSettings['scrape_ai_model_primary'] ?? '—' }} → {{ $resolvedSettings['scrape_ai_model_fallback'] ?? '—' }} | Spin {{ $resolvedSettings['spin_model_primary'] ?? '—' }} → {{ $resolvedSettings['spin_model_fallback'] ?? '—' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Author</span><p class="text-sm text-gray-800">{{ $campaign->author ?? '—' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Post Status</span><p class="text-sm text-gray-800">{{ ucfirst($campaign->post_status ?? 'draft') }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Schedule</span><p class="text-sm text-gray-800">{{ $campaign->articles_per_interval }} post(s) / {{ $campaign->interval_unit }}{{ $campaign->run_at_time ? ' at ' . $campaign->run_at_time : '' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Timezone</span><p class="text-sm text-gray-800">{{ $campaign->timezone ?? 'America/New_York' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Last Run</span><p class="text-sm text-gray-800">{{ $campaign->last_run_at ? $campaign->last_run_at->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A T') . ' (' . $campaign->last_run_at->utc()->format('H:i') . ' UTC)' : 'Never' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Next Run</span><p class="text-sm text-gray-800">{{ $campaign->next_run_at ? $campaign->next_run_at->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A T') . ' (' . $campaign->next_run_at->utc()->format('H:i') . ' UTC)' : '—' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Auto-Publish</span><p class="text-sm text-gray-800">{{ $campaign->auto_publish ? 'Yes — fully automated' : 'No — manual review' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0">AI Instructions</span><p class="text-sm text-gray-800 whitespace-pre-line">{{ $campaign->ai_instructions ?? $campaign->notes ?? '—' }}</p></div>
-        <div class="flex items-start gap-3 py-1.5"><span class="text-xs text-gray-400 w-28 flex-shrink-0">Created</span><p class="text-sm text-gray-800">{{ $campaign->created_at ? $campaign->created_at->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A T') : '—' }} by {{ $campaign->creator->name ?? '—' }}</p></div>
-    </div>
-
-    {{-- Preset Settings (expandable) --}}
-    @include('app-publish::partials.preset-fields', ['prefix' => 'template', 'label' => 'Article Preset Settings'])
-
-    {{-- Campaign History (articles) --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div class="p-4 border-b border-gray-200">
-            <h3 class="font-semibold text-gray-800">Campaign History ({{ $campaign->articles->count() }} articles)</h3>
-        </div>
-        @forelse($campaign->articles as $article)
-        <div class="p-4 border-b border-gray-100 hover:bg-gray-50 flex items-start justify-between gap-4">
-            <div class="flex-1 min-w-0">
-                <a href="{{ route('publish.articles.show', $article->id) }}" class="text-sm font-medium text-gray-800 hover:text-blue-600 break-words">{{ $article->title ?: 'Untitled' }}</a>
-                <p class="text-xs text-gray-400 mt-0.5">
-                    {{ $article->article_id }}
-                    @if($article->wp_post_url) &middot; <a href="{{ $article->wp_post_url }}" target="_blank" class="text-blue-600 hover:underline inline-flex items-center gap-0.5">WP Post <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a> @endif
-                    &middot; {{ $article->word_count ? number_format($article->word_count) . ' words' : '' }}
-                    &middot; {{ $article->created_at ? $article->created_at->diffForHumans() : '' }}
-                </p>
-            </div>
-            @if($article->status === 'completed' || $article->status === 'published')
-                <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">{{ ucfirst($article->status) }}</span>
-            @else
-                <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500">{{ ucfirst($article->status) }}</span>
-            @endif
-        </div>
-        @empty
-        <div class="p-8 text-center text-gray-400 text-sm">No articles created by this campaign yet.</div>
-        @endforelse
-    </div>
-
-    {{-- Run Logs --}}
-    @if(isset($runLogs) && $runLogs->count() > 0)
-    <div class="bg-gray-900 rounded-xl border border-gray-700 p-5">
-        <h3 class="text-sm font-semibold text-white uppercase tracking-wide mb-3">Cron Run Logs ({{ $runLogs->count() }})</h3>
-        <div class="space-y-1 max-h-64 overflow-y-auto">
-            @foreach($runLogs as $log)
-            <div class="flex items-start gap-2 text-xs font-mono py-1 {{ !$loop->first ? 'border-t border-gray-800' : '' }}">
-                <span class="text-gray-500 flex-shrink-0">{{ $log->created_at }}</span>
-                <span class="text-gray-300 break-words">{{ $log->action }}: {{ $log->description }}</span>
-            </div>
-            @endforeach
-        </div>
-    </div>
-    @endif
-
-    {{-- Links --}}
-    <div class="flex gap-4 text-xs text-gray-400">
-        <a href="{{ route('campaigns.index') }}" class="hover:text-blue-600">&larr; All Campaigns</a>
-        <a href="{{ route('campaigns.create', ['id' => $campaign->id]) }}" class="hover:text-blue-600">Edit Campaign</a>
-        @if(Route::has('publish.schedule.index'))
-            <a href="{{ route('publish.schedule.index') }}" class="hover:text-blue-600">Cron Schedule</a>
-        @endif
-    </div>
 </div>
+@endsection
 
 @push('scripts')
 @include('app-publish::partials.preset-fields-mixin')
+@include('app-publish::partials.site-connection-mixin')
 <script>
-function campaignShow() {
+function campaignDashboard() {
+    const initialForm         = @json($campaignForm);
+    const campaignPresetItems = @json($campaignPresetItems);
+    const articlePresetItems  = @json($aiTemplateItems);
+    const campaignPresetSchema = @json($campaignPresetSchema ?? []);
+    const articlePresetSchema  = @json($articlePresetSchema ?? []);
+    const campaignPresetValues = @json($campaignPresetValues ?? []);
+    const articlePresetValues  = @json($articlePresetValues ?? []);
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
 
-    const templateData = @json($campaign->template);
-    const checklistDefinitions = @json($checklistDefinitions ?? []);
-
     return {
+        ...presetFieldsMixin('campaignPreset'),
         ...presetFieldsMixin('template'),
-        template_schema: @json(\hexa_app_publish\Publishing\Templates\Models\PublishTemplate::getFieldSchema()),
         ...presetFieldsMethods,
+        ...siteConnectionMixin(),
 
-        running: false, runResult: '', runSuccess: false, runState: '',
-        runLog: [],
-        seenEventKeys: [],
-        runningMode: '',
-        lastEventSequence: 0,
-        operationId: null,
-        operationStatus: '',
-        operationTransport: '',
-        operationTraceId: '',
-        operationCurrent: '',
-        operationLabel: '',
-        operationShowUrl: '',
-        operationStreamUrl: '',
-        operationStreamController: null,
-        operationPollTimer: null,
-        operationStartedAt: '',
-        operationCompletedAt: '',
-        elapsedTimer: null,
-        campaignChecklistByMode: checklistDefinitions,
-        campaignChecklist: [],
+        editId: {{ (int) $campaign->id }},
+        campaignStatus: @json($campaign->status ?? 'draft'),
+        form: {
+            ...initialForm,
+            post_status: initialForm.post_status || @json($campaign->post_status ?? 'draft'),
+        },
+        termsText: Array.isArray(initialForm.keywords) ? initialForm.keywords.join('\n') : '',
+        saving: false,
+        saveResult: '',
+        saveSuccess: true,
+        runningNow: false,
+        _saveTimer: null,
+        _skipCount: 0,
+
+        get campaignPresetEditUrl() {
+            return this.form.campaign_preset_id
+                ? @json(route('campaigns.presets.index')) + '?id=' + this.form.campaign_preset_id
+                : null;
+        },
+        get articlePresetEditUrl() {
+            return this.form.publish_template_id
+                ? '/publish/article-presets/' + this.form.publish_template_id + '/edit'
+                : null;
+        },
 
         init() {
-            if (templateData) this.loadPresetFields('template', templateData);
-        },
+            this._loadCampaignPreset();
+            this._loadArticlePreset();
 
-        checklistProgressText() {
-            const enabled = this.campaignChecklist.filter(item => item.enabled !== false);
-            const done = enabled.filter(item => item.status === 'done').length;
-            return enabled.length ? (done + '/' + enabled.length + ' complete') : 'No checklist items';
-        },
-
-        cloneChecklist(mode) {
-            const definitions = this.campaignChecklistByMode?.[mode] || [];
-            return JSON.parse(JSON.stringify(definitions)).map((item) => ({
-                ...item,
-                live_detail: item.live_detail || '',
-                event_lines: [],
-            }));
-        },
-
-        operationElapsedText() {
-            const startedAt = this.operationStartedAt ? new Date(this.operationStartedAt) : null;
-            if (!startedAt || Number.isNaN(startedAt.getTime())) {
-                return '00:00';
-            }
-
-            const endedAt = this.operationCompletedAt ? new Date(this.operationCompletedAt) : new Date();
-            const seconds = Math.max(0, Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000));
-            const minutesPart = String(Math.floor(seconds / 60)).padStart(2, '0');
-            const secondsPart = String(seconds % 60).padStart(2, '0');
-
-            return minutesPart + ':' + secondsPart;
-        },
-
-        syncElapsedTimer() {
-            if (this.elapsedTimer) {
-                clearInterval(this.elapsedTimer);
-                this.elapsedTimer = null;
-            }
-
-            if (!this.operationStartedAt || this.operationCompletedAt) {
-                return;
-            }
-
-            this.elapsedTimer = setInterval(() => {
-                if (this.operationCompletedAt) {
-                    clearInterval(this.elapsedTimer);
-                    this.elapsedTimer = null;
-                    return;
-                }
-
-                this.operationStartedAt = this.operationStartedAt;
-            }, 1000);
-        },
-
-        resetOperationState() {
-            this.running = false;
-            this.runningMode = '';
-            this.seenEventKeys = [];
-            this.lastEventSequence = 0;
-            this.operationId = null;
-            this.operationStatus = '';
-            this.operationTransport = '';
-            this.operationTraceId = '';
-            this.operationCurrent = '';
-            this.operationLabel = '';
-            this.operationShowUrl = '';
-            this.operationStreamUrl = '';
-            this.operationStartedAt = '';
-            this.operationCompletedAt = '';
-            if (this.operationStreamController) {
-                try { this.operationStreamController.abort(); } catch (e) {}
-            }
-            this.operationStreamController = null;
-            if (this.operationPollTimer) {
-                clearTimeout(this.operationPollTimer);
-            }
-            this.operationPollTimer = null;
-            if (this.elapsedTimer) {
-                clearInterval(this.elapsedTimer);
-            }
-            this.elapsedTimer = null;
-        },
-
-        appendChecklistLine(item, line) {
-            const normalized = (line || '').trim();
-            if (!normalized) return;
-
-            item.event_lines = Array.isArray(item.event_lines) ? item.event_lines : [];
-            if (item.event_lines[item.event_lines.length - 1] === normalized) {
-                return;
-            }
-
-            item.event_lines.push(normalized);
-            if (item.event_lines.length > 24) {
-                item.event_lines = item.event_lines.slice(-24);
-            }
-        },
-
-        recordChecklistEvent(item, entry) {
-            this.appendChecklistLine(item, (entry.message || '') + (entry.details ? ' — ' + entry.details : ''));
-
-            [
-                ['url', 'URL'],
-                ['source', 'Source'],
-                ['source_url', 'Source URL'],
-                ['search_term', 'Search'],
-                ['title', 'Title'],
-                ['description', 'Description'],
-                ['author', 'Author'],
-                ['hostname', 'Host'],
-                ['connection_label', 'Connection'],
-                ['connection_mode', 'Mode'],
-                ['source_domain', 'Domain'],
-                ['source_type', 'Type'],
-                ['checked_via', 'Checked Via'],
-                ['status_code', 'HTTP Status'],
-                ['word_count', 'Words'],
-                ['method_used', 'Method'],
-                ['fallback_used', 'Fallback'],
-                ['alt_text', 'Alt'],
-                ['caption', 'Caption'],
-                ['wp_url', 'WP URL'],
-                ['media_id', 'Media ID'],
-                ['model', 'Model'],
-                ['provider', 'Provider'],
-                ['width', 'Width'],
-                ['height', 'Height'],
-                ['aspect_ratio', 'Aspect'],
-                ['file_size_bytes', 'Bytes'],
-                ['mime_type', 'Mime'],
-                ['quality_score', 'Quality'],
-                ['quality_pass', 'Quality Pass'],
-                ['search_backend_label', 'Backend'],
-                ['selected_anchor_title', 'Anchor'],
-                ['post_id', 'Post ID'],
-                ['post_url', 'Post URL'],
-            ].forEach(([key, label]) => {
-                const value = entry?.[key];
-                if (value !== undefined && value !== null && String(value).trim() !== '') {
-                    this.appendChecklistLine(item, label + ': ' + value);
-                }
+            this.$watch('termsText', v => {
+                this.form.keywords = (v || '').split('\n').map(s => s.trim()).filter(Boolean);
             });
-        },
 
-        pushRunLog(entry) {
-            const sequence = Number(entry.id || entry.sequence_no || 0);
-            const eventKey = entry.client_event_id || [sequence, entry.stage || '', entry.substage || '', entry.message || ''].join('|');
-            if (this.seenEventKeys.includes(eventKey)) {
-                return;
-            }
-            this.seenEventKeys.push(eventKey);
-            if (this.seenEventKeys.length > 1200) {
-                this.seenEventKeys = this.seenEventKeys.slice(-800);
-            }
-            if (sequence > this.lastEventSequence) {
-                this.lastEventSequence = sequence;
-            }
-            this.runLog.push({
-                time: entry.time || entry.captured_at || new Date().toLocaleTimeString(),
-                type: entry.type || 'info',
-                message: entry.message || '',
-                stage: entry.stage || '',
-                substage: entry.substage || '',
-                details: entry.details || '',
-            });
-            this.$nextTick(() => {
-                const container = this.$refs.campaignLogContainer;
-                if (container) container.scrollTop = container.scrollHeight;
-            });
-        },
+            this.$watch('form', () => {
+                this._skipCount++;
+                if (this._skipCount <= 2) return;
+                clearTimeout(this._saveTimer);
+                this._saveTimer = setTimeout(() => this.autoSave(), 600);
+            }, { deep: true });
 
-        findChecklistIndex(stage) {
-            return this.campaignChecklist.findIndex(item => Array.isArray(item.stages) && item.stages.includes(stage));
-        },
-
-        updateChecklistFromEvent(entry) {
-            const stage = entry.stage || '';
-            if (!stage) return;
-            const idx = this.findChecklistIndex(stage);
-            if (idx === -1) return;
-
-            for (let i = 0; i < idx; i++) {
-                const item = this.campaignChecklist[i];
-                if (item.enabled !== false && ['pending', 'running'].includes(item.status)) {
-                    item.status = 'done';
-                }
-            }
-
-            const item = this.campaignChecklist[idx];
-            if (!item || item.enabled === false) return;
-
-            item.live_detail = entry.details
-                ? (entry.message + ' — ' + entry.details)
-                : entry.message;
-            this.recordChecklistEvent(item, entry);
-
-            if (entry.type === 'error') {
-                item.status = 'failed';
-                return;
-            }
-
-            const completeSubstages = ['resolved', 'created', 'manual_links', 'complete', 'local_draft'];
-            if (entry.type === 'done' || completeSubstages.includes(entry.substage || '')) {
-                item.status = 'done';
-                return;
-            }
-
-            item.status = 'running';
-        },
-
-        applyOperation(operation) {
-            if (!operation) return;
-            this.operationId = operation.id;
-            this.operationStatus = operation.status || '';
-            this.operationTransport = operation.transport || '';
-            this.operationTraceId = operation.trace_id || '';
-            this.operationShowUrl = operation.show_url || '';
-            this.operationStreamUrl = operation.stream_url || '';
-            this.operationStartedAt = operation.started_at || this.operationStartedAt || new Date().toISOString();
-            this.operationCompletedAt = operation.completed_at || '';
-            this.operationCurrent = operation.last_stage
-                ? ('Current: ' + operation.last_stage.replace(/_/g, ' ') + (operation.last_message ? ' — ' + operation.last_message : ''))
-                : (operation.last_message || '');
-            this.syncElapsedTimer();
-        },
-
-        finishChecklist(success, message, resultPayload = null) {
-            this.running = false;
-            if (success) {
-                this.campaignChecklist.forEach(item => {
-                    if (item.enabled !== false && ['pending', 'running'].includes(item.status)) {
-                        item.status = 'done';
-                    }
-                });
-            }
-            this.runSuccess = success;
-            this.runState = success ? 'success' : 'error';
-            this.operationCompletedAt = this.operationCompletedAt || new Date().toISOString();
-            this.runResult = message || (success ? 'Campaign run complete.' : 'Campaign run failed.');
-            if (resultPayload?.article_url) {
-                this.runResult += ' — Article: ' + resultPayload.article_url;
-            }
-            if (resultPayload?.wp_post_url) {
-                this.runResult += ' — WP: ' + resultPayload.wp_post_url;
-            }
-            if (this.operationPollTimer) {
-                clearTimeout(this.operationPollTimer);
-                this.operationPollTimer = null;
-            }
-            if (this.elapsedTimer) {
-                clearInterval(this.elapsedTimer);
-                this.elapsedTimer = null;
+            if (this.form.publish_site_id) {
+                this.restoreSiteConnection(this.form.publish_site_id, 'campaignSiteConnection_' + this.editId);
             }
         },
 
-        async startOperation(mode, label) {
-            if (!confirm('Run campaign now as ' + label.toLowerCase() + '?')) return;
-            this.resetOperationState();
-            this.running = true;
-            this.runningMode = mode;
-            this.runResult = '';
-            this.runSuccess = false;
-            this.runState = '';
-            this.runLog = [];
-            this.operationLabel = label;
-            this.campaignChecklist = this.cloneChecklist(mode);
-            this.operationStartedAt = new Date().toISOString();
-            this.operationCompletedAt = '';
-            this.syncElapsedTimer();
+        formatLabel(value) {
+            return (value || '').replace(/[-_]/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+        },
+
+        _loadCampaignPreset() {
+            const p = campaignPresetItems.find(x => String(x.id) === String(this.form.campaign_preset_id));
+            const values = p ? p.form_values : campaignPresetValues;
+            _loadPresetFields(this, 'campaignPreset', values, campaignPresetSchema);
+        },
+        _loadArticlePreset() {
+            const p = articlePresetItems.find(x => String(x.id) === String(this.form.publish_template_id));
+            const values = p ? p.form_values : articlePresetValues;
+            _loadPresetFields(this, 'template', values, articlePresetSchema);
+        },
+
+        onCampaignPresetChange() {
+            this._loadCampaignPreset();
+            const p = campaignPresetItems.find(x => String(x.id) === String(this.form.campaign_preset_id));
+            if (!p) return;
+            const v = p.form_values || {};
+            if (!this.termsText.trim() && Array.isArray(v.search_queries) && v.search_queries.length) {
+                this.termsText = v.search_queries.join('\n');
+            }
+            if (!this.form.ai_instructions && v.campaign_instructions) this.form.ai_instructions = v.campaign_instructions;
+            if (v.posts_per_run && (this.form.articles_per_interval || 1) <= 1) this.form.articles_per_interval = v.posts_per_run;
+            if (v.frequency && this.form.interval_unit === 'daily') this.form.interval_unit = v.frequency;
+            if (v.run_at_time && this.form.run_at_time === '09:00') this.form.run_at_time = v.run_at_time;
+            if (v.drip_minutes && (this.form.drip_interval_minutes || 60) === 60) this.form.drip_interval_minutes = v.drip_minutes;
+        },
+        onArticlePresetChange() { this._loadArticlePreset(); },
+
+        async autoSave() {
+            if (!this.editId) return;
+            this.saving = true;
             try {
-                const r = await fetch('{{ route("campaigns.start-operation", $campaign->id) }}', { method: 'POST', headers, body: JSON.stringify({ mode }) });
+                const r = await fetch('/campaigns/' + this.editId, { method: 'PUT', headers, body: JSON.stringify(this.form) });
                 const d = await r.json();
-                if (!r.ok || !d.success) {
-                    throw new Error(d.message || 'Failed to start campaign operation');
-                }
-                this.campaignChecklist = d.checklist || this.campaignChecklist;
-                this.applyOperation(d.operation);
-                this.runSuccess = true;
-                this.runState = 'info';
-                this.runResult = d.message || '';
-                this.pollOperation(1000);
-                await this.startStreaming();
-            } catch(e) {
-                this.runSuccess = false;
-                this.runState = 'error';
-                this.runResult = 'Error: ' + e.message;
-                this.running = false;
-            }
-        },
-
-        async startStreaming() {
-            if (!this.operationId || !this.operationStreamUrl) {
-                this.running = false;
-                return;
-            }
-
-            if (!window.ReadableStream || !this.operationStreamUrl) {
-                this.pollOperation(400);
-                return;
-            }
-
-            this.operationStreamController = new AbortController();
-            try {
-                const resp = await fetch(this.operationStreamUrl, {
-                    headers: { 'Accept': 'application/x-ndjson' },
-                    signal: this.operationStreamController.signal,
-                });
-                if (!resp.ok || !resp.body) {
-                    this.pollOperation(400);
-                    return;
-                }
-
-                const reader = resp.body.getReader();
-                const decoder = new TextDecoder();
-                let buffer = '';
-
-                while (true) {
-                    const { value, done } = await reader.read();
-                    if (done) break;
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n');
-                    buffer = lines.pop() || '';
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (!trimmed) continue;
-                        this.handleStreamPayload(JSON.parse(trimmed));
-                    }
-                }
-
-                if (buffer.trim() !== '') {
-                    this.handleStreamPayload(JSON.parse(buffer.trim()));
-                }
+                this.saveSuccess = !!d.success;
+                this.saveResult = d.success ? 'Saved ' + new Date().toLocaleTimeString() : (d.message || 'Save failed');
             } catch (e) {
-                if (e.name !== 'AbortError') {
-                    this.pollOperation(800);
-                }
+                this.saveSuccess = false;
+                this.saveResult = 'Network error';
             }
+            this.saving = false;
         },
 
-        handleStreamPayload(payload) {
-            if (payload.operation) {
-                this.applyOperation(payload.operation);
-            }
-
-            if (payload.event) {
-                this.pushRunLog(payload.event);
-                this.updateChecklistFromEvent(payload.event);
-            }
-
-            if (payload.kind === 'terminal') {
-                const resultPayload = payload.operation?.result_payload || {};
-                this.finishChecklist((payload.operation?.status || '') === 'completed', resultPayload.message || this.runResult, resultPayload);
-            }
-
-            if (payload.kind === 'timeout') {
-                this.pollOperation(400);
-            }
+        async doTestSite() {
+            if (!this.form.publish_site_id) return;
+            await this.testSiteConnection(this.form.publish_site_id, csrf, {
+                cacheKey: 'campaignSiteConnection_' + this.editId,
+                onSuccess: (d) => { if (d.default_author && !this.form.author) this.form.author = d.default_author; },
+            });
         },
 
-        async pollOperation(delay = 1000) {
-            if (!this.operationShowUrl) return;
-            if (this.operationPollTimer) clearTimeout(this.operationPollTimer);
-            this.operationPollTimer = setTimeout(async () => {
-                try {
-                    const pollUrl = new URL(this.operationShowUrl, window.location.origin);
-                    if (this.lastEventSequence > 0) {
-                        pollUrl.searchParams.set('after_sequence', String(this.lastEventSequence));
-                    }
-                    pollUrl.searchParams.set('limit', '200');
-                    const resp = await fetch(pollUrl.toString(), { headers: { 'Accept': 'application/json' } });
-                    const data = await resp.json();
-                    if (!data.success) throw new Error(data.message || 'Polling failed');
-                    if (data.operation) this.applyOperation(data.operation);
-                    (data.events || []).forEach((event) => {
-                        this.pushRunLog(event);
-                        this.updateChecklistFromEvent(event);
-                    });
-                    if (['completed', 'failed'].includes(this.operationStatus)) {
-                        const resultPayload = data.operation?.result_payload || {};
-                        this.finishChecklist(this.operationStatus === 'completed', resultPayload.message || this.runResult, resultPayload);
-                        return;
-                    }
-                    this.pollOperation(1500);
-                } catch (e) {
-                    this.runState = 'info';
-                    this.runResult = 'Waiting for live updates… ' + e.message;
-                    this.pollOperation(2500);
-                }
-            }, delay);
+        async runNow() {
+            this.runningNow = true;
+            try { await fetch('/campaigns/' + this.editId + '/run-now', { method: 'POST', headers }); } catch (e) {}
+            this.runningNow = false;
+            window.location.reload();
+        },
+        async activateCampaign() {
+            try { await fetch('/campaigns/' + this.editId + '/activate', { method: 'POST', headers }); } catch (e) {}
+            window.location.reload();
+        },
+        async pauseCampaign() {
+            try { await fetch('/campaigns/' + this.editId + '/pause', { method: 'POST', headers }); } catch (e) {}
+            window.location.reload();
+        },
+        async duplicateCampaign() {
+            try {
+                const r = await fetch('/campaigns/' + this.editId + '/duplicate', { method: 'POST', headers });
+                const d = await r.json();
+                if (d.success && d.campaign?.id) window.location.href = '/campaigns/' + d.campaign.id;
+            } catch (e) {}
+        },
+        async deleteCampaign() {
+            if (!confirm('Delete this campaign? This cannot be undone.')) return;
+            try {
+                await fetch('/campaigns/' + this.editId, { method: 'DELETE', headers });
+                window.location.href = @json(route('campaigns.index'));
+            } catch (e) {}
         },
     };
 }
 </script>
 @endpush
-@endsection
