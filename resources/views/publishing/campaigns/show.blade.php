@@ -498,8 +498,12 @@
                                 @else
                                     By <span class="text-gray-400">—</span>
                                 @endif
-                                @if($article->word_count)<span class="hx-sep">·</span><strong>{{ number_format($article->word_count) }}</strong> words@endif
-                                @if($sourceCount > 0)<span class="hx-sep">·</span><strong>{{ $sourceCount }}</strong> source{{ $sourceCount === 1 ? '' : 's' }}@endif
+                                @if($article->word_count)
+                                    <span class="hx-sep">·</span><strong>{{ number_format($article->word_count) }}</strong> words
+                                @endif
+                                @if($sourceCount > 0)
+                                    <span class="hx-sep">·</span><strong>{{ $sourceCount }}</strong> source{{ $sourceCount === 1 ? '' : 's' }}
+                                @endif
                                 <span class="hx-sep">·</span>{{ $article->created_at?->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y · g:i A') }}
                             </div>
 
@@ -518,9 +522,15 @@
                     <div class="hx-article-footer">
                         <div class="hx-article-tech">
                             <span>{{ $article->article_id }}</span>
-                            @if($article->ai_engine_used)<span class="hx-sep">·</span><span>{{ $article->ai_engine_used }}</span>@endif
-                            @if($article->ai_cost)<span class="hx-sep">·</span><span>${{ number_format((float) $article->ai_cost, 4) }}</span>@endif
-                            @if($article->wp_post_id)<span class="hx-sep">·</span><span>WP #{{ $article->wp_post_id }}</span>@endif
+                            @if($article->ai_engine_used)
+                                <span class="hx-sep">·</span><span>{{ $article->ai_engine_used }}</span>
+                            @endif
+                            @if($article->ai_cost)
+                                <span class="hx-sep">·</span><span>${{ number_format((float) $article->ai_cost, 4) }}</span>
+                            @endif
+                            @if($article->wp_post_id)
+                                <span class="hx-sep">·</span><span>WP #{{ $article->wp_post_id }}</span>
+                            @endif
                         </div>
                         <div class="hx-article-actions">
                             @if($wpLink)
