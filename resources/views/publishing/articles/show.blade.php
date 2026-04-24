@@ -19,20 +19,79 @@
     }
     $featuredUrl = $featuredImg['sizes']['medium_large'] ?? $featuredImg['media_url'] ?? null;
     $tz = config('app.timezone', 'America/New_York');
+    $effectiveWpStatus = $lifecycle['effective_status'] ?? ($article->wp_status ?: $article->status);
+    $isLocalDraft = ($article->delivery_mode ?? '') === 'draft-local';
+    $statusTone = $isLocalDraft
+        ? 'bg-gray-100 text-gray-700'
+        : (($effectiveWpStatus ?? '') === 'publish' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800');
+    $lifecycleBadge = $isLocalDraft
+        ? 'Local draft'
+        : (($effectiveWpStatus ?? '') === 'publish' ? 'Live on WordPress' : 'WordPress draft');
+    $statusHeadline = $isLocalDraft
+        ? 'This article is still a local draft.'
+        : (($effectiveWpStatus ?? '') === 'publish'
+            ? 'This article is live on WordPress' . ($article->wp_post_id ? ' as post #' . $article->wp_post_id : '.')
+            : 'This article already has a WordPress draft' . ($article->wp_post_id ? ' (#' . $article->wp_post_id . ')' : '') . '.');
+    $statusDetail = $lifecycle['recommended_action'] ?? 'Resume in editor to continue working on this article.';
+    $syncSummary = !empty($lifecycle['sync_error'])
+        ? $lifecycle['sync_error']
+        : (!empty($lifecycle['sync_message']) ? $lifecycle['sync_message'] : 'WordPress state is in sync with the stored article record.');
 @endphp
 <div class="max-w-4xl mx-auto space-y-6" x-data="articleReport()">
 
     <div class="flex flex-wrap items-center justify-between gap-3">
         <a href="{{ route('publish.drafts.index') }}" class="text-sm text-gray-400 hover:text-gray-600 inline-flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> All Articles</a>
-        <div class="flex items-center gap-2">
-            @if($article->wp_post_url)<a href="{{ $article->wp_post_url }}" target="_blank" class="text-xs text-green-600 hover:text-green-800 px-3 py-1.5 border border-green-200 rounded-lg hover:bg-green-50 inline-flex items-center gap-1">View Live <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>@endif
-            @if($article->wp_post_id && $article->site)<a href="{{ rtrim($article->site->url, '/') }}/wp-admin/post.php?post={{ $article->wp_post_id }}&action=edit" target="_blank" class="text-xs text-blue-600 hover:text-blue-800 px-3 py-1.5 border border-blue-200 rounded-lg hover:bg-blue-50 inline-flex items-center gap-1">Edit in WP <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>@endif
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{{ $lifecycle['resume_url'] }}" class="text-xs text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg inline-flex items-center gap-1">Resume in Editor <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></a>
+            @if(!empty($lifecycle['wp_admin_url']))<a href="{{ $lifecycle['wp_admin_url'] }}" target="_blank" class="text-xs text-blue-600 hover:text-blue-800 px-3 py-1.5 border border-blue-200 rounded-lg hover:bg-blue-50 inline-flex items-center gap-1">Open in WP Admin <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>@endif
+            @if(!empty($lifecycle['is_live']) && !empty($lifecycle['public_url']))<a href="{{ $lifecycle['public_url'] }}" target="_blank" class="text-xs text-green-600 hover:text-green-800 px-3 py-1.5 border border-green-200 rounded-lg hover:bg-green-50 inline-flex items-center gap-1">View Live <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>@endif
             <button @click="copyPrettyAudit()" class="text-xs text-purple-600 hover:text-purple-800 px-3 py-1.5 border border-purple-200 rounded-lg hover:bg-purple-50">Copy Audit Summary</button>
             <button @click="copyAuditDump()" class="text-xs text-indigo-600 hover:text-indigo-800 px-3 py-1.5 border border-indigo-200 rounded-lg hover:bg-indigo-50">Copy Audit JSON</button>
             <button @click="downloadAuditJson()" class="text-xs text-gray-600 hover:text-gray-800 px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">Download Audit JSON</button>
             <button @click="confirmDelete = true; $nextTick(() => $refs.deleteSection?.scrollIntoView({ behavior: 'smooth' }))" class="text-xs text-red-400 hover:text-red-600 px-3 py-1.5 border border-red-200 rounded-lg hover:bg-red-50">Delete</button>
         </div>
     </div>
+
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium {{ $statusTone }}">{{ $lifecycleBadge }}</span>
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700">Internal: {{ ucfirst($article->status ?? '—') }}</span>
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">WP: {{ ucfirst($effectiveWpStatus ?: '—') }}</span>
+        </div>
+        <div class="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+            <div class="rounded-xl border border-gray-200 bg-gray-50 p-5">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Article Lifecycle</p>
+                <h2 class="mt-2 text-xl font-semibold text-gray-900">{{ $statusHeadline }}</h2>
+                <p class="mt-3 text-sm leading-6 text-gray-700">{{ $statusDetail }}</p>
+                <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-lg border border-gray-200 bg-white px-3 py-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">WordPress Post</p>
+                        <p class="mt-1 text-sm font-mono text-gray-900">{{ $article->wp_post_id ? '#' . $article->wp_post_id : 'None yet' }}</p>
+                    </div>
+                    <div class="rounded-lg border border-gray-200 bg-white px-3 py-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Delivery Mode</p>
+                        <p class="mt-1 text-sm text-gray-900">{{ $article->delivery_mode ?? '—' }}</p>
+                    </div>
+                    <div class="rounded-lg border border-gray-200 bg-white px-3 py-3">
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Live URL</p>
+                        <p class="mt-1 text-sm text-gray-900">{{ !empty($lifecycle['is_live']) ? 'Available' : 'Not live yet' }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="rounded-xl border {{ !empty($lifecycle['sync_error']) ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50' }} p-5">
+                <p class="text-[11px] font-semibold uppercase tracking-wide {{ !empty($lifecycle['sync_error']) ? 'text-red-400' : 'text-gray-400' }}">WordPress Sync</p>
+                <p class="mt-2 text-sm leading-6 {{ !empty($lifecycle['sync_error']) ? 'text-red-700' : (!empty($lifecycle['sync_message']) ? 'text-green-700' : 'text-gray-700') }}">{{ $syncSummary }}</p>
+                <div class="mt-4 space-y-2 text-sm">
+                    @if(!empty($lifecycle['wp_admin_url']))
+                        <a href="{{ $lifecycle['wp_admin_url'] }}" target="_blank" class="inline-flex text-blue-600 hover:text-blue-800">Open in WordPress admin</a>
+                    @endif
+                    @if(!empty($lifecycle['is_live']) && !empty($lifecycle['public_url']))
+                        <a href="{{ $lifecycle['public_url'] }}" target="_blank" class="block text-blue-600 hover:text-blue-800 break-all">{{ $lifecycle['public_url'] }}</a>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </section>
 
     <article class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         @if($featuredUrl)
@@ -45,7 +104,7 @@
                 @if($article->author)<span class="inline-flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> {{ $article->author }}</span>@endif
                 @if($article->word_count)<span>{{ number_format($article->word_count) }} words</span>@endif
                 @if($article->site)<a href="{{ $article->site->url }}" target="_blank" class="text-blue-500 hover:text-blue-700">{{ $article->site->name }}</a>@endif
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ in_array($article->status, ['completed','published']) ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600' }}">{{ ucfirst($article->wp_status ?? $article->status) }}</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ ($effectiveWpStatus ?? '') === 'publish' ? 'bg-green-100 text-green-800' : (($article->delivery_mode ?? '') === 'draft-local' ? 'bg-gray-100 text-gray-700' : 'bg-amber-100 text-amber-800') }}">{{ ucfirst($effectiveWpStatus ?? $article->status) }}</span>
             </div>
             @if($cleanBody)
             <div class="article-body break-words">{!! $cleanBody !!}</div>
@@ -127,7 +186,7 @@
                     <div class="min-w-0"><div class="text-gray-400 text-[11px]">WP Post ID</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->wp_post_id ?? '—' }}</div></div>
                     <div class="min-w-0"><div class="text-gray-400 text-[11px]">WP Status</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->wp_status ?? '—' }}</div></div>
                     <div class="min-w-0 md:col-span-1"><div class="text-gray-400 text-[11px]">Published</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->published_at ? $article->published_at->setTimezone($tz)->format('M j, Y g:i A') : '—' }}</div></div>
-                    <div class="min-w-0 col-span-2 md:col-span-4"><div class="text-gray-400 text-[11px]">WP URL</div><div class="text-gray-800 font-medium mt-0.5 break-all">@if($article->wp_post_url)<a href="{{ $article->wp_post_url }}" target="_blank" class="text-blue-600 hover:underline">{{ $article->wp_post_url }}</a>@else —@endif</div></div>
+                    <div class="min-w-0 col-span-2 md:col-span-4"><div class="text-gray-400 text-[11px]">WordPress Access</div><div class="text-gray-800 font-medium mt-0.5 break-all">@if(!empty($lifecycle['is_live']) && !empty($lifecycle['public_url']))<a href="{{ $lifecycle['public_url'] }}" target="_blank" class="text-blue-600 hover:underline">{{ $lifecycle['public_url'] }}</a>@elseif(!empty($lifecycle['wp_admin_url']))<a href="{{ $lifecycle['wp_admin_url'] }}" target="_blank" class="text-blue-600 hover:underline">Open in WordPress admin</a>@else —@endif</div></div>
                 </div>
             </div>
 

@@ -619,7 +619,38 @@
             }
             if (draftState.publishAuthor) this.publishAuthor = draftState.publishAuthor;
             if (!this.articleTitle && draftState.articleTitle) this.articleTitle = draftState.articleTitle;
+            if (!this.articleDescription && draftState.articleDescription) this.articleDescription = draftState.articleDescription;
             if (!this.aiModel && draftState.aiModel) this.aiModel = draftState.aiModel;
+            if ((!this.publishAction || this.publishAction === 'draft_local') && draftState.publishAction) {
+                this.publishAction = draftState.publishAction;
+            }
+            if (!this.scheduleDate && draftState.scheduleDate) {
+                this.scheduleDate = draftState.scheduleDate;
+            }
+            if (!this.existingWpPostId && draftState.existingWpPostId) {
+                this.existingWpPostId = draftState.existingWpPostId;
+            }
+            if (!this.existingWpStatus && draftState.existingWpStatus) {
+                this.existingWpStatus = draftState.existingWpStatus;
+            }
+            if (!this.existingWpPostUrl && draftState.existingWpPostUrl) {
+                this.existingWpPostUrl = draftState.existingWpPostUrl;
+            }
+            if (!this.existingWpAdminUrl && draftState.existingWpAdminUrl) {
+                this.existingWpAdminUrl = draftState.existingWpAdminUrl;
+            }
+            if ((!Array.isArray(this.suggestedCategories) || this.suggestedCategories.length === 0) && Array.isArray(draftState.categories) && draftState.categories.length > 0) {
+                this.suggestedCategories = this.normalizeUniqueTextList(draftState.categories, 10);
+                if (!Array.isArray(this.selectedCategories) || this.selectedCategories.length === 0) {
+                    this.selectedCategories = this.suggestedCategories.map((_, idx) => idx);
+                }
+            }
+            if ((!Array.isArray(this.suggestedTags) || this.suggestedTags.length === 0) && Array.isArray(draftState.tags) && draftState.tags.length > 0) {
+                this.suggestedTags = this.normalizeUniqueTextList(draftState.tags, 10);
+                if (!Array.isArray(this.selectedTags) || this.selectedTags.length === 0) {
+                    this.selectedTags = this.suggestedTags.map((_, idx) => idx);
+                }
+            }
             if (!this.spunContent && draftState.body) {
                 this.spunContent = draftState.body;
                 this.editorContent = draftState.body;
@@ -901,6 +932,7 @@
                 'featuredAlt', 'featuredCaption', 'featuredFilename',
                 // Step 7 — Publish + uploaded media tracking
                 'publishAction', 'publishAuthor', 'publishAuthorSource', 'scheduleDate',
+                'existingWpPostId', 'existingWpStatus', 'existingWpPostUrl', 'existingWpAdminUrl',
                 'uploadedImages', 'preparedFeaturedMediaId', 'preparedFeaturedWpUrl',
                 // AI Detection
                 'aiDetectionResults', 'aiDetectionRan', 'aiDetectionAllPass',
@@ -1003,6 +1035,24 @@
             }
         },
 
+        async flushPipelineStateNow() {
+            if (this._restoring) return true;
+            if (this._draftSessionConflictActive) return false;
+
+            this.savePipelineState();
+
+            if (this._pipelineStateTimer) {
+                clearTimeout(this._pipelineStateTimer);
+                this._pipelineStateTimer = null;
+            }
+            if (this._serverPipelineStateTimer) {
+                clearTimeout(this._serverPipelineStateTimer);
+                this._serverPipelineStateTimer = null;
+            }
+
+            return await this.savePipelineStateToServer();
+        },
+
         clearPipeline() {
             localStorage.removeItem(this.pipelineStateKey);
             localStorage.removeItem('publishPipelineState');
@@ -1055,6 +1105,10 @@
             this.publishAuthor = '';
             this.publishAuthorSource = '';
             this.scheduleDate = '';
+            this.existingWpPostId = null;
+            this.existingWpStatus = '';
+            this.existingWpPostUrl = '';
+            this.existingWpAdminUrl = '';
             this.publishing = false;
             this.publishResult = null;
             this.publishError = '';

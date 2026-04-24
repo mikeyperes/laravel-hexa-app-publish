@@ -48,7 +48,20 @@
                     <a x-show="!publishAuthor && selectedSite?.id" x-cloak :href="selectedSite?.id ? '/publish/sites/' + selectedSite.id : '#'" target="_blank" class="text-xs text-orange-500 hover:text-orange-700">Set in site settings</a>
                 </div>
             </div>
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Publish Action</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? 'Publish immediately' : (publishAction === 'draft_wp' ? 'WordPress draft' : (publishAction === 'future' ? 'Scheduled' : 'Local draft'))"></p></div>
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Publish Action</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? (existingWpPostId ? 'Publish existing WordPress draft live' : 'Publish immediately') : (publishAction === 'draft_wp' ? (existingWpPostId ? 'Update existing WordPress draft' : 'Create WordPress draft') : (publishAction === 'future' ? (existingWpPostId ? 'Schedule existing WordPress post' : 'Schedule post') : 'Save as local draft'))"></p></div>
+            <div x-show="existingWpPostId" x-cloak class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 space-y-2">
+                <div class="flex items-start gap-3 text-sm">
+                    <span class="text-xs text-blue-500 w-28 flex-shrink-0 pt-0.5 uppercase tracking-wide">Existing WP Post</span>
+                    <div class="space-y-1 text-blue-900">
+                        <p><span class="font-mono" x-text="'#' + existingWpPostId"></span> already belongs to this article.</p>
+                        <p class="text-xs text-blue-700" x-text="existingWpStatus === 'publish' ? 'WordPress reports this post as live.' : 'WordPress reports this post as a draft. Publishing from here should update the same post instead of creating a duplicate.'"></p>
+                        <div class="flex flex-wrap gap-3 text-xs">
+                            <a x-show="existingWpAdminUrl" :href="existingWpAdminUrl" target="_blank" class="text-blue-700 hover:text-blue-900 underline">Open in WordPress admin</a>
+                            <a x-show="existingWpStatus === 'publish' && existingWpPostUrl" :href="existingWpPostUrl" target="_blank" class="text-blue-700 hover:text-blue-900 underline">Open live URL</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             {{-- Template & Preset --}}
             <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Article Preset</span><p class="text-sm text-gray-800" x-text="selectedTemplate ? selectedTemplate.name : 'Default'"></p></div>
@@ -325,12 +338,16 @@
         <div x-show="!publishResult" x-cloak class="border border-gray-200 rounded-xl p-5 mb-4">
             <h5 class="text-sm font-semibold text-gray-700 mb-3">Publish</h5>
 
+            <div x-show="existingWpPostId" x-cloak class="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                This draft already owns WordPress post <span class="font-mono" x-text="'#' + existingWpPostId"></span>. Use <span class="font-medium">Publish immediately</span> to push that same post live, or <span class="font-medium">Push as WordPress draft</span> to keep updating the same draft safely.
+            </div>
+
             <div class="max-w-md space-y-3 mb-4">
                 <div class="space-y-2">
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="publishAction" value="publish" class="text-blue-600"><span class="text-sm">Publish immediately</span></label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="publishAction" value="publish" class="text-blue-600"><span class="text-sm" x-text="existingWpPostId ? 'Publish existing WordPress draft live' : 'Publish immediately'"></span></label>
                     <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="publishAction" value="draft_local" class="text-blue-600"><span class="text-sm">Save as local draft</span></label>
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="publishAction" value="draft_wp" class="text-blue-600"><span class="text-sm">Push as WordPress draft</span></label>
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="publishAction" value="future" class="text-blue-600"><span class="text-sm">Schedule</span></label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="publishAction" value="draft_wp" class="text-blue-600"><span class="text-sm" x-text="existingWpPostId ? 'Update existing WordPress draft' : 'Push as WordPress draft'"></span></label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" x-model="publishAction" value="future" class="text-blue-600"><span class="text-sm" x-text="existingWpPostId ? 'Schedule existing WordPress post' : 'Schedule'"></span></label>
                 </div>
                 <div x-show="publishAction === 'future'" x-cloak>
                     <label class="block text-xs text-gray-500 mb-1">Schedule Date & Time</label>
@@ -341,7 +358,7 @@
             <div class="flex gap-3">
                 <button @click="publishArticle()" :disabled="publishing || ((publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future') && !prepareComplete)" class="bg-green-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                     <svg x-show="publishing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="publishing ? (publishOperationStatus === 'queued' ? 'Queued...' : 'Publishing...') : 'Publish'"></span>
+                    <span x-text="publishing ? (publishOperationStatus === 'queued' ? 'Queued...' : 'Publishing...') : (publishAction === 'draft_local' ? 'Save Local Draft' : (publishAction === 'draft_wp' ? (existingWpPostId ? 'Update WP Draft' : 'Create WP Draft') : (publishAction === 'future' ? (existingWpPostId ? 'Schedule Existing Post' : 'Schedule Post') : (existingWpPostId ? 'Publish Existing Draft' : 'Publish'))))"></span>
                 </button>
                 <button @click="saveDraftNow()" :disabled="savingDraft" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-50 flex items-center gap-2">
                     <svg x-show="savingDraft" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -369,10 +386,10 @@
             {{-- Post details (row layout) --}}
             <div class="space-y-2 mb-4">
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Title</span><p class="text-sm font-medium text-gray-800 break-words" x-text="articleTitle || 'Untitled'"></p></div>
-                <div x-show="publishResult?.post_url" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Permalink</span><a :href="publishResult?.post_url" target="_blank" class="text-sm text-blue-600 hover:underline break-all inline-flex items-center gap-1" x-text="publishResult?.post_url"><svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></div>
-                <div x-show="publishResult?.post_id && selectedSite?.url" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Edit URL</span><a :href="selectedSite?.url + '/?p=' + publishResult?.post_id" target="_blank" class="text-sm text-blue-600 hover:underline break-all inline-flex items-center gap-1" x-text="selectedSite?.url + '/?p=' + publishResult?.post_id"><svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></div>
+                <div x-show="publishResult?.post_status === 'publish' && publishResult?.post_url" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Permalink</span><a :href="publishResult?.post_url" target="_blank" class="text-sm text-blue-600 hover:underline break-all inline-flex items-center gap-1" x-text="publishResult?.post_url"><svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></div>
+                <div x-show="publishResult?.post_id && selectedSite?.url" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">WordPress Admin</span><a :href="String(selectedSite?.url || '').replace(/\/+$/, '') + '/wp-admin/post.php?post=' + publishResult?.post_id + '&action=edit'" target="_blank" class="text-sm text-blue-600 hover:underline break-all inline-flex items-center gap-1" x-text="String(selectedSite?.url || '').replace(/\/+$/, '') + '/wp-admin/post.php?post=' + publishResult?.post_id + '&action=edit'"><svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></div>
                 <div x-show="publishResult?.post_id" class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">WP Post ID</span><p class="text-sm font-mono text-gray-800" x-text="publishResult?.post_id"></p></div>
-                <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Post Type</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? 'Published' : (publishAction === 'draft_wp' ? 'WP Draft' : (publishAction === 'future' ? 'Scheduled' : 'Local Draft'))"></p></div>
+                <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">WordPress Status</span><p class="text-sm text-gray-800" x-text="publishResult?.post_status === 'publish' ? 'Live' : (publishResult?.post_status === 'future' ? 'Scheduled' : 'Draft')"></p></div>
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Author</span><p class="text-sm text-gray-800" x-text="publishAuthor || 'Default'"></p></div>
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Website</span><p class="text-sm text-gray-800" x-text="selectedSite?.name || 'Local'"></p></div>
                 <div class="flex items-start gap-3 py-1 border-b border-green-200"><span class="text-xs text-gray-500 w-24 flex-shrink-0">Word Count</span><p class="text-sm text-gray-800" x-text="spunWordCount + ' words'"></p></div>
@@ -408,13 +425,13 @@
 
             {{-- Quick access buttons --}}
             <div x-show="selectedSite?.url" class="flex flex-wrap gap-2 mb-4">
-                <a :href="publishResult?.post_url || (selectedSite?.url + '/?p=' + publishResult?.post_id)" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700">
+                <a x-show="publishResult?.post_status === 'publish' && publishResult?.post_url" :href="publishResult?.post_url" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                    View Post
+                    View Live
                 </a>
-                <a :href="selectedSite?.url + '/wp-admin/post.php?post=' + publishResult?.post_id + '&action=edit'" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-700 text-white text-xs font-medium rounded-lg hover:bg-gray-800">
+                <a :href="String(selectedSite?.url || '').replace(/\/+$/, '') + '/wp-admin/post.php?post=' + publishResult?.post_id + '&action=edit'" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-700 text-white text-xs font-medium rounded-lg hover:bg-gray-800">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                    WP Admin Edit
+                    Open in WP Admin
                 </a>
             </div>
 

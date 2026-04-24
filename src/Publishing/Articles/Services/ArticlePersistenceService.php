@@ -83,12 +83,18 @@ class ArticlePersistenceService
     {
         $isPublished = ($wpStatus === 'publish');
         $beforeStatus = $article->status;
+        $deliveryMode = match ($wpStatus) {
+            'publish' => 'auto-publish',
+            'draft' => 'draft-wordpress',
+            default => $article->delivery_mode,
+        };
         $article->update([
+            'delivery_mode' => $deliveryMode,
             'wp_post_id'   => $deliveryResult['post_id'] ?? null,
             'wp_post_url'  => $deliveryResult['post_url'] ?? null,
             'wp_status'    => $wpStatus,
-            'status'       => $isPublished ? 'completed' : 'drafting',
-            'published_at' => $isPublished ? now() : null,
+            'status'       => 'completed',
+            'published_at' => $isPublished ? ($deliveryResult['post_date'] ?? now()) : null,
         ]);
 
         $this->recordLifecycle($article, 'delivery_updated', $isPublished ? 'Article published to WordPress.' : 'Article stored as WordPress draft.', [

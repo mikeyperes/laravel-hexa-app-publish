@@ -653,13 +653,25 @@
             const result = operation?.result_payload || {};
             if (!result || result.success === false) return;
             this._stopPipelineOperationStream('publish');
-            const normalizedPostUrl = this._normalizePublishedPostUrl(result.post_url, result.post_id);
+            const normalizedPostUrl = this._normalizePublishedPostUrl(result.post_url, result.post_id, result.post_status);
             if (normalizedPostUrl) {
                 result.post_url = normalizedPostUrl;
             }
 
             this.publishResult = result;
             this.publishError = '';
+            if (result.post_id) {
+                this.existingWpPostId = result.post_id;
+                this.existingWpAdminUrl = this.selectedSite?.url
+                    ? String(this.selectedSite.url).replace(/\/+$/, '') + '/wp-admin/post.php?post=' + String(result.post_id) + '&action=edit'
+                    : this.existingWpAdminUrl;
+            }
+            if (result.post_status) {
+                this.existingWpStatus = result.post_status;
+            }
+            if (result.post_url && ['publish', 'future'].includes(String(result.post_status || '').toLowerCase())) {
+                this.existingWpPostUrl = result.post_url;
+            }
             this.completeStep(7);
             if (notify && result.message) this.showNotification('success', result.message);
         },
@@ -972,6 +984,7 @@
                 status: wpStatus,
                 date: this.publishAction === 'future' ? this.scheduleDate : null,
                 draft_id: this.draftId,
+                existing_post_id: this.existingWpPostId || null,
                 categories: this.selectedCategoryNames(),
                 tags: this.selectedTagNames(),
                 wp_images: this.uploadedImageList,
@@ -1023,11 +1036,12 @@
             return text.replace(/\//g, ' / ').replace(/_/g, ' ');
         },
 
-        _normalizePublishedPostUrl(value, postId = null) {
+        _normalizePublishedPostUrl(value, postId = null, postStatus = '') {
             const text = String(value || '').trim();
             const matches = text.match(/https?:\/\/[^\s]+/g) || [];
             if (matches.length > 0) return matches[matches.length - 1];
-            if (postId && this.selectedSite?.url) {
+            const normalizedStatus = String(postStatus || '').toLowerCase();
+            if (postId && this.selectedSite?.url && ['publish', 'future'].includes(normalizedStatus)) {
                 return String(this.selectedSite.url).replace(/\/+$/, '') + '/?p=' + String(postId);
             }
             return text || null;
@@ -1106,13 +1120,10 @@
             try {
                 const resp = await fetch('{{ route('publish.pipeline.prepare') }}', {
                     method: 'POST',
-                    headers: {
+                    headers: this.requestHeaders({
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': this.csrfToken,
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
                         'X-Pipeline-Client-Trace': this._buildClientTrace('prepare'),
-                    },
+                    }),
                     body: JSON.stringify(this._buildPrepareRequestPayload())
                 });
                 const data = await resp.json().catch(() => ({}));
@@ -1186,7 +1197,7 @@
             try {
                 const resp = await fetch('{{ route("publish.pipeline.delete-media") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ site_id: this.selectedSite?.id || null, media_id: media.media_id })
                 });
                 const data = await resp.json();
@@ -1249,13 +1260,10 @@
             try {
                 const resp = await fetch('{{ route('publish.pipeline.publish') }}', {
                     method: 'POST',
-                    headers: {
+                    headers: this.requestHeaders({
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': this.csrfToken,
-                        'X-Requested-With': 'XMLHttpRequest',
                         'X-Pipeline-Client-Trace': this._buildClientTrace('publish'),
-                    },
+                    }),
                     body: JSON.stringify(this._buildPublishRequestPayload(wpStatus))
                 });
                 const data = await resp.json().catch(() => ({}));

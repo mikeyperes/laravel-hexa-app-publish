@@ -8,6 +8,7 @@ use hexa_core\Models\Setting;
 use hexa_core\Models\User;
 use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishSite;
+use hexa_app_publish\Discovery\Links\Health\Services\LinkHealthService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Publishing\Campaigns\Services\NewsDiscoveryOptionsService;
@@ -165,8 +166,25 @@ class PipelineController extends Controller
                 }
                 : null,
             'articleTitle' => $draft->title ?: '',
+            'articleDescription' => $draft->excerpt ?: '',
             'body' => $draft->body,
             'wordCount' => $draft->word_count ?: 0,
+            'categories' => is_array($draft->categories) ? array_values(array_filter($draft->categories, fn ($value) => filled($value))) : [],
+            'tags' => is_array($draft->tags) ? array_values(array_filter($draft->tags, fn ($value) => filled($value))) : [],
+            'publishAction' => $draft->scheduled_for
+                ? 'future'
+                : match ($draft->delivery_mode) {
+                    'auto-publish' => 'publish',
+                    'draft-wordpress' => 'draft_wp',
+                    default => 'draft_local',
+                },
+            'scheduleDate' => $draft->scheduled_for?->format('Y-m-d\TH:i') ?: '',
+            'existingWpPostId' => $draft->wp_post_id ?: null,
+            'existingWpStatus' => $draft->wp_status ?: '',
+            'existingWpPostUrl' => $draft->wp_post_url ?: '',
+            'existingWpAdminUrl' => ($draftSite && $draft->wp_post_id)
+                ? rtrim((string) $draftSite->url, '/') . '/wp-admin/post.php?post=' . $draft->wp_post_id . '&action=edit'
+                : '',
             'photoSuggestions' => $draft->photo_suggestions ?? [],
             'featuredImageSearch' => $draft->featured_image_search ?: '',
             'aiModel' => $draft->ai_engine_used ?: '',
@@ -403,7 +421,7 @@ class PipelineController extends Controller
             'url' => 'required|string|max:2000',
         ]);
 
-        $status = $this->probeArticleUrl((string) $validated['url']);
+        $status = app(LinkHealthService::class)->probe((string) $validated['url'], 'pipeline');
 
         return response()->json([
             'success' => !$status['probe_failed'],
@@ -676,66 +694,13 @@ class PipelineController extends Controller
      */
     private function verifyArticleCandidates(array $articles, int $limit, array $excludeUrls = []): array
     {
-        $verified = [];
-        $seen = [];
-
-        foreach ($excludeUrls as $excludeUrl) {
-            $normalized = $this->normalizeArticleUrlCandidate((string) $excludeUrl);
-            if ($normalized) {
-                $seen[$normalized] = true;
-            }
-        }
-
-        $checked = 0;
-        $discarded = 0;
-
-        foreach ($articles as $article) {
-            if (count($verified) >= $limit) {
-                break;
-            }
-
-            $candidate = $this->normalizeArticleCandidate($article);
-            if ($candidate === null) {
-                $discarded++;
-                continue;
-            }
-
-            if (isset($seen[$candidate['url']])) {
-                continue;
-            }
-
-            $checked++;
-            $probe = $this->probeArticleUrl($candidate['url']);
-            if ($probe['probe_failed'] || $probe['is_broken']) {
-                $discarded++;
-                continue;
-            }
-
-            $resolvedUrl = $this->normalizeArticleUrlCandidate((string) ($probe['final_url'] ?? '')) ?: $candidate['url'];
-            if (!$this->looksLikeCanonicalArticleUrl($resolvedUrl) || isset($seen[$resolvedUrl])) {
-                $discarded++;
-                continue;
-            }
-
-            $seen[$resolvedUrl] = true;
-            $verified[] = array_merge($candidate, [
-                'url' => $resolvedUrl,
-                'status_code' => $probe['status_code'],
-                'status_text' => $probe['status_text'],
-                'checked_via' => $probe['checked_via'],
-                'final_url' => $resolvedUrl,
-                'is_broken' => false,
-            ]);
-        }
-
-        return [
-            'articles' => $verified,
-            'stats' => [
-                'checked' => $checked,
-                'kept' => count($verified),
-                'discarded' => $discarded,
-            ],
-        ];
+        return app(LinkHealthService::class)->verifyArticleCandidates(
+            $articles,
+            $limit,
+            $excludeUrls,
+            null,
+            'pipeline'
+        );
     }
 
     /**
@@ -1405,12 +1370,25 @@ class PipelineController extends Controller
         ];
         $this->logPipelineDebug('[Draft] Save requested', $requestSummary, $debugMode);
 
+        $publishAction = (string) ($validated['publish_action'] ?? '');
+        $deliveryMode = match ($publishAction) {
+            'publish' => 'auto-publish',
+            'draft_wp', 'future' => 'draft-wordpress',
+            'draft_local' => 'draft-local',
+            default => null,
+        };
+        $scheduledFor = ($publishAction === 'future' && !empty($validated['schedule_date']))
+            ? $validated['schedule_date']
+            : null;
+
         $data = [
             'title'            => $validated['title'] ?? 'Untitled Pipeline Draft',
             'body'             => $validated['body'] ?? null,
             'excerpt'          => $validated['excerpt'] ?? null,
             'article_type'     => $validated['article_type'] ?? null,
             'status'           => 'drafting',
+            'delivery_mode'    => $deliveryMode,
+            'scheduled_for'    => $scheduledFor,
             'user_id'          => $validated['user_id'] ?? auth()->id(),
             'created_by'       => $validated['user_id'] ?? auth()->id(),
             'publish_site_id'  => $validated['site_id'] ?? null,
@@ -1419,6 +1397,8 @@ class PipelineController extends Controller
             'ai_engine_used'   => $validated['ai_model'] ?? null,
             'author'           => $validated['author'] ?? null,
             'source_articles'  => $validated['sources'] ?? null,
+            'categories'       => isset($validated['categories']) ? array_values(array_filter(array_map(fn ($value) => trim((string) $value), (array) $validated['categories']), fn ($value) => $value !== '')) : null,
+            'tags'             => isset($validated['tags']) ? array_values(array_filter(array_map(fn ($value) => trim((string) $value), (array) $validated['tags']), fn ($value) => $value !== '')) : null,
             'word_count'       => isset($validated['body']) ? str_word_count(strip_tags($validated['body'])) : 0,
             'photo_suggestions' => $this->sanitizePhotoSuggestionsForPersistence($validated['photo_suggestions'] ?? null),
             'featured_image_search' => $validated['featured_image_search'] ?? null,

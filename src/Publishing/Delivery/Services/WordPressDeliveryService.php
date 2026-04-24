@@ -13,9 +13,6 @@ use hexa_package_wptoolkit\Services\WpToolkitService;
  *
  * Handles both SSH (WP Toolkit) and REST API sites.
  * Normalizes the result to always include post_id and post_url.
- *
- * Replaces duplicated publish logic from PipelineController::publishToWordpress()
- * and CampaignRunService publish step.
  */
 class WordPressDeliveryService
 {
@@ -25,30 +22,12 @@ class WordPressDeliveryService
     protected WpToolkitService $wptoolkit;
     protected WordPressService $wp;
 
-    /**
-     * @param WpToolkitService $wptoolkit
-     * @param WordPressService $wp
-     */
     public function __construct(WpToolkitService $wptoolkit, WordPressService $wp)
     {
         $this->wptoolkit = $wptoolkit;
         $this->wp = $wp;
     }
 
-    /**
-     * Create a post on a WordPress site (SSH or REST, auto-detected).
-     *
-     * @param PublishSite $site
-     * @param string $title
-     * @param string $html
-     * @param string $status publish|draft|future
-     * @param array $options {
-     *     @type array  $category_ids  WP category IDs
-     *     @type array  $tag_ids       WP tag IDs
-     *     @type string $date          Scheduled date for future posts
-     * }
-     * @return array{success: bool, message: string, post_id: int|null, post_url: string|null, mode: string}
-     */
     public function createPost(PublishSite $site, string $title, string $html, string $status = 'draft', array $options = []): array
     {
         if ($this->usesWpToolkit($site)) {
@@ -58,16 +37,24 @@ class WordPressDeliveryService
         return $this->createViaRest($site, $title, $html, $status, $options);
     }
 
-    /**
-     * Create post via SSH (WP Toolkit / WP CLI).
-     *
-     * @param PublishSite $site
-     * @param string $title
-     * @param string $html
-     * @param string $status
-     * @param array $options
-     * @return array
-     */
+    public function updatePost(PublishSite $site, int $postId, string $title, string $html, string $status = 'draft', array $options = []): array
+    {
+        if ($this->usesWpToolkit($site)) {
+            return $this->updateViaSsh($site, $postId, $title, $html, $status, $options);
+        }
+
+        return $this->updateViaRest($site, $postId, $title, $html, $status, $options);
+    }
+
+    public function inspectPost(PublishSite $site, int $postId): array
+    {
+        if ($this->usesWpToolkit($site)) {
+            return $this->inspectViaSsh($site, $postId);
+        }
+
+        return $this->inspectViaRest($site, $postId);
+    }
+
     private function createViaSsh(PublishSite $site, string $title, string $html, string $status, array $options): array
     {
         $resolved = $this->resolveServer($site);
@@ -102,20 +89,66 @@ class WordPressDeliveryService
             $transportMode,
             $result['message'] ?? ('Published via WP Toolkit (' . $transportMode . ').'),
             $postId,
-            $result['data']['post_url'] ?? null
+            $result['data']['post_url'] ?? null,
+            $result['data']['post_status'] ?? $status,
+            $result['data']['post_date'] ?? $date
         );
     }
 
-    /**
-     * Create post via WordPress REST API.
-     *
-     * @param PublishSite $site
-     * @param string $title
-     * @param string $html
-     * @param string $status
-     * @param array $options
-     * @return array
-     */
+    private function updateViaSsh(PublishSite $site, int $postId, string $title, string $html, string $status, array $options): array
+    {
+        $resolved = $this->resolveServer($site);
+        if (!$resolved['server'] || !$site->wordpress_install_id) {
+            return $this->failure("Site '{$site->name}' is missing WP Toolkit configuration.", self::MODE_WPTOOLKIT);
+        }
+        $transportMode = $this->wptoolkit->connectionMode($resolved['server']);
+
+        $postData = $this->buildPostData($title, $html, $status, $options);
+        $result = $this->wptoolkit->wpCliUpdatePost(
+            $resolved['server'],
+            $site->wordpress_install_id,
+            $postId,
+            $postData
+        );
+
+        if (!$result['success']) {
+            return $this->failure($result['message'] ?? 'WP Toolkit update failed.', $transportMode);
+        }
+
+        return $this->success(
+            $site,
+            $transportMode,
+            $result['message'] ?? ('Updated via WP Toolkit (' . $transportMode . ').'),
+            $result['data']['post_id'] ?? $postId,
+            $result['data']['post_url'] ?? null,
+            $result['data']['post_status'] ?? $status,
+            $result['data']['post_date'] ?? null
+        );
+    }
+
+    private function inspectViaSsh(PublishSite $site, int $postId): array
+    {
+        $resolved = $this->resolveServer($site);
+        if (!$resolved['server'] || !$site->wordpress_install_id) {
+            return $this->failure("Site '{$site->name}' is missing WP Toolkit configuration.", self::MODE_WPTOOLKIT);
+        }
+        $transportMode = $this->wptoolkit->connectionMode($resolved['server']);
+        $result = $this->wptoolkit->wpCliGetPost($resolved['server'], $site->wordpress_install_id, $postId);
+        if (!$result['success']) {
+            return $this->failure($result['message'] ?? 'WP Toolkit inspect failed.', $transportMode);
+        }
+
+        return $this->success(
+            $site,
+            $transportMode,
+            $result['message'] ?? ('Fetched via WP Toolkit (' . $transportMode . ').'),
+            $result['data']['post_id'] ?? $postId,
+            $result['data']['post_url'] ?? null,
+            $result['data']['post_status'] ?? null,
+            $result['data']['post_date'] ?? null
+        );
+    }
+
     private function createViaRest(PublishSite $site, string $title, string $html, string $status, array $options): array
     {
         if (!$site->wp_username || !$site->wp_application_password) {
@@ -123,7 +156,6 @@ class WordPressDeliveryService
         }
 
         $postData = $this->buildPostData($title, $html, $status, $options);
-
         $result = $this->wp->createPost($site->url, $site->wp_username, $site->wp_application_password, $postData);
 
         if (!$result['success']) {
@@ -135,7 +167,55 @@ class WordPressDeliveryService
             self::MODE_REST,
             $result['message'] ?? 'Published via REST.',
             $result['data']['post_id'] ?? null,
-            $result['data']['post_url'] ?? null
+            $result['data']['post_url'] ?? null,
+            $result['data']['post_status'] ?? $status,
+            $result['data']['post_date'] ?? ($postData['date'] ?? null)
+        );
+    }
+
+    private function updateViaRest(PublishSite $site, int $postId, string $title, string $html, string $status, array $options): array
+    {
+        if (!$site->wp_username || !$site->wp_application_password) {
+            return $this->failure("Site '{$site->name}' has no WordPress REST credentials.", self::MODE_REST);
+        }
+
+        $postData = $this->buildPostData($title, $html, $status, $options);
+        $result = $this->wp->updatePost($site->url, $site->wp_username, $site->wp_application_password, $postId, $postData);
+
+        if (!$result['success']) {
+            return $this->failure($result['message'] ?? 'REST update failed.', self::MODE_REST);
+        }
+
+        return $this->success(
+            $site,
+            self::MODE_REST,
+            $result['message'] ?? 'Updated via REST.',
+            $result['data']['post_id'] ?? $postId,
+            $result['data']['post_url'] ?? null,
+            $result['data']['post_status'] ?? $status,
+            $result['data']['post_date'] ?? ($postData['date'] ?? null)
+        );
+    }
+
+    private function inspectViaRest(PublishSite $site, int $postId): array
+    {
+        if (!$site->wp_username || !$site->wp_application_password) {
+            return $this->failure("Site '{$site->name}' has no WordPress REST credentials.", self::MODE_REST);
+        }
+
+        $result = $this->wp->getPost($site->url, $site->wp_username, $site->wp_application_password, $postId);
+        if (!$result['success']) {
+            return $this->failure($result['message'] ?? 'REST inspect failed.', self::MODE_REST);
+        }
+
+        return $this->success(
+            $site,
+            self::MODE_REST,
+            $result['message'] ?? 'Fetched via REST.',
+            $result['data']['post_id'] ?? $postId,
+            $result['data']['post_url'] ?? null,
+            $result['data']['post_status'] ?? null,
+            $result['data']['post_date'] ?? null
         );
     }
 
@@ -152,15 +232,19 @@ class WordPressDeliveryService
             'status' => $status,
         ];
 
+        if (!empty($options['excerpt'])) {
+            $postData['excerpt'] = $options['excerpt'];
+        }
+
         if (!empty($options['category_ids'])) {
-            $postData['categories'] = $options['category_ids'];
+            $postData['categories'] = array_values($options['category_ids']);
         }
 
         if (!empty($options['tag_ids'])) {
-            $postData['tags'] = $options['tag_ids'];
+            $postData['tags'] = array_values($options['tag_ids']);
         }
 
-        if ($status === 'future' && !empty($options['date'])) {
+        if (!empty($options['date'])) {
             $postData['date'] = $options['date'];
         }
 
@@ -169,12 +253,7 @@ class WordPressDeliveryService
         }
 
         if (!empty($options['author'])) {
-            // WP REST expects integer author ID — if numeric, use directly
-            if (is_numeric($options['author'])) {
-                $postData['author'] = (int) $options['author'];
-            }
-            // If string username, WP won't accept it in the author field —
-            // it must be resolved to an ID during prepare/connection
+            $postData['author'] = $options['author'];
         }
 
         return $postData;
@@ -187,11 +266,13 @@ class WordPressDeliveryService
             'message' => $message,
             'post_id' => null,
             'post_url' => null,
+            'post_status' => null,
+            'post_date' => null,
             'mode' => $mode,
         ];
     }
 
-    private function success(PublishSite $site, string $mode, string $message, ?int $postId, ?string $postUrl = null): array
+    private function success(PublishSite $site, string $mode, string $message, ?int $postId, ?string $postUrl = null, ?string $postStatus = null, ?string $postDate = null): array
     {
         $postUrl = $this->normalizePostUrl($postUrl)
             ?: ($postId ? rtrim($site->url, '/') . '/?p=' . $postId : null);
@@ -201,6 +282,8 @@ class WordPressDeliveryService
             'message' => $message,
             'post_id' => $postId,
             'post_url' => $postUrl,
+            'post_status' => $postStatus,
+            'post_date' => $postDate,
             'mode' => $mode,
         ];
     }
@@ -220,12 +303,6 @@ class WordPressDeliveryService
         return str_starts_with($postUrl, 'http') ? $postUrl : null;
     }
 
-    /**
-     * Resolve WHM server for a WP Toolkit site.
-     *
-     * @param PublishSite $site
-     * @return array{server: WhmServer|null, account: HostingAccount|null}
-     */
     private function resolveServer(PublishSite $site): array
     {
         $account = HostingAccount::find($site->hosting_account_id);

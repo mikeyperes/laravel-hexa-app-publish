@@ -1588,6 +1588,10 @@ function publishPipeline() {
         publishAuthor: '',
         publishAuthorSource: '',
         authorsLoading: false,
+        existingWpPostId: null,
+        existingWpStatus: '',
+        existingWpPostUrl: '',
+        existingWpAdminUrl: '',
         scheduleDate: '',
         publishing: false,
         publishOperationId: null,
@@ -1709,6 +1713,19 @@ function publishPipeline() {
         // CSRF token
         get csrfToken() {
             return document.querySelector('meta[name="csrf-token"]')?.content || '';
+        },
+
+        requestHeaders(extra = {}) {
+            if (typeof window.hexaRequestHeaders === 'function') {
+                return window.hexaRequestHeaders(extra);
+            }
+
+            return {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                ...(this.csrfToken ? { 'X-CSRF-TOKEN': this.csrfToken } : {}),
+                ...extra,
+            };
         },
 
         get pipelineStateKey() {

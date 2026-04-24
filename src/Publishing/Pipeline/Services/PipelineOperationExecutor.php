@@ -138,6 +138,9 @@ class PipelineOperationExecutor
 
         $startedAt = microtime(true);
         $site = PublishSite::findOrFail((int) $payload['site_id']);
+        $existingPostId = !empty($payload['existing_post_id']) ? (int) $payload['existing_post_id'] : null;
+        $updatingExistingPost = $existingPostId > 0;
+        $publishVerb = $updatingExistingPost ? 'Updating existing WordPress post' : 'Creating WordPress post';
 
         $this->operationService->appendEvent($operation, 'publish', 'info', 'Publish operation started', [
             'stage' => 'publish',
@@ -152,9 +155,9 @@ class PipelineOperationExecutor
                 'substage' => 'connect',
                 'step' => 7,
             ]);
-            $this->operationService->appendEvent($operation, 'publish', 'step', "Creating WordPress post ({$payload['status']})...", [
+            $this->operationService->appendEvent($operation, 'publish', 'step', $publishVerb . ($updatingExistingPost ? ' #' . $existingPostId : '') . " ({$payload['status']})...", [
                 'stage' => 'publish',
-                'substage' => 'create_post',
+                'substage' => $updatingExistingPost ? 'update_post' : 'create_post',
                 'step' => 7,
             ]);
             $this->operationService->appendEvent($operation, 'publish', 'info', "Title: {$payload['title']}", [
@@ -177,13 +180,18 @@ class PipelineOperationExecutor
                 ]);
             }
 
-            $delivery = $this->deliveryService->createPost($site, (string) $payload['title'], (string) $payload['html'], (string) $payload['status'], [
+            $deliveryOptions = [
                 'category_ids' => $payload['category_ids'] ?? [],
                 'tag_ids' => $payload['tag_ids'] ?? [],
                 'date' => ($payload['status'] === 'future' && !empty($payload['date'])) ? $payload['date'] : null,
                 'featured_media_id' => $payload['featured_media_id'] ?? null,
                 'author' => $payload['author'] ?? null,
-            ]);
+                'excerpt' => $payload['excerpt'] ?? null,
+            ];
+
+            $delivery = $updatingExistingPost
+                ? $this->deliveryService->updatePost($site, $existingPostId, (string) $payload['title'], (string) $payload['html'], (string) $payload['status'], $deliveryOptions)
+                : $this->deliveryService->createPost($site, (string) $payload['title'], (string) $payload['html'], (string) $payload['status'], $deliveryOptions);
 
             if (!$delivery['success']) {
                 $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
@@ -213,9 +221,9 @@ class PipelineOperationExecutor
                 return;
             }
 
-            $this->operationService->appendEvent($operation, 'publish', 'success', "WordPress post created — ID: {$delivery['post_id']}", [
+            $this->operationService->appendEvent($operation, 'publish', 'success', ($updatingExistingPost ? 'WordPress post updated' : 'WordPress post created') . " — ID: {$delivery['post_id']}", [
                 'stage' => 'publish',
-                'substage' => 'wp_created',
+                'substage' => $updatingExistingPost ? 'wp_updated' : 'wp_created',
                 'step' => 7,
             ]);
             if (!empty($delivery['post_url'])) {
@@ -231,6 +239,16 @@ class PipelineOperationExecutor
                 'substage' => 'persist',
                 'step' => 7,
             ]);
+
+            $publishedAt = ($payload['status'] ?? null) === 'publish'
+                ? ($delivery['post_date'] ?? now())
+                : null;
+            $deliveryMode = match ((string) ($payload['status'] ?? 'draft')) {
+                'publish' => 'auto-publish',
+                'draft' => 'draft-wordpress',
+                'future' => 'auto-publish',
+                default => 'draft-wordpress',
+            };
 
             $article = $this->articlePersistence->createOrUpdate([
                 'pipeline_session_id' => $payload['pipeline_session_id'] ?? null,
@@ -253,10 +271,11 @@ class PipelineOperationExecutor
                 'user_ip' => $payload['user_ip'] ?? null,
                 'author' => $payload['author'] ?? $site->default_author ?? null,
                 'status' => 'completed',
+                'delivery_mode' => $deliveryMode,
                 'wp_post_id' => $delivery['post_id'],
                 'wp_post_url' => $delivery['post_url'],
-                'wp_status' => $payload['status'],
-                'published_at' => now(),
+                'wp_status' => $delivery['post_status'] ?? $payload['status'],
+                'published_at' => $publishedAt,
                 'source_articles' => $payload['sources'] ?? null,
                 'categories' => $payload['categories'] ?? null,
                 'tags' => $payload['tags'] ?? null,
@@ -295,11 +314,20 @@ class PipelineOperationExecutor
             }
 
             $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+            $resultMessage = match ((string) ($delivery['post_status'] ?? $payload['status'] ?? 'draft')) {
+                'publish' => "Article published to {$site->name}. WP Post ID: {$delivery['post_id']}.",
+                'future' => "Article scheduled on {$site->name}. WP Post ID: {$delivery['post_id']}.",
+                default => "WordPress draft saved on {$site->name}. WP Post ID: {$delivery['post_id']}.",
+            };
+
             $resultPayload = [
                 'success' => true,
-                'message' => "Article published to {$site->name}. WP Post ID: {$delivery['post_id']}.",
+                'message' => $resultMessage,
                 'post_id' => $delivery['post_id'],
                 'post_url' => $delivery['post_url'],
+                'post_status' => $delivery['post_status'] ?? $payload['status'] ?? null,
+                'used_existing_post' => $updatingExistingPost,
+                'existing_post_id' => $existingPostId,
                 'article_id' => $article->id,
                 'article_url' => route('publish.articles.show', $article->id),
                 'stage' => 'publish',
@@ -308,7 +336,7 @@ class PipelineOperationExecutor
                 'duration_ms' => $durationMs,
             ];
 
-            $this->operationService->appendEvent($operation, 'publish', 'done', "Published to {$site->name}!", [
+            $this->operationService->appendEvent($operation, 'publish', 'done', (($delivery['post_status'] ?? $payload['status'] ?? 'draft') === 'publish' ? 'Published' : (($delivery['post_status'] ?? $payload['status'] ?? 'draft') === 'future' ? 'Scheduled' : 'Draft saved')) . " on {$site->name}!", [
                 'stage' => 'publish',
                 'substage' => 'complete',
                 'trace_id' => $operation->trace_id,

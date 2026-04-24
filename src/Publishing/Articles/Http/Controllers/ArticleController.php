@@ -22,6 +22,8 @@ use hexa_app_publish\Discovery\Links\Services\LinkInsertionService;
 use hexa_app_publish\Quality\Detection\Services\SeoAnalysisService;
 use hexa_package_anthropic\Services\AnthropicService;
 use hexa_package_chatgpt\Services\ChatGptService;
+use hexa_package_grok\Services\GrokService;
+use hexa_package_gemini\Services\GeminiService;
 use hexa_package_sapling\Services\SaplingService;
 use hexa_package_telegram\Services\TelegramService;
 use Illuminate\Http\JsonResponse;
@@ -188,8 +190,11 @@ class ArticleController extends Controller
             'account', 'site', 'campaign', 'template', 'creator', 'usedSources',
         ])->findOrFail($id);
 
+        $lifecycle = $this->syncArticleWordPressState($article);
+
         return view('app-publish::publishing.articles.show', [
             'article' => $article,
+            'lifecycle' => $lifecycle,
         ]);
     }
 
@@ -214,17 +219,9 @@ class ArticleController extends Controller
      * @param int $id
      * @return View
      */
-    public function edit(int $id): View
+    public function edit(int $id)
     {
-        $article = PublishArticle::with([
-            'account', 'site', 'campaign', 'template', 'usedSources',
-        ])->findOrFail($id);
-
-        return view('app-publish::publishing.articles.edit', [
-            'article' => $article,
-            'articleTypes' => config('hws-publish.article_types', []),
-            'aiEngines' => config('hws-publish.ai_engines', []),
-        ]);
+        return redirect()->route('publish.pipeline', ['id' => $id]);
     }
 
     /**
@@ -277,9 +274,16 @@ class ArticleController extends Controller
         $article = $this->findArticle($id, ['site']);
         $site = $article->site;
         $wpStatus = ($article->delivery_mode === 'draft-wordpress') ? 'draft' : 'publish';
+        $hasExistingPost = !empty($article->wp_post_id);
 
         $delivery = app(\hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService::class);
-        $result = $delivery->createPost($site, $article->title, $article->body ?? '', $wpStatus);
+        $result = $hasExistingPost
+            ? $delivery->updatePost($site, (int) $article->wp_post_id, $article->title, $article->body ?? '', $wpStatus, [
+                'author' => $article->author ?? $site?->default_author ?? null,
+            ])
+            : $delivery->createPost($site, $article->title, $article->body ?? '', $wpStatus, [
+                'author' => $article->author ?? $site?->default_author ?? null,
+            ]);
 
         if (!$result['success']) {
             app(ArticlePersistenceService::class)->markFailed($article);
@@ -288,16 +292,20 @@ class ArticleController extends Controller
         }
 
         $persistence = app(\hexa_app_publish\Publishing\Articles\Services\ArticlePersistenceService::class);
-        $persistence->updateDeliveryResult($article, $result, $wpStatus);
-        hexaLog('publish', 'article_published', "Article published: {$article->title} ({$article->article_id}) → {$site->url} (WP ID: {$result['post_id']})");
+        $persistence->updateDeliveryResult($article, $result, $result['post_status'] ?? $wpStatus);
+        hexaLog('publish', $hasExistingPost ? 'article_updated' : 'article_published', ($hasExistingPost ? 'Article updated on WordPress: ' : 'Article published: ') . "{$article->title} ({$article->article_id}) → {$site->url} (WP ID: {$result['post_id']})");
 
         try {
-            app(TelegramService::class)->notifyPublished($article->title, $site->name, $result['post_url'] ?? null);
+            if (($result['post_status'] ?? $wpStatus) === 'publish') {
+                app(TelegramService::class)->notifyPublished($article->title, $site->name, $result['post_url'] ?? null);
+            }
         } catch (\Exception $e) {}
 
         return response()->json([
             'success' => true,
-            'message' => "Article published to {$site->name} as {$wpStatus}. WP Post ID: {$result['post_id']}.",
+            'message' => (($result['post_status'] ?? $wpStatus) === 'publish'
+                ? "Article published to {$site->name}."
+                : "WordPress draft updated on {$site->name}.") . " WP Post ID: {$result['post_id']}.",
         ]);
     }
 
@@ -377,6 +385,12 @@ class ArticleController extends Controller
         $instruction = $validated['instruction'] ?? '';
         $articleType = $article->article_type ?? ($article->template->article_type ?? null);
         $tone = $article->template->tone ?? null;
+        if (is_array($tone)) {
+            $tone = implode(', ', array_values(array_filter(array_map(static fn ($value): string => trim((string) $value), $tone))));
+        }
+        if (!is_string($tone) || trim($tone) === '') {
+            $tone = null;
+        }
 
         // Prepend template AI prompt if available
         if ($article->template && $article->template->ai_prompt) {
@@ -385,11 +399,13 @@ class ArticleController extends Controller
 
         $article->update(['status' => 'spinning', 'ai_engine_used' => $validated['ai_engine']]);
 
-        if ($validated['ai_engine'] === 'anthropic') {
-            $result = app(AnthropicService::class)->spinArticle($body, $instruction, $articleType, $tone);
-        } else {
-            $result = app(ChatGptService::class)->spinArticle($body, $instruction, $articleType, $tone);
-        }
+        $result = match ($validated['ai_engine']) {
+            'anthropic' => app(AnthropicService::class)->spinArticle($body, $instruction, $articleType, $tone),
+            'chatgpt' => app(ChatGptService::class)->spinArticle($body, $instruction, $articleType, $tone),
+            'grok' => app(GrokService::class)->spinArticle($body, $instruction, $articleType, $tone),
+            'gemini' => app(GeminiService::class)->spinArticle($body, $instruction, $articleType, $tone),
+            default => ['success' => false, 'message' => 'Unsupported AI engine.', 'data' => null],
+        };
 
         if (!$result['success']) {
             $article->update(['status' => 'review']);
@@ -586,6 +602,92 @@ class ArticleController extends Controller
             'report' => $result['data']['report'] ?? [],
             'body' => $result['data']['html'] ?? null,
         ]);
+    }
+
+    private function syncArticleWordPressState(PublishArticle $article): array
+    {
+        $site = $article->site;
+        $hasWordPressPost = !empty($article->wp_post_id) && $site;
+        $wpAdminUrl = $hasWordPressPost
+            ? rtrim((string) $site->url, '/') . '/wp-admin/post.php?post=' . $article->wp_post_id . '&action=edit'
+            : null;
+
+        $storedStatus = $article->wp_status ?: null;
+        $storedUrl = $article->wp_post_url ?: null;
+        $effectiveStatus = $storedStatus;
+        $effectiveUrl = $storedUrl;
+        $syncMessage = null;
+        $syncError = null;
+
+        if ($hasWordPressPost) {
+            try {
+                $inspection = app(\hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService::class)
+                    ->inspectPost($site, (int) $article->wp_post_id);
+
+                if ($inspection['success']) {
+                    $effectiveStatus = $inspection['post_status'] ?? $effectiveStatus;
+                    $effectiveUrl = $inspection['post_url'] ?? $effectiveUrl;
+
+                    $updates = [];
+                    if ($effectiveStatus && $effectiveStatus !== $article->wp_status) {
+                        $updates['wp_status'] = $effectiveStatus;
+                    }
+                    if ($effectiveUrl && $effectiveUrl !== $article->wp_post_url) {
+                        $updates['wp_post_url'] = $effectiveUrl;
+                    }
+                    if ($effectiveStatus === 'publish') {
+                        if (!$article->published_at) {
+                            $updates['published_at'] = !empty($inspection['post_date'])
+                                ? \Illuminate\Support\Carbon::parse((string) $inspection['post_date'])
+                                : now();
+                        }
+                        if ($article->delivery_mode === 'draft-wordpress') {
+                            $updates['delivery_mode'] = 'auto-publish';
+                        }
+                        if ($article->status !== 'completed') {
+                            $updates['status'] = 'completed';
+                        }
+                    }
+
+                    if (!empty($updates)) {
+                        $article->update($updates);
+                        $article->refresh();
+                        $storedStatus = $article->wp_status ?: $effectiveStatus;
+                        $storedUrl = $article->wp_post_url ?: $effectiveUrl;
+                        $syncMessage = 'WordPress state was refreshed from the live site.';
+                    }
+                } else {
+                    $syncError = $inspection['message'] ?? 'Unable to inspect WordPress post.';
+                }
+            } catch (\Throwable $e) {
+                $syncError = $e->getMessage();
+            }
+        }
+
+        $effectiveStatus = $article->wp_status ?: $effectiveStatus;
+        $effectiveUrl = $article->wp_post_url ?: $effectiveUrl;
+        $isLive = $effectiveStatus === 'publish';
+        $resumeUrl = route('publish.pipeline', ['id' => $article->id]);
+
+        $recommendedAction = !$hasWordPressPost
+            ? 'Resume in editor to keep working on this local draft, then prepare and publish when ready.'
+            : ($isLive
+                ? 'This article is already live. Resume in editor only if you want to revise the same WordPress post.'
+                : 'This article already has a WordPress draft. Resume in editor to continue editing and publish that same WordPress draft without creating a duplicate post.');
+
+        return [
+            'has_wordpress_post' => $hasWordPressPost,
+            'resume_url' => $resumeUrl,
+            'wp_admin_url' => $wpAdminUrl,
+            'public_url' => $isLive ? $effectiveUrl : null,
+            'public_url_label' => $isLive ? 'View Live' : null,
+            'stored_status' => $storedStatus,
+            'effective_status' => $effectiveStatus,
+            'is_live' => $isLive,
+            'recommended_action' => $recommendedAction,
+            'sync_message' => $syncMessage,
+            'sync_error' => $syncError,
+        ];
     }
 
     private function findArticle(int $id, array $relations = []): PublishArticle
