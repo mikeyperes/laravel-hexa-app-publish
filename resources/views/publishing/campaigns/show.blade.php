@@ -360,9 +360,6 @@
             </div>
         </div>
         <div x-show="open" x-cloak class="hx-card-body">
-            @php
-                $operationByArticleId = collect($recentOperations ?? [])->keyBy(fn($op) => $op->article?->id);
-            @endphp
             @forelse($campaign->articles as $article)
                 @php
                     $thumb = null;
@@ -379,8 +376,6 @@
                         }
                     }
                     $sourceCount = count((array) ($article->source_articles ?? []));
-                    $opForArticle = $operationByArticleId->get($article->id);
-                    $runLabel = $opForArticle ? (method_exists($opForArticle, 'created_at_carbon') ? null : null) : null;
                 @endphp
                 <div class="hx-article-row">
                     <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener" class="hx-article-thumb">
