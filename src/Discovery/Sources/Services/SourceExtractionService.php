@@ -2,6 +2,7 @@
 
 namespace hexa_app_publish\Discovery\Sources\Services;
 
+use hexa_app_publish\Discovery\Sources\Health\Services\SourceAccessStrategyService;
 use hexa_app_publish\Discovery\Sources\Models\ScrapeLog;
 use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Support\AiModelCatalog;
@@ -64,66 +65,57 @@ class SourceExtractionService
 
         $extractor = $this->resolveExtractor();
         if (!$extractor) {
-            return $this->fail($url, 'ArticleExtractorService not available.');
+            return $this->fail($url, 'ContentExtractionService not available.');
+        }
+
+        $strategyService = app(SourceAccessStrategyService::class);
+        $attemptMatrix = $strategyService->buildAttemptMatrix($url, $method, $userAgent);
+        if (!$autoFallback && count($attemptMatrix) > 1) {
+            $attemptMatrix = [reset($attemptMatrix)];
         }
 
         try {
-            $primaryExtraction = $extractor->extract($url, $method, null, [
-                'user_agent' => $userAgent,
-                'retries'    => $retries,
-                'timeout'    => $timeout,
-                'min_words'  => $minWords,
-            ]);
-            $primaryResult = $this->normalizeResult($url, $method, $primaryExtraction);
-            $primaryResult = $this->attachNormalizationMeta($primaryResult, $requestedUrl, $url, $normalizationMeta);
-            $this->logScrape($url, $method, $userAgent, $timeout, $retries, $primaryResult, $source, $draftId);
+            $lastResult = null;
+            $attemptCount = count($attemptMatrix);
 
-            // Auto-fallback: if failed, retry with googlebot UA and log that request separately.
-            if (!$primaryResult['success'] && $autoFallback && $userAgent !== 'googlebot') {
-                $fallbackExtraction = $extractor->extract($url, $method, null, [
-                    'user_agent' => 'googlebot',
+            foreach ($attemptMatrix as $index => $attempt) {
+                $attemptMethod = (string) ($attempt['method'] ?? $method);
+                $attemptUserAgent = (string) ($attempt['user_agent'] ?? $userAgent);
+
+                $extraction = $extractor->extract($url, $attemptMethod, null, [
+                    'user_agent' => $attemptUserAgent,
                     'retries'    => $retries,
                     'timeout'    => $timeout,
                     'min_words'  => $minWords,
                 ]);
 
-                $fallbackResult = $this->normalizeResult($url, $method, $fallbackExtraction, 'googlebot');
-                if ($fallbackResult['success']) {
-                    $fallbackResult['message'] = 'Extracted via fallback (Googlebot). ' . ($fallbackResult['message'] ?? '');
+                $result = $this->normalizeResult($url, $attemptMethod, $extraction);
+                $result = $this->attachNormalizationMeta($result, $requestedUrl, $url, $normalizationMeta);
+                $result = $this->annotateAttemptStrategy($result, $attempt, $method, $userAgent);
+                $this->logScrape($url, $attemptMethod, $attemptUserAgent, $timeout, $retries, $result, $source, $draftId);
+                $lastResult = $result;
+
+                if (!empty($result['success'])) {
+                    return $result;
                 }
 
-                $fallbackResult = $this->attachNormalizationMeta($fallbackResult, $requestedUrl, $url, $normalizationMeta);
-                $this->logScrape($url, $method, 'googlebot', $timeout, $retries, $fallbackResult, $source, $draftId);
-                if ($fallbackResult['success']) {
-                    return $fallbackResult;
-                }
-
-                foreach ($aiFallbackModels as $aiModel) {
-                    $aiResult = $this->extractWithAiModel($url, $aiModel, $minWords);
-                    $aiResult = $this->attachNormalizationMeta($aiResult, $requestedUrl, $url, $normalizationMeta);
-                    $this->logScrape($url, 'ai-fallback', 'ai', $timeout, $retries, $aiResult, $source, $draftId);
-                    if ($aiResult['success']) {
-                        $aiResult['message'] = 'Extracted via AI fallback (' . $aiModel . '). ' . ($aiResult['message'] ?? '');
-                        return $aiResult;
-                    }
-                }
-
-                return $fallbackResult;
-            }
-
-            if (!$primaryResult['success']) {
-                foreach ($aiFallbackModels as $aiModel) {
-                    $aiResult = $this->extractWithAiModel($url, $aiModel, $minWords);
-                    $aiResult = $this->attachNormalizationMeta($aiResult, $requestedUrl, $url, $normalizationMeta);
-                    $this->logScrape($url, 'ai-fallback', 'ai', $timeout, $retries, $aiResult, $source, $draftId);
-                    if ($aiResult['success']) {
-                        $aiResult['message'] = 'Extracted via AI fallback (' . $aiModel . '). ' . ($aiResult['message'] ?? '');
-                        return $aiResult;
-                    }
+                if (!$this->shouldContinueLocalFallback($result, $index, $attemptCount)) {
+                    break;
                 }
             }
 
-            return $primaryResult;
+            foreach ($aiFallbackModels as $aiModel) {
+                $aiResult = $this->extractWithAiModel($url, $aiModel, $minWords);
+                $aiResult = $this->attachNormalizationMeta($aiResult, $requestedUrl, $url, $normalizationMeta);
+                $this->logScrape($url, 'ai-fallback', 'ai', $timeout, $retries, $aiResult, $source, $draftId);
+                if ($aiResult['success']) {
+                    $aiResult['message'] = 'Extracted via AI fallback (' . $aiModel . '). ' . ($aiResult['message'] ?? '');
+                    return $aiResult;
+                }
+                $lastResult = $aiResult;
+            }
+
+            return $lastResult ?: $this->fail($url, 'Could not extract article content.');
         } catch (\Exception $e) {
             Log::warning("[SourceExtraction] Failed for {$url}: " . $e->getMessage());
             $fail = $this->fail($url, $e->getMessage());
@@ -279,7 +271,9 @@ class SourceExtractionService
                 'model' => $fetchInfo['model'] ?? null,
                 'method' => $result['method_used'] ?? $method,
                 'attempt_no' => is_array($fetchInfo['attempt_log'] ?? null) ? count((array) $fetchInfo['attempt_log']) : null,
-                'is_retry' => in_array($userAgent, ['googlebot', 'ai'], true) || str_contains((string) $method, 'fallback'),
+                'is_retry' => in_array($userAgent, ['googlebot', 'bingbot', 'mobile', 'firefox', 'safari', 'ai'], true)
+                    || str_contains((string) $method, 'fallback')
+                    || (($fetchInfo['attempt_strategy']['reason'] ?? 'requested') !== 'requested'),
                 'success' => (bool) ($result['success'] ?? false),
                 'title' => $result['title'] ?? null,
                 'url' => $url,
@@ -350,6 +344,64 @@ class SourceExtractionService
         ];
     }
 
+    private function annotateAttemptStrategy(array $result, array $attempt, string $requestedMethod, string $requestedUserAgent): array
+    {
+        $fetchInfo = is_array($result['fetch_info'] ?? null) ? $result['fetch_info'] : [];
+        $fetchInfo['attempt_strategy'] = $attempt;
+        $result['fetch_info'] = $fetchInfo;
+
+        $usedMethod = (string) ($attempt['method'] ?? $requestedMethod);
+        $usedUserAgent = (string) ($attempt['user_agent'] ?? $requestedUserAgent);
+        $isFallback = $usedMethod !== $requestedMethod || $usedUserAgent !== $requestedUserAgent || (($attempt['reason'] ?? 'requested') !== 'requested');
+
+        if ($isFallback) {
+            $result['fallback_tried'] = implode(':', array_filter([
+                $attempt['reason'] ?? 'fallback',
+                $usedMethod,
+                $usedUserAgent,
+            ]));
+
+            if (!empty($result['success']) && !empty($attempt['label'])) {
+                $result['message'] = $attempt['label'] . ' succeeded. ' . ($result['message'] ?? '');
+            }
+        }
+
+        return $result;
+    }
+
+    private function shouldContinueLocalFallback(array $result, int $attemptIndex, int $attemptCount): bool
+    {
+        if ($attemptIndex >= ($attemptCount - 1) || !empty($result['success'])) {
+            return false;
+        }
+
+        $status = (int) ($result['http_status'] ?? 0);
+        $message = strtolower((string) ($result['message'] ?? ''));
+
+        if ($status === 404) {
+            return false;
+        }
+
+        if ($status === 0) {
+            return true;
+        }
+
+        if (in_array($status, [401, 403, 408, 409, 423, 429, 451], true) || $status >= 500) {
+            return true;
+        }
+
+        if ($status >= 200 && $status < 400) {
+            return str_contains($message, 'minimum')
+                || str_contains($message, 'paywall')
+                || str_contains($message, 'could not extract')
+                || str_contains($message, 'too short');
+        }
+
+        return str_contains($message, 'timed out')
+            || str_contains($message, 'could not extract')
+            || str_contains($message, 'too short');
+    }
+
     /**
      * Extract article content using an AI provider.
      *
@@ -365,7 +417,7 @@ class SourceExtractionService
             'claude' => 'claude-haiku-4-5-20251001',
             'gpt' => 'gpt-4o',
             'grok' => $catalog->firstModelForProvider('grok') ?: $catalog->defaultSearchModel(),
-            'gemini' => 'gemini-2.5-flash',
+            'gemini' => $catalog->firstModelForProvider('gemini') ?: 'gemini-2.5-flash',
             default => $catalog->defaultSearchModel(),
         };
 
@@ -520,14 +572,14 @@ class SourceExtractionService
     }
 
     /**
-     * @return \hexa_package_article_extractor\Services\ArticleExtractorService|null
+     * @return \hexa_package_content_extractor\Extract\Services\ContentExtractionService|null
      */
     private function resolveExtractor()
     {
-        if (!class_exists(\hexa_package_article_extractor\Services\ArticleExtractorService::class)) {
+        if (!class_exists(\hexa_package_content_extractor\Extract\Services\ContentExtractionService::class)) {
             return null;
         }
-        return app(\hexa_package_article_extractor\Services\ArticleExtractorService::class);
+        return app(\hexa_package_content_extractor\Extract\Services\ContentExtractionService::class);
     }
 
     /**

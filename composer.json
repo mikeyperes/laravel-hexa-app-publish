@@ -10,6 +10,7 @@
         "hexawebsystems/laravel-hexa-package-wordpress": "*",
         "hexawebsystems/laravel-hexa-package-anthropic": "*",
         "hexawebsystems/laravel-hexa-package-chatgpt": "*",
+        "hexawebsystems/laravel-hexa-package-gemini": "*",
         "hexawebsystems/laravel-hexa-package-brevo": "*",
         "hexawebsystems/laravel-hexa-package-telegram": "*",
         "hexawebsystems/laravel-hexa-package-calendar": "*",
@@ -20,7 +21,7 @@
         "hexawebsystems/laravel-hexa-package-newsdata": "*",
         "hexawebsystems/laravel-hexa-package-sapling": "*",
         "hexawebsystems/laravel-hexa-package-currents-news": "*",
-        "hexawebsystems/laravel-hexa-package-article-extractor": "*"
+        "hexawebsystems/laravel-hexa-package-content-extractor": "*"
     },
     "autoload": {
         "psr-4": {

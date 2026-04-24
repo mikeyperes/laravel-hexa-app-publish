@@ -79,10 +79,10 @@
 </a>
 @endif
 
-@if(Route::has('article-extractor.index'))
-<a href="{{ route('article-extractor.index') }}"
+@if(Route::has('content-extractor.index'))
+<a href="{{ route('content-extractor.index') }}"
    class="flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-150
-          {{ request()->routeIs('article-extractor.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+          {{ request()->routeIs('content-extractor.*') ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
     <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
     </svg>
