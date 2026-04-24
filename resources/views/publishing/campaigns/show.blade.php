@@ -58,20 +58,34 @@
     .hx-btn:disabled { opacity:0.55; cursor:not-allowed; }
     .hx-chev { transition:transform 0.15s; color:#9ca3af; }
     .hx-chev.open { transform:rotate(180deg); }
-    .hx-article-row { display:flex; gap:18px; align-items:stretch; padding:16px; border:1px solid #e5e7eb; border-radius:12px; background:#fff; transition:border-color 0.12s, box-shadow 0.12s; }
-    .hx-article-row:hover { border-color:#cbd5e1; box-shadow:0 2px 6px rgba(15,23,42,0.06); }
-    .hx-article-row + .hx-article-row { margin-top:12px; }
-    .hx-article-thumb { width:180px; height:135px; border-radius:10px; overflow:hidden; background:#f3f4f6; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#9ca3af; }
+    .hx-article-row { display:flex; flex-direction:column; border:1px solid #e5e7eb; border-radius:14px; background:#fff; overflow:hidden; transition:border-color 0.12s, box-shadow 0.12s; }
+    .hx-article-row:hover { border-color:#cbd5e1; box-shadow:0 4px 12px rgba(15,23,42,0.06); }
+    .hx-article-row + .hx-article-row { margin-top:14px; }
+    .hx-article-main { display:flex; gap:24px; padding:20px; align-items:flex-start; }
+    .hx-article-thumb { width:260px; height:195px; border-radius:12px; overflow:hidden; background:#f1f5f9; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#94a3b8; }
     .hx-article-thumb img { width:100%; height:100%; object-fit:cover; }
-    .hx-article-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:6px; }
-    .hx-article-title { font-size:18px; font-weight:700; color:#111827; line-height:1.3; margin:0; }
+    .hx-article-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:12px; }
+    .hx-article-title { font-size:22px; font-weight:700; color:#0f172a; line-height:1.3; margin:0; letter-spacing:-0.01em; }
+    .hx-article-title a { color:inherit; }
     .hx-article-title a:hover { color:#2563eb; }
-    .hx-article-attrs { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; font-size:12px; color:#64748b; margin-top:2px; }
-    .hx-article-attrs > * { display:inline-flex; align-items:center; }
-    .hx-article-attrs .hx-tag { font-size:10px; }
-    .hx-article-attrs .hx-sep { color:#cbd5e1; user-select:none; }
-    .hx-article-attrs strong { color:#334155; font-weight:600; }
-    .hx-article-actions { flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:10px; min-width:120px; }
+    .hx-article-pills { display:flex; flex-wrap:wrap; gap:8px; }
+    .hx-article-pills .hx-tag { font-size:11px; padding:4px 10px; }
+    .hx-article-meta { font-size:13px; color:#475569; line-height:1.55; }
+    .hx-article-meta .hx-sep { color:#cbd5e1; margin:0 8px; user-select:none; }
+    .hx-article-meta a { color:#2563eb; }
+    .hx-article-meta a:hover { text-decoration:underline; }
+    .hx-article-meta strong { color:#1e293b; font-weight:600; }
+    .hx-article-cats { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; color:#64748b; }
+    .hx-article-cats .hx-cat { background:#f1f5f9; color:#475569; padding:3px 9px; border-radius:6px; font-size:11px; font-weight:500; }
+    .hx-article-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 20px; border-top:1px solid #f1f5f9; background:#fafbfc; }
+    .hx-article-tech { font-size:11px; color:#94a3b8; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; display:flex; flex-wrap:wrap; gap:10px; }
+    .hx-article-tech .hx-sep { color:#e2e8f0; }
+    .hx-article-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+    .hx-article-btn { display:inline-flex; align-items:center; gap:5px; padding:6px 14px; border-radius:7px; font-size:13px; font-weight:600; transition:background 0.1s; }
+    .hx-article-btn-primary { background:#2563eb; color:#fff; }
+    .hx-article-btn-primary:hover { background:#1d4ed8; color:#fff; }
+    .hx-article-btn-secondary { background:#fff; color:#334155; border:1px solid #d1d5db; }
+    .hx-article-btn-secondary:hover { background:#f8fafc; }
     .hx-link { color:#2563eb; }
     .hx-link:hover { color:#1d4ed8; text-decoration:underline; }
     .hx-link-muted { color:#64748b; }
@@ -448,80 +462,77 @@
                         : ($article->wp_post_url ?: $wpEditUrl);
                     $wpLinkLabel = $isDraft ? 'Edit in WordPress' : 'View on WordPress';
                 @endphp
-                <div class="hx-article-row">
-                    <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener" class="hx-article-thumb">
-                        @if($thumb)
-                            <img src="{{ $thumb }}" alt="" loading="lazy">
-                        @else
-                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                        @endif
-                    </a>
-                    <div class="hx-article-body">
-                        <h4 class="hx-article-title">
-                            <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener" class="text-gray-900 hover:text-blue-700">{{ $article->title ?: 'Untitled Article' }}</a>
-                        </h4>
-                        <div class="hx-article-attrs">
-                            <span class="hx-tag {{ $pipelineTone }}" title="Internal pipeline generation state">Pipeline: {{ $pipelineLabel }}</span>
-                            @if($article->wp_status)
-                                @if($wpLink)
-                                    <a href="{{ $wpLink }}" target="_blank" rel="noopener" class="hx-tag {{ $wpTone }}" title="{{ $wpLinkLabel }} on {{ $siteName ?: 'WordPress' }}">WordPress: {{ ucfirst($article->wp_status) }} ↗</a>
-                                @else
-                                    <span class="hx-tag {{ $wpTone }}" title="WordPress post status (no URL available)">WordPress: {{ ucfirst($article->wp_status) }}</span>
-                                @endif
-                            @endif
-                            @if($siteName)
-                                <a href="{{ $siteUrl ?: '#' }}" target="_blank" rel="noopener" class="hx-tag blue" title="Open {{ $siteName }}">Site:&nbsp;{{ $siteName }} ↗</a>
-                            @endif
-                        </div>
-                        <div class="hx-article-attrs">
-                            <span>{{ $article->article_id }}</span>
-                            <span class="hx-sep">·</span>
-                            @if($article->author && $authorWpUrl)
-                                <span>By&nbsp;<a href="{{ $authorWpUrl }}" target="_blank" rel="noopener" class="hx-link" title="Open {{ $article->author }}'s WordPress profile">{{ $article->author }}&nbsp;↗</a></span>
-                            @elseif($article->author)
-                                <span>By&nbsp;<strong>{{ $article->author }}</strong></span>
+                <article class="hx-article-row">
+                    <div class="hx-article-main">
+                        <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener" class="hx-article-thumb">
+                            @if($thumb)
+                                <img src="{{ $thumb }}" alt="" loading="lazy">
                             @else
-                                <span>By <span class="text-gray-400">—</span></span>
+                                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                             @endif
-                            @if($article->word_count)
-                                <span class="hx-sep">·</span>
-                                <span>{{ number_format($article->word_count) }} words</span>
-                            @endif
-                            @if($sourceCount > 0)
-                                <span class="hx-sep">·</span>
-                                <span>{{ $sourceCount }} source{{ $sourceCount === 1 ? '' : 's' }}</span>
-                            @endif
-                            @if($article->ai_engine_used)
-                                <span class="hx-sep">·</span>
-                                <span>{{ $article->ai_engine_used }}</span>
-                            @endif
-                            @if($article->ai_cost)
-                                <span class="hx-sep">·</span>
-                                <span>${{ number_format((float) $article->ai_cost, 4) }}</span>
-                            @endif
-                            <span class="hx-sep">·</span>
-                            <span>{{ $article->created_at?->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y g:i A') }}</span>
-                        </div>
-                        @if(!empty($article->categories) && is_array($article->categories))
-                            <div class="hx-article-attrs">
-                                <span class="text-gray-400">Categories:</span>
-                                <span>{{ implode(' · ', array_slice((array) $article->categories, 0, 5)) }}@if(count((array) $article->categories) > 5) <span class="text-gray-400">+{{ count((array) $article->categories) - 5 }}</span>@endif</span>
+                        </a>
+                        <div class="hx-article-body">
+                            <h3 class="hx-article-title">
+                                <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener">{{ $article->title ?: 'Untitled Article' }}</a>
+                            </h3>
+
+                            <div class="hx-article-pills">
+                                <span class="hx-tag {{ $pipelineTone }}" title="Internal pipeline generation state">Pipeline · {{ $pipelineLabel }}</span>
+                                @if($article->wp_status)
+                                    @if($wpLink)
+                                        <a href="{{ $wpLink }}" target="_blank" rel="noopener" class="hx-tag {{ $wpTone }}" title="{{ $wpLinkLabel }} on {{ $siteName ?: 'WordPress' }}">WordPress · {{ ucfirst($article->wp_status) }} ↗</a>
+                                    @else
+                                        <span class="hx-tag {{ $wpTone }}" title="WordPress post status (no URL available)">WordPress · {{ ucfirst($article->wp_status) }}</span>
+                                    @endif
+                                @endif
+                                @if($siteName)
+                                    <a href="{{ $siteUrl ?: '#' }}" target="_blank" rel="noopener" class="hx-tag blue" title="Open {{ $siteName }}">Site · {{ $siteName }} ↗</a>
+                                @endif
                             </div>
-                        @endif
+
+                            <div class="hx-article-meta">
+                                @if($article->author && $authorWpUrl)
+                                    By&nbsp;<a href="{{ $authorWpUrl }}" target="_blank" rel="noopener" title="Open {{ $article->author }}'s WordPress profile"><strong>{{ $article->author }}</strong>&nbsp;↗</a>
+                                @elseif($article->author)
+                                    By&nbsp;<strong>{{ $article->author }}</strong>
+                                @else
+                                    By <span class="text-gray-400">—</span>
+                                @endif
+                                @if($article->word_count)<span class="hx-sep">·</span><strong>{{ number_format($article->word_count) }}</strong> words@endif
+                                @if($sourceCount > 0)<span class="hx-sep">·</span><strong>{{ $sourceCount }}</strong> source{{ $sourceCount === 1 ? '' : 's' }}@endif
+                                <span class="hx-sep">·</span>{{ $article->created_at?->setTimezone($campaign->timezone ?? 'America/New_York')->format('M j, Y · g:i A') }}
+                            </div>
+
+                            @if(!empty($article->categories) && is_array($article->categories))
+                                <div class="hx-article-cats">
+                                    @foreach(array_slice((array) $article->categories, 0, 6) as $cat)
+                                        <span class="hx-cat">{{ $cat }}</span>
+                                    @endforeach
+                                    @if(count((array) $article->categories) > 6)
+                                        <span class="text-gray-400">+{{ count((array) $article->categories) - 6 }} more</span>
+                                    @endif
+                                </div>
+                            @endif
+                        </div>
                     </div>
-                    <div class="hx-article-actions">
-                        <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener" class="hx-link text-sm font-semibold">Open →</a>
-                        @if($wpLink)
-                            <a href="{{ $wpLink }}" target="_blank" rel="noopener" class="hx-link-muted text-xs">{{ $wpLinkLabel }} ↗</a>
-                        @endif
-                        @if($article->wp_post_url && $isDraft && $wpLink !== $article->wp_post_url)
-                            <a href="{{ $article->wp_post_url }}?preview=true" target="_blank" rel="noopener" class="hx-link-muted text-xs">Preview draft ↗</a>
-                        @endif
-                        @if($article->wp_post_id)
-                            <span class="text-[10px] text-gray-400 font-mono">WP #{{ $article->wp_post_id }}</span>
-                        @endif
+                    <div class="hx-article-footer">
+                        <div class="hx-article-tech">
+                            <span>{{ $article->article_id }}</span>
+                            @if($article->ai_engine_used)<span class="hx-sep">·</span><span>{{ $article->ai_engine_used }}</span>@endif
+                            @if($article->ai_cost)<span class="hx-sep">·</span><span>${{ number_format((float) $article->ai_cost, 4) }}</span>@endif
+                            @if($article->wp_post_id)<span class="hx-sep">·</span><span>WP #{{ $article->wp_post_id }}</span>@endif
+                        </div>
+                        <div class="hx-article-actions">
+                            @if($wpLink)
+                                <a href="{{ $wpLink }}" target="_blank" rel="noopener" class="hx-article-btn hx-article-btn-secondary">{{ $wpLinkLabel }}&nbsp;↗</a>
+                            @endif
+                            @if($article->wp_post_url && $isDraft && $wpLink !== $article->wp_post_url)
+                                <a href="{{ $article->wp_post_url }}?preview=true" target="_blank" rel="noopener" class="hx-article-btn hx-article-btn-secondary">Preview&nbsp;↗</a>
+                            @endif
+                            <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener" class="hx-article-btn hx-article-btn-primary">Open&nbsp;→</a>
+                        </div>
                     </div>
-                </div>
+                </article>
             @empty
                 <div class="rounded-xl border border-dashed border-gray-200 px-4 py-10 text-center text-sm text-gray-400">This campaign has not produced any articles yet.</div>
             @endforelse
