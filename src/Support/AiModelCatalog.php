@@ -170,6 +170,21 @@ class AiModelCatalog
 
     public function firstModelForProvider(string $provider): ?string
     {
+        $preferred = match ($provider) {
+            'anthropic' => ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-6'],
+            'openai' => ['gpt-4o', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
+            'grok' => ['grok-3-mini', 'grok-3', 'grok-4-1-fast'],
+            'gemini' => ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'],
+            default => [],
+        };
+
+        if ($preferred !== []) {
+            $model = $this->preferredModel($preferred);
+            if ($model) {
+                return $model;
+            }
+        }
+
         foreach ($this->entries() as $entry) {
             if ($entry['provider'] === $provider) {
                 return $entry['id'];
@@ -342,10 +357,44 @@ class AiModelCatalog
      */
     protected function geminiModels(): array
     {
-        return array_values(array_map(
+        if (class_exists(\hexa_package_gemini\Services\GeminiService::class)) {
+            try {
+                return $this->filterGeminiModels(array_values(array_map(
+                    static fn (array $model): array => ['id' => (string) $model['id'], 'name' => (string) $model['name']],
+                    app(\hexa_package_gemini\Services\GeminiService::class)->getAvailableModels()
+                )));
+            } catch (\Throwable) {
+            }
+        }
+
+        return $this->filterGeminiModels(array_values(array_map(
             static fn (array $model): array => ['id' => (string) $model['id'], 'name' => (string) $model['name']],
             (array) config('gemini.models', [])
-        ));
+        )));
+    }
+
+    /**
+     * @param array<int, array{id: string, name: string}> $models
+     * @return array<int, array{id: string, name: string}>
+     */
+    private function filterGeminiModels(array $models): array
+    {
+        $blockedFragments = ['preview', 'latest', 'customtools'];
+
+        return array_values(array_filter($models, static function (array $model) use ($blockedFragments): bool {
+            $id = strtolower(trim((string) ($model['id'] ?? '')));
+            if ($id === '' || !str_starts_with($id, 'gemini-')) {
+                return false;
+            }
+
+            foreach ($blockedFragments as $fragment) {
+                if (str_contains($id, $fragment)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }));
     }
 
     private function preferredModel(array $priority, array $exclude = []): ?string

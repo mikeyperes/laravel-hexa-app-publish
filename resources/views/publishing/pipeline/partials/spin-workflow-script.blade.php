@@ -39,7 +39,7 @@
                 const articleText = (this.spunContent || '').replace(/<[^>]*>/g, '').substring(0, 2000);
                 const resp = await fetch('{{ route("publish.pipeline.photo-meta") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         search_term: ps.search_term,
                         article_title: this.articleTitle || '',
@@ -79,7 +79,7 @@
                 const articleText = (this.spunContent || '').replace(/<[^>]*>/g, '').substring(0, 2000);
                 const resp = await fetch('{{ route("publish.pipeline.photo-meta") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         search_term: this.featuredImageSearch,
                         article_title: this.articleTitle || '',
@@ -114,7 +114,7 @@
                 const articleText = (this.spunContent || '').replace(/<[^>]*>/g, '').substring(0, 2000);
                 const resp = await fetch('{{ route("publish.pipeline.photo-meta") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         search_term: this.photoSearch || this.insertingPhoto.alt || '',
                         article_title: this.articleTitle || '',
@@ -161,7 +161,7 @@
             try {
                 const resp = await fetch('{{ route("publish.pipeline.preview-prompt") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify(payload)
                 });
                 const data = await resp.json();
@@ -210,7 +210,7 @@
             try {
                 const resp = await fetch('{{ route('publish.pipeline.spin') }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         draft_id: this.draftId || null,
                         source_texts: sourceTexts,
@@ -335,7 +335,7 @@
             try {
                 const resp = await fetch('{{ route('publish.pipeline.spin') }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         draft_id: this.draftId || null,
                         source_texts: [currentContent],

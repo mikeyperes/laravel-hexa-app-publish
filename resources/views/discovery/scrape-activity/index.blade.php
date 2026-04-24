@@ -352,6 +352,7 @@
                             <option value="structured">Structured Data</option>
                             <option value="heuristic">DOM Heuristic</option>
                             <option value="regex">Regex</option>
+                            <option value="css">CSS Extractor</option>
                             <option value="jina">Jina Reader</option>
                         </select>
                     </div>
@@ -360,15 +361,19 @@
                         <select x-model="notesData.recommended_ua" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                             <option value="">None</option>
                             <option value="chrome">Chrome Desktop</option>
+                            <option value="mobile">Mobile Chrome</option>
+                            <option value="firefox">Firefox</option>
+                            <option value="safari">Safari</option>
                             <option value="googlebot">Googlebot</option>
                             <option value="bingbot">Bingbot</option>
-                            <option value="mobile">Mobile Chrome</option>
+                            <option value="bot">Generic Bot</option>
                         </select>
                     </div>
                 </div>
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Working Instructions</label>
                     <textarea x-model="notesData.working_instructions" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Step-by-step instructions that work for this source..."></textarea>
+                    <p class="mt-1 text-[11px] text-gray-400">These notes feed the live source access strategy so future scrape attempts can prioritize the right method and user agent.</p>
                 </div>
             </div>
             <div class="flex justify-end gap-2 mt-4">

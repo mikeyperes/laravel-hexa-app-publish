@@ -80,6 +80,7 @@
                         <option value="claude">Claude AI</option>
                         <option value="gpt">GPT</option>
                         <option value="grok">Grok</option>
+                        <option value="gemini">Gemini</option>
                     </select>
                 </div>
 

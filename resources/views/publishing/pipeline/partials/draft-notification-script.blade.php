@@ -41,9 +41,11 @@
                 article_type: this.currentArticleType || null,
                 ai_model: this.aiModel,
                 author: this.publishAuthor || null,
+                publish_action: this.publishAction || null,
+                schedule_date: this.publishAction === 'future' ? (this.scheduleDate || null) : null,
                 sources: this.sources.map(s => ({ url: s.url, title: s.title })),
-                tags: this.suggestedTags,
-                categories: this.suggestedCategories,
+                tags: this.selectedTagNames(),
+                categories: this.selectedCategoryNames(),
                 photo_suggestions: this.sanitizePhotoSuggestionsForPersistence() || null,
                 featured_image_search: this.featuredImageSearch || null,
             };
@@ -64,10 +66,24 @@
                 payload_preview: this.pipelineDebugEnabled ? this._summarizeValue(payload, 1200) : '',
                 debug_only: !this.pipelineDebugEnabled,
             });
+
+            if (!silent) {
+                const stateSaved = await this.flushPipelineStateNow();
+                if (!stateSaved) {
+                    this.savingDraft = false;
+                    this._logActivity('draft', 'error', 'Draft settings failed to save before draft persistence.', {
+                        stage: 'draft',
+                        substage: 'state_flush_failed',
+                    });
+                    this.showNotification('error', 'Draft settings could not be saved. Please try again.');
+                    return;
+                }
+            }
+
             try {
                 const resp = await this._rawPipelineFetch('{{ route('publish.pipeline.save-draft') }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify(payload)
                 });
                 const data = await resp.json().catch(() => ({}));

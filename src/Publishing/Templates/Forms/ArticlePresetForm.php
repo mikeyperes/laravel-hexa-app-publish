@@ -191,7 +191,7 @@ class ArticlePresetForm
                         'sentence_case' => 'Sentence case',
                         'title_case' => 'Title Case',
                     ])
-                    ->meta(['empty_label' => 'Select notation...', 'section' => 'media'])
+                    ->meta(['empty_label' => 'Select notation...', 'section' => 'content'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
                 FieldDefinition::make('inline_photo_min', 'number', 'Inline Photo Minimum')
@@ -203,6 +203,16 @@ class ArticlePresetForm
                 FieldDefinition::make('inline_photo_max', 'number', 'Inline Photo Maximum')
                     ->default(3)
                     ->rules(['nullable', 'integer', 'min:0', 'max:10'])
+                    ->meta(['section' => 'media'])
+                    ->contexts(['create', 'edit', 'pipeline']),
+
+                FieldDefinition::make('photo_sources', 'checkbox_group', 'Photo Sources')
+                    ->multiple()
+                    ->default(fn (array $context = []) => self::defaultPhotoSources($context))
+                    ->rules(['nullable', 'array'])
+                    ->options(fn () => self::photoSourceOptions())
+                    ->columns('md:col-span-2')
+                    ->help('Choose which image sources are allowed for inline and featured photos.')
                     ->meta(['section' => 'media'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
@@ -262,6 +272,7 @@ class ArticlePresetForm
         $values['h2_notation'] = $values['h2_notation'] ?? 'capital_case';
         $values['inline_photo_min'] = $values['inline_photo_min'] ?? ($legacyPhotoCount > 0 ? min($legacyPhotoCount, 2) : 2);
         $values['inline_photo_max'] = $values['inline_photo_max'] ?? ($legacyPhotoCount > 0 ? $legacyPhotoCount : 3);
+        $values['photo_sources'] = array_values((array) ($values['photo_sources'] ?? config('hws-publish.photo_sources', [])));
         $values['featured_image_required'] = $values['featured_image_required'] ?? true;
         $values['featured_image_must_be_landscape'] = $values['featured_image_must_be_landscape'] ?? true;
 

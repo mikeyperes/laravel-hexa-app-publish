@@ -42,7 +42,7 @@
             try {
                 const resp = await fetch('{{ route("publish.pipeline.detect-ai") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ text: plainText, article_id: this.draftId })
                 });
                 const data = await resp.json();
@@ -113,7 +113,7 @@
             try {
                 const resp = await fetch('{{ route("publish.pipeline.metadata") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ article_html: html, draft_id: this.draftId || null })
                 });
                 const data = await resp.json();
@@ -189,18 +189,23 @@
             try {
                 const resp = await fetch('{{ route("publish.pipeline.link-status") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ url: link.url }),
                 });
                 const data = await resp.json();
+                const finalUrl = data.data?.final_url || '';
+                const canonicalized = !!(finalUrl && !data.data?.is_broken && finalUrl !== link.url);
                 const updated = {
                     ...link,
+                    url: canonicalized ? finalUrl : link.url,
                     checking: false,
                     status_code: data.data?.status_code ?? null,
-                    status_text: data.data?.status_text || (data.success ? 'OK' : 'Check failed'),
+                    status_text: canonicalized
+                        ? ((data.data?.status_text || 'Redirect updated') + ' · canonicalized')
+                        : (data.data?.status_text || (data.success ? 'OK' : 'Check failed')),
                     status_tone: data.data?.status_tone || (data.success ? 'green' : 'red'),
                     checked_via: data.data?.checked_via || '',
-                    final_url: data.data?.final_url || '',
+                    final_url: finalUrl,
                     is_broken: !!(data.data?.is_broken),
                 };
 
@@ -208,6 +213,8 @@
 
                 if (updated.is_broken) {
                     this.showNotification('warning', 'Broken link detected: ' + updated.status_text);
+                } else if (canonicalized) {
+                    this.showNotification('success', 'Updated redirected link to canonical URL.');
                 }
             } catch (e) {
                 this.suggestedUrls.splice(idx, 1, {
@@ -232,7 +239,7 @@
             this.loadingSyndicationCats = true;
             try {
                 const resp = await fetch('/publish/sites/' + this.selectedSite.id + '/categories', {
-                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders(),
                 });
                 const data = await resp.json();
                 if (data.success && data.categories) {
@@ -287,12 +294,12 @@
             try {
                 const resp = await fetch('{{ route("publish.search.images.post") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         query: this.photoSearch,
                         draft_id: this.draftId || null,
                         per_page: 15,
-                        sources: ['google', 'pexels', 'pixabay'],
+                        sources: ['google', 'serper', 'pexels', 'pixabay'],
                         quality_context: 'inline',
                         probe_quality: true,
                     })
@@ -313,7 +320,7 @@
             try {
                 const resp = await fetch('{{ route("publish.search.google-images") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         query: this.featuredImageSearch,
                         draft_id: this.draftId || null,
@@ -361,7 +368,7 @@
             try {
                 const resp = await fetch('{{ route("publish.pipeline.upload-photo") }}', {
                     method: 'POST',
-                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders(),
                     body: formData,
                 });
                 const data = await resp.json();
@@ -399,7 +406,7 @@
             try {
                 const resp = await fetch('{{ route("publish.pipeline.upload-photo") }}', {
                     method: 'POST',
-                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders(),
                     body: formData,
                 });
                 const data = await resp.json();
@@ -503,14 +510,14 @@
             try {
                 const resp = await fetch('{{ route("publish.search.images.batch") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         queries: pendingIndexes.map((idx) => ({
                             key: String(idx),
                             query: this.photoSuggestions[idx]?.search_term || '',
                             per_page: 12,
                         })),
-                        sources: ['google', 'pexels', 'pixabay'],
+                        sources: ['google', 'serper', 'pexels', 'pixabay'],
                         quality_context: 'inline',
                         probe_quality: true,
                     }),
@@ -694,7 +701,18 @@
             const candidates = [];
             const pushCandidate = (value) => {
                 const content = String(value || '').trim();
-                if (content) candidates.push(content);
+                if (!content) return;
+
+                const textOnly = content
+                    .replace(/<br\s*\/?>/gi, ' ')
+                    .replace(/&nbsp;/gi, ' ')
+                    .replace(/<p>\s*<\/p>/gi, ' ')
+                    .replace(/<[^>]+>/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                if (!textOnly) return;
+                candidates.push(content);
             };
 
             const editor = typeof tinymce !== 'undefined' ? tinymce.get('spin-preview-editor') : null;
@@ -870,7 +888,7 @@
             try {
                 const resp = await fetch('{{ route("publish.search.images.post") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ query: ps.search_term, per_page: 20, draft_id: this.draftId || null })
                 });
                 const data = await resp.json();

@@ -58,6 +58,7 @@ class ArticleGenerationService
             ->values()
             ->all();
         $templateId = $options['template_id'] ?? null;
+        $templateValues = is_array($options['template_values'] ?? null) ? $options['template_values'] : [];
         $presetId = $options['preset_id'] ?? null;
         $articleType = $this->resolveArticleType($options['article_type'] ?? null, $templateId);
         $promptSlug = $options['prompt_slug'] ?? null;
@@ -78,7 +79,8 @@ class ArticleGenerationService
             $prSubjectContext,
             false,
             $promptSlug,
-            $articleType
+            $articleType,
+            $templateValues
         );
 
         // Inject web research instruction if requested
@@ -214,6 +216,7 @@ class ArticleGenerationService
      * @param bool $withLog Whether to return resolution log alongside the prompt
      * @param string|null $promptSlug
      * @param string|null $articleType
+     * @param array<string, mixed> $templateValues
      * @return string|array Returns string normally, or ['prompt' => ..., 'log' => [...]] when $withLog is true
      */
     public function buildPrompt(
@@ -225,7 +228,8 @@ class ArticleGenerationService
         ?string $prSubjectContext = null,
         bool $withLog = false,
         ?string $promptSlug = null,
-        ?string $articleType = null
+        ?string $articleType = null,
+        array $templateValues = []
     ): string|array
     {
         $log = [];
@@ -289,17 +293,18 @@ class ArticleGenerationService
         if ($templateId) {
             $template = PublishTemplate::find($templateId);
             if ($template) {
+                $templateSource = array_replace($template->toArray(), $templateValues);
                 $parts = [];
-                $resolvedArticleType = $resolvedArticleType ?: $template->article_type;
-                if ($template->ai_prompt) $parts[] = $template->ai_prompt;
-                if ($template->headline_rules) $parts[] = "Headline rules: {$template->headline_rules}";
-                if ($template->tone) $parts[] = "Tone: " . (is_array($template->tone) ? implode(', ', $template->tone) : $template->tone);
+                $resolvedArticleType = $resolvedArticleType ?: ($templateSource['article_type'] ?? $template->article_type);
+                if (!empty($templateSource['ai_prompt'])) $parts[] = (string) $templateSource['ai_prompt'];
+                if (!empty($templateSource['headline_rules'])) $parts[] = "Headline rules: {$templateSource['headline_rules']}";
+                if (!empty($templateSource['tone'])) $parts[] = "Tone: " . (is_array($templateSource['tone']) ? implode(', ', $templateSource['tone']) : $templateSource['tone']);
                 if ($resolvedArticleType) $parts[] = "Article type: {$resolvedArticleType}";
-                if ($template->word_count_min || $template->word_count_max) $parts[] = "Target words: {$template->word_count_min}-{$template->word_count_max}";
-                if ($template->h2_notation) $parts[] = "H2 notation: {$template->h2_notation}";
+                if (!empty($templateSource['word_count_min']) || !empty($templateSource['word_count_max'])) $parts[] = "Target words: " . ($templateSource['word_count_min'] ?? '') . '-' . ($templateSource['word_count_max'] ?? '');
+                if (!empty($templateSource['h2_notation'])) $parts[] = "H2 notation: {$templateSource['h2_notation']}";
                 $templateConfig = implode("\n", $parts);
-                $photoMin = max(1, (int) ($template->inline_photo_min ?: 2));
-                $photoMax = max($photoMin, (int) ($template->inline_photo_max ?: ($template->photos_per_article ?: 3)));
+                $photoMin = max(1, (int) ($templateSource['inline_photo_min'] ?? $template->inline_photo_min ?: 2));
+                $photoMax = max($photoMin, (int) ($templateSource['inline_photo_max'] ?? $template->inline_photo_max ?: ($template->photos_per_article ?: 3)));
                 $photoCount = $photoMin === $photoMax ? (string) $photoMax : ($photoMin . '-' . $photoMax);
             }
         } elseif ($resolvedArticleType) {

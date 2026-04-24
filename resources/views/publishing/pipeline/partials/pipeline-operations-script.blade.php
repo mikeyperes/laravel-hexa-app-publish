@@ -640,6 +640,12 @@
             }
 
             if (notify) this.showNotification('success', 'Content prepared for WordPress');
+            this.$nextTick(() => {
+                const el = this.$refs.publishActionBox;
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
         },
 
         _applyPrepareOperationFailure(message, meta = {}, { notify = true } = {}) {
@@ -936,6 +942,21 @@
                 || ['queued', 'running'].includes(this.publishOperationStatus)
                 || !!this.preparing
                 || !!this.publishing;
+        },
+
+        _focusPublishActionBox({ behavior = 'smooth' } = {}) {
+            this.$nextTick(() => {
+                const isStepSevenOpen = this.currentStep === 7
+                    && Array.isArray(this.openSteps)
+                    && this.openSteps.includes(7);
+
+                if (!isStepSevenOpen) return;
+
+                const el = this.$refs.publishActionBox;
+                if (el) {
+                    el.scrollIntoView({ behavior, block: 'start' });
+                }
+            });
         },
 
         async _restorePipelineOperations(force = false) {

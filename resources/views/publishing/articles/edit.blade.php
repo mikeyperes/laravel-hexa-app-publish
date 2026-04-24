@@ -102,7 +102,7 @@
                     <label class="block text-xs text-gray-500 mb-1">AI Engine</label>
                     <select x-model="aiEngine" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
                         @foreach($aiEngines as $engine)
-                            <option value="{{ $engine }}">{{ ucfirst($engine) }}</option>
+                            <option value="{{ $engine }}">{{ match($engine) { 'anthropic' => 'Claude', 'chatgpt' => 'ChatGPT / OpenAI', 'grok' => 'Grok', 'gemini' => 'Gemini', default => ucfirst($engine), } }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -173,7 +173,7 @@ function articleEditor() {
             delivery_mode: @json($article->delivery_mode ?? 'review'),
             word_count: @json($article->word_count ?? 0),
         },
-        aiEngine: 'anthropic',
+        aiEngine: @json($aiEngines[0] ?? 'anthropic'),
         aiInstruction: '',
         scores: {
             ai: @json($article->ai_detection_score),

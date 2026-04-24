@@ -110,15 +110,16 @@ class PipelineOperationService
         }
 
         $basePath = base_path();
+        $artisanPath = base_path('artisan');
         $phpBinary = PHP_BINARY ?: 'php';
         $queueArg = escapeshellarg($queueName);
         $connectionArg = escapeshellarg($connection);
         $phpArg = escapeshellarg($phpBinary);
-        $baseArg = escapeshellarg($basePath);
+        $artisanArg = escapeshellarg($artisanPath);
         $logPath = storage_path('logs/pipeline-queue-worker-' . Str::lower((string) Str::uuid()) . '.log');
         $logArg = escapeshellarg($logPath);
 
-        $command = "cd {$baseArg} && nohup {$phpArg} artisan queue:work {$connectionArg} --queue={$queueArg} --once --stop-when-empty --tries=1 --timeout=1800 > {$logArg} 2>&1 &";
+        $command = "cd " . escapeshellarg($basePath) . " && nohup {$phpArg} {$artisanArg} queue:work {$connectionArg} --queue={$queueArg} --once --stop-when-empty --tries=1 --timeout=1800 > {$logArg} 2>&1 &";
 
         try {
             Process::run($command);
@@ -265,7 +266,8 @@ class PipelineOperationService
     private function queueWorkerRunning(): bool
     {
         try {
-            $result = Process::run('ps aux 2>/dev/null | grep "[q]ueue:work" | grep -v grep');
+            $artisanPath = escapeshellarg(base_path('artisan'));
+            $result = Process::run('ps aux 2>/dev/null | grep "[q]ueue:work" | grep -F ' . $artisanPath);
             $workers = array_filter(explode("\n", trim($result->output())));
 
             return count($workers) > 0;

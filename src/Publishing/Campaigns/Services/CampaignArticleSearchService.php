@@ -3,6 +3,8 @@
 namespace hexa_app_publish\Publishing\Campaigns\Services;
 
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
+use hexa_app_publish\Discovery\Sources\Health\Services\SourceAccessStrategyService;
+use hexa_app_publish\Discovery\Links\Health\Services\LinkHealthService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Support\AiModelCatalog;
 use Illuminate\Support\Facades\Cache;
@@ -15,6 +17,7 @@ class CampaignArticleSearchService
         protected SourceDiscoveryService $sourceDiscovery,
         protected AiModelCatalog $catalog,
         protected ArticleActivityService $activities,
+        protected SourceAccessStrategyService $sourceAccessStrategy,
     ) {
     }
 
@@ -430,71 +433,14 @@ class CampaignArticleSearchService
      */
     protected function verifyArticleCandidates(array $articles, int $limit, array $excludeUrls = [], ?string $topic = null): array
     {
-        $verified = [];
-        $seen = [];
-
-        foreach ($excludeUrls as $excludeUrl) {
-            $normalized = $this->normalizeArticleUrlCandidate((string) $excludeUrl);
-            if ($normalized) {
-                $seen[$normalized] = true;
-            }
-        }
-
-        $checked = 0;
-        $discarded = 0;
-
-        foreach ($articles as $article) {
-            if (count($verified) >= $limit) {
-                break;
-            }
-
-            $candidate = $this->normalizeArticleCandidate($article);
-            if ($candidate === null) {
-                $discarded++;
-                continue;
-            }
-
-            if (!$this->matchesTopic($candidate, $topic)) {
-                $discarded++;
-                continue;
-            }
-
-            if (isset($seen[$candidate['url']])) {
-                continue;
-            }
-
-            $checked++;
-            $probe = $this->probeArticleUrl($candidate['url']);
-            if ($probe['probe_failed'] || $probe['is_broken']) {
-                $discarded++;
-                continue;
-            }
-
-            $resolvedUrl = $this->normalizeArticleUrlCandidate((string) ($probe['final_url'] ?? '')) ?: $candidate['url'];
-            if (!$this->looksLikeCanonicalArticleUrl($resolvedUrl) || isset($seen[$resolvedUrl])) {
-                $discarded++;
-                continue;
-            }
-
-            $seen[$resolvedUrl] = true;
-            $verified[] = array_merge($candidate, [
-                'url' => $resolvedUrl,
-                'status_code' => $probe['status_code'],
-                'status_text' => $probe['status_text'],
-                'checked_via' => $probe['checked_via'],
-                'final_url' => $resolvedUrl,
-                'is_broken' => false,
-            ]);
-        }
-
-        return [
-            'articles' => $verified,
-            'stats' => [
-                'checked' => $checked,
-                'kept' => count($verified),
-                'discarded' => $discarded,
-            ],
-        ];
+        return app(LinkHealthService::class)->verifyArticleCandidates(
+            $articles,
+            $limit,
+            $excludeUrls,
+            fn (array $candidate): bool => $this->matchesTopic($candidate, $topic)
+                && !$this->sourceAccessStrategy->shouldBlockDiscoveryCandidate((string) ($candidate['url'] ?? '')),
+            'campaign'
+        );
     }
 
     /**

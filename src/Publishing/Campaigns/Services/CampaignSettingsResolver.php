@@ -4,7 +4,10 @@ namespace hexa_app_publish\Publishing\Campaigns\Services;
 
 use hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset;
 use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
+use hexa_app_publish\Publishing\Campaigns\Forms\CampaignPresetForm;
+use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
+use hexa_core\Forms\Runtime\FormRuntimeService;
 use hexa_app_publish\Support\AiModelCatalog;
 
 class CampaignSettingsResolver
@@ -13,6 +16,7 @@ class CampaignSettingsResolver
         protected CampaignEligibilityService $eligibility,
         protected CampaignModeResolver $modeResolver,
         protected AiModelCatalog $catalog,
+        protected FormRuntimeService $formRuntime,
     ) {
     }
 
@@ -25,53 +29,63 @@ class CampaignSettingsResolver
 
         $campaignPreset = $campaign->campaignPreset ?: $this->defaultCampaignPreset($campaign);
         $template = $campaign->template ?: $this->defaultTemplate($campaign);
+        $campaignPresetValues = $this->resolveCampaignPresetValues($campaignPreset, (array) ($campaign->campaign_preset_overrides ?? []));
+        $templateValues = $this->resolveTemplateValues($template, (array) ($campaign->article_preset_overrides ?? []));
 
         $articleType = $campaign->article_type
-            ?: ($template?->article_type ?: config('hws-publish.campaign_supported_article_types.0'));
+            ?: ($templateValues['article_type'] ?? $template?->article_type ?: config('hws-publish.campaign_supported_article_types.0'));
         $deliveryMode = $campaign->delivery_mode ?: 'draft-local';
         $normalizedDeliveryMode = $this->modeResolver->normalizeDeliveryMode($deliveryMode);
-        $onlineSearchPrimary = $template?->searching_agent ?: $this->catalog->defaultSearchModel();
-        $onlineSearchFallback = $template?->online_search_model_fallback ?: ($this->catalog->defaultSearchFallbackModel($onlineSearchPrimary) ?: $onlineSearchPrimary);
-        $scrapeAiPrimary = $template?->scraping_agent ?: $this->catalog->defaultSearchModel();
-        $scrapeAiFallback = $template?->scrape_ai_model_fallback ?: ($this->catalog->defaultSearchFallbackModel($scrapeAiPrimary) ?: $scrapeAiPrimary);
-        $spinPrimary = $template?->spinning_agent ?: ($template?->ai_engine ?: $this->catalog->defaultSpinModel());
-        $spinFallback = $template?->spin_model_fallback ?: ($this->catalog->defaultSpinFallbackModel($spinPrimary) ?: $spinPrimary);
-        $inlinePhotoMin = max(1, (int) ($template?->inline_photo_min ?: 2));
-        $inlinePhotoMax = max($inlinePhotoMin, (int) ($template?->inline_photo_max ?: max(3, $inlinePhotoMin)));
+        $onlineSearchPrimary = $templateValues['searching_agent'] ?? $template?->searching_agent ?: $this->catalog->defaultSearchModel();
+        $onlineSearchFallback = $templateValues['online_search_model_fallback'] ?? $template?->online_search_model_fallback ?: ($this->catalog->defaultSearchFallbackModel($onlineSearchPrimary) ?: $onlineSearchPrimary);
+        $scrapeAiPrimary = $templateValues['scraping_agent'] ?? $template?->scraping_agent ?: $this->catalog->defaultSearchModel();
+        $scrapeAiFallback = $templateValues['scrape_ai_model_fallback'] ?? $template?->scrape_ai_model_fallback ?: ($this->catalog->defaultSearchFallbackModel($scrapeAiPrimary) ?: $scrapeAiPrimary);
+        $spinPrimary = $templateValues['spinning_agent'] ?? $template?->spinning_agent ?: ($templateValues['ai_engine'] ?? $template?->ai_engine ?: $this->catalog->defaultSpinModel());
+        $spinFallback = $templateValues['spin_model_fallback'] ?? $template?->spin_model_fallback ?: ($this->catalog->defaultSpinFallbackModel($spinPrimary) ?: $spinPrimary);
+        $inlinePhotoMin = max(1, (int) ($templateValues['inline_photo_min'] ?? $template?->inline_photo_min ?: 2));
+        $inlinePhotoMax = max($inlinePhotoMin, (int) ($templateValues['inline_photo_max'] ?? $template?->inline_photo_max ?: max(3, $inlinePhotoMin)));
 
         $resolved = [
             'article_type' => $articleType,
             'delivery_mode' => $normalizedDeliveryMode,
             'execution_mode' => $this->modeResolver->toExecutionMode($deliveryMode),
-            'search_terms' => $this->resolveSearchTerms($campaign, $campaignPreset),
+            'search_terms' => $this->resolveSearchTerms($campaign, $campaignPresetValues),
             'topic' => trim((string) ($campaign->topic ?: '')),
             'article_sources' => $this->normalizeArticleSources($campaign->article_sources),
-            'photo_sources' => $this->resolvePhotoSources($campaign, $template),
-            'max_links_per_article' => $campaign->max_links_per_article ?: ($template?->max_links ?: config('hws-publish.defaults.max_links_per_article', 5)),
+            'photo_sources' => $this->resolvePhotoSources($campaign, $templateValues, $template),
+            'max_links_per_article' => $campaign->max_links_per_article ?: ($templateValues['max_links'] ?? $template?->max_links ?: config('hws-publish.defaults.max_links_per_article', 5)),
             'ai_engine' => $campaign->ai_engine ?: $spinPrimary,
             'spin_model_primary' => $spinPrimary,
             'spin_model_fallback' => $spinFallback,
-            'search_online_for_additional_context' => $template?->search_online_for_additional_context ?? true,
+            'search_online_for_additional_context' => $templateValues['search_online_for_additional_context'] ?? $template?->search_online_for_additional_context ?? true,
             'online_search_model_primary' => $onlineSearchPrimary,
             'online_search_model_fallback' => $onlineSearchFallback,
             'scrape_ai_model_primary' => $scrapeAiPrimary,
             'scrape_ai_model_fallback' => $scrapeAiFallback,
-            'headline_rules' => trim((string) ($template?->headline_rules ?: '')),
-            'h2_notation' => trim((string) ($template?->h2_notation ?: 'capital_case')),
+            'headline_rules' => trim((string) ($templateValues['headline_rules'] ?? $template?->headline_rules ?: '')),
+            'h2_notation' => trim((string) ($templateValues['h2_notation'] ?? $template?->h2_notation ?: 'capital_case')),
             'inline_photo_min' => $inlinePhotoMin,
             'inline_photo_max' => $inlinePhotoMax,
-            'featured_image_required' => $template?->featured_image_required ?? true,
-            'featured_image_must_be_landscape' => $template?->featured_image_must_be_landscape ?? true,
+            'featured_image_required' => $templateValues['featured_image_required'] ?? $template?->featured_image_required ?? true,
+            'featured_image_must_be_landscape' => $templateValues['featured_image_must_be_landscape'] ?? $template?->featured_image_must_be_landscape ?? true,
             'publish_template_id' => $campaign->publish_template_id ?: $template?->id,
             'post_status' => $this->resolvePostStatus($normalizedDeliveryMode, $campaign->post_status),
             'author' => $campaign->author ?: $campaign->site?->default_author,
             'ai_instructions' => $this->combineInstructions(
-                $campaignPreset?->campaign_instructions,
-                $campaignPreset?->ai_instructions,
+                $campaignPresetValues['campaign_instructions'] ?? null,
+                $campaignPresetValues['ai_instructions'] ?? null,
                 $campaign->ai_instructions ?: $campaign->notes
             ),
+            'campaign_source_method' => $campaignPresetValues['source_method'] ?? 'keyword',
+            'campaign_final_article_method' => $campaignPresetValues['final_article_method'] ?? 'news-search',
+            'campaign_local_preference' => $campaignPresetValues['local_preference'] ?? null,
+            'campaign_genre' => $campaignPresetValues['genre'] ?? null,
+            'campaign_trending_categories' => array_values((array) ($campaignPresetValues['trending_categories'] ?? [])),
+            'campaign_auto_select_sources' => (bool) ($campaignPresetValues['auto_select_sources'] ?? false),
             'campaign_preset' => $campaignPreset,
+            'campaign_preset_values' => $campaignPresetValues,
             'article_preset' => $template,
+            'article_preset_values' => $templateValues,
             'template' => $template,
         ];
 
@@ -84,11 +98,11 @@ class CampaignSettingsResolver
     /**
      * @return array<int, string>
      */
-    private function resolveSearchTerms(PublishCampaign $campaign, ?CampaignPreset $campaignPreset): array
+    private function resolveSearchTerms(PublishCampaign $campaign, array $campaignPresetValues = []): array
     {
         $terms = $campaign->keywords;
-        if (empty($terms) && $campaignPreset) {
-            $terms = $campaignPreset->search_queries ?: $campaignPreset->keywords;
+        if (empty($terms)) {
+            $terms = $campaignPresetValues['search_queries'] ?? $campaignPresetValues['keywords'] ?? [];
         }
 
         return collect((array) $terms)
@@ -130,11 +144,11 @@ class CampaignSettingsResolver
     /**
      * @return array<int, string>
      */
-    private function resolvePhotoSources(PublishCampaign $campaign, ?PublishTemplate $template): array
+    private function resolvePhotoSources(PublishCampaign $campaign, array $templateValues = [], ?PublishTemplate $template = null): array
     {
         $sources = $campaign->photo_sources;
-        if (empty($sources) && $template) {
-            $sources = $template->photo_sources;
+        if (empty($sources)) {
+            $sources = $templateValues['photo_sources'] ?? ($template?->photo_sources);
         }
 
         $resolved = collect((array) $sources)
@@ -194,5 +208,41 @@ class CampaignSettingsResolver
             'draft-wordpress' => 'draft',
             default => $postStatus ?: 'draft',
         };
+    }
+
+    /**
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private function resolveCampaignPresetValues(?CampaignPreset $campaignPreset, array $overrides = []): array
+    {
+        return $this->formRuntime->hydrate(
+            CampaignPresetForm::FORM_KEY,
+            $campaignPreset,
+            $overrides,
+            [
+                'context' => 'pipeline',
+                'mode' => 'pipeline',
+                'record' => $campaignPreset,
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private function resolveTemplateValues(?PublishTemplate $template, array $overrides = []): array
+    {
+        return $this->formRuntime->hydrate(
+            ArticlePresetForm::FORM_KEY,
+            $template,
+            $overrides,
+            [
+                'context' => 'pipeline',
+                'mode' => 'pipeline',
+                'record' => $template,
+            ]
+        );
     }
 }

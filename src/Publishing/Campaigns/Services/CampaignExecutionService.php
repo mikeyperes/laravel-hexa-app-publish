@@ -338,7 +338,7 @@ class CampaignExecutionService
             'substage' => 'start',
             'details' => implode(' | ', array_filter([
                 'method=auto',
-                'user_agent=chrome -> googlebot',
+                'user_agent=strategy-driven local fallback ladder',
                 'ai=' . (($resolved['scrape_ai_model_primary'] ?? '—') . ' -> ' . ($resolved['scrape_ai_model_fallback'] ?? '—')),
             ])),
         ]);
@@ -430,6 +430,15 @@ class CampaignExecutionService
             return $this->failure($log, $article, 'extraction', 'No source content extracted.');
         }
 
+        $emit('success', 'Source extraction complete.', [
+            'stage' => 'extraction',
+            'substage' => 'complete',
+            'details' => implode(' | ', array_filter([
+                'kept=' . count($sourceTexts),
+                $failedCount > 0 ? ('failed=' . $failedCount) : null,
+            ])),
+        ]);
+
         $article->update([
             'source_articles' => $sourceTexts,
             'status' => 'spinning',
@@ -461,14 +470,18 @@ class CampaignExecutionService
             return $this->failure($log, $article, 'generation', $e->getMessage());
         }
 
+        $modelUsed = $spinResult['model'] ?? $resolved['ai_engine'];
+        $providerUsed = app(\hexa_app_publish\Support\AiModelCatalog::class)->providerForModel($modelUsed);
+
         $article->update([
             'title' => $spinResult['title'] ?? 'Untitled',
             'body' => $spinResult['html'],
             'word_count' => $spinResult['word_count'],
+            'ai_engine_used' => $modelUsed,
             'ai_cost' => $spinResult['cost'] ?? 0,
             'ai_tokens_input' => $spinResult['usage']['input_tokens'] ?? 0,
             'ai_tokens_output' => $spinResult['usage']['output_tokens'] ?? 0,
-            'ai_provider' => $spinResult['provider'] ?? 'anthropic',
+            'ai_provider' => $providerUsed,
             'categories' => $spinResult['categories'] ?? [],
             'tags' => $spinResult['tags'] ?? [],
             'excerpt' => $spinResult['description'] ?? '',
@@ -484,7 +497,7 @@ class CampaignExecutionService
             'substage' => 'complete',
             'details' => implode(' | ', array_filter([
                 'title=' . ($spinResult['title'] ?? 'Untitled'),
-                'provider=' . ($spinResult['provider'] ?? $resolved['ai_engine'] ?? 'ai'),
+                'provider=' . ($providerUsed ?? $resolved['ai_engine'] ?? 'ai'),
                 'models=' . implode(' -> ', (array) ($spinResult['attempted_models'] ?? [])),
                 'cost=$' . ($spinResult['cost'] ?? 0),
             ])),
@@ -527,7 +540,7 @@ class CampaignExecutionService
             'stage' => 'photos',
             'substage' => 'start',
             'details' => implode(' | ', array_filter([
-                'featured=google_only',
+                'featured=google_first',
                 'inline=' . (($resolved['inline_photo_min'] ?? 2) . '-' . ($resolved['inline_photo_max'] ?? 3)),
                 'landscape=' . (($resolved['featured_image_must_be_landscape'] ?? true) ? 'required' : 'optional'),
                 'blacklist=on',
@@ -749,6 +762,7 @@ class CampaignExecutionService
                 $resolved['spin_model_fallback'] ?? null,
             ])),
             'template_id' => $resolved['publish_template_id'] ?? null,
+            'template_values' => $resolved['article_preset_values'] ?? [],
             'preset_id' => null,
             'article_type' => $resolved['article_type'] ?? null,
             'custom_prompt' => $resolved['ai_instructions'] ?? null,

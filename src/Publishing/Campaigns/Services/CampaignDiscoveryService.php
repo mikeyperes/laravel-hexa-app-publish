@@ -16,14 +16,16 @@ class CampaignDiscoveryService
 
     /**
      * @param array<string, mixed> $resolved
-     * @return array{query: string, selected_term: ?string, category: ?string, source_mode: string}
+     * @return array{query: string, selected_term: ?string, category: ?string, genre: ?string, source_mode: string}
      */
     public function buildSearchContext(PublishCampaign $campaign, array $resolved): array
     {
         $terms = array_values((array) ($resolved['search_terms'] ?? []));
         $selectedTerm = !empty($terms) ? $terms[array_rand($terms)] : null;
-        $sourceMode = 'google_via_ai';
+        $sourceMode = (string) ($resolved['campaign_source_method'] ?? 'keyword');
         $category = null;
+        $genre = null;
+        $localPreference = trim((string) ($resolved['campaign_local_preference'] ?? ''));
         $query = trim((string) ($selectedTerm ?: ($resolved['topic'] ?? '')));
 
         $allSingleWordTerms = !empty($terms) && collect($terms)->every(function ($term) {
@@ -43,10 +45,31 @@ class CampaignDiscoveryService
             $query = trim((string) ($campaign->topic ?: 'latest news'));
         }
 
+        if ($sourceMode === 'local' && $localPreference !== '') {
+            $query = trim($query . ' ' . $localPreference);
+        }
+
+        if ($sourceMode === 'trending') {
+            $categories = array_values(array_filter((array) ($resolved['campaign_trending_categories'] ?? [])));
+            if (!empty($categories)) {
+                $category = (string) $categories[array_rand($categories)];
+                $query = trim($query !== '' ? ($query . ' ' . $category) : $category);
+            }
+        }
+
+        if ($sourceMode === 'genre') {
+            $genre = trim((string) ($resolved['campaign_genre'] ?? ''));
+            $category = $genre !== '' ? $genre : $category;
+            if ($query === '' && $genre !== '') {
+                $query = $genre;
+            }
+        }
+
         return [
             'query' => $query,
             'selected_term' => $selectedTerm ? (string) $selectedTerm : null,
             'category' => $category,
+            'genre' => $genre !== '' ? $genre : null,
             'source_mode' => $sourceMode,
         ];
     }
@@ -81,8 +104,9 @@ class CampaignDiscoveryService
         }
 
         $urls = $this->sourceDiscovery->discoverUrls($context['query'], [
-            'mode' => 'keyword',
+            'mode' => $context['source_mode'] ?: 'keyword',
             'category' => $context['category'],
+            'genre' => $context['genre'],
             'sources' => $resolved['article_sources'] ?? [],
         ], $limit);
 

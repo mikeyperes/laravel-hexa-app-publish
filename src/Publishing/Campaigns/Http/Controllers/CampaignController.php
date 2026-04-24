@@ -388,16 +388,19 @@ class CampaignController extends Controller
                 'record' => $campaign->campaignPreset,
             ]),
             'campaignPresetValues' => \hexa_app_publish\Publishing\Campaigns\Forms\CampaignPresetForm::values($campaign->campaignPreset),
+            'campaignPresetOverrides' => (array) ($campaign->campaign_preset_overrides ?? []),
             'articlePresetFields' => $articlePresetForm->toClientPayload('edit', [
                 'mode' => 'edit',
                 'context' => 'edit',
                 'record' => $campaign->template,
             ]),
             'articlePresetValues' => \hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm::values($campaign->template),
+            'articlePresetOverrides' => (array) ($campaign->article_preset_overrides ?? []),
             'campaignPresetSchema' => \hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset::getFieldSchema('edit'),
             'articlePresetSchema' => \hexa_app_publish\Publishing\Templates\Models\PublishTemplate::getFieldSchema('edit'),
             'cronJobsData' => $cronJobsData,
             'primaryCronRunUrl' => $primaryCronJob ? route('tools.cron-manager.run', ['cronJob' => $primaryCronJob->id]) : null,
+            'cronManagerUrl' => route('tools.cron-manager'),
             'schedulerHealth' => $schedulerHealth,
             'recentOperations' => $recentOperationSummaries,
             'activeOperation' => $activeOperation ? $this->serializeOperation($activeOperation) : null,
@@ -470,6 +473,7 @@ class CampaignController extends Controller
             'name' => $job->name,
             'command' => $job->command,
             'description' => $job->description,
+            'package_name' => $job->package_name,
             'enabled' => (bool) $job->is_enabled,
             'schedule' => $job->schedule,
             'schedule_label' => $job->getScheduleLabel(),
@@ -477,7 +481,11 @@ class CampaignController extends Controller
             'next_run' => $this->formatAuditTimestamp($nextRun, $timezone, 'Pending'),
             'last_status' => $job->last_status ?: 'never',
             'run_count' => (int) ($job->run_count ?: 0),
+            'created_at' => $this->formatAuditTimestamp($job->created_at, $timezone, '—'),
+            'updated_at' => $this->formatAuditTimestamp($job->updated_at, $timezone, '—'),
+            'last_output' => $job->last_output ? trim((string) $job->last_output) : null,
             'last_output_preview' => $this->truncateCronOutput($job->last_output),
+            'output_url' => route('tools.cron-manager.output', ['cronJob' => $job->id]),
             'run_url' => route('tools.cron-manager.run', ['cronJob' => $job->id]),
         ];
     }
@@ -854,6 +862,8 @@ class CampaignController extends Controller
             'interval_unit' => 'nullable|in:hourly,daily,weekly,monthly',
             'run_at_time' => 'nullable|string|max:10',
             'drip_interval_minutes' => 'nullable|integer|min:1|max:1440',
+            'campaign_preset_overrides' => 'nullable|array',
+            'article_preset_overrides' => 'nullable|array',
         ]);
 
         // Resolve account from site
@@ -871,6 +881,20 @@ class CampaignController extends Controller
             $validated['user_id'] ?? $campaign->user_id,
             $campaign->timezone
         );
+
+        if ($request->exists('campaign_preset_overrides')) {
+            $validated['campaign_preset_overrides'] = $this->resolveCampaignPresetOverrides(
+                $campaign,
+                (array) ($validated['campaign_preset_overrides'] ?? [])
+            );
+        }
+
+        if ($request->exists('article_preset_overrides')) {
+            $validated['article_preset_overrides'] = $this->resolveArticlePresetOverrides(
+                $campaign,
+                (array) ($validated['article_preset_overrides'] ?? [])
+            );
+        }
 
         $campaign->update(array_filter($validated, fn($value, $key) => $value !== null || $request->exists($key), ARRAY_FILTER_USE_BOTH));
 
@@ -987,6 +1011,86 @@ class CampaignController extends Controller
                 $request->merge([$field => null]);
             }
         }
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>|null
+     */
+    private function resolveCampaignPresetOverrides(PublishCampaign $campaign, array $payload): ?array
+    {
+        if ($payload === []) {
+            return null;
+        }
+
+        $runtime = app(\hexa_core\Forms\Runtime\FormRuntimeService::class);
+        $context = [
+            'context' => 'pipeline',
+            'mode' => 'pipeline',
+            'record' => $campaign->campaignPreset,
+        ];
+
+        $normalized = $runtime->normalizeSubmission(\hexa_app_publish\Publishing\Campaigns\Forms\CampaignPresetForm::FORM_KEY, $payload, $context);
+        $defaults = $runtime->hydrate(\hexa_app_publish\Publishing\Campaigns\Forms\CampaignPresetForm::FORM_KEY, $campaign->campaignPreset, [], $context);
+        $dirty = [];
+
+        foreach (array_keys($payload) as $key) {
+            $value = $normalized[$key] ?? null;
+            if (!$this->valuesDiffer($value, $defaults[$key] ?? null)) {
+                continue;
+            }
+
+            $dirty[$key] = $value;
+        }
+
+        $dehydrated = $runtime->dehydrate(\hexa_app_publish\Publishing\Campaigns\Forms\CampaignPresetForm::FORM_KEY, $dirty, $context);
+        unset($dehydrated['keywords'], $dehydrated['ai_instructions']);
+
+        return !empty($dehydrated) ? $dehydrated : null;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>|null
+     */
+    private function resolveArticlePresetOverrides(PublishCampaign $campaign, array $payload): ?array
+    {
+        if ($payload === []) {
+            return null;
+        }
+
+        $runtime = app(\hexa_core\Forms\Runtime\FormRuntimeService::class);
+        $context = [
+            'context' => 'pipeline',
+            'mode' => 'pipeline',
+            'record' => $campaign->template,
+        ];
+
+        $normalized = $runtime->normalizeSubmission(\hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm::FORM_KEY, $payload, $context);
+        $defaults = $runtime->hydrate(\hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm::FORM_KEY, $campaign->template, [], $context);
+        $dirty = [];
+
+        foreach (array_keys($payload) as $key) {
+            $value = $normalized[$key] ?? null;
+            if (!$this->valuesDiffer($value, $defaults[$key] ?? null)) {
+                continue;
+            }
+
+            $dirty[$key] = $value;
+        }
+
+        $dehydrated = $runtime->dehydrate(\hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm::FORM_KEY, $dirty, $context);
+
+        return !empty($dehydrated) ? $dehydrated : null;
+    }
+
+    private function valuesDiffer(mixed $left, mixed $right): bool
+    {
+        if (is_array($left) || is_array($right)) {
+            return json_encode($left) !== json_encode($right);
+        }
+
+        return $left !== $right;
     }
 
     private function resolveCampaignTimezone(?int $userId, ?string $fallback = null): string

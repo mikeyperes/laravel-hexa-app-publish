@@ -13,6 +13,8 @@ use hexa_package_newsdata\Services\NewsDataService;
 use hexa_package_sapling\Services\SaplingService;
 use hexa_package_anthropic\Services\AnthropicService;
 use hexa_package_chatgpt\Services\ChatGptService;
+use hexa_package_grok\Services\GrokService;
+use hexa_package_gemini\Services\GeminiService;
 use hexa_package_telegram\Services\TelegramService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -60,6 +62,8 @@ class SettingsController extends Controller
             'sapling' => app(SaplingService::class)->testApiKey(),
             'anthropic' => app(AnthropicService::class)->testApiKey(),
             'chatgpt' => app(ChatGptService::class)->testApiKey(),
+            'grok' => app(GrokService::class)->testApiKey(),
+            'gemini' => app(GeminiService::class)->testApiKey(),
             'telegram' => app(TelegramService::class)->testBotToken(),
             default => ['success' => false, 'message' => "Unknown service: {$service}"],
         };

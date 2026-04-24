@@ -48,7 +48,7 @@
                 try {
                     const r = await fetch('/publish/sites/' + siteId + '/test-write', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }
+                        headers: window.hexaRequestHeaders({ 'Content-Type': 'application/json' })
                     });
                     const d = await r.json();
 
@@ -84,6 +84,7 @@
                         status: this.siteConn.status,
                         message: this.siteConn.message,
                         authors: this.siteConn.authors,
+                        default_author: this.siteConn.defaultAuthor,
                     }));
                 }
             },
@@ -106,6 +107,7 @@
                     this.siteConn.status = conn.status;
                     this.siteConn.message = conn.message;
                     this.siteConn.authors = conn.authors;
+                    this.siteConn.defaultAuthor = conn.default_author || null;
                     return true;
                 } catch (e) {
                     return false;

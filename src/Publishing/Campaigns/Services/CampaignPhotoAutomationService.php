@@ -229,12 +229,36 @@ class CampaignPhotoAutomationService
             ],
         ]);
         foreach ($ranked as $candidate) {
+            if ($this->isRejectedCandidate($candidate, $qualityContext)) {
+                continue;
+            }
+
             if (!empty($candidate['quality_pass'])) {
                 return $candidate;
             }
         }
 
-        return $ranked[0] ?? null;
+        return null;
+    }
+
+    private function isRejectedCandidate(array $candidate, string $qualityContext): bool
+    {
+        if ($qualityContext !== 'featured') {
+            return false;
+        }
+
+        $domain = strtolower((string) ($candidate['domain'] ?? parse_url((string) ($candidate['url_large'] ?? $candidate['url'] ?? ''), PHP_URL_HOST) ?? ''));
+        if ($domain === '') {
+            return false;
+        }
+
+        foreach (['preview.redd.it', 'i.redd.it', 'reddit.com', 'www.reddit.com'] as $blockedDomain) {
+            if ($domain === $blockedDomain || str_ends_with($domain, '.' . $blockedDomain)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -253,13 +277,17 @@ class CampaignPhotoAutomationService
             $providers[] = 'google';
         }
 
-        if ($qualityContext === 'featured') {
-            return $providers;
+        if (Setting::getValue('use_serper_search', '0') === '1' && class_exists(\hexa_package_serper\Services\SerperService::class)) {
+            $providers[] = 'serper';
         }
 
         foreach ($preferredSources as $source) {
             $normalized = strtolower(trim((string) $source));
-            if ($normalized !== '' && !in_array($normalized, $providers, true)) {
+            if ($normalized === '' || in_array($normalized, ['google', 'google-cse', 'serpapi', 'serper'], true)) {
+                continue;
+            }
+
+            if (!in_array($normalized, $providers, true)) {
                 $providers[] = $normalized;
             }
         }
@@ -273,8 +301,10 @@ class CampaignPhotoAutomationService
     private function searchProvider(string $provider, string $searchTerm): array
     {
         return match ($provider) {
+            'google' => $this->searchGoogleAuto($searchTerm),
             'google-cse' => $this->searchGoogleCse($searchTerm),
-            'google', 'serpapi' => $this->searchSerp($searchTerm),
+            'serpapi' => $this->searchSerp($searchTerm),
+            'serper' => $this->searchSerper($searchTerm),
             default => $this->searchStock($searchTerm, $provider),
         };
     }
@@ -300,6 +330,26 @@ class CampaignPhotoAutomationService
     /**
      * @return array<int, array<string, mixed>>
      */
+    private function searchGoogleAuto(string $searchTerm): array
+    {
+        foreach (['google-cse', 'serpapi', 'serper'] as $provider) {
+            $photos = match ($provider) {
+                'google-cse' => $this->searchGoogleCse($searchTerm),
+                'serpapi' => $this->searchSerp($searchTerm),
+                'serper' => $this->searchSerper($searchTerm),
+            };
+
+            if (!empty($photos)) {
+                return $photos;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function searchSerp(string $searchTerm): array
     {
         if (!class_exists(\hexa_package_serpapi\Services\SerpApiService::class)) {
@@ -307,6 +357,19 @@ class CampaignPhotoAutomationService
         }
 
         $result = app(\hexa_package_serpapi\Services\SerpApiService::class)->searchImages($searchTerm, 8, 0, 'photo');
+        return array_values((array) ($result['data']['photos'] ?? []));
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function searchSerper(string $searchTerm): array
+    {
+        if (!class_exists(\hexa_package_serper\Services\SerperService::class)) {
+            return [];
+        }
+
+        $result = app(\hexa_package_serper\Services\SerperService::class)->searchImages($searchTerm, 8, 0);
         return array_values((array) ($result['data']['photos'] ?? []));
     }
 

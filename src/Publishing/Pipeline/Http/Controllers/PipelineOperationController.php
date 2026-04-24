@@ -215,6 +215,7 @@ class PipelineOperationController extends Controller
             'completed_at' => optional($operation->completed_at)->toIso8601String(),
             'last_event_at' => optional($operation->last_event_at)->toIso8601String(),
             'stream_supported' => $this->operationService->supportsLiveStream(),
+            'show_url' => route('publish.pipeline.operations.show', ['operation' => $operation->id]),
             'stream_url' => route('publish.pipeline.operations.stream', ['operation' => $operation->id]),
         ];
     }

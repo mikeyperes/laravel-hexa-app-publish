@@ -318,7 +318,23 @@
 
         async _rawPipelineFetch(input, init = {}) {
             const originalFetch = window.__publishPipelineOriginalFetch || window.fetch.bind(window);
-            const headers = new Headers(init?.headers || {});
+            const baseHeaders = typeof window.hexaRequestHeaders === 'function'
+                ? window.hexaRequestHeaders()
+                : {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(this.csrfToken ? { 'X-CSRF-TOKEN': this.csrfToken } : {}),
+                };
+            const headers = new Headers(baseHeaders);
+            const requestedHeaders = new Headers(init?.headers || {});
+            requestedHeaders.forEach((value, key) => {
+                if (/^x-csrf-token$/i.test(key) || /^x-xsrf-token$/i.test(key)) {
+                    return;
+                }
+
+                headers.set(key, value);
+            });
+
             headers.set('X-Pipeline-Draft-Id', String(this.draftId || ''));
             headers.set('X-Pipeline-Tab-Id', this._ensureTabInstanceId());
             if (this.pipelineDebugEnabled) headers.set('X-Pipeline-Debug', '1');

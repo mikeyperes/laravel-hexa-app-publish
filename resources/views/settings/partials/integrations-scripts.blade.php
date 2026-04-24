@@ -10,6 +10,10 @@ function integrationField(serviceName, currentKey, saveUrl, testUrl) {
         testing: false,
         resultMessage: '',
         resultSuccess: false,
+        maskValue(value) {
+            if (!value) return '';
+            return value.length <= 4 ? '••••••••' : '••••••••' + value.slice(-4);
+        },
         async saveKey() {
             this.saving = true;
             this.resultMessage = '';
@@ -27,7 +31,7 @@ function integrationField(serviceName, currentKey, saveUrl, testUrl) {
                 this.resultSuccess = data.success !== false;
                 this.resultMessage = data.message || 'Saved.';
                 if (this.resultSuccess) {
-                    this.storedKey = this.newKey;
+                    this.storedKey = this.maskValue(this.newKey);
                     this.newKey = '';
                     this.editing = false;
                 }

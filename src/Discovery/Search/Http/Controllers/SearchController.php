@@ -160,7 +160,7 @@ class SearchController extends Controller
     }
 
     /**
-     * Search Google Images (CSE first, SerpAPI fallback).
+     * Search Google Images through Google CSE, SerpAPI, or Serper.dev.
      */
     public function searchGoogleImages(Request $request): JsonResponse
     {
@@ -169,6 +169,7 @@ class SearchController extends Controller
             'draft_id' => 'nullable|integer|exists:publish_articles,id',
             'per_page' => 'integer|min:1|max:20',
             'start'    => 'integer|min:0|max:100',
+            'provider' => 'nullable|in:auto,google-cse,serpapi,serper',
             'quality_context' => 'nullable|in:inline,featured,general',
             'probe_quality' => 'nullable|boolean',
         ]);
@@ -178,78 +179,130 @@ class SearchController extends Controller
         $start = (int) $request->input('start', 0);
         $qualityContext = (string) $request->input('quality_context', 'featured');
         $probeQuality = $request->boolean('probe_quality', true);
+        $requestedProvider = (string) $request->input('provider', 'auto');
         $draft = $this->resolveDraft($request->input('draft_id'));
-        $result = null;
-        $provider = null;
-        $timing = 0;
         $mediaSearch = app(MediaSearchService::class);
 
         $useGoogle = \hexa_core\Models\Setting::getValue('use_google_image_search', '0') === '1';
         $useSerp = \hexa_core\Models\Setting::getValue('use_serpapi_search', '0') === '1';
-        $fallback = \hexa_core\Models\Setting::getValue('google_fallback_serpapi', '1') === '1';
+        $useSerper = \hexa_core\Models\Setting::getValue('use_serper_search', '0') === '1';
+        $fallbackToSerp = \hexa_core\Models\Setting::getValue('google_fallback_serpapi', '1') === '1';
 
-        // Try Google CSE first
-        if ($useGoogle && class_exists(\hexa_package_google_cse\Services\GoogleCseService::class)) {
-            $cse = app(\hexa_package_google_cse\Services\GoogleCseService::class);
-            if (!$cse->isQuotaExhausted()) {
-                $t0 = microtime(true);
-                $result = $cse->searchImages($query, $perPage, $start + 1);
-                $timing = round((microtime(true) - $t0) * 1000);
-                $provider = 'google-cse';
+        $providers = $requestedProvider !== 'auto'
+            ? [$requestedProvider]
+            : $this->googleImageProviderSequence($useGoogle, $useSerp, $useSerper, $fallbackToSerp);
 
-                if ($result['success']) {
-                    $this->recordGoogleImageAudit($draft, $query, $qualityContext, $provider, $result);
-                    $result['data']['photos'] = $mediaSearch->rankPhotos(
-                        (array) ($result['data']['photos'] ?? []),
-                        $qualityContext,
-                        $probeQuality
-                    );
-                    $result['data']['provider'] = 'google-cse';
-                    $result['data']['timing_ms'] = $timing;
-                    $result['message'] .= " ({$timing}ms via Google CSE)";
-                    return response()->json($result);
-                }
-
-                // CSE failed — fall through to SerpAPI if enabled
-                if ($fallback && $useSerp) {
-                    $result = null;
-                }
-            } elseif ($fallback && $useSerp) {
-                // Already exhausted, fall through
-            } else {
-                return response()->json(['success' => false, 'message' => 'Google CSE daily quota exhausted. Enable SerpAPI fallback in settings.', 'data' => null]);
-            }
+        if (empty($providers)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No Google image search provider configured. Enable Google CSE, SerpAPI, or Serper.dev in Publishing Settings.',
+                'data' => null,
+            ]);
         }
 
-        // SerpAPI (primary or fallback)
-        if (!$result && $useSerp && class_exists(\hexa_package_serpapi\Services\SerpApiService::class)) {
-            $serp = app(\hexa_package_serpapi\Services\SerpApiService::class);
-            $t0 = microtime(true);
-            $result = $serp->searchImages($query, $perPage, $start, 'photo');
-            $timing = round((microtime(true) - $t0) * 1000);
-            $provider = 'serpapi';
+        $errors = [];
 
-            if ($result['success']) {
+        foreach ($providers as $provider) {
+            if (!$this->googleImageProviderEnabled($provider, $useGoogle, $useSerp, $useSerper)) {
+                $errors[] = $this->googleImageProviderLabel($provider) . ' is disabled in Publishing Settings.';
+                continue;
+            }
+
+            $t0 = microtime(true);
+            $result = $this->executeGoogleImageProviderSearch($provider, $query, $perPage, $start);
+            $timing = (int) round((microtime(true) - $t0) * 1000);
+
+            if ($result['success'] ?? false) {
                 $this->recordGoogleImageAudit($draft, $query, $qualityContext, $provider, $result);
                 $result['data']['photos'] = $mediaSearch->rankPhotos(
                     (array) ($result['data']['photos'] ?? []),
                     $qualityContext,
                     $probeQuality
                 );
-                $result['data']['provider'] = 'serpapi';
+                $result['data']['provider'] = $provider;
                 $result['data']['timing_ms'] = $timing;
-                $result['message'] .= " ({$timing}ms via SerpAPI)";
+                $result['message'] = trim(($result['message'] ?? 'Image search succeeded.') . ' (' . $timing . 'ms via ' . $this->googleImageProviderLabel($provider) . ')');
                 return response()->json($result);
             }
+
+            $errors[] = $this->googleImageProviderLabel($provider) . ': ' . ($result['message'] ?? 'Request failed.');
         }
 
-        if (!$result) {
-            $msg = 'No Google image search provider configured.';
-            if (!$useGoogle && !$useSerp) $msg .= ' Enable Google CSE or SerpAPI in Publishing Settings.';
-            return response()->json(['success' => false, 'message' => $msg, 'data' => null]);
+        return response()->json([
+            'success' => false,
+            'message' => implode(' | ', $errors),
+            'data' => [
+                'provider' => $requestedProvider,
+            ],
+        ]);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function googleImageProviderSequence(bool $useGoogle, bool $useSerp, bool $useSerper, bool $fallbackToSerp): array
+    {
+        $providers = [];
+
+        if ($useGoogle && class_exists(\hexa_package_google_cse\Services\GoogleCseService::class)) {
+            $providers[] = 'google-cse';
         }
 
-        return response()->json($result);
+        if ($useSerp && class_exists(\hexa_package_serpapi\Services\SerpApiService::class) && (!$useGoogle || $fallbackToSerp)) {
+            $providers[] = 'serpapi';
+        }
+
+        if ($useSerper && class_exists(\hexa_package_serper\Services\SerperService::class)) {
+            $providers[] = 'serper';
+        }
+
+        return array_values(array_unique($providers));
+    }
+
+    private function googleImageProviderEnabled(string $provider, bool $useGoogle, bool $useSerp, bool $useSerper): bool
+    {
+        return match ($provider) {
+            'google-cse' => $useGoogle && class_exists(\hexa_package_google_cse\Services\GoogleCseService::class),
+            'serpapi' => $useSerp && class_exists(\hexa_package_serpapi\Services\SerpApiService::class),
+            'serper' => $useSerper && class_exists(\hexa_package_serper\Services\SerperService::class),
+            default => false,
+        };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function executeGoogleImageProviderSearch(string $provider, string $query, int $perPage, int $start): array
+    {
+        return match ($provider) {
+            'google-cse' => $this->runGoogleCseImageSearch($query, $perPage, $start),
+            'serpapi' => app(\hexa_package_serpapi\Services\SerpApiService::class)->searchImages($query, $perPage, $start, 'photo'),
+            'serper' => app(\hexa_package_serper\Services\SerperService::class)->searchImages($query, $perPage, $start),
+            default => ['success' => false, 'message' => 'Unsupported provider.', 'data' => null],
+        };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function runGoogleCseImageSearch(string $query, int $perPage, int $start): array
+    {
+        $cse = app(\hexa_package_google_cse\Services\GoogleCseService::class);
+        if ($cse->isQuotaExhausted()) {
+            return ['success' => false, 'message' => 'Google CSE daily quota exhausted.', 'data' => null];
+        }
+
+        return $cse->searchImages($query, $perPage, $start + 1);
+    }
+
+    private function googleImageProviderLabel(string $provider): string
+    {
+        return match ($provider) {
+            'google-cse' => 'Google CSE',
+            'serpapi' => 'SerpAPI',
+            'serper' => 'Serper.dev',
+            default => $provider,
+        };
     }
 
     private function resolveDraft(mixed $draftId): ?PublishArticle

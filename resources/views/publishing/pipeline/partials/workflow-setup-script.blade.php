@@ -25,6 +25,7 @@
                 }
                 if (step === 7 || this.openSteps.includes(7)) {
                     this.$nextTick(() => this._restorePipelineOperations());
+                    this._focusPublishActionBox({ behavior: 'smooth' });
                 }
                 this._syncStepToUrl();
                 this._logActivity('ui', 'step', 'Navigated to step ' + step, {
@@ -49,6 +50,7 @@
             }
             if (step === 7 && this.openSteps.includes(7)) {
                 this.$nextTick(() => this._restorePipelineOperations());
+                this._focusPublishActionBox({ behavior: 'smooth' });
             }
             this._syncStepToUrl();
             this._logDebug('ui', 'Toggled step ' + step, {
@@ -66,6 +68,7 @@
             }
             if (step === 7 || this.openSteps.includes(7)) {
                 this.$nextTick(() => this._restorePipelineOperations());
+                this._focusPublishActionBox({ behavior: 'smooth' });
             }
             if (!this._restoring) this._syncStepToUrl();
             this._logDebug('ui', 'Opened step ' + step, {
@@ -290,7 +293,7 @@
             try {
                 const resp = await fetch('{{ route("publish.pipeline.upload-source-doc") }}', {
                     method: 'POST',
-                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders(),
                     body: formData,
                 });
                 const data = await resp.json();
@@ -404,7 +407,7 @@
             try {
                 const resp = await fetch('{{ route('publish.search.articles.post') }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         query: this.newsSearch,
                         mode: this.newsMode,
@@ -454,7 +457,7 @@
 
                 const resp = await fetch('{{ route("publish.pipeline.ai-search") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         topic: this.aiSearchTopic,
                         draft_id: this.draftId || null,
@@ -562,7 +565,7 @@
                 try {
                     const resp = await fetch('/notion/profile/' + profile.id + '/context', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                        headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                         body: JSON.stringify({ fresh: false }),
                     });
                     const data = await resp.json();
@@ -595,7 +598,7 @@
             try {
                 const resp = await fetch('/notion/profile/' + profileId + '/relations/' + slug, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ fresh: false }),
                 });
                 const data = await resp.json();
@@ -621,7 +624,7 @@
             try {
                 const resp = await fetch('/notion/page/' + entryId + '/detail', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ fresh: false }),
                 });
                 const data = await resp.json();
@@ -713,7 +716,7 @@
             try {
                 const resp = await fetch('{{ route("notion.profile.fetch-photos") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ drive_url: data.driveUrl }),
                 });
                 const result = await resp.json();
@@ -760,7 +763,7 @@
             try {
                 await fetch('/publish/scrape-activity/ban', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         domain: new URL(source.url).hostname,
                         reason: 'Flagged as broken from pipeline — ' + (result?.message || 'user flagged'),
@@ -806,7 +809,7 @@
             try {
                 await fetch('{{ route("publish.failed-sources.store") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         url: source.url,
                         title: source.title || '',
@@ -888,7 +891,7 @@
             try {
                 const resp = await fetch('{{ route('publish.pipeline.check') }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         urls: this.sources.map(s => s.url),
                         user_agent: this.checkUserAgent,
@@ -945,7 +948,7 @@
             try {
                 const resp = await fetch('{{ route('publish.pipeline.check') }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         urls: [source.url],
                         user_agent: 'googlebot',

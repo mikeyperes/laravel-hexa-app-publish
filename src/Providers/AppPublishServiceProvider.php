@@ -53,9 +53,8 @@ class AppPublishServiceProvider extends ServiceProvider
 
         $this->registerCrons();
 
-        if ($this->app->runningInConsole()) {
-            $this->commands([RunCampaignsCommand::class, CleanupOrphanUploadsCommand::class]);
-        }
+        // Register publish commands for both CLI and web-triggered Artisan::call() cron runs.
+        $this->commands([RunCampaignsCommand::class, CleanupOrphanUploadsCommand::class]);
     }
 
     private function registerCalendarSources(): void

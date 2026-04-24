@@ -250,6 +250,50 @@
     </template>
 </div>
 
+{{-- ═══ Grok ═══ --}}
+@php $grokKey = app(\hexa_core\Services\CredentialService::class)->getMasked('grok', 'api_key') ?: \hexa_core\Models\Setting::getValue('grok_api_key', ''); @endphp
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6" x-data="integrationField('grok', '{{ $grokKey }}', '{{ route('settings.update') }}', '{{ route('settings.test-integration') }}')">
+    <h2 class="font-semibold text-gray-800 mb-2">Grok</h2>
+    <div class="flex items-center gap-2 mb-3">
+        <span class="w-2 h-2 rounded-full" :class="storedKey ? 'bg-green-400' : 'bg-yellow-400'"></span>
+        <span class="text-sm font-medium" :class="storedKey ? 'text-green-700' : 'text-yellow-700'" x-text="storedKey ? 'API Key Configured' : 'Not Configured'"></span>
+    </div>
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3 text-xs text-gray-600 space-y-1.5">
+        <p class="font-semibold text-gray-700">Setup steps:</p>
+        <ol class="list-decimal list-inside space-y-1">
+            <li>Go to <a href="https://console.x.ai/" target="_blank" class="text-blue-600 underline">console.x.ai &#8599;</a></li>
+            <li>Create a new API key</li>
+            <li>Paste it below and save</li>
+        </ol>
+        <p class="text-gray-500 mt-1">Used for Grok-backed search and generation workflows.</p>
+    </div>
+    <template x-if="true">
+        <div>@include('app-publish::settings.partials.api-key-field', ['settingKey' => 'grok_api_key', 'name' => 'Grok'])</div>
+    </template>
+</div>
+
+{{-- ═══ Gemini ═══ --}}
+@php $geminiKey = app(\hexa_core\Services\CredentialService::class)->getMasked('gemini', 'api_key') ?: \hexa_core\Models\Setting::getValue('gemini_api_key', ''); @endphp
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6" x-data="integrationField('gemini', '{{ $geminiKey }}', '{{ route('settings.update') }}', '{{ route('settings.test-integration') }}')">
+    <h2 class="font-semibold text-gray-800 mb-2">Gemini</h2>
+    <div class="flex items-center gap-2 mb-3">
+        <span class="w-2 h-2 rounded-full" :class="storedKey ? 'bg-green-400' : 'bg-yellow-400'"></span>
+        <span class="text-sm font-medium" :class="storedKey ? 'text-green-700' : 'text-yellow-700'" x-text="storedKey ? 'API Key Configured' : 'Not Configured'"></span>
+    </div>
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3 text-xs text-gray-600 space-y-1.5">
+        <p class="font-semibold text-gray-700">Setup steps:</p>
+        <ol class="list-decimal list-inside space-y-1">
+            <li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-600 underline">Google AI Studio &#8599;</a></li>
+            <li>Create a Gemini API key</li>
+            <li>Paste it below and save</li>
+        </ol>
+        <p class="text-gray-500 mt-1">Used for Gemini grounded search, URL extraction, and article generation workflows.</p>
+    </div>
+    <template x-if="true">
+        <div>@include('app-publish::settings.partials.api-key-field', ['settingKey' => 'gemini_api_key', 'name' => 'Gemini'])</div>
+    </template>
+</div>
+
 {{-- ═══ Telegram ═══ --}}
 @php $telegramToken = \hexa_core\Models\Setting::getValue('telegram_bot_token', ''); @endphp
 @php $telegramChatId = \hexa_core\Models\Setting::getValue('telegram_chat_id', ''); @endphp

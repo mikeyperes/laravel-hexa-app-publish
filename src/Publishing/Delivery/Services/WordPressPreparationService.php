@@ -2,6 +2,7 @@
 
 namespace hexa_app_publish\Publishing\Delivery\Services;
 
+use hexa_app_publish\Discovery\Links\Health\Services\LinkHealthService;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
@@ -229,6 +230,28 @@ class WordPressPreparationService
         // Step 3: Create tags
         $tagIds = $this->createTags($site, $mode, $server, $installId, $options['tags'] ?? [], $send);
 
+        $this->emitProgress($send, 'info', 'Checking article links for 404s...', 'integrity', 'links_start');
+        $linkHealth = app(LinkHealthService::class)->sanitizeHtmlAnchors($html, 'prepare');
+        $html = $linkHealth['html'];
+
+        if (($linkHealth['updated'] ?? 0) > 0) {
+            $this->emitProgress($send, 'success', 'Canonicalized ' . $linkHealth['updated'] . ' redirected link(s).', 'integrity', 'links_canonicalized', [
+                'updated_count' => $linkHealth['updated'],
+            ]);
+        }
+
+        if (($linkHealth['removed'] ?? 0) > 0) {
+            $this->emitProgress($send, 'warning', 'Removed ' . $linkHealth['removed'] . ' broken link(s) before publish.', 'integrity', 'links_removed', [
+                'removed_count' => $linkHealth['removed'],
+            ]);
+        }
+
+        if (($linkHealth['failed'] ?? 0) > 0) {
+            $this->emitProgress($send, 'warning', 'Skipped ' . $linkHealth['failed'] . ' link probe(s) because the remote check failed.', 'integrity', 'links_probe_failed', [
+                'failed_count' => $linkHealth['failed'],
+            ]);
+        }
+
         // Step 4: Integrity check — validate HTML structure, photos, and cleanup
         $this->emitProgress($send, 'info', "Running integrity check...", 'integrity', 'start');
         $integrityIssues = [];
@@ -259,6 +282,13 @@ class WordPressPreparationService
             $integrityIssues[] = 'Alpine.js directives found in content';
             $html = preg_replace('/\s+(?:x-[\w.-]+|@[\w.-]+(?:\.\w+)*|:[\w-]+)\s*=\s*"[^"]*"/i', '', $html);
             $html = preg_replace('/\s+x-cloak/i', '', $html);
+        }
+
+        if (($linkHealth['removed'] ?? 0) > 0) {
+            $integrityIssues[] = $linkHealth['removed'] . ' broken link(s) removed before publish';
+        }
+        if (($linkHealth['failed'] ?? 0) > 0) {
+            $integrityIssues[] = $linkHealth['failed'] . ' link probe(s) could not be verified';
         }
 
         // Check for broken/unclosed tags

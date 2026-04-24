@@ -230,6 +230,8 @@ return [
     'ai_engines' => [
         'anthropic',
         'chatgpt',
+        'grok',
+        'gemini',
     ],
 
     /*
@@ -263,7 +265,7 @@ return [
             'max_aspect_ratio' => 2.4,
             'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp'],
             'allowed_mime_types' => ['image/jpeg', 'image/png', 'image/webp'],
-            'preferred_sources' => ['google-cse', 'google', 'serpapi'],
+            'preferred_sources' => ['google-cse', 'google', 'serpapi', 'serper'],
         ],
         'inline' => [
             'min_width' => 900,
@@ -273,7 +275,7 @@ return [
             'max_aspect_ratio' => 2.4,
             'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp'],
             'allowed_mime_types' => ['image/jpeg', 'image/png', 'image/webp'],
-            'preferred_sources' => ['google-cse', 'google', 'serpapi', 'pexels', 'unsplash', 'pixabay'],
+            'preferred_sources' => ['google-cse', 'google', 'serpapi', 'serper', 'pexels', 'unsplash', 'pixabay'],
         ],
     ],
 

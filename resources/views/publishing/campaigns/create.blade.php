@@ -382,8 +382,8 @@ function campaignCreate() {
                 this.saveSuccess = data.success;
                 this.saveResult = data.message || (data.success ? 'Saved.' : 'Error.');
                 if (data.success && data.campaign?.id) {
-                    this.editId = data.campaign.id;
-                    history.replaceState(null, '', '{{ route("campaigns.create") }}?id=' + data.campaign.id);
+                    window.location.href = '{{ url('/campaigns') }}/' + data.campaign.id;
+                    return;
                 }
             } catch (e) {
                 this.saveSuccess = false;

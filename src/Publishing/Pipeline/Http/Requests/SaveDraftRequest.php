@@ -19,6 +19,8 @@ class SaveDraftRequest extends PipelineRequest
             'article_type' => 'nullable|string|max:100',
             'ai_model' => 'nullable|string|max:100',
             'author' => 'nullable|string|max:255',
+            'publish_action' => 'nullable|string|in:publish,draft_local,draft_wp,future',
+            'schedule_date' => 'nullable|date',
             'sources' => 'nullable|array',
             'tags' => 'nullable|array',
             'categories' => 'nullable|array',

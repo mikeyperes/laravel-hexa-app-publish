@@ -86,10 +86,15 @@
                 </div>
             </div>
             <div class="hx-card-header-right">
-                <button @click="runNow()" :disabled="runningNow" class="hx-btn hx-btn-primary">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                    <span x-show="!runningNow">Run Now</span>
-                    <span x-show="runningNow" x-cloak>Running…</span>
+                <button @click="startOperation('draft-wordpress', 'Instant Draft')" :disabled="running" class="hx-btn hx-btn-secondary">
+                    <svg x-show="running && runningMode === 'draft-wordpress'" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    <svg x-show="!running || runningMode !== 'draft-wordpress'" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    <span>Instant Draft</span>
+                </button>
+                <button @click="startOperation('auto-publish', 'Instant Publish')" :disabled="running" class="hx-btn hx-btn-primary">
+                    <svg x-show="running && runningMode === 'auto-publish'" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    <svg x-show="!running || runningMode !== 'auto-publish'" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    <span>Instant Publish</span>
                 </button>
                 <button x-show="campaignStatus === 'active'" x-cloak @click="pauseCampaign()" class="hx-btn hx-btn-amber">Pause</button>
                 <button x-show="campaignStatus !== 'active'" x-cloak @click="activateCampaign()" class="hx-btn hx-btn-green">Activate</button>
@@ -105,6 +110,120 @@
             <div>
                 <span x-show="saving" x-cloak class="text-gray-400">Saving…</span>
                 <span x-show="!saving && saveResult" x-cloak :class="saveSuccess ? 'text-green-600' : 'text-red-500'" x-text="saveResult"></span>
+            </div>
+        </div>
+    </div>
+
+    {{-- ───────────────────────────────────────────────
+         LIVE RUN CHECKLIST
+         ─────────────────────────────────────────────── --}}
+    <div class="hx-card" x-ref="liveChecklistCard">
+        <div class="hx-card-header">
+            <div class="hx-card-title-block">
+                <div class="hx-card-icon indigo">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <div>
+                    <h3 class="hx-card-title">Instant Run Output</h3>
+                    <p class="hx-card-subtitle">Streams the same campaign runner stages the cron system uses, plus the article publish checklist, in real time.</p>
+                </div>
+            </div>
+            <div class="hx-card-header-right text-right">
+                <div class="text-xs text-gray-500 space-y-1">
+                    <p x-show="operationLabel" x-cloak class="font-medium text-gray-700" x-text="operationLabel"></p>
+                    <p x-show="operationStatus" x-cloak x-text="'Status: ' + operationStatus + (operationTransport ? ' via ' + operationTransport.replace(/_/g, ' ') : '')"></p>
+                    <p x-show="operationTraceId" x-cloak x-text="'Trace: ' + operationTraceId"></p>
+                    <p x-show="operationStartedAt || running" x-cloak x-text="'Elapsed: ' + operationElapsedText()"></p>
+                    <p x-show="campaignChecklist.length > 0" x-cloak x-text="checklistProgressText()"></p>
+                </div>
+            </div>
+        </div>
+        <div class="hx-card-body">
+            <div x-show="runResult" x-cloak class="mb-4 p-3 rounded-lg text-sm border" :class="{
+                'bg-blue-50 border-blue-200 text-blue-800': runState === 'info',
+                'bg-green-50 border-green-200 text-green-800': runState === 'success',
+                'bg-red-50 border-red-200 text-red-800': runState === 'error'
+            }" x-text="runResult"></div>
+
+            <div x-show="operationCurrent" x-cloak class="mb-4 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2" x-text="operationCurrent"></div>
+
+            <div x-show="operationOutput.article_url || operationOutput.wp_post_url" x-cloak class="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-semibold uppercase tracking-wide text-green-700">Latest Output</div>
+                        <p class="mt-1 text-sm text-green-900">This run spawned an article and returned publish targets.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <a x-show="operationOutput.article_url" x-cloak :href="operationOutput.article_url" class="hx-btn hx-btn-secondary" target="_blank" rel="noopener">Open Article</a>
+                        <a x-show="operationOutput.wp_post_url" x-cloak :href="operationOutput.wp_post_url" class="hx-btn hx-btn-primary" target="_blank" rel="noopener">Open WordPress</a>
+                    </div>
+                </div>
+            </div>
+
+            <div x-show="campaignChecklist.length === 0" class="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500 text-center">
+                Click <span class="font-medium text-gray-700">Instant Draft</span> or <span class="font-medium text-gray-700">Instant Publish</span> to open the full live checklist and cron-style activity feed.
+            </div>
+
+            <div x-show="campaignChecklist.length > 0" x-cloak class="space-y-3">
+                <template x-for="item in campaignChecklist" :key="item.key">
+                    <div class="flex items-start gap-3 border border-gray-100 rounded-lg px-4 py-3">
+                        <div class="w-5 h-5 mt-0.5 flex-shrink-0">
+                            <template x-if="item.status === 'done'">
+                                <div class="w-5 h-5 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-[11px] font-bold">✓</div>
+                            </template>
+                            <template x-if="item.status === 'failed'">
+                                <div class="w-5 h-5 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-[11px] font-bold">!</div>
+                            </template>
+                            <template x-if="item.status === 'running'">
+                                <div class="w-5 h-5 rounded-full border-2 border-blue-500 border-t-transparent animate-spin"></div>
+                            </template>
+                            <template x-if="item.status === 'pending'">
+                                <div class="w-5 h-5 rounded-full border border-gray-300 bg-white"></div>
+                            </template>
+                            <template x-if="item.status === 'skipped'">
+                                <div class="w-5 h-5 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-[11px] font-bold">-</div>
+                            </template>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h4 class="text-sm font-medium text-gray-900" x-text="item.label"></h4>
+                                <span class="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full"
+                                      :class="{
+                                          'bg-green-100 text-green-700': item.status === 'done',
+                                          'bg-red-100 text-red-700': item.status === 'failed',
+                                          'bg-blue-100 text-blue-700': item.status === 'running',
+                                          'bg-gray-100 text-gray-500': item.status === 'pending' || item.status === 'skipped'
+                                      }"
+                                      x-text="item.status"></span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1" x-text="item.live_detail || item.detail"></p>
+                            <div x-show="(item.event_lines || []).length > 0" x-cloak class="mt-2 space-y-1">
+                                <template x-for="(line, lineIdx) in item.event_lines" :key="item.key + '-line-' + lineIdx">
+                                    <p class="text-[11px] text-gray-500 break-words font-mono" x-text="line"></p>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div x-show="runLog.length > 0" x-cloak class="mt-4 border border-gray-200 bg-gray-950 rounded-xl px-5 py-4 max-h-72 overflow-y-auto" x-ref="campaignLogContainer">
+                <div class="flex items-center justify-between mb-3">
+                    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-300">Live Activity</h4>
+                    <span class="text-[10px] text-gray-500" x-text="runLog.length + ' entries'"></span>
+                </div>
+                <template x-for="(entry, idx) in runLog" :key="idx">
+                    <div class="py-1.5 text-xs font-mono" :class="{
+                        'text-green-400': entry.type === 'success' || entry.type === 'done',
+                        'text-red-400': entry.type === 'error',
+                        'text-yellow-400': entry.type === 'warning',
+                        'text-blue-400': entry.type === 'info',
+                        'text-gray-400': entry.type === 'step'
+                    }">
+                        <span class="text-gray-500" x-text="entry.time || entry.captured_at || ''"></span>
+                        <span class="ml-2" x-text="entry.message"></span>
+                    </div>
+                </template>
             </div>
         </div>
     </div>
@@ -432,7 +551,25 @@
                     @endforeach
                 </select>
             </div>
-            @include('app-publish::partials.preset-fields', ['prefix' => 'campaignPreset', 'label' => 'Campaign Preset Fields'])
+            <div class="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50/80 px-4 py-3 text-sm text-indigo-900">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p class="font-medium">Changes below apply only to this campaign.</p>
+                        <p class="mt-1 text-indigo-800/90">They are saved as campaign-specific overrides and survive refresh. To update the preset itself for every campaign, open the preset in a new tab.</p>
+                    </div>
+                    <div class="text-xs font-semibold uppercase tracking-wide text-indigo-700" x-text="campaignPresetOverrideCount + ' override' + (campaignPresetOverrideCount === 1 ? '' : 's')"></div>
+                </div>
+                <a x-show="campaignPresetEditUrl" x-cloak :href="campaignPresetEditUrl" target="_blank" rel="noopener" class="mt-2 inline-flex items-center gap-1 text-sm font-medium text-indigo-700 hover:text-indigo-900">
+                    Edit preset in new tab
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 4h6m0 0v6m0-6L10 14M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4"/></svg>
+                </a>
+            </div>
+            @include('app-publish::partials.preset-fields', [
+                'prefix' => 'campaignPreset',
+                'title' => 'Campaign-only preset overrides',
+                'description' => 'Only the discovery-specific preset settings that make sense at the campaign layer are editable here.',
+                'excludeFields' => ['user_id', 'name', 'search_queries', 'campaign_instructions', 'posts_per_run', 'frequency', 'run_at_time', 'drip_minutes', 'is_active', 'is_default']
+            ])
             <div class="pt-4 mt-4 border-t border-gray-100">
                 <div class="hx-field">
                     <label class="hx-label">Search queries <span class="text-gray-400 normal-case font-normal">— one per line, overrides preset</span></label>
@@ -485,7 +622,25 @@
                     </select>
                 </div>
             </div>
-            @include('app-publish::partials.preset-fields', ['prefix' => 'template', 'label' => 'Article Preset Fields'])
+            <div class="mb-4 rounded-2xl border border-fuchsia-200 bg-fuchsia-50/80 px-4 py-3 text-sm text-fuchsia-900">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p class="font-medium">Article preset edits here are campaign-only overrides.</p>
+                        <p class="mt-1 text-fuchsia-800/90">Use this section to tune how this single campaign writes. To change the underlying preset itself, open the preset in a new tab.</p>
+                    </div>
+                    <div class="text-xs font-semibold uppercase tracking-wide text-fuchsia-700" x-text="articlePresetOverrideCount + ' override' + (articlePresetOverrideCount === 1 ? '' : 's')"></div>
+                </div>
+                <a x-show="articlePresetEditUrl" x-cloak :href="articlePresetEditUrl" target="_blank" rel="noopener" class="mt-2 inline-flex items-center gap-1 text-sm font-medium text-fuchsia-700 hover:text-fuchsia-900">
+                    Edit preset in new tab
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 4h6m0 0v6m0-6L10 14M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4"/></svg>
+                </a>
+            </div>
+            @include('app-publish::partials.preset-fields', [
+                'prefix' => 'template',
+                'title' => 'Campaign-only article preset overrides',
+                'description' => 'These fields override the selected article preset only for this campaign.',
+                'excludeFields' => ['publish_account_id', 'name', 'article_type', 'is_default']
+            ])
         </div>
     </div>
 
@@ -646,6 +801,11 @@ function campaignDashboard() {
     const articlePresetSchema  = @json($articlePresetSchema ?? []);
     const campaignPresetValues = @json($campaignPresetValues ?? []);
     const articlePresetValues  = @json($articlePresetValues ?? []);
+    const campaignPresetOverrides = @json($campaignPresetOverrides ?? []);
+    const articlePresetOverrides  = @json($articlePresetOverrides ?? []);
+    const initialOperation     = @json($activeOperation ?? null);
+    const initialOperationArticle = @json($activeOperationArticle ?? null);
+    const checklistDefinitions = @json($checklistDefinitions ?? []);
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
 
@@ -665,7 +825,33 @@ function campaignDashboard() {
         saving: false,
         saveResult: '',
         saveSuccess: true,
-        runningNow: false,
+        running: false,
+        runningMode: '',
+        runResult: '',
+        runSuccess: false,
+        runState: '',
+        runLog: [],
+        seenEventKeys: [],
+        lastEventSequence: 0,
+        operationId: null,
+        operationStatus: '',
+        operationTransport: '',
+        operationTraceId: '',
+        operationCurrent: '',
+        operationLabel: '',
+        operationShowUrl: '',
+        operationStreamUrl: '',
+        operationStreamController: null,
+        operationPollTimer: null,
+        operationStartedAt: '',
+        operationCompletedAt: '',
+        elapsedTimer: null,
+        operationOutput: {
+            article_url: initialOperationArticle?.show_url || '',
+            wp_post_url: initialOperationArticle?.wp_post_url || '',
+        },
+        campaignChecklistByMode: checklistDefinitions,
+        campaignChecklist: [],
         _saveTimer: null,
         _skipCount: 0,
 
@@ -679,19 +865,55 @@ function campaignDashboard() {
                 ? '/publish/article-presets/' + this.form.publish_template_id + '/edit'
                 : null;
         },
+        get campaignPresetOverrideCount() {
+            return Object.keys(this.campaignPreset_overrides || {}).length;
+        },
+        get articlePresetOverrideCount() {
+            return Object.keys(this.template_overrides || {}).length;
+        },
 
         init() {
             this._loadCampaignPreset();
             this._loadArticlePreset();
             this.$watch('termsText', v => { this.form.keywords = (v || '').split('\n').map(s => s.trim()).filter(Boolean); });
-            this.$watch('form', () => {
+            const queueAutoSave = () => {
                 this._skipCount++;
                 if (this._skipCount <= 2) return;
                 clearTimeout(this._saveTimer);
                 this._saveTimer = setTimeout(() => this.autoSave(), 600);
+            };
+            this.$watch('form', () => {
+                queueAutoSave();
             }, { deep: true });
+            this.$watch('campaignPreset_overrides', () => { queueAutoSave(); }, { deep: true });
+            this.$watch('template_overrides', () => { queueAutoSave(); }, { deep: true });
             if (this.form.publish_site_id) {
                 this.restoreSiteConnection(this.form.publish_site_id, 'campaignSiteConnection_' + this.editId);
+            }
+            if (initialOperation) {
+                const mode = initialOperation?.request_summary?.mode
+                    || initialOperation?.request_summary?.delivery_mode
+                    || this.form.delivery_mode
+                    || 'draft-wordpress';
+                this.runningMode = mode;
+                this.operationLabel = this.operationModeLabel(mode);
+                this.campaignChecklist = this.cloneChecklist(mode);
+                this.applyOperation(initialOperation);
+
+                if (['completed', 'failed'].includes(this.operationStatus)) {
+                    const resultPayload = initialOperation?.result_payload || {};
+                    this.finishChecklist(this.operationStatus === 'completed', resultPayload.message || (this.operationStatus === 'completed' ? 'Last instant run completed.' : 'Last instant run failed.'), resultPayload);
+                } else {
+                    this.running = true;
+                    this.runSuccess = true;
+                    this.runState = 'info';
+                    this.runResult = 'Resumed active operation stream.';
+                    this.$nextTick(() => {
+                        this.$refs.liveChecklistCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
+                    this.pollOperation(400);
+                    this.startStreaming();
+                }
             }
         },
 
@@ -699,15 +921,262 @@ function campaignDashboard() {
             return (value || '').replace(/[-_]/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
         },
 
+        operationModeLabel(mode) {
+            if (mode === 'auto-publish') return 'Instant Publish';
+            if (mode === 'draft-wordpress') return 'Instant Draft';
+            if (mode === 'draft-local') return 'Local Draft Run';
+            return this.formatLabel(mode || 'Campaign Run');
+        },
+
+        checklistProgressText() {
+            const enabled = this.campaignChecklist.filter(item => item.enabled !== false);
+            const done = enabled.filter(item => item.status === 'done').length;
+            return enabled.length ? (done + '/' + enabled.length + ' complete') : 'No checklist items';
+        },
+
+        cloneChecklist(mode) {
+            const definitions = this.campaignChecklistByMode?.[mode] || [];
+            return JSON.parse(JSON.stringify(definitions)).map((item) => ({
+                ...item,
+                live_detail: item.live_detail || '',
+                event_lines: [],
+            }));
+        },
+
+        operationElapsedText() {
+            const startedAt = this.operationStartedAt ? new Date(this.operationStartedAt) : null;
+            if (!startedAt || Number.isNaN(startedAt.getTime())) {
+                return '00:00';
+            }
+
+            const endedAt = this.operationCompletedAt ? new Date(this.operationCompletedAt) : new Date();
+            const seconds = Math.max(0, Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000));
+            const minutesPart = String(Math.floor(seconds / 60)).padStart(2, '0');
+            const secondsPart = String(seconds % 60).padStart(2, '0');
+
+            return minutesPart + ':' + secondsPart;
+        },
+
+        syncElapsedTimer() {
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+                this.elapsedTimer = null;
+            }
+
+            if (!this.operationStartedAt || this.operationCompletedAt) {
+                return;
+            }
+
+            this.elapsedTimer = setInterval(() => {
+                if (this.operationCompletedAt) {
+                    clearInterval(this.elapsedTimer);
+                    this.elapsedTimer = null;
+                    return;
+                }
+
+                this.operationStartedAt = this.operationStartedAt;
+            }, 1000);
+        },
+
+        resetOperationState() {
+            this.running = false;
+            this.runningMode = '';
+            this.seenEventKeys = [];
+            this.lastEventSequence = 0;
+            this.operationId = null;
+            this.operationStatus = '';
+            this.operationTransport = '';
+            this.operationTraceId = '';
+            this.operationCurrent = '';
+            this.operationLabel = '';
+            this.operationShowUrl = '';
+            this.operationStreamUrl = '';
+            this.operationStartedAt = '';
+            this.operationCompletedAt = '';
+            this.operationOutput = { article_url: '', wp_post_url: '' };
+            if (this.operationStreamController) {
+                try { this.operationStreamController.abort(); } catch (e) {}
+            }
+            this.operationStreamController = null;
+            if (this.operationPollTimer) {
+                clearTimeout(this.operationPollTimer);
+            }
+            this.operationPollTimer = null;
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+            }
+            this.elapsedTimer = null;
+        },
+
+        appendChecklistLine(item, line) {
+            const normalized = (line || '').trim();
+            if (!normalized) return;
+
+            item.event_lines = Array.isArray(item.event_lines) ? item.event_lines : [];
+            if (item.event_lines[item.event_lines.length - 1] === normalized) {
+                return;
+            }
+
+            item.event_lines.push(normalized);
+            if (item.event_lines.length > 12) {
+                item.event_lines = item.event_lines.slice(-12);
+            }
+        },
+
+        recordChecklistEvent(item, entry) {
+            this.appendChecklistLine(item, (entry.message || '') + (entry.details ? ' — ' + entry.details : ''));
+
+            [
+                ['url', 'URL'],
+                ['source', 'Source'],
+                ['search_term', 'Search'],
+                ['author', 'Author'],
+                ['hostname', 'Host'],
+                ['connection_label', 'Connection'],
+                ['connection_mode', 'Mode'],
+                ['source_domain', 'Domain'],
+                ['source_type', 'Type'],
+                ['alt_text', 'Alt'],
+                ['caption', 'Caption'],
+                ['wp_url', 'WP URL'],
+                ['media_id', 'Media ID'],
+            ].forEach(([key, label]) => {
+                const value = entry?.[key];
+                if (value !== undefined && value !== null && String(value).trim() !== '') {
+                    this.appendChecklistLine(item, label + ': ' + value);
+                }
+            });
+        },
+
+        pushRunLog(entry) {
+            const sequence = Number(entry.id || entry.sequence_no || 0);
+            const eventKey = entry.client_event_id || [sequence, entry.stage || '', entry.substage || '', entry.message || ''].join('|');
+            if (this.seenEventKeys.includes(eventKey)) {
+                return;
+            }
+            this.seenEventKeys.push(eventKey);
+            if (this.seenEventKeys.length > 1200) {
+                this.seenEventKeys = this.seenEventKeys.slice(-800);
+            }
+            if (sequence > this.lastEventSequence) {
+                this.lastEventSequence = sequence;
+            }
+            this.runLog.push({
+                time: entry.time || entry.captured_at || new Date().toLocaleTimeString(),
+                type: entry.type || 'info',
+                message: entry.message || '',
+                stage: entry.stage || '',
+                substage: entry.substage || '',
+                details: entry.details || '',
+            });
+            this.$nextTick(() => {
+                const container = this.$refs.campaignLogContainer;
+                if (container) container.scrollTop = container.scrollHeight;
+            });
+        },
+
+        findChecklistIndex(stage) {
+            return this.campaignChecklist.findIndex(item => Array.isArray(item.stages) && item.stages.includes(stage));
+        },
+
+        updateChecklistFromEvent(entry) {
+            const stage = entry.stage || '';
+            if (!stage) return;
+            const idx = this.findChecklistIndex(stage);
+            if (idx === -1) return;
+
+            for (let i = 0; i < idx; i++) {
+                const item = this.campaignChecklist[i];
+                if (item.enabled !== false && ['pending', 'running'].includes(item.status)) {
+                    item.status = 'done';
+                }
+            }
+
+            const item = this.campaignChecklist[idx];
+            if (!item || item.enabled === false) return;
+
+            item.live_detail = entry.details
+                ? (entry.message + ' — ' + entry.details)
+                : entry.message;
+            this.recordChecklistEvent(item, entry);
+
+            if (entry.type === 'error') {
+                item.status = 'failed';
+                return;
+            }
+
+            const completeSubstages = ['resolved', 'created', 'manual_links', 'complete', 'local_draft'];
+            if (entry.type === 'done' || completeSubstages.includes(entry.substage || '')) {
+                item.status = 'done';
+                return;
+            }
+
+            item.status = 'running';
+        },
+
+        applyOperation(operation) {
+            if (!operation) return;
+            this.operationId = operation.id;
+            this.operationStatus = operation.status || '';
+            this.operationTransport = operation.transport || '';
+            this.operationTraceId = operation.trace_id || '';
+            this.operationShowUrl = operation.show_url || this.operationShowUrl || '';
+            this.operationStreamUrl = operation.stream_url || this.operationStreamUrl || '';
+            this.operationStartedAt = operation.started_at || this.operationStartedAt || new Date().toISOString();
+            this.operationCompletedAt = operation.completed_at || '';
+            this.operationCurrent = operation.last_stage
+                ? ('Current: ' + operation.last_stage.replace(/_/g, ' ') + (operation.last_message ? ' — ' + operation.last_message : ''))
+                : (operation.last_message || '');
+            const resultPayload = operation.result_payload || {};
+            if (resultPayload.article_url) this.operationOutput.article_url = resultPayload.article_url;
+            if (resultPayload.wp_post_url) this.operationOutput.wp_post_url = resultPayload.wp_post_url;
+            this.syncElapsedTimer();
+        },
+
+        finishChecklist(success, message, resultPayload = null) {
+            this.running = false;
+            if (success) {
+                this.campaignChecklist.forEach(item => {
+                    if (item.enabled !== false && ['pending', 'running'].includes(item.status)) {
+                        item.status = 'done';
+                    }
+                });
+            }
+            this.runSuccess = success;
+            this.runState = success ? 'success' : 'error';
+            this.operationCompletedAt = this.operationCompletedAt || new Date().toISOString();
+            this.runResult = message || (success ? 'Campaign run complete.' : 'Campaign run failed.');
+            if (resultPayload?.article_url) {
+                this.operationOutput.article_url = resultPayload.article_url;
+            }
+            if (resultPayload?.wp_post_url) {
+                this.operationOutput.wp_post_url = resultPayload.wp_post_url;
+            }
+            if (this.operationPollTimer) {
+                clearTimeout(this.operationPollTimer);
+                this.operationPollTimer = null;
+            }
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+                this.elapsedTimer = null;
+            }
+        },
+
         _loadCampaignPreset() {
             const p = campaignPresetItems.find(x => String(x.id) === String(this.form.campaign_preset_id));
             const values = p ? p.form_values : campaignPresetValues;
-            _loadPresetFields(this, 'campaignPreset', values, campaignPresetSchema);
+            const overrides = Object.keys(this.campaignPreset_overrides || {}).length
+                ? this.campaignPreset_overrides
+                : campaignPresetOverrides;
+            this.loadPresetFields('campaignPreset', values, campaignPresetSchema, overrides);
         },
         _loadArticlePreset() {
             const p = articlePresetItems.find(x => String(x.id) === String(this.form.publish_template_id));
             const values = p ? p.form_values : articlePresetValues;
-            _loadPresetFields(this, 'template', values, articlePresetSchema);
+            const overrides = Object.keys(this.template_overrides || {}).length
+                ? this.template_overrides
+                : articlePresetOverrides;
+            this.loadPresetFields('template', values, articlePresetSchema, overrides);
         },
 
         onCampaignPresetChange() {
@@ -730,7 +1199,12 @@ function campaignDashboard() {
             if (!this.editId) return;
             this.saving = true;
             try {
-                const r = await fetch('/campaigns/' + this.editId, { method: 'PUT', headers, body: JSON.stringify(this.form) });
+                const payload = {
+                    ...this.form,
+                    campaign_preset_overrides: { ...(this.campaignPreset_overrides || {}) },
+                    article_preset_overrides: { ...(this.template_overrides || {}) },
+                };
+                const r = await fetch('/campaigns/' + this.editId, { method: 'PUT', headers, body: JSON.stringify(payload) });
                 const d = await r.json();
                 this.saveSuccess = !!d.success;
                 this.saveResult = d.success ? 'Saved ' + new Date().toLocaleTimeString() : (d.message || 'Save failed');
@@ -749,11 +1223,147 @@ function campaignDashboard() {
             });
         },
 
-        async runNow() {
-            this.runningNow = true;
-            try { await fetch('/campaigns/' + this.editId + '/run-now', { method: 'POST', headers }); } catch (e) {}
-            this.runningNow = false;
-            window.location.reload();
+        async startOperation(mode, label) {
+            if (!confirm('Run campaign now as ' + label.toLowerCase() + '?')) return;
+            this.resetOperationState();
+            this.running = true;
+            this.runningMode = mode;
+            this.runResult = '';
+            this.runSuccess = false;
+            this.runState = '';
+            this.runLog = [];
+            this.operationLabel = label;
+            this.campaignChecklist = this.cloneChecklist(mode);
+            this.operationStartedAt = new Date().toISOString();
+            this.operationCompletedAt = '';
+            this.syncElapsedTimer();
+            this.$nextTick(() => {
+                this.$refs.liveChecklistCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+            try {
+                const r = await fetch(@json(route('campaigns.start-operation', $campaign->id)), { method: 'POST', headers, body: JSON.stringify({ mode }) });
+                const d = await r.json();
+                if (!r.ok || !d.success) {
+                    throw new Error(d.message || 'Failed to start campaign operation');
+                }
+                this.campaignChecklist = d.checklist || this.campaignChecklist;
+                if (d.article_url) {
+                    this.operationOutput.article_url = d.article_url;
+                }
+                this.applyOperation(d.operation);
+                this.runSuccess = true;
+                this.runState = 'info';
+                this.runResult = d.message || '';
+                this.pollOperation(1000);
+                await this.startStreaming();
+            } catch(e) {
+                this.runSuccess = false;
+                this.runState = 'error';
+                this.runResult = 'Error: ' + e.message;
+                this.running = false;
+            }
+        },
+
+        async startStreaming() {
+            if (!this.operationId || !this.operationStreamUrl) {
+                this.running = false;
+                return;
+            }
+
+            if (!window.ReadableStream || !this.operationStreamUrl) {
+                this.pollOperation(400);
+                return;
+            }
+
+            this.operationStreamController = new AbortController();
+            try {
+                const resp = await fetch(this.operationStreamUrl, {
+                    headers: { 'Accept': 'application/x-ndjson' },
+                    signal: this.operationStreamController.signal,
+                });
+                if (!resp.ok || !resp.body) {
+                    this.pollOperation(400);
+                    return;
+                }
+
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed) continue;
+                        this.handleStreamPayload(JSON.parse(trimmed));
+                    }
+                }
+
+                if (buffer.trim() !== '') {
+                    this.handleStreamPayload(JSON.parse(buffer.trim()));
+                }
+            } catch (e) {
+                if (e.name !== 'AbortError') {
+                    this.pollOperation(800);
+                }
+            }
+        },
+
+        handleStreamPayload(payload) {
+            if (payload.operation) {
+                this.applyOperation(payload.operation);
+            }
+
+            if (payload.event) {
+                this.pushRunLog(payload.event);
+                this.updateChecklistFromEvent(payload.event);
+            }
+
+            if (payload.kind === 'terminal') {
+                const resultPayload = payload.operation?.result_payload || {};
+                this.finishChecklist((payload.operation?.status || '') === 'completed', resultPayload.message || this.runResult, resultPayload);
+            }
+
+            if (payload.kind === 'timeout') {
+                this.pollOperation(400);
+            }
+        },
+
+        async pollOperation(delay = 1000) {
+            if (!this.operationShowUrl) return;
+            if (this.operationPollTimer) clearTimeout(this.operationPollTimer);
+            this.operationPollTimer = setTimeout(async () => {
+                try {
+                    const pollUrl = new URL(this.operationShowUrl, window.location.origin);
+                    if (this.lastEventSequence > 0) {
+                        pollUrl.searchParams.set('after_sequence', String(this.lastEventSequence));
+                    }
+                    pollUrl.searchParams.set('limit', '200');
+                    const resp = await fetch(pollUrl.toString(), { headers: { 'Accept': 'application/json' } });
+                    const data = await resp.json();
+                    if (!data.success) throw new Error(data.message || 'Polling failed');
+                    if (data.operation) this.applyOperation(data.operation);
+                    const events = Array.isArray(data.events) ? data.events : [];
+                    events.forEach((event) => {
+                        this.pushRunLog(event);
+                        this.updateChecklistFromEvent(event);
+                    });
+                    if (['completed', 'failed'].includes(this.operationStatus)) {
+                        const resultPayload = data.operation?.result_payload || {};
+                        this.finishChecklist(this.operationStatus === 'completed', resultPayload.message || this.runResult, resultPayload);
+                        return;
+                    }
+                    this.pollOperation(1500);
+                } catch (e) {
+                    this.runState = 'info';
+                    this.runResult = 'Waiting for live updates… ' + e.message;
+                    this.pollOperation(2500);
+                }
+            }, delay);
         },
         async activateCampaign() {
             try { await fetch('/campaigns/' + this.editId + '/activate', { method: 'POST', headers }); } catch (e) {}

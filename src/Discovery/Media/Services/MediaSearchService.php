@@ -86,7 +86,7 @@ class MediaSearchService
     {
         $normalizedSources = collect($sources)
             ->map(fn ($source) => strtolower((string) $source))
-            ->filter(fn ($source) => in_array($source, ['pexels', 'unsplash', 'pixabay', 'google', 'serpapi', 'google-cse'], true))
+            ->filter(fn ($source) => in_array($source, ['pexels', 'unsplash', 'pixabay', 'google', 'serpapi', 'serper', 'google-cse'], true))
             ->values()
             ->all();
 
@@ -316,6 +316,8 @@ class MediaSearchService
                 && class_exists(\hexa_package_google_cse\Services\GoogleCseService::class),
             'google', 'serpapi' => Setting::getValue('use_serpapi_search', '0') === '1'
                 && class_exists(\hexa_package_serpapi\Services\SerpApiService::class),
+            'serper' => Setting::getValue('use_serper_search', '0') === '1'
+                && class_exists(\hexa_package_serper\Services\SerperService::class),
             default => false,
         };
     }
@@ -603,8 +605,10 @@ class MediaSearchService
 
         try {
             $result = match ($source) {
+                'google' => $this->searchGoogleAuto($query, $perPage, $page),
                 'google-cse' => $this->searchGoogleCse($query, $perPage, $page),
-                'google', 'serpapi' => $this->searchSerp($query, $perPage, $page),
+                'serpapi' => $this->searchSerp($query, $perPage, $page),
+                'serper' => $this->searchSerper($query, $perPage, $page),
                 default => ['success' => false, 'message' => 'Unsupported source.', 'data' => null],
             };
         } catch (\Throwable $e) {
@@ -647,6 +651,37 @@ class MediaSearchService
         return $service->searchImages($query, $perPage, $start);
     }
 
+    private function searchGoogleAuto(string $query, int $perPage, int $page): array
+    {
+        $attempts = [];
+
+        if ($this->providerConfigured('google-cse')) {
+            $result = $this->searchGoogleCse($query, $perPage, $page);
+            if ($result['success'] ?? false) {
+                return $result;
+            }
+            $attempts[] = 'Google CSE: ' . ($result['message'] ?? 'Request failed.');
+        }
+
+        if ($this->providerConfigured('serpapi')) {
+            $result = $this->searchSerp($query, $perPage, $page);
+            if ($result['success'] ?? false) {
+                return $result;
+            }
+            $attempts[] = 'SerpAPI: ' . ($result['message'] ?? 'Request failed.');
+        }
+
+        if ($this->providerConfigured('serper')) {
+            $result = $this->searchSerper($query, $perPage, $page);
+            if ($result['success'] ?? false) {
+                return $result;
+            }
+            $attempts[] = 'Serper.dev: ' . ($result['message'] ?? 'Request failed.');
+        }
+
+        return ['success' => false, 'message' => !empty($attempts) ? implode(' | ', $attempts) : 'No Google image provider configured.', 'data' => null];
+    }
+
     private function searchSerp(string $query, int $perPage, int $page): array
     {
         if (!class_exists(\hexa_package_serpapi\Services\SerpApiService::class)) {
@@ -655,6 +690,16 @@ class MediaSearchService
 
         $start = ($page - 1) * max($perPage, 1);
         return app(\hexa_package_serpapi\Services\SerpApiService::class)->searchImages($query, $perPage, $start, 'photo');
+    }
+
+    private function searchSerper(string $query, int $perPage, int $page): array
+    {
+        if (!class_exists(\hexa_package_serper\Services\SerperService::class)) {
+            return ['success' => false, 'message' => 'Serper.dev package not available.', 'data' => null];
+        }
+
+        $start = ($page - 1) * max($perPage, 1);
+        return app(\hexa_package_serper\Services\SerperService::class)->searchImages($query, $perPage, $start);
     }
 
     /**

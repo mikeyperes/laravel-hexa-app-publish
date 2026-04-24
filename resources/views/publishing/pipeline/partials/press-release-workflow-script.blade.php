@@ -182,7 +182,7 @@ function pressReleaseWorkflowMixin(config) {
             try {
                 const response = await fetch('{{ route("publish.pipeline.press-release.upload-documents") }}', {
                     method: 'POST',
-                    headers: { 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                    headers: this.requestHeaders(),
                     body: form,
                 });
                 const data = await response.json();
@@ -224,7 +224,7 @@ function pressReleaseWorkflowMixin(config) {
             try {
                 const response = await fetch('{{ route("publish.pipeline.press-release.detect-fields") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         draft_id: this.draftId,
                         model: this.aiModel || 'claude-sonnet-4-20250514',
@@ -269,7 +269,7 @@ function pressReleaseWorkflowMixin(config) {
                 log('info', 'Sending detection request to server...');
                 const response = await fetch('{{ route("publish.pipeline.press-release.detect-photos") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ draft_id: this.draftId }),
                 });
                 const data = await response.json();
@@ -321,7 +321,7 @@ function pressReleaseWorkflowMixin(config) {
             try {
                 const response = await fetch('{{ route("notion.profile.fetch-photos") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ drive_url: this.pressRelease.google_drive_url }),
                 });
                 const data = await response.json();
@@ -376,7 +376,7 @@ function pressReleaseWorkflowMixin(config) {
                 log('info', 'Sending extraction request...');
                 const response = await fetch('{{ route("publish.pipeline.check") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         urls: [this.pressRelease.public_url],
                         method: this.pressRelease.public_url_method || 'auto',
@@ -441,21 +441,21 @@ function pressReleaseWorkflowMixin(config) {
         },
 
         async savePipelineStateToServer() {
-            if (!this.draftId) return;
-            if (this._draftSessionConflictActive) return;
+            if (!this.draftId) return true;
+            if (this._draftSessionConflictActive) return false;
             if (this._savingPipelineStateServer) {
                 this._pendingServerPipelineStateSave = true;
                 this._logDebug?.('state', 'Server pipeline-state save deferred while another request is in flight', {
                     stage: 'state',
                     substage: 'server_deferred',
                 });
-                return;
+                return false;
             }
 
             const payload = this.buildPipelineStateSnapshot();
             const signature = this._stableSignature(payload);
             if (!this._pendingServerPipelineStateSave && signature === this._lastServerPipelineStateSignature) {
-                return;
+                return true;
             }
 
             this._savingPipelineStateServer = true;
@@ -465,7 +465,7 @@ function pressReleaseWorkflowMixin(config) {
             try {
                 const response = await this._rawPipelineFetch('{{ route("publish.pipeline.state.save") }}', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         draft_id: this.draftId,
                         workflow_type: this.currentWorkflowKey(),
@@ -476,7 +476,7 @@ function pressReleaseWorkflowMixin(config) {
                 if (response.status === 409 && data.code === 'draft_session_conflict') {
                     this._handleDraftSessionConflict?.('state', data, { silent: true });
                     this._savingPipelineStateServer = false;
-                    return;
+                    return false;
                 }
                 if (response.ok && data.success) {
                     this._clearDraftSessionConflict?.();
@@ -488,19 +488,24 @@ function pressReleaseWorkflowMixin(config) {
                         duration_ms: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt)),
                         details: data.state_id ? ('state_id: ' + data.state_id + ' | workflow: ' + (data.workflow_type || this.currentWorkflowKey())) : '',
                     });
-                } else {
-                    this._pendingServerPipelineStateSave = true;
-                    this._logActivity?.('state', 'error', data.message || 'Server pipeline state save failed', {
-                        stage: 'state',
-                        substage: 'server_response_error',
-                        status: response.status,
-                        duration_ms: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt)),
-                    });
+                    this._savingPipelineStateServer = false;
+                    if (this._pendingServerPipelineStateSave) {
+                        this.queueServerPipelineStateSave();
+                    }
+                    return true;
                 }
+
+                this._pendingServerPipelineStateSave = true;
+                this._logActivity?.('state', 'error', data.message || 'Server pipeline state save failed', {
+                    stage: 'state',
+                    substage: 'server_response_error',
+                    status: response.status,
+                    duration_ms: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt)),
+                });
             } catch (error) {
                 if (this._isLikelyNavigationAbort?.(error)) {
                     this._savingPipelineStateServer = false;
-                    return;
+                    return false;
                 }
                 this._pendingServerPipelineStateSave = true;
                 this._logActivity?.('state', 'error', 'Server pipeline state save error: ' + error.message, {
@@ -514,6 +519,7 @@ function pressReleaseWorkflowMixin(config) {
             if (this._pendingServerPipelineStateSave) {
                 this.queueServerPipelineStateSave();
             }
+            return false;
         },
 
         buildPipelineStateSnapshot() {
