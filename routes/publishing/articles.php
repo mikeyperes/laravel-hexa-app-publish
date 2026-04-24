@@ -13,6 +13,7 @@ Route::get('/publish/articles/{id}/audit', [ArticleController::class, 'audit'])-
 Route::get('/publish/articles/{id}/edit', [ArticleController::class, 'edit'])->name('publish.articles.edit');
 Route::put('/publish/articles/{id}', [ArticleController::class, 'update'])->name('publish.articles.update');
 Route::post('/publish/articles/{id}/publish', [ArticleController::class, 'publish'])->name('publish.articles.publish');
+Route::post('/publish/articles/{id}/refresh-wp', [ArticleController::class, 'refreshWp'])->name('publish.articles.refresh-wp');
 Route::post('/publish/articles/{id}/ai-check', [ArticleController::class, 'aiCheck'])->name('publish.articles.ai-check');
 Route::post('/publish/articles/{id}/seo-check', [ArticleController::class, 'seoCheck'])->name('publish.articles.seo-check');
 Route::post('/publish/articles/{id}/spin', [ArticleController::class, 'spin'])->name('publish.articles.spin');

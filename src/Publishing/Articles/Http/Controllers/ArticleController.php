@@ -310,6 +310,33 @@ class ArticleController extends Controller
     }
 
     /**
+     * Refresh the article's WordPress state (status, url, published_at) from the live site.
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function refreshWp(int $id): JsonResponse
+    {
+        $article = $this->findArticle($id, ['site']);
+        $result = $this->syncArticleWordPressState($article);
+        $article->refresh();
+
+        return response()->json([
+            'success' => empty($result['sync_error']),
+            'message' => $result['sync_message'] ?? ($result['sync_error'] ? null : 'Already in sync with WordPress.'),
+            'error'   => $result['sync_error'] ?? null,
+            'article' => [
+                'id'           => $article->id,
+                'title'        => $article->title,
+                'status'       => $article->status,
+                'wp_status'    => $article->wp_status,
+                'wp_post_url'  => $article->wp_post_url,
+                'published_at' => $article->published_at?->toIso8601String(),
+            ],
+        ]);
+    }
+
+    /**
      * Run AI content detection on an article.
      *
      * @param int $id

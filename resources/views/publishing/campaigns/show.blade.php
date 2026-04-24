@@ -462,7 +462,7 @@
                         : ($article->wp_post_url ?: $wpEditUrl);
                     $wpLinkLabel = $isDraft ? 'Edit in WordPress' : 'View on WordPress';
                 @endphp
-                <article class="hx-article-row">
+                <article class="hx-article-row" x-data="{ refreshing: false, refreshNotice: '', refreshError: '' }">
                     <div class="hx-article-main">
                         <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener" class="hx-article-thumb">
                             @if($thumb)
@@ -486,7 +486,7 @@
                                     @endif
                                 @endif
                                 @if($siteName)
-                                    <a href="{{ $siteUrl ?: '#' }}" target="_blank" rel="noopener" class="hx-tag blue" title="Open {{ $siteName }}">Site · {{ $siteName }} ↗</a>
+                                    <a href="{{ $siteUrl ?: '#' }}" target="_blank" rel="noopener" class="hx-tag blue" title="Open {{ $siteName }}">{{ $siteName }} ↗</a>
                                 @endif
                             </div>
 
@@ -533,6 +533,34 @@
                             @endif
                         </div>
                         <div class="hx-article-actions">
+                            <button type="button"
+                                @click="refreshing = true; refreshNotice = ''; refreshError = '';
+                                    fetch('/publish/articles/{{ $article->id }}/refresh-wp', {
+                                        method: 'POST',
+                                        headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content, 'Accept': 'application/json' }
+                                    })
+                                    .then(r => r.json())
+                                    .then(d => {
+                                        if (d.success || d.message) {
+                                            refreshNotice = d.message || 'Refreshed.';
+                                            setTimeout(() => window.location.reload(), 450);
+                                        } else {
+                                            refreshError = d.error || 'Refresh failed.';
+                                            refreshing = false;
+                                        }
+                                    })
+                                    .catch(e => { refreshError = e.message || 'Network error'; refreshing = false; })"
+                                :disabled="refreshing"
+                                class="hx-article-btn hx-article-btn-secondary"
+                                title="Pull latest WordPress status/title/url from the live site">
+                                <svg x-show="!refreshing" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                <svg x-show="refreshing" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                <span x-text="refreshing ? 'Refreshing…' : 'Refresh'"></span>
+                            </button>
+                            <a href="{{ route('publish.articles.edit', $article->id) }}" class="hx-article-btn hx-article-btn-secondary" title="Open this article in the pipeline editor">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                Edit
+                            </a>
                             @if($wpLink)
                                 <a href="{{ $wpLink }}" target="_blank" rel="noopener" class="hx-article-btn hx-article-btn-secondary">{{ $wpLinkLabel }}&nbsp;↗</a>
                             @endif
@@ -541,6 +569,9 @@
                             @endif
                             <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener" class="hx-article-btn hx-article-btn-primary">Open&nbsp;→</a>
                         </div>
+                    </div>
+                    <div x-show="refreshNotice || refreshError" x-cloak class="px-5 pb-3 text-xs" :class="refreshError ? 'text-red-600' : 'text-green-600'">
+                        <span x-text="refreshError || refreshNotice"></span>
                     </div>
                 </article>
             @empty
