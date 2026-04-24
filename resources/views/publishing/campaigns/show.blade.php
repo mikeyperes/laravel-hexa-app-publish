@@ -33,6 +33,10 @@
     .hx-input, .hx-select, .hx-textarea { width:100%; padding:9px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; background:#fff; color:#111827; transition:border-color 0.1s, box-shadow 0.1s; }
     .hx-input:focus, .hx-select:focus, .hx-textarea:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,0.2); }
     .hx-textarea { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; resize:vertical; min-height:72px; }
+    .hx-select { appearance:none; -webkit-appearance:none; -moz-appearance:none; padding-right:36px; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; background-size:16px 16px; cursor:pointer; }
+    .hx-select:hover { border-color:#94a3b8; }
+    .hx-select option { background:#fff; color:#111827; }
+    .hx-autocomplete { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; background-size:16px 16px; padding-right:36px; }
     .hx-field { margin-bottom:20px; }
     .hx-field:last-child { margin-bottom:0; }
     .hx-field-hint { font-size:12px; color:#9ca3af; margin-top:6px; }
@@ -333,7 +337,7 @@
                         @keydown.escape="authorDropdownOpen = false"
                         autocomplete="off"
                         :placeholder="siteAuthorCount === 0 ? 'Test site connection to load authors, or type a name' : 'Type to search authors'"
-                        class="hx-input">
+                        class="hx-input hx-autocomplete">
                     <div x-show="authorDropdownOpen && filteredSiteAuthors.length > 0" x-cloak
                         class="absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
                         <template x-for="(author, idx) in filteredSiteAuthors" :key="author.id ?? author.slug ?? author.username ?? idx">
