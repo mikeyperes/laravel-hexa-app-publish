@@ -411,6 +411,7 @@
                 @endphp
                 @php
                     $siteUrl = rtrim($campaign->site->url ?? '', '/');
+                    $siteName = $campaign->site->name ?? parse_url($siteUrl, PHP_URL_HOST) ?: '';
                     $authorSlug = $article->author ? \Illuminate\Support\Str::slug($article->author) : '';
                     $authorWpUrl = ($siteUrl && $authorSlug) ? $siteUrl . '/author/' . $authorSlug . '/' : null;
                     $pipelineTone = match($article->status) {
@@ -426,13 +427,22 @@
                         'failed', 'error' => 'Failed',
                         default => ucfirst((string) $article->status),
                     };
+                    $isDraft = in_array($article->wp_status, ['draft', 'pending', 'auto-draft', 'future'], true);
                     $wpTone = match($article->wp_status) {
                         'publish', 'published' => 'green',
-                        'draft' => 'gray',
-                        'pending' => 'amber',
+                        'draft', 'auto-draft' => 'gray',
+                        'pending', 'future' => 'amber',
                         'trash' => 'red',
                         default => 'slate',
                     };
+                    // Draft posts return 404 on the public ?p= URL — link to the WP admin edit screen instead.
+                    $wpEditUrl = ($siteUrl && $article->wp_post_id)
+                        ? $siteUrl . '/wp-admin/post.php?post=' . $article->wp_post_id . '&action=edit'
+                        : null;
+                    $wpLink = $isDraft
+                        ? ($wpEditUrl ?: $article->wp_post_url)
+                        : ($article->wp_post_url ?: $wpEditUrl);
+                    $wpLinkLabel = $isDraft ? 'Edit in WordPress' : 'View on WordPress';
                 @endphp
                 <div class="hx-article-row">
                     <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener" class="hx-article-thumb">
@@ -449,27 +459,26 @@
                         <div class="hx-article-attrs">
                             <span class="hx-tag {{ $pipelineTone }}" title="Internal pipeline generation state">Pipeline: {{ $pipelineLabel }}</span>
                             @if($article->wp_status)
-                                @if($article->wp_post_url)
-                                    <a href="{{ $article->wp_post_url }}" target="_blank" rel="noopener" class="hx-tag {{ $wpTone }}" title="WordPress post status — click to open on WordPress">WordPress: {{ ucfirst($article->wp_status) }} ↗</a>
+                                @if($wpLink)
+                                    <a href="{{ $wpLink }}" target="_blank" rel="noopener" class="hx-tag {{ $wpTone }}" title="{{ $wpLinkLabel }} on {{ $siteName ?: 'WordPress' }}">WordPress: {{ ucfirst($article->wp_status) }} ↗</a>
                                 @else
-                                    <span class="hx-tag {{ $wpTone }}" title="WordPress post status (post URL unavailable)">WordPress: {{ ucfirst($article->wp_status) }}</span>
+                                    <span class="hx-tag {{ $wpTone }}" title="WordPress post status (no URL available)">WordPress: {{ ucfirst($article->wp_status) }}</span>
                                 @endif
+                            @endif
+                            @if($siteName)
+                                <a href="{{ $siteUrl ?: '#' }}" target="_blank" rel="noopener" class="hx-tag blue" title="Open {{ $siteName }}">Site:&nbsp;{{ $siteName }} ↗</a>
                             @endif
                         </div>
                         <div class="hx-article-attrs">
                             <span>{{ $article->article_id }}</span>
                             <span class="hx-sep">·</span>
-                            <span>
-                                @if($article->author)
-                                    @if($authorWpUrl)
-                                        By <a href="{{ $authorWpUrl }}" target="_blank" rel="noopener" class="hx-link" title="Open author on WordPress">{{ $article->author }} ↗</a>
-                                    @else
-                                        By <strong>{{ $article->author }}</strong>
-                                    @endif
-                                @else
-                                    By <span class="text-gray-400">—</span>
-                                @endif
-                            </span>
+                            @if($article->author && $authorWpUrl)
+                                <span>By&nbsp;<a href="{{ $authorWpUrl }}" target="_blank" rel="noopener" class="hx-link" title="Open {{ $article->author }}'s WordPress profile">{{ $article->author }}&nbsp;↗</a></span>
+                            @elseif($article->author)
+                                <span>By&nbsp;<strong>{{ $article->author }}</strong></span>
+                            @else
+                                <span>By <span class="text-gray-400">—</span></span>
+                            @endif
                             @if($article->word_count)
                                 <span class="hx-sep">·</span>
                                 <span>{{ number_format($article->word_count) }} words</span>
@@ -498,8 +507,11 @@
                     </div>
                     <div class="hx-article-actions">
                         <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener" class="hx-link text-sm font-semibold">Open →</a>
-                        @if($article->wp_post_url)
-                            <a href="{{ $article->wp_post_url }}" target="_blank" rel="noopener" class="hx-link-muted text-xs">View on WordPress ↗</a>
+                        @if($wpLink)
+                            <a href="{{ $wpLink }}" target="_blank" rel="noopener" class="hx-link-muted text-xs">{{ $wpLinkLabel }} ↗</a>
+                        @endif
+                        @if($article->wp_post_url && $isDraft && $wpLink !== $article->wp_post_url)
+                            <a href="{{ $article->wp_post_url }}?preview=true" target="_blank" rel="noopener" class="hx-link-muted text-xs">Preview draft ↗</a>
                         @endif
                         @if($article->wp_post_id)
                             <span class="text-[10px] text-gray-400 font-mono">WP #{{ $article->wp_post_id }}</span>
