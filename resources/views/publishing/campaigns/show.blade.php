@@ -329,32 +329,32 @@
                 </div>
             </div>
             <div class="hx-grid-3">
-                <div class="hx-field relative" @click.outside="authorDropdownOpen = false">
-                    <label class="hx-label">Author</label>
-                    <input type="text" x-model="form.author"
-                        @focus="authorDropdownOpen = true"
-                        @input="authorDropdownOpen = true"
-                        @keydown.escape="authorDropdownOpen = false"
-                        autocomplete="off"
-                        :placeholder="siteAuthorCount === 0 ? 'Test site connection to load authors, or type a name' : 'Type to search authors'"
-                        class="hx-input hx-autocomplete">
-                    <div x-show="authorDropdownOpen && filteredSiteAuthors.length > 0" x-cloak
-                        class="absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                        <template x-for="(author, idx) in filteredSiteAuthors" :key="author.id ?? author.slug ?? author.username ?? idx">
-                            <button type="button"
-                                @mousedown.prevent="selectSiteAuthor(author)"
-                                class="block w-full text-left px-3 py-2 text-sm hover:bg-blue-50 border-b border-gray-100 last:border-b-0">
-                                <span class="font-medium text-gray-900" x-text="authorLabel(author)"></span>
-                                <template x-if="authorSubLabel(author)">
-                                    <span class="ml-2 text-xs text-gray-500" x-text="authorSubLabel(author)"></span>
-                                </template>
-                            </button>
-                        </template>
-                    </div>
-                    <p class="hx-field-hint" x-show="siteAuthorCount === 0" x-cloak>Test the site connection above to load the WordPress author list into cache.</p>
-                    <p class="hx-field-hint" x-show="siteAuthorCount > 0" x-cloak>
-                        <span x-text="siteAuthorCount"></span> author<span x-show="siteAuthorCount !== 1">s</span> cached from WordPress. Type to filter.
-                    </p>
+                <div class="hx-field"
+                    @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-author') form.author = $event.detail.item.display_name || $event.detail.item.name || $event.detail.item.username || ''"
+                    @hexa-search-cleared.window="if ($event.detail.component_id === 'campaign-author') form.author = ''">
+                    @php
+                        $selectedAuthor = $campaign->author ? [
+                            'id' => $campaign->author,
+                            'name' => $campaign->author,
+                            'display_name' => $campaign->author,
+                            'username' => $campaign->author,
+                            'email' => '',
+                        ] : null;
+                    @endphp
+                    <x-hexa-smart-search
+                        url="{{ route('campaigns.authors.search', $campaign->id) }}"
+                        name="author"
+                        label="Author"
+                        placeholder="Type to search WordPress authors..."
+                        display-field="display_name"
+                        subtitle-field="email"
+                        value-field="username"
+                        id="campaign-author"
+                        :selected="$selectedAuthor"
+                        :min-chars="0"
+                        :debounce="250"
+                    />
+                    <p class="hx-field-hint mt-1">Results are cached server-side for 10 minutes per campaign. Retest the site connection to warm the cache.</p>
                 </div>
                 <div class="hx-field">
                     <label class="hx-label">Delivery mode</label>
@@ -599,42 +599,8 @@ function campaignDashboard() {
         saveResult: '',
         saveSuccess: true,
         runningNow: false,
-        authorDropdownOpen: false,
         _saveTimer: null,
         _skipCount: 0,
-
-        get siteAuthorCount() {
-            return Array.isArray(this.siteConn?.authors) ? this.siteConn.authors.length : 0;
-        },
-        get filteredSiteAuthors() {
-            if (!Array.isArray(this.siteConn?.authors)) return [];
-            const q = (this.form.author || '').toLowerCase().trim();
-            if (!q) return this.siteConn.authors.slice(0, 50);
-            return this.siteConn.authors.filter(a => {
-                const hay = [
-                    a.display_name || a.name || '',
-                    a.username || a.slug || '',
-                    a.email || '',
-                ].join(' ').toLowerCase();
-                return hay.includes(q);
-            }).slice(0, 50);
-        },
-        authorLabel(a) {
-            if (!a) return '';
-            return a.display_name || a.name || a.username || a.slug || a.email || '';
-        },
-        authorSubLabel(a) {
-            if (!a) return '';
-            const primary = this.authorLabel(a);
-            const username = a.username || a.slug || '';
-            if (username && username !== primary) return '@' + username;
-            if (a.email && a.email !== primary) return a.email;
-            return '';
-        },
-        selectSiteAuthor(a) {
-            this.form.author = this.authorLabel(a);
-            this.authorDropdownOpen = false;
-        },
 
         get campaignPresetEditUrl() {
             return this.form.campaign_preset_id

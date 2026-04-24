@@ -17,6 +17,9 @@ use hexa_app_publish\Publishing\Pipeline\Services\PipelineOperationService;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
 use hexa_app_publish\Services\PublishService;
+use hexa_package_whm\Models\HostingAccount;
+use hexa_package_whm\Models\WhmServer;
+use hexa_package_wptoolkit\Services\WpToolkitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
@@ -174,6 +177,13 @@ class CampaignController extends Controller
             'ai_instructions' => 'nullable|string',
             'topic' => 'nullable|string|max:1000',
             'keywords' => 'nullable|array',
+            'link_list' => 'nullable|array',
+            'link_list.*' => 'nullable|url|max:2000',
+            'article_sources' => 'nullable|array',
+            'article_sources.*' => 'nullable|string|max:100',
+            'photo_sources' => 'nullable|array',
+            'photo_sources.*' => 'nullable|string|max:100',
+            'max_links_per_article' => 'nullable|integer|min:0|max:25',
             'article_type' => ['nullable', 'string', Rule::in($this->eligibility->supportedArticleTypes())],
             'ai_engine' => 'nullable|string|max:100',
             'author' => 'nullable|string|max:255',
@@ -249,7 +259,56 @@ class CampaignController extends Controller
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
         $campaignPresets = \hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset::with('user')->orderBy('name')->get();
         $aiTemplates = PublishTemplate::with('account')->orderBy('name')->get();
-        $cronJob = \DB::table('cron_jobs')->where('command', 'publish:run-campaigns')->first();
+        $timezone = $campaign->timezone ?: config('app.timezone', 'America/New_York');
+        $cronJobs = \hexa_core\CronManager\Models\CronJob::query()
+            ->where('package_name', 'app-publish')
+            ->orderBy('name')
+            ->get();
+        $primaryCronJob = $cronJobs->firstWhere('command', 'publish:run-campaigns') ?: $cronJobs->first();
+        $schedulerHealth = $this->buildSchedulerHealth($this->readSchedulerCrontab(), base_path());
+        $cronJobsData = $cronJobs->map(fn (\hexa_core\CronManager\Models\CronJob $job) => $this->serializeCronJobSummary($job, $timezone))->values();
+        $recentOperations = PublishPipelineOperation::query()
+            ->with(['article' => function ($query) {
+                $query->select([
+                    'id',
+                    'article_id',
+                    'title',
+                    'status',
+                    'wp_status',
+                    'wp_post_url',
+                    'publish_campaign_id',
+                    'created_at',
+                    'updated_at',
+                    'ai_provider',
+                    'ai_engine_used',
+                    'word_count',
+                    'source_articles',
+                    'wp_images',
+                ]);
+            }])
+            ->where('request_summary->campaign_id', $campaign->id)
+            ->latest('id')
+            ->limit(8)
+            ->get();
+        $activeOperation = $recentOperations->first(fn (PublishPipelineOperation $operation) => $operation->isActive());
+        $activeOperationArticle = $activeOperation?->article ? [
+            'show_url' => route('publish.articles.show', $activeOperation->article->id),
+            'article_id' => $activeOperation->article->article_id,
+            'title' => $activeOperation->article->title ?: 'Untitled Article',
+            'wp_post_url' => $activeOperation->article->wp_post_url,
+            'thumbnail_url' => $this->resolveArticleThumbnail($activeOperation->article->wp_images),
+            'ai_provider' => $activeOperation->article->ai_provider,
+            'ai_engine_used' => $activeOperation->article->ai_engine_used,
+            'word_count' => $activeOperation->article->word_count,
+            'source_count' => count((array) ($activeOperation->article->source_articles ?? [])),
+            'source_domains' => collect((array) ($activeOperation->article->source_articles ?? []))
+                ->map(fn ($source) => parse_url((string) ($source['url'] ?? ''), PHP_URL_HOST))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all(),
+        ] : null;
+        $recentOperationSummaries = $recentOperations->map(fn (PublishPipelineOperation $operation) => $this->serializeCampaignOperationSummary($operation, $timezone))->values();
         $lastArticle = $campaign->articles->first();
 
         /** @var \hexa_core\Forms\Services\FormRegistryService $formRegistry */
@@ -296,6 +355,10 @@ class CampaignController extends Controller
             'ai_instructions' => $campaign->ai_instructions ?? $campaign->notes ?? '',
             'ai_engine' => '',
             'keywords' => array_values((array) ($campaign->keywords ?? [])),
+            'link_list' => array_values((array) ($campaign->link_list ?? [])),
+            'article_sources' => array_values((array) ($campaign->article_sources ?? [])),
+            'photo_sources' => array_values((array) ($campaign->photo_sources ?? [])),
+            'max_links_per_article' => $campaign->max_links_per_article ?? null,
             'delivery_mode' => $this->modeResolver->normalizeDeliveryMode($campaign->delivery_mode ?? 'draft-wordpress'),
             'article_type' => $campaign->article_type ?? '',
             'author' => $campaign->author ?? '',
@@ -304,6 +367,8 @@ class CampaignController extends Controller
             'run_at_time' => $campaign->run_at_time ?? '09:00',
             'drip_interval_minutes' => $campaign->drip_interval_minutes ?? 60,
         ];
+
+        $initialSiteAuthors = $this->loadInitialSiteAuthors($campaign->site, $campaign->author);
 
         return view('app-publish::publishing.campaigns.show', [
             'campaign' => $campaign,
@@ -331,16 +396,246 @@ class CampaignController extends Controller
             'articlePresetValues' => \hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm::values($campaign->template),
             'campaignPresetSchema' => \hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset::getFieldSchema('edit'),
             'articlePresetSchema' => \hexa_app_publish\Publishing\Templates\Models\PublishTemplate::getFieldSchema('edit'),
-            'cronJob' => $cronJob,
+            'cronJobsData' => $cronJobsData,
+            'primaryCronRunUrl' => $primaryCronJob ? route('tools.cron-manager.run', ['cronJob' => $primaryCronJob->id]) : null,
+            'schedulerHealth' => $schedulerHealth,
+            'recentOperations' => $recentOperationSummaries,
+            'activeOperation' => $activeOperation ? $this->serializeOperation($activeOperation) : null,
+            'activeOperationArticle' => $activeOperationArticle,
+            'displayTimezone' => $timezone,
             'lastArticle' => $lastArticle,
             'checklistDefinitions' => [
                 'draft-local' => $this->checklistService->definitions('draft-local'),
                 'draft-wordpress' => $this->checklistService->definitions('draft-wordpress'),
                 'auto-publish' => $this->checklistService->definitions('auto-publish'),
             ],
+            'initialSiteAuthors' => $initialSiteAuthors,
+            'initialSiteDefaultAuthor' => $campaign->site?->default_author,
         ]);
     }
 
+    private function readSchedulerCrontab(): ?string
+    {
+        try {
+            $process = \Illuminate\Support\Facades\Process::run('crontab -l 2>/dev/null');
+            if (!$process->successful()) {
+                return null;
+            }
+
+            $output = trim($process->output());
+
+            return $output !== '' ? $output : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function buildSchedulerHealth(?string $crontab, string $appPath): array
+    {
+        $lines = collect(preg_split('/\r?\n/', (string) $crontab))
+            ->map(fn ($line) => trim((string) $line))
+            ->filter(fn ($line) => $line !== '' && !str_starts_with($line, '#'))
+            ->values();
+
+        $appMarker = basename($appPath);
+        $scheduleEntry = $lines->first(function (string $line) use ($appMarker) {
+            return str_contains($line, 'artisan schedule:run')
+                && (str_contains($line, 'publish.scalemypublication.com') || str_contains($line, $appMarker));
+        });
+
+        return [
+            'installed' => $scheduleEntry !== null,
+            'entry' => $scheduleEntry,
+            'line_count' => $lines->count(),
+            'message' => $scheduleEntry
+                ? 'Laravel scheduler entry is installed for this publish app.'
+                : 'Laravel scheduler entry is missing for this publish app.',
+        ];
+    }
+
+    private function serializeCronJobSummary(\hexa_core\CronManager\Models\CronJob $job, string $timezone): array
+    {
+        $nextRun = null;
+
+        try {
+            $nextRun = \Carbon\Carbon::instance(
+                \Cron\CronExpression::factory($job->schedule)->getNextRunDate('now', 0, false, $timezone)
+            );
+        } catch (\Throwable $e) {
+            $nextRun = null;
+        }
+
+        return [
+            'id' => $job->id,
+            'name' => $job->name,
+            'command' => $job->command,
+            'description' => $job->description,
+            'enabled' => (bool) $job->is_enabled,
+            'schedule' => $job->schedule,
+            'schedule_label' => $job->getScheduleLabel(),
+            'last_run' => $this->formatAuditTimestamp($job->last_run_at, $timezone, 'Never'),
+            'next_run' => $this->formatAuditTimestamp($nextRun, $timezone, 'Pending'),
+            'last_status' => $job->last_status ?: 'never',
+            'run_count' => (int) ($job->run_count ?: 0),
+            'last_output_preview' => $this->truncateCronOutput($job->last_output),
+            'run_url' => route('tools.cron-manager.run', ['cronJob' => $job->id]),
+        ];
+    }
+
+    private function serializeCampaignOperationSummary(PublishPipelineOperation $operation, string $timezone): array
+    {
+        $article = $operation->article;
+
+        return [
+            'id' => $operation->id,
+            'status' => $operation->status,
+            'mode' => $operation->request_summary['mode'] ?? null,
+            'last_stage' => $operation->last_stage,
+            'last_message' => $operation->error_message ?: $operation->last_message,
+            'created_at' => $this->formatAuditTimestamp($operation->created_at, $timezone, '—'),
+            'completed_at' => $this->formatAuditTimestamp($operation->completed_at, $timezone, '—'),
+            'article' => $article ? [
+                'id' => $article->id,
+                'article_id' => $article->article_id,
+                'title' => $article->title ?: 'Untitled Article',
+                'status' => $article->status,
+                'wp_status' => $article->wp_status,
+                'show_url' => route('publish.articles.show', $article->id),
+                'wp_post_url' => $article->wp_post_url,
+                'ai_provider' => $article->ai_provider,
+                'ai_engine_used' => $article->ai_engine_used,
+                'word_count' => $article->word_count,
+                'source_count' => count((array) ($article->source_articles ?? [])),
+                'source_domains' => collect((array) ($article->source_articles ?? []))
+                    ->map(fn ($source) => parse_url((string) ($source['url'] ?? ''), PHP_URL_HOST))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all(),
+                'thumbnail_url' => $this->resolveArticleThumbnail($article->wp_images),
+            ] : null,
+        ];
+    }
+
+    private function resolveArticleThumbnail($images): ?string
+    {
+        if (!is_array($images) || empty($images)) {
+            return null;
+        }
+
+        $featured = collect($images)->firstWhere('is_featured', true);
+        if (!$featured) {
+            $featured = collect($images)->first();
+        }
+
+        if (!is_array($featured)) {
+            return null;
+        }
+
+        return $featured['sizes']['thumbnail']
+            ?? $featured['sizes']['medium']
+            ?? $featured['inline_url']
+            ?? $featured['media_url']
+            ?? null;
+    }
+
+    private function formatAuditTimestamp($date, string $timezone, string $fallback = '—'): array
+    {
+        if (!$date) {
+            return [
+                'iso' => null,
+                'display' => $fallback,
+                'relative' => null,
+            ];
+        }
+
+        $local = $date instanceof \Carbon\CarbonInterface
+            ? $date->copy()->setTimezone($timezone)
+            : \Carbon\Carbon::parse($date)->setTimezone($timezone);
+
+        return [
+            'iso' => $local->toIso8601String(),
+            'display' => $local->format('M j, Y g:i A T'),
+            'relative' => $local->diffForHumans(),
+        ];
+    }
+
+    private function truncateCronOutput(?string $output, int $limit = 280): ?string
+    {
+        $output = trim((string) $output);
+        if ($output === '' || $output === '(no output)') {
+            return null;
+        }
+
+        if (mb_strlen($output) <= $limit) {
+            return $output;
+        }
+
+        return mb_substr($output, 0, $limit - 1) . '…';
+    }
+
+    private function loadInitialSiteAuthors(?PublishSite $site, ?string $selectedAuthor = null): array
+    {
+        $authors = [];
+
+        if ($site && $site->isWpToolkit() && $site->hosting_account_id && $site->wordpress_install_id) {
+            try {
+                $account = HostingAccount::find($site->hosting_account_id);
+                $server = $account ? WhmServer::find($account->whm_server_id) : null;
+
+                if ($server) {
+                    $result = app(WpToolkitService::class)->wpCliListAdminUsers($server, (int) $site->wordpress_install_id);
+                    $authors = array_values(array_filter((array) ($result['authors'] ?? []), fn ($author) => is_array($author) && filled($author['user_login'] ?? null)));
+                }
+            } catch (\Throwable $e) {
+                $authors = [];
+            }
+        }
+
+        return $this->appendMissingAuthorOptions($authors, array_filter([
+            $selectedAuthor,
+            $site?->default_author,
+        ]));
+    }
+
+    private function appendMissingAuthorOptions(array $authors, array $preferredLogins): array
+    {
+        $known = [];
+
+        foreach ($authors as $author) {
+            $login = strtolower((string) ($author['user_login'] ?? ''));
+            if ($login !== '') {
+                $known[$login] = true;
+            }
+        }
+
+        foreach ($preferredLogins as $login) {
+            $login = trim((string) $login);
+            if ($login === '') {
+                continue;
+            }
+
+            $key = strtolower($login);
+            if (!isset($known[$key])) {
+                $authors[] = [
+                    'id' => null,
+                    'user_login' => $login,
+                    'display_name' => $login,
+                    'roles' => ['saved'],
+                ];
+                $known[$key] = true;
+            }
+        }
+
+        usort($authors, function (array $left, array $right): int {
+            $leftLabel = (string) ($left['display_name'] ?? $left['user_login'] ?? '');
+            $rightLabel = (string) ($right['display_name'] ?? $right['user_login'] ?? '');
+
+            return strcasecmp($leftLabel, $rightLabel);
+        });
+
+        return array_values($authors);
+    }
 
     public function startOperation(int $id, Request $request): JsonResponse
     {
@@ -374,6 +669,64 @@ class CampaignController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
+    public function searchAuthors(int $id, Request $request): JsonResponse
+    {
+        $campaign = PublishCampaign::findOrFail($id);
+        $site = $campaign->publish_site_id ? PublishSite::find($campaign->publish_site_id) : null;
+
+        if (!$site || !$site->wordpress_install_id) {
+            return response()->json(['success' => true, 'data' => []]);
+        }
+
+        $cacheKey = 'campaigns:' . $campaign->id . ':site:' . $site->id . ':authors';
+        $authors = \Illuminate\Support\Facades\Cache::remember($cacheKey, 600, function () use ($site) {
+            $server = $site->publish_account_id
+                ? WhmServer::whereHas('accounts', fn ($q) => $q->where('id', $site->publish_account_id))->first()
+                : null;
+            if (!$server) {
+                $hosting = HostingAccount::find($site->publish_account_id);
+                $server = $hosting?->whm_server;
+            }
+            if (!$server) {
+                return [];
+            }
+            $result = app(WpToolkitService::class)->wpCliListAdminUsers($server, (int) $site->wordpress_install_id);
+            return $result['authors'] ?? [];
+        });
+
+        $q = trim((string) $request->input('q', ''));
+        $limit = (int) ($request->input('limit', 15) ?: 15);
+        $limit = max(1, min(50, $limit));
+
+        $filtered = $q === ''
+            ? array_slice($authors, 0, $limit)
+            : array_values(array_filter($authors, function ($a) use ($q) {
+                $hay = strtolower(
+                    ($a['display_name'] ?? '') . ' '
+                    . ($a['username'] ?? '') . ' '
+                    . ($a['email'] ?? '') . ' '
+                    . ($a['slug'] ?? '')
+                );
+                return str_contains($hay, strtolower($q));
+            }));
+
+        $filtered = array_slice($filtered, 0, $limit);
+
+        $data = array_map(function ($a) {
+            $name = $a['display_name'] ?? $a['name'] ?? $a['username'] ?? $a['slug'] ?? '';
+            return [
+                'id' => $a['id'] ?? $a['ID'] ?? $name,
+                'name' => $name,
+                'display_name' => $name,
+                'username' => $a['username'] ?? $a['slug'] ?? $name,
+                'email' => $a['email'] ?? '',
+                'slug' => $a['slug'] ?? \Illuminate\Support\Str::slug($name),
+            ];
+        }, $filtered);
+
+        return response()->json(['success' => true, 'data' => $data]);
+    }
+
     public function runNow(int $id, Request $request): JsonResponse
     {
         $campaign = PublishCampaign::findOrFail($id);
@@ -485,6 +838,13 @@ class CampaignController extends Controller
             'ai_instructions' => 'nullable|string',
             'topic' => 'nullable|string|max:1000',
             'keywords' => 'nullable|array',
+            'link_list' => 'nullable|array',
+            'link_list.*' => 'nullable|url|max:2000',
+            'article_sources' => 'nullable|array',
+            'article_sources.*' => 'nullable|string|max:100',
+            'photo_sources' => 'nullable|array',
+            'photo_sources.*' => 'nullable|string|max:100',
+            'max_links_per_article' => 'nullable|integer|min:0|max:25',
             'article_type' => ['nullable', 'string', Rule::in($this->eligibility->supportedArticleTypes())],
             'ai_engine' => 'nullable|string|max:100',
             'author' => 'nullable|string|max:255',
@@ -615,6 +975,7 @@ class CampaignController extends Controller
             'description',
             'ai_instructions',
             'topic',
+            'max_links_per_article',
             'article_type',
             'ai_engine',
             'author',

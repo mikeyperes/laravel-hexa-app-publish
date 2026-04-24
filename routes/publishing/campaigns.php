@@ -22,4 +22,5 @@ Route::post('/campaigns/{id}/pause', [CampaignController::class, 'pause'])->name
 Route::post('/campaigns/{id}/duplicate', [CampaignController::class, 'duplicate'])->name('campaigns.duplicate');
 Route::post('/campaigns/{id}/start-operation', [CampaignController::class, 'startOperation'])->name('campaigns.start-operation');
 Route::post('/campaigns/{id}/run-now', [CampaignController::class, 'runNow'])->name('campaigns.run-now');
+Route::get('/campaigns/{id}/authors/search', [CampaignController::class, 'searchAuthors'])->name('campaigns.authors.search');
 Route::delete('/campaigns/{id}', [CampaignController::class, 'destroy'])->name('campaigns.destroy');
