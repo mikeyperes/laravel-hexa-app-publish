@@ -4,12 +4,12 @@
 
 @section('content')
 <style>
-    .hx-card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; overflow:visible; margin-bottom:20px; }
-    .hx-card-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:16px 20px; border-bottom:1px solid #f3f4f6; }
-    .hx-card-header.hx-clickable { cursor:pointer; user-select:none; }
+    .hx-card { background:#fff; border:1px solid #e5e7eb; border-radius:14px; overflow:visible; margin-bottom:24px; box-shadow:0 1px 2px rgba(0,0,0,0.04); }
+    .hx-card-header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; padding:20px 24px; border-bottom:1px solid #f1f5f9; }
+    .hx-card-header.hx-clickable { cursor:pointer; user-select:none; transition:background 0.12s; }
     .hx-card-header.hx-clickable:hover { background:#fafbfc; }
-    .hx-card-title-block { display:flex; align-items:flex-start; gap:12px; min-width:0; flex:1; }
-    .hx-card-icon { width:38px; height:38px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#eff6ff; color:#2563eb; }
+    .hx-card-title-block { display:flex; align-items:flex-start; gap:14px; min-width:0; flex:1; }
+    .hx-card-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#eff6ff; color:#2563eb; }
     .hx-card-icon svg { width:20px; height:20px; }
     .hx-card-icon.green  { background:#f0fdf4; color:#16a34a; }
     .hx-card-icon.amber  { background:#fffbeb; color:#d97706; }
@@ -18,10 +18,10 @@
     .hx-card-icon.slate  { background:#f1f5f9; color:#475569; }
     .hx-card-icon.indigo { background:#eef2ff; color:#4f46e5; }
     .hx-card-icon.red    { background:#fef2f2; color:#dc2626; }
-    .hx-card-title { font-size:15px; font-weight:700; color:#111827; margin:0; line-height:1.25; }
-    .hx-card-subtitle { font-size:12px; color:#6b7280; margin-top:3px; line-height:1.4; }
-    .hx-card-body { padding:20px; }
-    .hx-card-header-right { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+    .hx-card-title { font-size:16px; font-weight:700; color:#111827; margin:0; line-height:1.3; }
+    .hx-card-subtitle { font-size:13px; color:#6b7280; margin-top:4px; line-height:1.45; }
+    .hx-card-body { padding:24px; }
+    .hx-card-header-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
     .hx-tag { display:inline-flex; align-items:center; padding:2px 9px; border-radius:9999px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap; }
     .hx-tag.blue  { background:#dbeafe; color:#1d4ed8; }
     .hx-tag.green { background:#dcfce7; color:#166534; }
@@ -33,12 +33,12 @@
     .hx-input, .hx-select, .hx-textarea { width:100%; padding:9px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; background:#fff; color:#111827; transition:border-color 0.1s, box-shadow 0.1s; }
     .hx-input:focus, .hx-select:focus, .hx-textarea:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,0.2); }
     .hx-textarea { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; resize:vertical; min-height:72px; }
-    .hx-field { margin-bottom:16px; }
+    .hx-field { margin-bottom:20px; }
     .hx-field:last-child { margin-bottom:0; }
-    .hx-field-hint { font-size:11px; color:#9ca3af; margin-top:4px; }
-    .hx-grid-2 { display:grid; grid-template-columns:1fr; gap:16px; }
+    .hx-field-hint { font-size:12px; color:#9ca3af; margin-top:6px; }
+    .hx-grid-2 { display:grid; grid-template-columns:1fr; gap:20px; }
     @media(min-width:640px) { .hx-grid-2 { grid-template-columns:1fr 1fr; } }
-    .hx-grid-3 { display:grid; grid-template-columns:1fr; gap:16px; }
+    .hx-grid-3 { display:grid; grid-template-columns:1fr; gap:20px; }
     @media(min-width:640px) { .hx-grid-3 { grid-template-columns:repeat(3, 1fr); } }
     .hx-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:8px; font-size:13px; font-weight:500; border:1px solid transparent; cursor:pointer; transition:background 0.1s, opacity 0.1s; white-space:nowrap; }
     .hx-btn-primary { background:#2563eb; color:#fff; }
