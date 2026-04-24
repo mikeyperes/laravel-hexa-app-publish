@@ -318,13 +318,79 @@ class ArticleController extends Controller
     public function refreshWp(int $id): JsonResponse
     {
         $article = $this->findArticle($id, ['site']);
+        $steps = [];
+        $stepStart = microtime(true);
+        $step = function (string $label, string $status, ?string $detail = null) use (&$steps, &$stepStart) {
+            $steps[] = [
+                'label'  => $label,
+                'status' => $status, // 'ok' | 'skip' | 'error' | 'info'
+                'detail' => $detail,
+                'ms'     => (int) round((microtime(true) - $stepStart) * 1000),
+            ];
+            $stepStart = microtime(true);
+        };
+
+        $step('Loading article record', 'ok', "#{$article->id} · " . ($article->article_id ?: 'no ref'));
+
+        if (!$article->site) {
+            $step('Resolving WordPress site', 'skip', 'Article has no associated site');
+        } else {
+            $step('Resolving WordPress site', 'ok', $article->site->name . ' (' . $article->site->url . ')');
+        }
+
+        $before = [
+            'wp_status'    => $article->wp_status,
+            'wp_post_url'  => $article->wp_post_url,
+            'status'       => $article->status,
+            'delivery'     => $article->delivery_mode,
+            'published_at' => $article->published_at?->toIso8601String(),
+        ];
+
+        if (!$article->wp_post_id) {
+            $step('Checking WordPress post ID', 'skip', 'No wp_post_id — this is still a local draft');
+        } else {
+            $step('Checking WordPress post ID', 'ok', '#' . $article->wp_post_id);
+            $step('Calling WordPress inspectPost', 'info', 'Fetching live post from ' . ($article->site->url ?? 'WordPress'));
+        }
+
         $result = $this->syncArticleWordPressState($article);
         $article->refresh();
 
+        if (!empty($result['sync_error'])) {
+            $step('WordPress inspect', 'error', $result['sync_error']);
+        } elseif ($article->wp_post_id) {
+            $step('WordPress inspect', 'ok', 'Post status: ' . ($result['effective_status'] ?? $article->wp_status ?: '—'));
+        }
+
+        $changes = [];
+        foreach (['wp_status', 'wp_post_url', 'status', 'delivery_mode'] as $field) {
+            $afterValue = $field === 'delivery_mode' ? $article->delivery_mode : $article->{$field};
+            $beforeValue = $before[$field === 'delivery_mode' ? 'delivery' : $field] ?? null;
+            if ($afterValue !== $beforeValue) {
+                $changes[$field] = [$beforeValue, $afterValue];
+            }
+        }
+        $afterPublishedAt = $article->published_at?->toIso8601String();
+        if ($afterPublishedAt !== $before['published_at']) {
+            $changes['published_at'] = [$before['published_at'], $afterPublishedAt];
+        }
+
+        if (empty($changes)) {
+            $step('Diffing local vs WordPress', 'ok', 'No field changes — already in sync');
+        } else {
+            foreach ($changes as $field => [$was, $now]) {
+                $step('Updated ' . $field, 'ok', ($was ?: '∅') . ' → ' . ($now ?: '∅'));
+            }
+        }
+
+        $step('Refresh complete', empty($result['sync_error']) ? 'ok' : 'error');
+
         return response()->json([
             'success' => empty($result['sync_error']),
-            'message' => $result['sync_message'] ?? ($result['sync_error'] ? null : 'Already in sync with WordPress.'),
+            'message' => $result['sync_message'] ?? ($result['sync_error'] ? null : (count($changes) ? 'Synced ' . count($changes) . ' field(s) from WordPress.' : 'Already in sync with WordPress.')),
             'error'   => $result['sync_error'] ?? null,
+            'changes' => $changes,
+            'steps'   => $steps,
             'article' => [
                 'id'           => $article->id,
                 'title'        => $article->title,

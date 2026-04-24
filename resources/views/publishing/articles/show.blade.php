@@ -49,7 +49,45 @@
     @php
         $iconColor = $isLocalDraft ? 'bg-gray-100 text-gray-600' : (!empty($lifecycle['is_live']) ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700');
     @endphp
-    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden" x-data="{ refreshing: false, refreshMsg: '', auditOpen: false }">
+    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden" x-data="{
+        refreshing: false,
+        refreshMsg: '',
+        refreshModalOpen: false,
+        refreshSteps: [],
+        refreshSummary: null,
+        refreshError: null,
+        exportOpen: false,
+        async runRefresh() {
+            this.refreshing = true;
+            this.refreshModalOpen = true;
+            this.refreshSteps = [{ label: 'Contacting WordPress…', status: 'info', ms: 0 }];
+            this.refreshSummary = null;
+            this.refreshError = null;
+            try {
+                const r = await fetch('{{ route('publish.articles.refresh-wp', $article->id) }}', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content, 'Accept': 'application/json' }
+                });
+                const d = await r.json();
+                this.refreshSteps = [];
+                for (const step of (d.steps || [])) {
+                    this.refreshSteps.push(step);
+                    await new Promise(res => setTimeout(res, 90));
+                }
+                this.refreshSummary = d.message || null;
+                this.refreshError = d.error || null;
+                if (d.success) {
+                    this.refreshSteps.push({ label: 'Reloading page to show updated record…', status: 'info', ms: 0 });
+                    setTimeout(() => window.location.reload(), 1100);
+                } else {
+                    this.refreshing = false;
+                }
+            } catch (e) {
+                this.refreshError = e.message || 'Network error';
+                this.refreshing = false;
+            }
+        },
+    }">
         <div class="p-8">
             <div class="flex items-start gap-5">
                 <div class="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 {{ $iconColor }}">
@@ -129,38 +167,82 @@
                     </a>
                 @endif
                 <button type="button"
-                    @click="refreshing = true; refreshMsg = '';
-                        fetch('{{ route('publish.articles.refresh-wp', $article->id) }}', { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content, 'Accept': 'application/json' } })
-                            .then(r => r.json())
-                            .then(d => { refreshMsg = d.message || d.error || 'Refreshed'; setTimeout(() => window.location.reload(), 500); })
-                            .catch(e => { refreshMsg = e.message || 'Network error'; refreshing = false; })"
+                    @click="runRefresh()"
                     :disabled="refreshing"
                     class="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 px-4 py-2.5 rounded-lg disabled:opacity-50"
-                    title="Pull the latest post status, title, and URL from WordPress and update this record">
+                    title="Open a live activity log, pull the latest post status, title, and URL from WordPress, and update this record">
                     <svg x-show="!refreshing" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                     <svg x-show="refreshing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     <span x-text="refreshing ? 'Refreshing…' : 'Refresh from WordPress'"></span>
                 </button>
             </div>
             <div class="flex flex-wrap items-center gap-2.5">
-                <div class="relative" @click.outside="auditOpen = false">
-                    <button type="button" @click="auditOpen = !auditOpen" class="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-gray-900 bg-white border border-gray-300 hover:bg-gray-50 px-4 py-2.5 rounded-lg">
-                        Audit
-                        <svg class="w-3 h-3 transition-transform" :class="auditOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                <div class="relative" @click.outside="exportOpen = false">
+                    <button type="button" @click="exportOpen = !exportOpen" class="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-gray-900 bg-white border border-gray-300 hover:bg-gray-50 px-4 py-2.5 rounded-lg" title="Export this article's full metadata dump — every field, AI run, WordPress state, and media record — as plain text or JSON">
+                        Export
+                        <svg class="w-3 h-3 transition-transform" :class="exportOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                     </button>
-                    <div x-show="auditOpen" x-cloak x-transition class="absolute right-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 text-sm">
-                        <button @click="copyPrettyAudit(); auditOpen = false" class="block w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50">Copy Audit Summary</button>
-                        <button @click="copyAuditDump(); auditOpen = false" class="block w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50">Copy Audit JSON</button>
-                        <button @click="downloadAuditJson(); auditOpen = false" class="block w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50">Download Audit JSON</button>
+                    <div x-show="exportOpen" x-cloak x-transition class="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 text-sm">
+                        <button @click="copyPrettyAudit(); exportOpen = false" class="block w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50">
+                            <span class="block font-medium">Copy Summary</span>
+                            <span class="block text-xs text-gray-400">Human-readable plain text</span>
+                        </button>
+                        <button @click="copyAuditDump(); exportOpen = false" class="block w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50">
+                            <span class="block font-medium">Copy JSON</span>
+                            <span class="block text-xs text-gray-400">Full article record to clipboard</span>
+                        </button>
+                        <button @click="downloadAuditJson(); exportOpen = false" class="block w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50">
+                            <span class="block font-medium">Download JSON</span>
+                            <span class="block text-xs text-gray-400">Save as .json file</span>
+                        </button>
                     </div>
                 </div>
                 <button @click="confirmDelete = true; $nextTick(() => $refs.deleteSection?.scrollIntoView({ behavior: 'smooth' }))" class="inline-flex items-center gap-1 text-sm font-medium text-red-500 hover:text-red-700 bg-white border border-red-200 hover:bg-red-50 px-4 py-2.5 rounded-lg">Delete</button>
             </div>
         </div>
-        <div x-show="refreshMsg" x-cloak class="px-8 py-3 text-xs text-gray-600 bg-blue-50 border-t border-blue-100">
-            <span x-text="refreshMsg"></span>
-        </div>
     </section>
+
+    {{-- Refresh activity log modal --}}
+    <div x-show="refreshModalOpen" x-cloak x-transition.opacity
+         @keydown.escape.window="if (!refreshing) refreshModalOpen = false"
+         class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+         @click.self="if (!refreshing) refreshModalOpen = false">
+        <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div class="flex items-center gap-2">
+                    <svg x-show="refreshing" class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    <svg x-show="!refreshing && !refreshError" x-cloak class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                    <svg x-show="!refreshing && refreshError" x-cloak class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.74-3l-7.07-12.24a2 2 0 00-3.48 0L3.19 16a2 2 0 001.74 3z"/></svg>
+                    <h3 class="text-sm font-semibold text-gray-900">Refreshing from WordPress</h3>
+                </div>
+                <button type="button" :disabled="refreshing" @click="refreshModalOpen = false" class="text-gray-400 hover:text-gray-600 disabled:opacity-40">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="flex-1 overflow-y-auto px-5 py-4 space-y-2 font-mono text-xs">
+                <template x-for="(step, idx) in refreshSteps" :key="idx">
+                    <div class="flex items-start gap-2.5" x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-x-1" x-transition:enter-end="opacity-100 translate-x-0">
+                        <template x-if="step.status === 'ok'"><svg class="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></template>
+                        <template x-if="step.status === 'error'"><svg class="w-3.5 h-3.5 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.74-3l-7.07-12.24a2 2 0 00-3.48 0L3.19 16a2 2 0 001.74 3z"/></svg></template>
+                        <template x-if="step.status === 'skip'"><span class="w-3.5 h-3.5 flex items-center justify-center text-gray-400 mt-0.5 flex-shrink-0">—</span></template>
+                        <template x-if="step.status === 'info'"><svg class="w-3.5 h-3.5 text-blue-500 animate-pulse mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/></svg></template>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-medium text-gray-800 break-words" x-text="step.label"></div>
+                            <div x-show="step.detail" x-cloak class="text-gray-500 break-words" x-text="step.detail"></div>
+                        </div>
+                        <span x-show="step.ms > 0" x-cloak class="text-[10px] text-gray-400 flex-shrink-0" x-text="step.ms + 'ms'"></span>
+                    </div>
+                </template>
+            </div>
+            <div x-show="refreshSummary || refreshError" x-cloak class="px-5 py-3 border-t border-gray-100 text-sm"
+                 :class="refreshError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'">
+                <span x-text="refreshError || refreshSummary"></span>
+            </div>
+            <div x-show="!refreshing" x-cloak class="px-5 py-3 border-t border-gray-100 flex justify-end">
+                <button @click="refreshModalOpen = false" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded">Close</button>
+            </div>
+        </div>
+    </div>
 
     <article class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         @if($featuredUrl)
@@ -211,81 +293,104 @@
         </div>
     </article>
 
-    {{-- Generation Breakdown —  AI usage, article, WordPress, source links --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" x-data="{ open: true }">
-        <button @click="open = !open" class="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 rounded-xl">
-            <div class="flex items-center gap-2">
-                <h3 class="font-semibold text-gray-700">Generation Breakdown</h3>
-                @if($article->ai_cost)<span class="text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5">${{ number_format($article->ai_cost, 4) }}</span>@endif
-                @if($article->ai_engine_used)<span class="text-[10px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-100 rounded px-1.5 py-0.5">{{ $article->ai_engine_used }}</span>@endif
+    {{-- Generation Breakdown — AI usage, article, WordPress, source, audit trail --}}
+    @php
+        $groups = [
+            'AI Generation' => [
+                ['label' => 'Provider', 'value' => $article->ai_provider ?: '—'],
+                ['label' => 'Model', 'value' => $article->ai_engine_used ?: '—', 'mono' => true],
+                ['label' => 'Input tokens', 'value' => $article->ai_tokens_input ? number_format($article->ai_tokens_input) : '—', 'mono' => true],
+                ['label' => 'Output tokens', 'value' => $article->ai_tokens_output ? number_format($article->ai_tokens_output) : '—', 'mono' => true],
+                ['label' => 'Cost', 'value' => $article->ai_cost ? '$' . number_format($article->ai_cost, 4) : '—', 'mono' => true, 'accent' => 'emerald'],
+            ],
+            'Article' => [
+                ['label' => 'Article ID', 'value' => '#' . $article->id, 'mono' => true],
+                ['label' => 'Public ref', 'value' => $article->article_id ?: '—', 'mono' => true],
+                ['label' => 'Type', 'value' => $article->article_type ?: '—'],
+                ['label' => 'Status', 'value' => ucfirst($article->status ?: '—')],
+                ['label' => 'Word count', 'value' => $article->word_count ? number_format($article->word_count) : '—', 'mono' => true],
+            ],
+            'WordPress' => [
+                ['label' => 'Delivery mode', 'value' => $article->delivery_mode ?: '—'],
+                ['label' => 'WP post ID', 'value' => $article->wp_post_id ?: '—', 'mono' => true],
+                ['label' => 'WP status', 'value' => $article->wp_status ?: '—'],
+                ['label' => 'Published', 'value' => $article->published_at ? $article->published_at->setTimezone($tz)->format('M j, Y g:i A') : '—'],
+            ],
+            'Source' => [
+                ['label' => 'Site', 'value' => $article->site ? $article->site->name : '—', 'link' => $article->site?->url],
+                ['label' => 'Campaign', 'value' => $article->publish_campaign_id ? '#' . $article->publish_campaign_id : '—', 'link' => $article->publish_campaign_id ? route('campaigns.show', $article->publish_campaign_id) : null],
+                ['label' => 'Template', 'value' => $article->publish_template_id ? '#' . $article->publish_template_id : '—', 'mono' => true],
+                ['label' => 'Preset', 'value' => $article->preset_id ? '#' . $article->preset_id : '—', 'mono' => true],
+            ],
+            'Audit Trail' => [
+                ['label' => 'Created by', 'value' => $article->creator?->name ?? $article->author ?? '—'],
+                ['label' => 'Created', 'value' => $article->created_at ? $article->created_at->setTimezone($tz)->format('M j, Y g:i A') : '—'],
+                ['label' => 'Updated', 'value' => $article->updated_at ? $article->updated_at->setTimezone($tz)->format('M j, Y g:i A') : '—'],
+                ['label' => 'IP address', 'value' => $article->user_ip ?: '—', 'mono' => true],
+            ],
+        ];
+    @endphp
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" x-data="{ open: true }">
+        <button @click="open = !open" class="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0h6m0 0v-4a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                </div>
+                <div>
+                    <h3 class="text-base font-semibold text-gray-900">Generation Breakdown</h3>
+                    <p class="text-xs text-gray-500">AI usage, article metadata, WordPress delivery, source linkage, and audit trail.</p>
+                </div>
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="open" x-cloak class="px-5 pb-5 space-y-5">
-
-            {{-- AI Generation --}}
-            <div>
-                <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-gray-100">AI Generation</div>
-                <div class="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-3 text-xs">
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Provider</div><div class="text-gray-800 font-medium mt-0.5 break-words">{{ $article->ai_provider ?? '—' }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Model</div><div class="text-gray-800 font-medium mt-0.5 font-mono break-words">{{ $article->ai_engine_used ?? '—' }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Input Tokens</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->ai_tokens_input ? number_format($article->ai_tokens_input) : '—' }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Output Tokens</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->ai_tokens_output ? number_format($article->ai_tokens_output) : '—' }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Cost</div><div class="text-emerald-700 font-semibold mt-0.5 font-mono">{{ $article->ai_cost ? '$' . number_format($article->ai_cost, 4) : '—' }}</div></div>
+        <div x-show="open" x-cloak class="border-t border-gray-100">
+            @foreach($groups as $groupLabel => $items)
+                <div class="grid grid-cols-[140px_1fr] items-start gap-6 px-6 py-5 {{ !$loop->last ? 'border-b border-gray-100' : '' }}">
+                    <div class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider pt-0.5">{{ $groupLabel }}</div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 text-sm">
+                        @foreach($items as $item)
+                            <div class="min-w-0">
+                                <div class="text-[11px] text-gray-400 uppercase tracking-wide">{{ $item['label'] }}</div>
+                                <div class="mt-1 text-gray-900 {{ !empty($item['mono']) ? 'font-mono text-[13px]' : 'font-medium' }} {{ ($item['accent'] ?? null) === 'emerald' ? 'text-emerald-700' : '' }} break-words">
+                                    @if(!empty($item['link']))
+                                        <a href="{{ $item['link'] }}" @if(str_starts_with($item['link'], 'http')) target="_blank" rel="noopener" @endif class="text-blue-600 hover:underline inline-flex items-center gap-0.5">
+                                            {{ $item['value'] }}
+                                            @if(str_starts_with($item['link'], 'http'))<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>@endif
+                                        </a>
+                                    @else
+                                        {{ $item['value'] }}
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
                 </div>
-            </div>
-
-            {{-- Article --}}
-            <div>
-                <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-gray-100">Article</div>
-                <div class="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-3 text-xs">
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Article ID</div><div class="text-gray-800 font-medium mt-0.5 font-mono">#{{ $article->id }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Public Ref</div><div class="text-gray-800 font-medium mt-0.5 font-mono break-words">{{ $article->article_id ?? '—' }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Type</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->article_type ?? '—' }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Status</div><div class="text-gray-800 font-medium mt-0.5">{{ ucfirst($article->status ?? '—') }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Word Count</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->word_count ? number_format($article->word_count) : '—' }}</div></div>
+            @endforeach
+            @if(!empty($lifecycle['public_url']) || !empty($lifecycle['wp_admin_url']))
+                <div class="grid grid-cols-[140px_1fr] gap-6 px-6 py-5 border-t border-gray-100 bg-gray-50/50">
+                    <div class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider pt-0.5">WordPress Access</div>
+                    <div class="space-y-1 text-sm">
+                        @if(!empty($lifecycle['is_live']) && !empty($lifecycle['public_url']))
+                            <a href="{{ $lifecycle['public_url'] }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline break-all inline-flex items-center gap-1">
+                                {{ $lifecycle['public_url'] }}
+                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                            </a>
+                        @endif
+                        @if(!empty($lifecycle['wp_admin_url']))
+                            <a href="{{ $lifecycle['wp_admin_url'] }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline break-all inline-flex items-center gap-1">
+                                Open in WordPress admin
+                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                            </a>
+                        @endif
+                    </div>
                 </div>
-            </div>
-
-            {{-- WordPress --}}
-            <div>
-                <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-gray-100">WordPress</div>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-xs">
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Delivery Mode</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->delivery_mode ?? '—' }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">WP Post ID</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->wp_post_id ?? '—' }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">WP Status</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->wp_status ?? '—' }}</div></div>
-                    <div class="min-w-0 md:col-span-1"><div class="text-gray-400 text-[11px]">Published</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->published_at ? $article->published_at->setTimezone($tz)->format('M j, Y g:i A') : '—' }}</div></div>
-                    <div class="min-w-0 col-span-2 md:col-span-4"><div class="text-gray-400 text-[11px]">WordPress Access</div><div class="text-gray-800 font-medium mt-0.5 break-all">@if(!empty($lifecycle['is_live']) && !empty($lifecycle['public_url']))<a href="{{ $lifecycle['public_url'] }}" target="_blank" class="text-blue-600 hover:underline">{{ $lifecycle['public_url'] }}</a>@elseif(!empty($lifecycle['wp_admin_url']))<a href="{{ $lifecycle['wp_admin_url'] }}" target="_blank" class="text-blue-600 hover:underline">Open in WordPress admin</a>@else —@endif</div></div>
-                </div>
-            </div>
-
-            {{-- Source links --}}
-            <div>
-                <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-gray-100">Source</div>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-xs">
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Site</div><div class="text-gray-800 font-medium mt-0.5 break-words">@if($article->site)<a href="{{ $article->site->url }}" target="_blank" class="text-blue-600 hover:underline">{{ $article->site->name }}</a>@else —@endif</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Campaign</div><div class="text-gray-800 font-medium mt-0.5">@if($article->publish_campaign_id)<a href="{{ route('campaigns.show', $article->publish_campaign_id) }}" class="text-blue-600 hover:underline">#{{ $article->publish_campaign_id }}</a>@else —@endif</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Template</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->publish_template_id ? '#' . $article->publish_template_id : '—' }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Preset</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->preset_id ? '#' . $article->preset_id : '—' }}</div></div>
-                </div>
-            </div>
-
-            {{-- Audit --}}
-            <div>
-                <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-gray-100">Audit</div>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-xs">
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Created By</div><div class="text-gray-800 font-medium mt-0.5 break-words">{{ $article->creator?->name ?? $article->author ?? '—' }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Created</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->created_at ? $article->created_at->setTimezone($tz)->format('M j, Y g:i A') : '—' }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">Updated</div><div class="text-gray-800 font-medium mt-0.5">{{ $article->updated_at ? $article->updated_at->setTimezone($tz)->format('M j, Y g:i A') : '—' }}</div></div>
-                    <div class="min-w-0"><div class="text-gray-400 text-[11px]">IP Address</div><div class="text-gray-800 font-medium mt-0.5 font-mono">{{ $article->user_ip ?? '—' }}</div></div>
-                </div>
-            </div>
+            @endif
         </div>
     </div>
 
     @php $seo = $article->seo_data ?? []; @endphp
-    <div class="bg-gray-50 rounded-xl border border-gray-200" x-data="{ open: true }">
-        <button @click="open = !open" class="w-full flex items-center justify-between p-5 text-left hover:bg-gray-100 rounded-xl"><h3 class="font-semibold text-gray-700">SEO</h3><svg class="w-5 h-5 text-gray-400 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg></button>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200" x-data="{ open: true }">
+        <button @click="open = !open" class="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 rounded-xl"><h3 class="font-semibold text-gray-700">SEO</h3><svg class="w-5 h-5 text-gray-400 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg></button>
         <div x-show="open" x-cloak class="px-5 pb-5 space-y-2 text-xs">
             <div class="flex gap-2 py-1"><span class="text-gray-400 w-28">Meta Title</span><span class="text-blue-700 font-medium break-words">{{ $article->title ?? '—' }}</span></div>
             <div class="flex gap-2 py-1"><span class="text-gray-400 w-28">Description</span><span class="text-gray-600 break-words">{{ $article->excerpt ?? '—' }}</span></div>
@@ -303,8 +408,13 @@
                     <p class="font-medium text-gray-800">{{ $img['filename'] ?? '—' }}</p>
                     <p class="text-gray-500">ID: {{ $img['media_id'] ?? '—' }} @if(!empty($img['file_size']))| {{ round($img['file_size'] / 1024) }} KB @endif @if(!empty($img['is_featured']))<span class="text-green-600 font-medium ml-1">Featured</span>@endif</p>
                     @if(!empty($img['alt_text']))<p class="text-gray-500">Alt: {{ $img['alt_text'] }}</p>@endif
-                    @if(!empty($img['source_url']))<p class="text-gray-400 break-all">Source: {{ \Illuminate\Support\Str::limit($img['source_url'], 80) }}</p>@endif
-                    @if(!empty($img['file_path']))<p class="text-gray-400 break-all">Path: {{ $img['file_path'] }}</p>@endif
+                    @if(!empty($img['source_url']))
+                        <p class="text-gray-500 break-all">Source: <a href="{{ $img['source_url'] }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline inline-flex items-center gap-0.5">{{ \Illuminate\Support\Str::limit($img['source_url'], 80) }}<svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></p>
+                    @endif
+                    @if(!empty($img['file_path']))
+                        @php $fullUrl = ($article->site ? rtrim($article->site->url, '/') . '/' . ltrim($img['file_path'], '/') : null); @endphp
+                        <p class="text-gray-500 break-all">Path: @if($fullUrl)<a href="{{ $fullUrl }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline inline-flex items-center gap-0.5">{{ $img['file_path'] }}<svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>@else{{ $img['file_path'] }}@endif</p>
+                    @endif
                     <div class="flex items-center gap-3 mt-1">
                         <span class="text-green-500 text-[10px]">_hexa_generated = true</span>
                         @if(!empty($img['media_id']) && $article->publishSite)
