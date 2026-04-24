@@ -5,6 +5,8 @@ namespace hexa_app_publish\Publishing\Pipeline\Services;
 use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
 use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineOperation;
+use hexa_core\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
@@ -12,6 +14,7 @@ use Illuminate\Support\Str;
 class PipelineOperationService
 {
     private const DEFAULT_QUEUE = 'publish-pipeline';
+    private const CANCELLATION_TTL_HOURS = 6;
 
     public function __construct(
         private PipelineActivityService $activityService,
@@ -157,6 +160,24 @@ class PipelineOperationService
         return DB::transaction(function () use ($operation, $scope, $type, $message, $extra) {
             /** @var PublishPipelineOperation $locked */
             $locked = PublishPipelineOperation::query()->lockForUpdate()->findOrFail($operation->id);
+            $resolvedCreatedBy = $this->resolveExistingUserId($locked->created_by);
+            if ($locked->isCancelled()) {
+                return [
+                    'id' => (int) $locked->event_sequence,
+                    'client_event_id' => $locked->client_trace . ':cancelled',
+                    'run_trace' => $locked->client_trace,
+                    'captured_at' => optional($locked->last_event_at)->toIso8601String(),
+                    'scope' => $scope,
+                    'type' => 'warning',
+                    'message' => $locked->last_message ?: 'Run stopped by user.',
+                    'stage' => $locked->last_stage,
+                    'substage' => $locked->last_substage,
+                    'trace_id' => $locked->trace_id,
+                    'step' => $this->intOrNull($extra['step'] ?? 7),
+                    'meta' => ['cancelled' => true],
+                ];
+            }
+
             $sequence = (int) $locked->event_sequence + 1;
             $capturedAt = now();
 
@@ -190,12 +211,12 @@ class PipelineOperationService
                 $entry,
                 $locked->workflow_type,
                 $locked->debug_enabled,
-                $locked->created_by
+                $resolvedCreatedBy
             );
 
             $this->articleActivity->record($locked->article, [
                 'publish_pipeline_operation_id' => $locked->id,
-                'created_by' => $locked->created_by,
+                'created_by' => $resolvedCreatedBy,
                 'activity_group' => $locked->client_trace,
                 'activity_type' => 'operation',
                 'stage' => $scope,
@@ -237,6 +258,11 @@ class PipelineOperationService
 
     public function complete(PublishPipelineOperation $operation, array $resultPayload = [], ?string $message = null): PublishPipelineOperation
     {
+        $fresh = $operation->fresh();
+        if ($fresh && $fresh->isCancelled()) {
+            return $fresh;
+        }
+
         $operation->forceFill([
             'status' => PublishPipelineOperation::STATUS_COMPLETED,
             'result_payload' => $resultPayload ?: null,
@@ -245,6 +271,8 @@ class PipelineOperationService
             'completed_at' => now(),
             'last_event_at' => now(),
         ])->save();
+
+        $this->clearCancellation($operation);
 
         return $operation->fresh();
     }
@@ -260,7 +288,53 @@ class PipelineOperationService
             'last_event_at' => now(),
         ])->save();
 
+        if (!(($resultPayload['cancelled'] ?? false) === true)) {
+            $this->clearCancellation($operation);
+        }
+
         return $operation->fresh();
+    }
+
+    public function requestCancellation(PublishPipelineOperation $operation, ?int $requestedBy = null): PublishPipelineOperation
+    {
+        Cache::put($this->cancellationCacheKey($operation->id), [
+            'requested_at' => now()->toIso8601String(),
+            'requested_by' => $requestedBy,
+        ], now()->addHours(self::CANCELLATION_TTL_HOURS));
+
+        $fresh = $operation->fresh() ?: $operation;
+        if (!$fresh->isCancelled()) {
+            $this->appendEvent($fresh, 'campaign', 'warning', 'Force stop requested by user.', [
+                'stage' => $fresh->last_stage ?: 'campaign',
+                'substage' => 'cancel_requested',
+                'requested_by' => $requestedBy,
+                'step' => 16,
+            ]);
+        }
+
+        return $this->fail($fresh, 'Run stopped by user.', array_filter([
+            'cancelled' => true,
+            'message' => 'Run stopped by user.',
+            'requested_by' => $requestedBy,
+            'article_id' => $fresh->publish_article_id,
+            'article_url' => $fresh->article ? route('publish.articles.show', $fresh->article->id) : null,
+        ], fn ($value) => $value !== null && $value !== ''));
+    }
+
+    public function cancellationRequested(PublishPipelineOperation|int $operation): bool
+    {
+        $operationId = $operation instanceof PublishPipelineOperation ? (int) $operation->id : (int) $operation;
+        if ($operation instanceof PublishPipelineOperation && $operation->isCancelled()) {
+            return true;
+        }
+
+        return Cache::has($this->cancellationCacheKey($operationId));
+    }
+
+    public function clearCancellation(PublishPipelineOperation|int $operation): void
+    {
+        $operationId = $operation instanceof PublishPipelineOperation ? (int) $operation->id : (int) $operation;
+        Cache::forget($this->cancellationCacheKey($operationId));
     }
 
     private function queueWorkerRunning(): bool
@@ -287,6 +361,20 @@ class PipelineOperationService
         }
 
         return false;
+    }
+
+    private function cancellationCacheKey(int $operationId): string
+    {
+        return 'publish-pipeline:cancel:' . $operationId;
+    }
+
+    private function resolveExistingUserId(?int $userId): ?int
+    {
+        if (!$userId) {
+            return null;
+        }
+
+        return User::query()->whereKey($userId)->exists() ? $userId : null;
     }
 
     private function normalizeMeta(array $extra): ?array

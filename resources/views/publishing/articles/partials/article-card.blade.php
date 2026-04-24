@@ -58,6 +58,14 @@
     $authorWpUrl = ($siteUrl && $authorSlug) ? $siteUrl . '/author/' . $authorSlug . '/' : null;
     $tz = $timezone ?? ($campaign->timezone ?? null) ?? config('app.timezone', 'America/New_York');
 
+    $campaignId = (int) ($campaign->id ?? request('campaign_id') ?? $article->publish_campaign_id ?? 0);
+    $showUrl = $campaignId > 0
+        ? route('publish.articles.show', ['id' => $article->id, 'campaign_id' => $campaignId, 'article_id' => $article->id])
+        : route('publish.articles.show', $article->id);
+    $editUrl = $campaignId > 0
+        ? route('publish.articles.edit', ['id' => $article->id, 'campaign_id' => $campaignId, 'article_id' => $article->id])
+        : route('publish.articles.edit', $article->id);
+
     $thumb = null;
     if ($article->wp_images && is_array($article->wp_images)) {
         $featured = collect($article->wp_images)->firstWhere('is_featured', true) ?: collect($article->wp_images)->first();
@@ -76,16 +84,26 @@
     $pipelineTone = match($article->status) {
         'completed' => 'green',
         'failed', 'error' => 'red',
-        'running', 'pending', 'queued' => 'amber',
+        'running', 'pending', 'queued', 'drafting', 'sourcing', 'spinning', 'review' => 'amber',
         default => 'slate',
     };
     $pipelineLabel = match($article->status) {
         'completed' => 'Generated',
-        'running' => 'Generating',
+        'running', 'drafting', 'sourcing', 'spinning' => 'In Progress',
+        'review' => 'Ready for Review',
         'queued', 'pending' => 'Queued',
         'failed', 'error' => 'Failed',
         default => ucfirst((string) $article->status),
     };
+    $placeholderTitle = trim((string) ($article->title ?? '')) === 'Campaign run starting...';
+    $displayTitle = trim((string) ($article->title ?: ''));
+    if ($placeholderTitle && in_array((string) $article->status, ['failed', 'error'], true)) {
+        $displayTitle = 'Campaign run failed before article generation';
+    } elseif ($placeholderTitle && in_array((string) $article->status, ['drafting', 'sourcing', 'running', 'queued', 'pending', 'spinning', 'review'], true)) {
+        $displayTitle = 'Campaign article is still being built';
+    } elseif ($displayTitle === '') {
+        $displayTitle = 'Untitled Article';
+    }
     $isDraft = in_array($article->wp_status, ['draft', 'pending', 'auto-draft', 'future'], true);
     $wpTone = match($article->wp_status) {
         'publish', 'published' => 'green',
@@ -103,11 +121,16 @@
     $wpLinkLabel = $isDraft ? 'Edit in WordPress' : 'View on WordPress';
 
     $showSiteChip = $showCampaignSite ?? true;
+    $thumbToneClass = in_array((string) $article->status, ['failed', 'error'], true)
+        ? 'bg-red-50 text-red-400'
+        : (in_array((string) $article->status, ['running', 'queued', 'pending', 'drafting', 'sourcing', 'spinning', 'review'], true)
+            ? 'bg-blue-50 text-blue-400'
+            : 'bg-slate-100 text-slate-400');
 @endphp
 
 <article class="hx-article-row" x-data="{ refreshing: false, refreshNotice: '', refreshError: '' }">
     <div class="hx-article-main">
-        <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener" class="hx-article-thumb">
+        <a href="{{ $showUrl }}" target="_blank" rel="noopener" class="hx-article-thumb {{ $thumb ? '' : $thumbToneClass }}">
             @if($thumb)
                 <img src="{{ $thumb }}" alt="" loading="lazy">
             @else
@@ -116,7 +139,7 @@
         </a>
         <div class="hx-article-body">
             <h3 class="hx-article-title">
-                <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener">{{ $article->title ?: 'Untitled Article' }}</a>
+                <a href="{{ $showUrl }}" target="_blank" rel="noopener">{{ $displayTitle }}</a>
             </h3>
 
             <div class="hx-article-pills">
@@ -200,7 +223,7 @@
                 <svg x-show="refreshing" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 <span x-text="refreshing ? 'Refreshing…' : 'Refresh'"></span>
             </button>
-            <a href="{{ route('publish.articles.edit', $article->id) }}" class="hx-article-btn hx-article-btn-secondary" title="Open this article in the pipeline editor">
+            <a href="{{ $editUrl }}" target="_blank" rel="noopener" class="hx-article-btn hx-article-btn-secondary" title="Open this article in the pipeline editor">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                 Edit
             </a>
@@ -210,7 +233,7 @@
             @if($article->wp_post_url && $isDraft && $wpLink !== $article->wp_post_url)
                 <a href="{{ $article->wp_post_url }}?preview=true" target="_blank" rel="noopener" class="hx-article-btn hx-article-btn-secondary">Preview&nbsp;↗</a>
             @endif
-            <a href="{{ route('publish.articles.show', $article->id) }}" target="_blank" rel="noopener" class="hx-article-btn hx-article-btn-primary">Open&nbsp;→</a>
+            <a href="{{ $showUrl }}" target="_blank" rel="noopener" class="hx-article-btn hx-article-btn-primary">Open&nbsp;→</a>
         </div>
     </div>
     <div x-show="refreshNotice || refreshError" x-cloak class="px-5 pb-3 text-xs" :class="refreshError ? 'text-red-600' : 'text-green-600'">

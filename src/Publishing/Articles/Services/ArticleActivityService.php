@@ -4,6 +4,7 @@ namespace hexa_app_publish\Publishing\Articles\Services;
 
 use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
 use hexa_app_publish\Publishing\Articles\Models\PublishArticleActivity;
+use hexa_core\Models\User;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -26,23 +27,23 @@ class ArticleActivityService
             'publish_article_id' => $articleModel->id,
             'publish_campaign_id' => $payload['publish_campaign_id'] ?? $articleModel->publish_campaign_id,
             'publish_pipeline_operation_id' => $payload['publish_pipeline_operation_id'] ?? null,
-            'created_by' => $payload['created_by'] ?? auth()->id() ?? $articleModel->created_by,
-            'activity_group' => $this->stringOrNull($payload['activity_group'] ?? null),
-            'activity_type' => (string) ($payload['activity_type'] ?? 'event'),
-            'stage' => $this->stringOrNull($payload['stage'] ?? null),
-            'substage' => $this->stringOrNull($payload['substage'] ?? null),
-            'status' => $this->stringOrNull($payload['status'] ?? null),
-            'provider' => $this->stringOrNull($payload['provider'] ?? null),
-            'model' => $this->stringOrNull($payload['model'] ?? null),
-            'agent' => $this->stringOrNull($payload['agent'] ?? null),
-            'method' => $this->stringOrNull($payload['method'] ?? null),
+            'created_by' => $this->resolveExistingUserId($payload['created_by'] ?? auth()->id() ?? $articleModel->created_by),
+            'activity_group' => $this->stringOrNull($payload['activity_group'] ?? null, 80),
+            'activity_type' => (string) Str::limit((string) ($payload['activity_type'] ?? 'event'), 60, ''),
+            'stage' => $this->stringOrNull($payload['stage'] ?? null, 80),
+            'substage' => $this->stringOrNull($payload['substage'] ?? null, 80),
+            'status' => $this->stringOrNull($payload['status'] ?? null, 40),
+            'provider' => $this->stringOrNull($payload['provider'] ?? null, 60),
+            'model' => $this->stringOrNull($payload['model'] ?? null, 120),
+            'agent' => $this->stringOrNull($payload['agent'] ?? null, 80),
+            'method' => $this->stringOrNull($payload['method'] ?? null, 60),
             'attempt_no' => $this->intOrNull($payload['attempt_no'] ?? null),
             'is_retry' => (bool) ($payload['is_retry'] ?? false),
             'success' => array_key_exists('success', $payload) ? (bool) $payload['success'] : null,
-            'title' => $this->stringOrNull($payload['title'] ?? null),
+            'title' => $this->stringOrNull($payload['title'] ?? null, 255),
             'url' => $this->stringOrNull($payload['url'] ?? null),
             'message' => $this->stringOrNull($payload['message'] ?? null),
-            'trace_id' => $this->stringOrNull($payload['trace_id'] ?? null),
+            'trace_id' => $this->stringOrNull($payload['trace_id'] ?? null, 160),
             'request_payload' => $this->normalizeArray($payload['request_payload'] ?? null),
             'response_payload' => $this->normalizeArray($payload['response_payload'] ?? null),
             'meta' => $this->normalizeArray($payload['meta'] ?? null),
@@ -395,10 +396,19 @@ class ArticleActivityService
         return now();
     }
 
-    private function stringOrNull(mixed $value): ?string
+    private function resolveExistingUserId(?int $userId): ?int
+    {
+        if (!$userId) {
+            return null;
+        }
+
+        return User::query()->whereKey($userId)->exists() ? $userId : null;
+    }
+
+    private function stringOrNull(mixed $value, int $limit = 65535): ?string
     {
         $value = is_string($value) ? trim($value) : $value;
-        return $value === '' || $value === null ? null : Str::limit((string) $value, 65535, '');
+        return $value === '' || $value === null ? null : Str::limit((string) $value, $limit, '');
     }
 
     private function intOrNull(mixed $value): ?int

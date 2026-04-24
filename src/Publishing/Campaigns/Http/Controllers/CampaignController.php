@@ -290,24 +290,14 @@ class CampaignController extends Controller
             ->latest('id')
             ->limit(8)
             ->get();
-        $activeOperation = $recentOperations->first(fn (PublishPipelineOperation $operation) => $operation->isActive());
-        $activeOperationArticle = $activeOperation?->article ? [
-            'show_url' => route('publish.articles.show', $activeOperation->article->id),
-            'article_id' => $activeOperation->article->article_id,
-            'title' => $activeOperation->article->title ?: 'Untitled Article',
-            'wp_post_url' => $activeOperation->article->wp_post_url,
-            'thumbnail_url' => $this->resolveArticleThumbnail($activeOperation->article->wp_images),
-            'ai_provider' => $activeOperation->article->ai_provider,
-            'ai_engine_used' => $activeOperation->article->ai_engine_used,
-            'word_count' => $activeOperation->article->word_count,
-            'source_count' => count((array) ($activeOperation->article->source_articles ?? [])),
-            'source_domains' => collect((array) ($activeOperation->article->source_articles ?? []))
-                ->map(fn ($source) => parse_url((string) ($source['url'] ?? ''), PHP_URL_HOST))
-                ->filter()
-                ->unique()
-                ->values()
-                ->all(),
-        ] : null;
+        $activeOperation = $recentOperations->first(fn (PublishPipelineOperation $operation) => $operation->isActive() && !$operation->isStale());
+        $staleOperation = $recentOperations->first(fn (PublishPipelineOperation $operation) => $operation->isActive() && $operation->isStale());
+        $activeOperationArticle = $activeOperation?->article
+            ? $this->serializeCampaignArticleSummary($activeOperation->article, $campaign->id)
+            : null;
+        $staleOperationArticle = $staleOperation?->article
+            ? $this->serializeCampaignArticleSummary($staleOperation->article, $campaign->id)
+            : null;
         $recentOperationSummaries = $recentOperations->map(fn (PublishPipelineOperation $operation) => $this->serializeCampaignOperationSummary($operation, $timezone))->values();
         $lastArticle = $campaign->articles->first();
 
@@ -404,7 +394,9 @@ class CampaignController extends Controller
             'schedulerHealth' => $schedulerHealth,
             'recentOperations' => $recentOperationSummaries,
             'activeOperation' => $activeOperation ? $this->serializeOperation($activeOperation) : null,
+            'staleOperation' => $staleOperation ? $this->serializeOperation($staleOperation) : null,
             'activeOperationArticle' => $activeOperationArticle,
+            'staleOperationArticle' => $staleOperationArticle,
             'displayTimezone' => $timezone,
             'lastArticle' => $lastArticle,
             'checklistDefinitions' => [
@@ -493,6 +485,7 @@ class CampaignController extends Controller
     private function serializeCampaignOperationSummary(PublishPipelineOperation $operation, string $timezone): array
     {
         $article = $operation->article;
+        $campaignId = (int) ($operation->request_summary['campaign_id'] ?? ($article->publish_campaign_id ?? 0));
 
         return [
             'id' => $operation->id,
@@ -508,7 +501,7 @@ class CampaignController extends Controller
                 'title' => $article->title ?: 'Untitled Article',
                 'status' => $article->status,
                 'wp_status' => $article->wp_status,
-                'show_url' => route('publish.articles.show', $article->id),
+                'show_url' => $campaignId > 0 ? $this->buildCampaignArticleUrl($article->id, $campaignId) : route('publish.articles.show', $article->id),
                 'wp_post_url' => $article->wp_post_url,
                 'ai_provider' => $article->ai_provider,
                 'ai_engine_used' => $article->ai_engine_used,
@@ -665,7 +658,7 @@ class CampaignController extends Controller
             'mode' => $mode,
             'checklist' => $this->checklistService->definitions($mode),
             'article_id' => $started['article']->id,
-            'article_url' => route('publish.articles.show', $started['article']->id),
+            'article_url' => $this->buildCampaignArticleUrl($started['article']->id, $campaign->id),
             'operation' => $this->serializeOperation($started['operation']),
         ]);
     }
@@ -755,9 +748,61 @@ class CampaignController extends Controller
             'mode' => $mode,
             'checklist' => $this->checklistService->definitions($mode),
             'article_id' => $started['article']->id,
-            'article_url' => route('publish.articles.show', $started['article']->id),
+            'article_url' => $this->buildCampaignArticleUrl($started['article']->id, $campaign->id),
             'operation' => $this->serializeOperation($started['operation']),
         ]);
+    }
+
+    public function stopOperation(int $id, PublishPipelineOperation $operation): JsonResponse
+    {
+        $campaign = PublishCampaign::findOrFail($id);
+
+        abort_unless(
+            (int) ($operation->request_summary['campaign_id'] ?? 0) === (int) $campaign->id
+            || (int) ($operation->article?->publish_campaign_id ?? 0) === (int) $campaign->id,
+            404
+        );
+
+        $operation = $this->pipelineOperationService->requestCancellation($operation, auth()->id());
+        if ($operation->article) {
+            $payload = (array) ($operation->result_payload ?? []);
+            $payload['article_id'] = $operation->article->id;
+            $payload['article_url'] = $this->buildCampaignArticleUrl($operation->article->id, $campaign->id);
+            $operation->forceFill(['result_payload' => $payload])->save();
+            $operation = $operation->fresh();
+        }
+
+        if ($operation->article && !in_array((string) $operation->article->status, ['completed', 'failed'], true)) {
+            $operation->article->update(['status' => 'failed']);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Run stop requested.',
+            'operation' => $this->serializeOperation($operation),
+        ]);
+    }
+
+    private function serializeCampaignArticleSummary(\hexa_app_publish\Publishing\Articles\Models\PublishArticle $article, int $campaignId): array
+    {
+        return [
+            'show_url' => $this->buildCampaignArticleUrl($article->id, $campaignId),
+            'article_id' => $article->article_id,
+            'article_record_id' => $article->id,
+            'title' => $article->title ?: 'Untitled Article',
+            'wp_post_url' => $article->wp_post_url,
+            'thumbnail_url' => $this->resolveArticleThumbnail($article->wp_images),
+            'ai_provider' => $article->ai_provider,
+            'ai_engine_used' => $article->ai_engine_used,
+            'word_count' => $article->word_count,
+            'source_count' => count((array) ($article->source_articles ?? [])),
+            'source_domains' => collect((array) ($article->source_articles ?? []))
+                ->map(fn ($source) => parse_url((string) ($source['url'] ?? ''), PHP_URL_HOST))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all(),
+        ];
     }
 
 
@@ -787,10 +832,21 @@ class CampaignController extends Controller
             'started_at' => optional($operation->started_at)->toIso8601String(),
             'completed_at' => optional($operation->completed_at)->toIso8601String(),
             'last_event_at' => optional($operation->last_event_at)->toIso8601String(),
+            'is_stale' => $operation->isStale(),
+            'is_cancelled' => $operation->isCancelled(),
             'stream_supported' => $this->pipelineOperationService->supportsLiveStream(),
             'show_url' => route('publish.pipeline.operations.show', ['operation' => $operation->id]),
             'stream_url' => route('publish.pipeline.operations.stream', ['operation' => $operation->id]),
         ];
+    }
+
+    private function buildCampaignArticleUrl(int $articleId, int $campaignId): string
+    {
+        return route('publish.articles.show', [
+            'id' => $articleId,
+            'campaign_id' => $campaignId,
+            'article_id' => $articleId,
+        ]);
     }
 
     /**

@@ -238,7 +238,7 @@ class LinkHealthService
     /**
      * @return array{html: string, checked: int, removed: int, updated: int, failed: int, links: array<int, array<string, mixed>>}
      */
-    public function sanitizeHtmlAnchors(string $html, string $cacheNamespace = 'prepare'): array
+    public function sanitizeHtmlAnchors(string $html, string $cacheNamespace = 'prepare', ?callable $shouldContinue = null): array
     {
         if (trim($html) === '' || stripos($html, '<a ') === false) {
             return [
@@ -304,6 +304,10 @@ class LinkHealthService
         $links = [];
 
         foreach ($anchors as $anchor) {
+            if ($shouldContinue && !$shouldContinue()) {
+                throw new \RuntimeException('Run stopped by user.');
+            }
+
             $href = (string) $anchor->getAttribute('href');
             $normalized = $this->normalizeUrl($href);
             if (!$normalized) {

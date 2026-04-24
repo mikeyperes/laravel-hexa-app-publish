@@ -18,6 +18,7 @@ class PipelineActivityService
         bool $debugEnabled = false,
         ?int $userId = null
     ): array {
+        $userId = $this->resolveExistingUserId($userId);
         $entries = array_values(array_filter($entries, fn ($entry) => !empty($entry['client_event_id'] ?? null)));
         if (count($entries) === 0) {
             return [
@@ -186,6 +187,7 @@ class PipelineActivityService
         bool $debugEnabled = false,
         ?int $userId = null
     ): PublishPipelineRunEvent {
+        $userId = $this->resolveExistingUserId($userId);
         $capturedAt = $this->resolveCapturedAt($entry) ?: now();
 
         $run = PublishPipelineRun::updateOrCreate(
@@ -248,6 +250,15 @@ class PipelineActivityService
         ])->save();
 
         return $event->fresh();
+    }
+
+    private function resolveExistingUserId(?int $userId): ?int
+    {
+        if (!$userId) {
+            return null;
+        }
+
+        return User::query()->whereKey($userId)->exists() ? $userId : null;
     }
 
     public function eventsForTrace(PublishArticle $article, string $clientTrace, int $afterSequence = 0, int $limit = 200): array

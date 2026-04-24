@@ -45,7 +45,8 @@ class CampaignRunOperationExecutor
                         'trace_id' => $operation->trace_id,
                         'step' => 16,
                     ]));
-                }
+                },
+                fn (): bool => $this->operationService->cancellationRequested($operation)
             );
 
             $resultPayload = [
@@ -55,7 +56,7 @@ class CampaignRunOperationExecutor
                     : ($result['message'] ?? 'Campaign run failed.'),
                 'article_id' => $result['article']->id ?? null,
                 'article_url' => isset($result['article']) && $result['article']
-                    ? route('publish.articles.show', $result['article']->id)
+                    ? route('publish.articles.show', ['id' => $result['article']->id, 'campaign_id' => (int) ($payload['campaign_id'] ?? 0), 'article_id' => $result['article']->id])
                     : null,
                 'wp_post_url' => $result['article']->wp_post_url ?? null,
                 'log' => $result['log'] ?? [],

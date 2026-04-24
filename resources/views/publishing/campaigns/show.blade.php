@@ -96,6 +96,11 @@
                     <svg x-show="!running || runningMode !== 'auto-publish'" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                     <span>Instant Publish</span>
                 </button>
+                <button x-show="running || staleOperationInfo" x-cloak @click="stopOperation()" :disabled="stoppingRun" class="hx-btn hx-btn-red">
+                    <svg x-show="stoppingRun" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    <svg x-show="!stoppingRun" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                    <span x-text="staleOperationInfo && !running ? 'Force Stop Stale Run' : 'Force Stop Run'"></span>
+                </button>
                 <button x-show="campaignStatus === 'active'" x-cloak @click="pauseCampaign()" class="hx-btn hx-btn-amber">Pause</button>
                 <button x-show="campaignStatus !== 'active'" x-cloak @click="activateCampaign()" class="hx-btn hx-btn-green">Activate</button>
                 <button @click="duplicateCampaign()" class="hx-btn hx-btn-secondary">Duplicate</button>
@@ -110,6 +115,14 @@
             <div>
                 <span x-show="saving" x-cloak class="text-gray-400">Saving…</span>
                 <span x-show="!saving && saveResult" x-cloak :class="saveSuccess ? 'text-green-600' : 'text-red-500'" x-text="saveResult"></span>
+            </div>
+        </div>
+        <div class="px-5 py-3 text-xs border-t border-gray-100 bg-white rounded-b-xl flex flex-wrap items-center justify-between gap-2">
+            <div class="text-gray-500">
+                Use <span class="font-semibold text-gray-700">Instant Draft</span> or <span class="font-semibold text-gray-700">Instant Publish</span> to spawn another article from this same campaign using the current campaign-only overrides.
+            </div>
+            <div x-show="staleOperationInfo && !running" x-cloak class="text-amber-700">
+                A stale run is blocking new spawns until it is force-stopped.
             </div>
         </div>
     </div>
@@ -132,6 +145,7 @@
                 <div class="text-xs text-gray-500 space-y-1">
                     <p x-show="operationLabel" x-cloak class="font-medium text-gray-700" x-text="operationLabel"></p>
                     <p x-show="operationStatus" x-cloak x-text="'Status: ' + operationStatus + (operationTransport ? ' via ' + operationTransport.replace(/_/g, ' ') : '')"></p>
+                    <p x-show="operationId" x-cloak x-text="'Operation: #' + operationId + (operationOutput.article_record_id ? ' · Article #' + operationOutput.article_record_id : '')"></p>
                     <p x-show="operationTraceId" x-cloak x-text="'Trace: ' + operationTraceId"></p>
                     <p x-show="operationStartedAt || running" x-cloak x-text="'Elapsed: ' + operationElapsedText()"></p>
                     <p x-show="campaignChecklist.length > 0" x-cloak x-text="checklistProgressText()"></p>
@@ -144,6 +158,30 @@
                 'bg-green-50 border-green-200 text-green-800': runState === 'success',
                 'bg-red-50 border-red-200 text-red-800': runState === 'error'
             }" x-text="runResult"></div>
+
+            <div x-show="staleOperationInfo && !running" x-cloak class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-semibold uppercase tracking-wide text-amber-700">Stale Run Detected</div>
+                        <p class="mt-1 text-sm text-amber-900">
+                            Operation <span class="font-semibold" x-text="'#' + staleOperationInfo.id"></span>
+                            stopped updating and is not auto-resumed anymore.
+                            Force stop it before spawning another article.
+                        </p>
+                        <div class="mt-2 text-xs text-amber-800 space-y-1">
+                            <p x-show="staleOperationInfo.last_stage" x-cloak x-text="'Last stage: ' + formatLabel(staleOperationInfo.last_stage) + (staleOperationInfo.last_substage ? ' / ' + formatLabel(staleOperationInfo.last_substage) : '')"></p>
+                            <p x-show="staleOperationInfo.last_message" x-cloak x-text="'Last message: ' + staleOperationInfo.last_message"></p>
+                            <p x-show="staleOperationInfo.last_event_at" x-cloak x-text="'Last event: ' + formatDateTime(staleOperationInfo.last_event_at)"></p>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <a x-show="staleOperationArticle?.show_url" x-cloak :href="staleOperationArticle.show_url" target="_blank" rel="noopener" class="hx-btn hx-btn-secondary">Open Stale Article</a>
+                        <button type="button" @click="stopOperation()" :disabled="stoppingRun" class="hx-btn hx-btn-red">
+                            <span x-text="stoppingRun ? 'Stopping…' : 'Force Stop Stale Run'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
 
             <div x-show="operationCurrent" x-cloak class="mb-4 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2" x-text="operationCurrent"></div>
 
@@ -725,6 +763,22 @@
     {{-- ───────────────────────────────────────────────
          CAMPAIGN ARTICLES — 1 per row, consolidated
          ─────────────────────────────────────────────── --}}
+    @php
+        $transientArticleIds = collect([
+            $activeOperationArticle['article_record_id'] ?? null,
+            $staleOperationArticle['article_record_id'] ?? null,
+        ])->filter()->map(fn ($id) => (int) $id)->all();
+
+        $visibleCampaignArticles = $campaign->articles->reject(function ($article) use ($transientArticleIds) {
+            if (in_array((int) $article->id, $transientArticleIds, true)) {
+                return true;
+            }
+
+            return trim((string) ($article->title ?? '')) === 'Campaign run starting...';
+        })->values();
+
+        $hiddenCampaignArticleCount = max(0, $campaign->articles->count() - $visibleCampaignArticles->count());
+    @endphp
     <div class="hx-card" x-data="{open: true}">
         <div class="hx-card-header hx-clickable" @click="open = !open">
             <div class="hx-card-title-block">
@@ -733,19 +787,22 @@
                 </div>
                 <div>
                     <h3 class="hx-card-title">Campaign Articles</h3>
-                    <p class="hx-card-subtitle">Every article this campaign has produced — most recent first.</p>
+                    <p class="hx-card-subtitle">Most recent completed or reopenable articles from this campaign. Active scaffold rows stay in the live run panel until they become real article records.</p>
                 </div>
             </div>
             <div class="hx-card-header-right">
-                <span class="hx-tag slate">{{ $campaign->articles->count() }} total</span>
+                <span class="hx-tag slate">{{ $visibleCampaignArticles->count() }} visible</span>
+                @if($hiddenCampaignArticleCount > 0)
+                    <span class="hx-tag amber">{{ $hiddenCampaignArticleCount }} transient hidden</span>
+                @endif
                 <svg class="w-4 h-4 hx-chev" :class="{ 'open': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
             </div>
         </div>
         <div x-show="open" x-cloak class="hx-card-body">
-            @forelse($campaign->articles as $article)
+            @forelse($visibleCampaignArticles as $article)
                 @include('app-publish::publishing.articles.partials.article-card', ['article' => $article, 'campaign' => $campaign])
             @empty
-                <div class="rounded-xl border border-dashed border-gray-200 px-4 py-10 text-center text-sm text-gray-400">This campaign has not produced any articles yet.</div>
+                <div class="rounded-xl border border-dashed border-gray-200 px-4 py-10 text-center text-sm text-gray-400">This campaign has not produced any completed or reopenable articles yet.</div>
             @endforelse
         </div>
     </div>
@@ -805,6 +862,8 @@ function campaignDashboard() {
     const articlePresetOverrides  = @json($articlePresetOverrides ?? []);
     const initialOperation     = @json($activeOperation ?? null);
     const initialOperationArticle = @json($activeOperationArticle ?? null);
+    const staleOperation       = @json($staleOperation ?? null);
+    const staleOperationArticle = @json($staleOperationArticle ?? null);
     const checklistDefinitions = @json($checklistDefinitions ?? []);
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
@@ -825,6 +884,7 @@ function campaignDashboard() {
         saving: false,
         saveResult: '',
         saveSuccess: true,
+        stoppingRun: false,
         running: false,
         runningMode: '',
         runResult: '',
@@ -849,7 +909,10 @@ function campaignDashboard() {
         operationOutput: {
             article_url: initialOperationArticle?.show_url || '',
             wp_post_url: initialOperationArticle?.wp_post_url || '',
+            article_record_id: initialOperationArticle?.article_record_id || '',
         },
+        staleOperationInfo: staleOperation,
+        staleOperationArticle: staleOperationArticle,
         campaignChecklistByMode: checklistDefinitions,
         campaignChecklist: [],
         _saveTimer: null,
@@ -914,11 +977,28 @@ function campaignDashboard() {
                     this.pollOperation(400);
                     this.startStreaming();
                 }
+            } else if (staleOperation) {
+                this.runSuccess = false;
+                this.runState = 'error';
+                this.runResult = 'A stale campaign run was found and not auto-resumed. Force stop it before spawning another article.';
+                this.operationLabel = this.operationModeLabel(
+                    staleOperation?.request_summary?.mode
+                    || staleOperation?.request_summary?.delivery_mode
+                    || this.form.delivery_mode
+                    || 'draft-wordpress'
+                );
             }
         },
 
         formatLabel(value) {
             return (value || '').replace(/[-_]/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+        },
+
+        formatDateTime(value) {
+            if (!value) return '—';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return value;
+            return date.toLocaleString();
         },
 
         operationModeLabel(mode) {
@@ -993,7 +1073,7 @@ function campaignDashboard() {
             this.operationStreamUrl = '';
             this.operationStartedAt = '';
             this.operationCompletedAt = '';
-            this.operationOutput = { article_url: '', wp_post_url: '' };
+            this.operationOutput = { article_url: '', wp_post_url: '', article_record_id: '' };
             if (this.operationStreamController) {
                 try { this.operationStreamController.abort(); } catch (e) {}
             }
@@ -1130,6 +1210,7 @@ function campaignDashboard() {
             const resultPayload = operation.result_payload || {};
             if (resultPayload.article_url) this.operationOutput.article_url = resultPayload.article_url;
             if (resultPayload.wp_post_url) this.operationOutput.wp_post_url = resultPayload.wp_post_url;
+            if (resultPayload.article_id) this.operationOutput.article_record_id = resultPayload.article_id;
             this.syncElapsedTimer();
         },
 
@@ -1224,6 +1305,15 @@ function campaignDashboard() {
         },
 
         async startOperation(mode, label) {
+            if (this.staleOperationInfo) {
+                this.runSuccess = false;
+                this.runState = 'error';
+                this.runResult = 'Force stop the stale run before spawning another article from this campaign.';
+                this.$nextTick(() => {
+                    this.$refs.liveChecklistCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+                return;
+            }
             if (!confirm('Run campaign now as ' + label.toLowerCase() + '?')) return;
             this.resetOperationState();
             this.running = true;
@@ -1250,6 +1340,9 @@ function campaignDashboard() {
                 if (d.article_url) {
                     this.operationOutput.article_url = d.article_url;
                 }
+                if (d.article_id) {
+                    this.operationOutput.article_record_id = d.article_id;
+                }
                 this.applyOperation(d.operation);
                 this.runSuccess = true;
                 this.runState = 'info';
@@ -1261,6 +1354,43 @@ function campaignDashboard() {
                 this.runState = 'error';
                 this.runResult = 'Error: ' + e.message;
                 this.running = false;
+            }
+        },
+
+        async stopOperation() {
+            const targetId = this.running ? this.operationId : (this.staleOperationInfo?.id || this.operationId);
+            if (!targetId) {
+                this.runSuccess = false;
+                this.runState = 'error';
+                this.runResult = 'No active campaign run found to stop.';
+                return;
+            }
+            if (!confirm('Force stop this campaign run?')) return;
+
+            this.stoppingRun = true;
+            try {
+                const r = await fetch('/campaigns/' + this.editId + '/operations/' + targetId + '/stop', {
+                    method: 'POST',
+                    headers,
+                });
+                const d = await r.json();
+                if (!r.ok || !d.success) {
+                    throw new Error(d.message || 'Failed to stop campaign run');
+                }
+                if (d.operation) {
+                    this.applyOperation(d.operation);
+                }
+                this.staleOperationInfo = null;
+                this.staleOperationArticle = null;
+                const resultPayload = d.operation?.result_payload || {};
+                this.finishChecklist(false, d.message || resultPayload.message || 'Run stop requested.', resultPayload);
+            } catch (e) {
+                this.runSuccess = false;
+                this.runState = 'error';
+                this.runResult = 'Error: ' + e.message;
+            } finally {
+                this.running = false;
+                this.stoppingRun = false;
             }
         },
 

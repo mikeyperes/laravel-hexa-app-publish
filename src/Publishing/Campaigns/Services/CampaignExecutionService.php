@@ -44,7 +44,7 @@ class CampaignExecutionService
      */
     public function run(PublishCampaign $campaign, string $mode = 'draft', ?Carbon $scheduledFor = null): array
     {
-        return $this->execute($campaign, null, $mode, $scheduledFor, null);
+        return $this->execute($campaign, null, $mode, $scheduledFor, null, null);
     }
 
     /**
@@ -55,7 +55,8 @@ class CampaignExecutionService
         int $campaignId,
         string $mode = 'draft',
         ?Carbon $scheduledFor = null,
-        ?callable $onProgress = null
+        ?callable $onProgress = null,
+        ?callable $shouldCancel = null
     ): array {
         $campaign = PublishCampaign::find($campaignId);
         if (!$campaign) {
@@ -68,7 +69,7 @@ class CampaignExecutionService
             ];
         }
 
-        return $this->execute($campaign, $article, $mode, $scheduledFor, $onProgress);
+        return $this->execute($campaign, $article, $mode, $scheduledFor, $onProgress, $shouldCancel);
     }
 
     /**
@@ -79,7 +80,8 @@ class CampaignExecutionService
         ?PublishArticle $article,
         string $mode,
         ?Carbon $scheduledFor,
-        ?callable $onProgress
+        ?callable $onProgress,
+        ?callable $shouldCancel
     ): array {
         $log = [];
         $trackedArticle = $article;
@@ -105,6 +107,20 @@ class CampaignExecutionService
             if ($onProgress) {
                 $onProgress($type, $message, $extra);
             }
+        };
+        $cancelledFailure = function (string $stage) use (&$log, &$article, $emit): array {
+            $emit('warning', 'Run stopped by user.', [
+                'stage' => $stage,
+                'substage' => 'cancelled',
+            ]);
+            if ($article) {
+                $this->persistence->markFailed($article);
+            }
+
+            return $this->failure($log, $article, $stage, 'Run stopped by user.');
+        };
+        $shouldAbort = function () use ($shouldCancel): bool {
+            return $shouldCancel ? (bool) $shouldCancel() : false;
         };
 
         $resolvedMode = $this->modeResolver->normalizeDeliveryMode($mode);
@@ -220,6 +236,10 @@ class CampaignExecutionService
             'substage' => 'created',
             'details' => 'draft_id=' . $article->id,
         ]);
+
+        if ($shouldAbort()) {
+            return $cancelledFailure('article');
+        }
 
         $sourceUrls = collect((array) $campaign->link_list)
             ->map(fn ($url) => trim((string) $url))
@@ -344,6 +364,10 @@ class CampaignExecutionService
         ]);
         $sourceTexts = [];
         foreach ($sourceUrls as $index => $sourceUrl) {
+            if ($shouldAbort()) {
+                return $cancelledFailure('extraction');
+            }
+
             $emit('info', 'Extraction attempt ' . ($index + 1) . ': ' . $sourceUrl, [
                 'stage' => 'extraction',
                 'substage' => 'attempt',
@@ -443,6 +467,10 @@ class CampaignExecutionService
             'source_articles' => $sourceTexts,
             'status' => 'spinning',
         ]);
+
+        if ($shouldAbort()) {
+            return $cancelledFailure('generation');
+        }
 
         $emit('step', 'Generating article with AI...', [
             'stage' => 'generation',
@@ -601,6 +629,10 @@ class CampaignExecutionService
             ])),
         ]);
 
+        if ($shouldAbort()) {
+            return $cancelledFailure('photos');
+        }
+
         $isWpAction = in_array($executionMode, ['publish', 'wp-draft'], true);
         if ($isWpAction) {
             $article->update(['status' => 'drafting']);
@@ -625,6 +657,7 @@ class CampaignExecutionService
                     'featured_meta' => $media['featured_meta'] ?? null,
                     'featured_url' => $media['featured_url'] ?? null,
                     'draft_id' => $article->id,
+                    'should_cancel' => $shouldCancel,
                 ], function (string $type, string $message, array $extra = []) use ($emit): void {
                     $emit($type, $message, $extra);
                 });
@@ -653,6 +686,10 @@ class CampaignExecutionService
                 'wp_images' => $prepared['wp_images'] ?? [],
                 'status' => 'drafting',
             ]);
+
+            if ($shouldAbort()) {
+                return $cancelledFailure('integrity');
+            }
 
             $emit('step', $postStatus === 'publish' ? 'Publishing to WordPress...' : 'Creating WordPress draft...', [
                 'stage' => 'delivery',

@@ -51,6 +51,7 @@ class WordPressPreparationService
     public function prepare(PublishSite $site, string $html, array $options = [], ?callable $onProgress = null): array
     {
         $send = $onProgress ?? function () {};
+        $shouldCancel = is_callable($options['should_cancel'] ?? null) ? $options['should_cancel'] : null;
         $mode = $site->connection_type === 'wptoolkit' ? 'wptoolkit' : 'rest';
         $connectionMode = $mode === 'wptoolkit' ? 'wptoolkit' : 'rest';
         $connectionLabel = $mode === 'wptoolkit' ? 'WP Toolkit' : 'REST API';
@@ -151,6 +152,7 @@ class WordPressPreparationService
         }
 
         // Step 1: Upload images
+        $this->assertNotCancelled($shouldCancel);
         [$html, $wpImages] = $this->uploadImages($site, $html, $mode, $server, $installId, $options, $send);
 
         // Step 1b: Upload featured image
@@ -225,13 +227,15 @@ class WordPressPreparationService
         }
 
         // Step 2: Create categories
+        $this->assertNotCancelled($shouldCancel);
         $categoryIds = $this->createCategories($site, $mode, $server, $installId, $options['categories'] ?? [], $send);
 
         // Step 3: Create tags
+        $this->assertNotCancelled($shouldCancel);
         $tagIds = $this->createTags($site, $mode, $server, $installId, $options['tags'] ?? [], $send);
 
         $this->emitProgress($send, 'info', 'Checking article links for 404s...', 'integrity', 'links_start');
-        $linkHealth = app(LinkHealthService::class)->sanitizeHtmlAnchors($html, 'prepare');
+        $linkHealth = app(LinkHealthService::class)->sanitizeHtmlAnchors($html, 'prepare', $shouldCancel ? static fn (): bool => !$shouldCancel() : null);
         $html = $linkHealth['html'];
 
         if (($linkHealth['updated'] ?? 0) > 0) {
@@ -253,6 +257,7 @@ class WordPressPreparationService
         }
 
         // Step 4: Integrity check — validate HTML structure, photos, and cleanup
+        $this->assertNotCancelled($shouldCancel);
         $this->emitProgress($send, 'info', "Running integrity check...", 'integrity', 'start');
         $integrityIssues = [];
 
@@ -334,6 +339,13 @@ class WordPressPreparationService
             'featured_media_id' => $featuredMediaId,
             'featured_wp_url'   => $featuredWpUrl,
         ];
+    }
+
+    private function assertNotCancelled(?callable $shouldCancel): void
+    {
+        if ($shouldCancel && $shouldCancel()) {
+            throw new \RuntimeException('Run stopped by user.');
+        }
     }
 
     /**

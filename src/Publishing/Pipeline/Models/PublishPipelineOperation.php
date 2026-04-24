@@ -75,4 +75,23 @@ class PublishPipelineOperation extends Model
     {
         return in_array($this->status, [self::STATUS_COMPLETED, self::STATUS_FAILED], true);
     }
+
+    public function isCancelled(): bool
+    {
+        return (bool) (($this->result_payload['cancelled'] ?? false) === true);
+    }
+
+    public function isStale(int $minutes = 10): bool
+    {
+        if (!$this->isActive()) {
+            return false;
+        }
+
+        $reference = $this->last_event_at ?: $this->started_at ?: $this->created_at;
+        if (!$reference) {
+            return false;
+        }
+
+        return $reference->lt(now()->subMinutes($minutes));
+    }
 }
