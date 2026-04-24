@@ -48,80 +48,83 @@
     {{-- ───────────────────────────── Header card ──────────────────── --}}
     @php
         $iconColor = $isLocalDraft ? 'bg-gray-100 text-gray-600' : (!empty($lifecycle['is_live']) ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700');
-        $syncTone = !empty($lifecycle['sync_error']) ? 'red' : (!empty($lifecycle['sync_message']) ? 'green' : 'gray');
     @endphp
     <section class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden" x-data="{ refreshing: false, refreshMsg: '', auditOpen: false }">
-        <div class="p-6">
-            <div class="flex items-start gap-4">
-                <div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 {{ $iconColor }}">
+        <div class="p-8">
+            <div class="flex items-start gap-5">
+                <div class="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 {{ $iconColor }}">
                     @if($isLocalDraft)
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                     @elseif(!empty($lifecycle['is_live']))
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
                     @else
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     @endif
                 </div>
                 <div class="flex-1 min-w-0">
                     <h1 class="text-2xl font-bold text-gray-900 leading-tight">{{ $article->title ?: 'Untitled Article' }}</h1>
-                    <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
+                    <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-gray-500">
                         <span class="font-mono text-xs text-gray-400">{{ $article->article_id }}</span>
-                        @if($article->author)<span>·</span><span>By <strong class="text-gray-700">{{ $article->author }}</strong></span>@endif
-                        @if($article->word_count)<span>·</span><span><strong class="text-gray-700">{{ number_format($article->word_count) }}</strong> words</span>@endif
-                        @if($article->created_at)<span>·</span><span>{{ $article->created_at->setTimezone($tz)->format('M j, Y · g:i A') }}</span>@endif
+                        @if($article->author)
+                            <span class="text-gray-300">·</span>
+                            <span>By <strong class="text-gray-700">{{ $article->author }}</strong></span>
+                        @endif
+                        @if($article->word_count)
+                            <span class="text-gray-300">·</span>
+                            <span><strong class="text-gray-700">{{ number_format($article->word_count) }}</strong> words</span>
+                        @endif
+                        @if($article->created_at)
+                            <span class="text-gray-300">·</span>
+                            <span>{{ $article->created_at->setTimezone($tz)->format('M j, Y · g:i A') }}</span>
+                        @endif
                     </div>
                 </div>
             </div>
 
-            {{-- Chips row --}}
-            <div class="mt-4 flex flex-wrap items-center gap-2">
-                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide {{ $statusTone }}">{{ $lifecycleBadge }}</span>
-                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-slate-100 text-slate-700">Internal · {{ ucfirst($article->status ?? '—') }}</span>
+            {{-- Chips row (no Sync chip — redundant with the Refresh button + inline error) --}}
+            <div class="mt-6 flex flex-wrap items-center gap-2.5">
+                <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide {{ $statusTone }}">{{ $lifecycleBadge }}</span>
+                <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide bg-slate-100 text-slate-700">Internal · {{ ucfirst($article->status ?? '—') }}</span>
                 @if($article->wp_post_id)
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-blue-50 text-blue-700">WP&nbsp;#{{ $article->wp_post_id }}</span>
+                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide bg-blue-50 text-blue-700">WP&nbsp;#{{ $article->wp_post_id }}</span>
                 @endif
                 @if($article->delivery_mode)
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-indigo-50 text-indigo-700">Delivery · {{ str_replace('-', ' ', $article->delivery_mode) }}</span>
+                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wide bg-indigo-50 text-indigo-700">Delivery · {{ str_replace('-', ' ', $article->delivery_mode) }}</span>
                 @endif
-                <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide
-                    @if($syncTone === 'red') bg-red-50 text-red-700
-                    @elseif($syncTone === 'green') bg-green-50 text-green-700
-                    @else bg-gray-100 text-gray-600 @endif"
-                    title="{{ $syncSummary }}">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                    Sync · {{ $syncTone === 'red' ? 'Error' : ($syncTone === 'green' ? 'Refreshed' : 'OK') }}
-                </span>
             </div>
 
-            {{-- One-line lifecycle summary --}}
-            <p class="mt-4 text-sm leading-6 text-gray-600">
-                <strong class="text-gray-900">{{ $statusHeadline }}</strong> {{ $statusDetail }}
-            </p>
-            @if(!empty($lifecycle['is_live']) && !empty($lifecycle['public_url']))
-                <a href="{{ $lifecycle['public_url'] }}" target="_blank" rel="noopener" class="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 break-all">
-                    {{ $lifecycle['public_url'] }}
-                    <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                </a>
-            @endif
-            @if(!empty($lifecycle['sync_error']))
-                <p class="mt-2 text-xs text-red-600">⚠ {{ $lifecycle['sync_error'] }}</p>
-            @endif
+            {{-- Lifecycle summary --}}
+            <div class="mt-6 text-sm leading-6 text-gray-600">
+                <p><strong class="text-gray-900">{{ $statusHeadline }}</strong> {{ $statusDetail }}</p>
+                @if(!empty($lifecycle['is_live']) && !empty($lifecycle['public_url']))
+                    <a href="{{ $lifecycle['public_url'] }}" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 break-all">
+                        {{ $lifecycle['public_url'] }}
+                        <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    </a>
+                @endif
+                @if(!empty($lifecycle['sync_error']))
+                    <p class="mt-3 inline-flex items-center gap-1.5 text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-2.5 py-1.5">
+                        <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.74-3l-7.07-12.24a2 2 0 00-3.48 0L3.19 16a2 2 0 001.74 3z"/></svg>
+                        Couldn't reach WordPress: {{ $lifecycle['sync_error'] }}
+                    </p>
+                @endif
+            </div>
         </div>
 
         {{-- Actions footer --}}
-        <div class="flex flex-wrap items-center justify-between gap-3 px-6 py-3 border-t border-gray-100 bg-gray-50/70">
-            <div class="flex flex-wrap items-center gap-2">
-                <a href="{{ $lifecycle['resume_url'] }}" class="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
+        <div class="flex flex-wrap items-center justify-between gap-4 px-8 py-5 border-t border-gray-100 bg-gray-50/60">
+            <div class="flex flex-wrap items-center gap-2.5">
+                <a href="{{ $lifecycle['resume_url'] }}" class="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2.5 rounded-lg">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     Resume in Editor
                 </a>
                 @if(!empty($lifecycle['wp_admin_url']))
-                    <a href="{{ $lifecycle['wp_admin_url'] }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 px-3.5 py-2 rounded-lg">
+                    <a href="{{ $lifecycle['wp_admin_url'] }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 px-4 py-2.5 rounded-lg">
                         Open in WP&nbsp;↗
                     </a>
                 @endif
                 @if(!empty($lifecycle['is_live']) && !empty($lifecycle['public_url']))
-                    <a href="{{ $lifecycle['public_url'] }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-sm font-medium text-green-700 bg-white border border-green-300 hover:bg-green-50 px-3.5 py-2 rounded-lg">
+                    <a href="{{ $lifecycle['public_url'] }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-sm font-medium text-green-700 bg-white border border-green-300 hover:bg-green-50 px-4 py-2.5 rounded-lg">
                         View Live&nbsp;↗
                     </a>
                 @endif
@@ -132,15 +135,16 @@
                             .then(d => { refreshMsg = d.message || d.error || 'Refreshed'; setTimeout(() => window.location.reload(), 500); })
                             .catch(e => { refreshMsg = e.message || 'Network error'; refreshing = false; })"
                     :disabled="refreshing"
-                    class="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 px-3.5 py-2 rounded-lg disabled:opacity-50">
+                    class="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 px-4 py-2.5 rounded-lg disabled:opacity-50"
+                    title="Pull the latest post status, title, and URL from WordPress and update this record">
                     <svg x-show="!refreshing" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                     <svg x-show="refreshing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="refreshing ? 'Refreshing…' : 'Refresh Status'"></span>
+                    <span x-text="refreshing ? 'Refreshing…' : 'Refresh from WordPress'"></span>
                 </button>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2.5">
                 <div class="relative" @click.outside="auditOpen = false">
-                    <button type="button" @click="auditOpen = !auditOpen" class="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-gray-900 bg-white border border-gray-300 hover:bg-gray-50 px-3.5 py-2 rounded-lg">
+                    <button type="button" @click="auditOpen = !auditOpen" class="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-gray-900 bg-white border border-gray-300 hover:bg-gray-50 px-4 py-2.5 rounded-lg">
                         Audit
                         <svg class="w-3 h-3 transition-transform" :class="auditOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                     </button>
@@ -150,10 +154,10 @@
                         <button @click="downloadAuditJson(); auditOpen = false" class="block w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50">Download Audit JSON</button>
                     </div>
                 </div>
-                <button @click="confirmDelete = true; $nextTick(() => $refs.deleteSection?.scrollIntoView({ behavior: 'smooth' }))" class="inline-flex items-center gap-1 text-sm font-medium text-red-500 hover:text-red-700 bg-white border border-red-200 hover:bg-red-50 px-3.5 py-2 rounded-lg">Delete</button>
+                <button @click="confirmDelete = true; $nextTick(() => $refs.deleteSection?.scrollIntoView({ behavior: 'smooth' }))" class="inline-flex items-center gap-1 text-sm font-medium text-red-500 hover:text-red-700 bg-white border border-red-200 hover:bg-red-50 px-4 py-2.5 rounded-lg">Delete</button>
             </div>
         </div>
-        <div x-show="refreshMsg" x-cloak class="px-6 py-2 text-xs text-gray-600 bg-blue-50 border-t border-blue-100">
+        <div x-show="refreshMsg" x-cloak class="px-8 py-3 text-xs text-gray-600 bg-blue-50 border-t border-blue-100">
             <span x-text="refreshMsg"></span>
         </div>
     </section>
