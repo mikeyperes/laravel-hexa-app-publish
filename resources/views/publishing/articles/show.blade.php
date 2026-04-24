@@ -56,7 +56,6 @@
         <div class="flex flex-wrap items-center gap-2">
             <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium {{ $statusTone }}">{{ $lifecycleBadge }}</span>
             <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700">Internal: {{ ucfirst($article->status ?? '—') }}</span>
-            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">WP: {{ ucfirst($effectiveWpStatus ?: '—') }}</span>
         </div>
         <div class="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
             <div class="rounded-xl border border-gray-200 bg-gray-50 p-5">
