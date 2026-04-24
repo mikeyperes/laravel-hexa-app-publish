@@ -2,7 +2,7 @@
 @section('title', 'Campaign — ' . ($campaign->name ?: 'Untitled'))
 @section('header', '')
 
-@push('styles')
+@section('content')
 <style>
     .hx-card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; overflow:visible; margin-bottom:20px; }
     .hx-card-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:16px 20px; border-bottom:1px solid #f3f4f6; }
@@ -63,9 +63,7 @@
     .hx-link:hover { color:#1d4ed8; text-decoration:underline; }
     [x-cloak] { display:none !important; }
 </style>
-@endpush
 
-@section('content')
 <div class="max-w-6xl mx-auto pt-4" x-data="campaignDashboard()" x-init="init()">
 
     {{-- ───────────────────────────────────────────────
