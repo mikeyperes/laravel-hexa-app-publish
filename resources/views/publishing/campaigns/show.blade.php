@@ -110,6 +110,211 @@
     </div>
 
     {{-- ───────────────────────────────────────────────
+         CRON ACTIVITY (expandable)
+         ─────────────────────────────────────────────── --}}
+    <div class="hx-card" x-data="{open: true}">
+        <div class="hx-card-header hx-clickable" @click="open = !open">
+            <div class="hx-card-title-block">
+                <div class="hx-card-icon green">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <div>
+                    <h3 class="hx-card-title">Cron Activity</h3>
+                    <p class="hx-card-subtitle">Hexa Core Cron Manager registration, scheduler entry, last run details, and the full publish cron metadata for this campaign.</p>
+                </div>
+            </div>
+            <div class="hx-card-header-right">
+                <span class="hx-tag green">Hexa Core</span>
+                <span class="hx-tag slate">{{ count($cronJobsData ?? []) }} job{{ count($cronJobsData ?? []) === 1 ? '' : 's' }}</span>
+                <svg class="w-4 h-4 hx-chev" :class="{ 'open': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+        </div>
+        <div x-show="open" x-cloak class="hx-card-body">
+
+            {{-- ── System scheduler row ── --}}
+            <div class="py-4 border-b border-gray-100">
+                <div class="flex items-baseline gap-3 mb-2">
+                    <h4 class="text-sm font-semibold text-gray-900">System Scheduler</h4>
+                    <span class="hx-tag {{ ($schedulerHealth['installed'] ?? false) ? 'green' : 'red' }}">{{ ($schedulerHealth['installed'] ?? false) ? 'Installed' : 'Missing' }}</span>
+                    <span class="text-xs text-gray-500 ml-auto">{{ $schedulerHealth['line_count'] ?? 0 }} crontab line(s) scanned</span>
+                </div>
+                <p class="text-sm text-gray-600">{{ $schedulerHealth['message'] ?? 'Scheduler status unavailable.' }}</p>
+                @if(!empty($schedulerHealth['entry']))
+                    <pre class="mt-2 whitespace-pre-wrap break-words rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-xs text-gray-700 font-mono">{{ $schedulerHealth['entry'] }}</pre>
+                @else
+                    <div class="mt-2 rounded-lg border border-dashed border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">No <code>artisan schedule:run</code> entry was detected for this publish app.</div>
+                @endif
+            </div>
+
+            {{-- ── Campaign timing row ── --}}
+            <div class="py-4 border-b border-gray-100">
+                <div class="flex items-baseline gap-3 mb-3">
+                    <h4 class="text-sm font-semibold text-gray-900">Campaign Timing</h4>
+                    <span class="hx-tag slate">{{ ucwords(str_replace('-', ' ', $campaign->status ?? 'draft')) }}</span>
+                </div>
+                <dl class="space-y-1.5 text-sm">
+                    <div class="flex items-baseline gap-3">
+                        <dt class="w-36 text-gray-500 flex-shrink-0">Last run</dt>
+                        <dd class="text-gray-900 font-medium">
+                            {{ $campaign->last_run_at ? $campaign->last_run_at->setTimezone($displayTimezone)->format('M j, Y g:i A T') : 'Never' }}
+                            @if($campaign->last_run_at)
+                                <span class="text-gray-400 ml-2">· {{ $campaign->last_run_at->setTimezone($displayTimezone)->diffForHumans() }}</span>
+                            @endif
+                        </dd>
+                    </div>
+                    <div class="flex items-baseline gap-3">
+                        <dt class="w-36 text-gray-500 flex-shrink-0">Next run</dt>
+                        <dd class="text-gray-900 font-medium">
+                            {{ $campaign->next_run_at ? $campaign->next_run_at->setTimezone($displayTimezone)->format('M j, Y g:i A T') : '—' }}
+                            @if($campaign->next_run_at)
+                                <span class="text-gray-400 ml-2">· {{ $campaign->next_run_at->setTimezone($displayTimezone)->diffForHumans() }}</span>
+                            @endif
+                        </dd>
+                    </div>
+                    <div class="flex items-baseline gap-3">
+                        <dt class="w-36 text-gray-500 flex-shrink-0">Cadence</dt>
+                        <dd class="text-gray-900 font-medium">
+                            {{ ucwords($campaign->interval_unit ?? 'daily') }}
+                            <span class="text-gray-400">·</span>
+                            {{ $campaign->articles_per_interval ?? 1 }} post{{ ($campaign->articles_per_interval ?? 1) === 1 ? '' : 's' }}/run
+                            <span class="text-gray-400">·</span>
+                            runs at {{ $campaign->run_at_time ?: '—' }}
+                            <span class="text-gray-400">·</span>
+                            {{ $campaign->drip_interval_minutes ?? 60 }} min drip
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+
+            {{-- ── Hexa Core registry row ── --}}
+            <div class="py-4 border-b border-gray-100">
+                <div class="flex items-baseline gap-3 mb-3">
+                    <h4 class="text-sm font-semibold text-gray-900">Hexa Core Registry</h4>
+                    <span class="hx-tag blue">{{ count($cronJobsData ?? []) }} job{{ count($cronJobsData ?? []) === 1 ? '' : 's' }}</span>
+                </div>
+                <dl class="space-y-1.5 text-sm">
+                    <div class="flex items-baseline gap-3">
+                        <dt class="w-36 text-gray-500 flex-shrink-0">Registered jobs</dt>
+                        <dd class="text-gray-900 font-medium">{{ count($cronJobsData ?? []) }}</dd>
+                    </div>
+                    <div class="flex items-baseline gap-3">
+                        <dt class="w-36 text-gray-500 flex-shrink-0">Primary job</dt>
+                        <dd class="text-gray-900 font-mono text-[13px]">{{ $cronJobsData[0]['name'] ?? '—' }}</dd>
+                    </div>
+                </dl>
+                <div class="flex flex-wrap gap-2 mt-3">
+                    @if(!empty($primaryCronRunUrl))
+                        <form method="POST" action="{{ $primaryCronRunUrl }}">
+                            @csrf
+                            <button type="submit" class="hx-btn hx-btn-primary">Run Publish Cron</button>
+                        </form>
+                    @endif
+                    @if(!empty($cronManagerUrl))
+                        <a href="{{ $cronManagerUrl }}" target="_blank" rel="noopener" class="hx-btn hx-btn-secondary">Open Cron Manager</a>
+                    @endif
+                </div>
+            </div>
+
+            {{-- ── Per-job detail rows (stacked, no columns) ── --}}
+            @forelse(($cronJobsData ?? []) as $job)
+                <div class="py-5 {{ !$loop->last ? 'border-b border-gray-100' : '' }}">
+                    <div class="flex items-start justify-between gap-4 flex-wrap mb-3">
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h4 class="text-sm font-semibold text-gray-900 font-mono">{{ $job['name'] }}</h4>
+                                <span class="hx-tag {{ $job['enabled'] ? 'green' : 'red' }}">{{ $job['enabled'] ? 'Enabled' : 'Disabled' }}</span>
+                                <span class="hx-tag {{ ($job['last_status'] ?? 'never') === 'success' ? 'green' : (($job['last_status'] ?? 'never') === 'never' ? 'gray' : 'amber') }}">{{ ucfirst($job['last_status'] ?? 'never') }}</span>
+                            </div>
+                            @if(!empty($job['description']))
+                                <p class="mt-1.5 text-sm text-gray-600">{{ $job['description'] }}</p>
+                            @endif
+                            <div class="mt-1 text-xs text-gray-500 font-mono break-all">{{ $job['command'] }}</div>
+                        </div>
+                        <div class="flex flex-wrap gap-2 flex-shrink-0">
+                            <form method="POST" action="{{ $job['run_url'] }}">
+                                @csrf
+                                <button type="submit" class="hx-btn hx-btn-secondary">Run Now</button>
+                            </form>
+                            <a href="{{ $job['output_url'] }}" target="_blank" rel="noopener" class="hx-btn hx-btn-secondary">Full Output</a>
+                        </div>
+                    </div>
+
+                    <dl class="space-y-1.5 text-sm">
+                        <div class="flex items-baseline gap-3">
+                            <dt class="w-36 text-gray-500 flex-shrink-0">Package</dt>
+                            <dd class="text-gray-900 font-medium">{{ $job['package_name'] ?: '—' }}</dd>
+                        </div>
+                        <div class="flex items-baseline gap-3">
+                            <dt class="w-36 text-gray-500 flex-shrink-0">Schedule</dt>
+                            <dd class="text-gray-900 font-medium">
+                                {{ $job['schedule_label'] ?: '—' }}
+                                <span class="text-gray-400 mx-1">·</span>
+                                <code class="text-[13px] font-mono text-gray-700">{{ $job['schedule'] ?: '—' }}</code>
+                            </dd>
+                        </div>
+                        <div class="flex items-baseline gap-3">
+                            <dt class="w-36 text-gray-500 flex-shrink-0">Run count</dt>
+                            <dd class="text-gray-900 font-mono text-[13px]">{{ number_format($job['run_count']) }}</dd>
+                        </div>
+                        <div class="flex items-baseline gap-3">
+                            <dt class="w-36 text-gray-500 flex-shrink-0">Last run</dt>
+                            <dd class="text-gray-900 font-medium">
+                                {{ $job['last_run']['display'] ?? 'Never' }}
+                                @if(!empty($job['last_run']['relative']))
+                                    <span class="text-gray-400 ml-2">· {{ $job['last_run']['relative'] }}</span>
+                                @endif
+                            </dd>
+                        </div>
+                        <div class="flex items-baseline gap-3">
+                            <dt class="w-36 text-gray-500 flex-shrink-0">Next run</dt>
+                            <dd class="text-gray-900 font-medium">
+                                {{ $job['next_run']['display'] ?? 'Pending' }}
+                                @if(!empty($job['next_run']['relative']))
+                                    <span class="text-gray-400 ml-2">· {{ $job['next_run']['relative'] }}</span>
+                                @endif
+                            </dd>
+                        </div>
+                        <div class="flex items-baseline gap-3">
+                            <dt class="w-36 text-gray-500 flex-shrink-0">Created</dt>
+                            <dd class="text-gray-900 font-medium">
+                                {{ $job['created_at']['display'] ?? '—' }}
+                                @if(!empty($job['created_at']['relative']))
+                                    <span class="text-gray-400 ml-2">· {{ $job['created_at']['relative'] }}</span>
+                                @endif
+                            </dd>
+                        </div>
+                        <div class="flex items-baseline gap-3">
+                            <dt class="w-36 text-gray-500 flex-shrink-0">Updated</dt>
+                            <dd class="text-gray-900 font-medium">
+                                {{ $job['updated_at']['display'] ?? '—' }}
+                                @if(!empty($job['updated_at']['relative']))
+                                    <span class="text-gray-400 ml-2">· {{ $job['updated_at']['relative'] }}</span>
+                                @endif
+                            </dd>
+                        </div>
+                    </dl>
+
+                    <div class="mt-4">
+                        <div class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Last output</div>
+                        @if(!empty($job['last_output']))
+                            <pre class="whitespace-pre-wrap break-words rounded-lg bg-gray-900 px-4 py-3 text-xs text-gray-100 font-mono">{{ $job['last_output'] }}</pre>
+                        @elseif(!empty($job['last_output_preview']))
+                            <pre class="whitespace-pre-wrap break-words rounded-lg bg-gray-900 px-4 py-3 text-xs text-gray-100 font-mono">{{ $job['last_output_preview'] }}</pre>
+                        @else
+                            <div class="rounded-lg border border-dashed border-gray-200 px-4 py-3 text-xs text-gray-500">No cron output has been recorded yet.</div>
+                        @endif
+                    </div>
+                </div>
+            @empty
+                <div class="py-4">
+                    <div class="rounded-xl border border-dashed border-red-200 bg-red-50 px-4 py-6 text-center text-sm text-red-700">No Hexa Core cron jobs are registered for <code>app-publish</code>.</div>
+                </div>
+            @endforelse
+
+        </div>
+    </div>
+
+    {{-- ───────────────────────────────────────────────
          CAMPAIGN DETAILS (expandable)
          ─────────────────────────────────────────────── --}}
     <div class="hx-card" x-data="{open: true}">
@@ -149,8 +354,8 @@
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                 </div>
                 <div>
-                    <h3 class="hx-card-title">Schedule &amp; Cadence</h3>
-                    <p class="hx-card-subtitle">Owning user, frequency, posts per run, run time, and drip interval.</p>
+                    <h3 class="hx-card-title">Campaign Schedule &amp; Cadence</h3>
+                    <p class="hx-card-subtitle">Owning user, campaign cadence, posts per run, run time, and drip interval. Cron reporting lives in the dedicated card above.</p>
                 </div>
             </div>
             <div class="hx-card-header-right">
