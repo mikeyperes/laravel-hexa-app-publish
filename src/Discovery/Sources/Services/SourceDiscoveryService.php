@@ -2,6 +2,7 @@
 
 namespace hexa_app_publish\Discovery\Sources\Services;
 
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -169,26 +170,37 @@ class SourceDiscoveryService
     private function searchGoogleRss(string $query, int $perPage): array
     {
         $rssUrl = 'https://news.google.com/rss/search?q=' . urlencode($query) . '&hl=en-US&gl=US&ceid=US:en';
-        $ctx = stream_context_create(['http' => ['timeout' => 10, 'user_agent' => 'Mozilla/5.0']]);
-        $xml = @simplexml_load_string(@file_get_contents($rssUrl, false, $ctx));
+        $response = Http::withHeaders([
+            'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Accept' => 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8',
+            'Accept-Language' => 'en-US,en;q=0.9',
+        ])->timeout(12)->get($rssUrl);
+
+        if (!$response->successful()) {
+            return ['success' => false, 'articles' => [], 'total' => 0, 'error' => 'Google RSS returned HTTP ' . $response->status() . '.'];
+        }
+
+        $xml = @simplexml_load_string((string) $response->body());
         if (!$xml || !isset($xml->channel->item)) {
-            return ['success' => false, 'articles' => [], 'total' => 0, 'error' => 'Google RSS: No results'];
+            return ['success' => false, 'articles' => [], 'total' => 0, 'error' => 'Google RSS: No parseable results'];
         }
 
         $articles = [];
         $count = 0;
         foreach ($xml->channel->item as $item) {
             if ($count >= $perPage) break;
+            $rawUrl = (string) $item->link;
+            $resolved = app(SourceExtractionService::class)->resolveSourceUrl($rawUrl, 8);
             $articles[] = [
                 'source_api'    => 'google-news-rss',
                 'title'         => (string) $item->title,
                 'description'   => strip_tags((string) $item->description),
                 'content'       => '',
-                'url'           => (string) $item->link,
+                'url'           => (string) ($resolved['url'] ?? $rawUrl),
                 'image'         => null,
                 'published_at'  => (string) $item->pubDate,
                 'source_name'   => (string) ($item->source ?? 'Google News'),
-                'source_url'    => '',
+                'source_url'    => $rawUrl,
             ];
             $count++;
         }

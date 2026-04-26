@@ -6,6 +6,7 @@ use hexa_app_publish\Discovery\Sources\Health\Services\SourceAccessStrategyServi
 use hexa_app_publish\Discovery\Sources\Models\ScrapeLog;
 use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Support\AiModelCatalog;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -19,6 +20,8 @@ use Illuminate\Support\Str;
  */
 class SourceExtractionService
 {
+    private const AI_METHODS = ['claude', 'gpt', 'grok', 'gemini'];
+
     /**
      * Extract content from a single URL.
      *
@@ -56,7 +59,7 @@ class SourceExtractionService
         $normalizationMeta = $normalization['meta'];
 
         // AI extraction methods — delegate to Claude, GPT, Grok, or Gemini
-        if (in_array($method, ['claude', 'gpt', 'grok', 'gemini'], true)) {
+        if (in_array($method, self::AI_METHODS, true)) {
             $result = $this->extractWithAi($url, $method, $minWords);
             $result = $this->attachNormalizationMeta($result, $requestedUrl, $url, $normalizationMeta);
             $this->logScrape($url, $method, $userAgent, $timeout, $retries, $result, $source, $draftId);
@@ -82,14 +85,16 @@ class SourceExtractionService
                 $attemptMethod = (string) ($attempt['method'] ?? $method);
                 $attemptUserAgent = (string) ($attempt['user_agent'] ?? $userAgent);
 
-                $extraction = $extractor->extract($url, $attemptMethod, null, [
-                    'user_agent' => $attemptUserAgent,
-                    'retries'    => $retries,
-                    'timeout'    => $timeout,
-                    'min_words'  => $minWords,
-                ]);
+                $result = $this->runAttemptExtraction(
+                    $extractor,
+                    $url,
+                    $attemptMethod,
+                    $attemptUserAgent,
+                    $retries,
+                    $timeout,
+                    $minWords
+                );
 
-                $result = $this->normalizeResult($url, $attemptMethod, $extraction);
                 $result = $this->attachNormalizationMeta($result, $requestedUrl, $url, $normalizationMeta);
                 $result = $this->annotateAttemptStrategy($result, $attempt, $method, $userAgent);
                 $this->logScrape($url, $attemptMethod, $attemptUserAgent, $timeout, $retries, $result, $source, $draftId);
@@ -402,6 +407,23 @@ class SourceExtractionService
             || str_contains($message, 'too short');
     }
 
+
+    private function runAttemptExtraction($extractor, string $url, string $attemptMethod, string $attemptUserAgent, int $retries, int $timeout, int $minWords): array
+    {
+        if (in_array($attemptMethod, self::AI_METHODS, true)) {
+            return $this->extractWithAi($url, $attemptMethod, $minWords);
+        }
+
+        $extraction = $extractor->extract($url, $attemptMethod, null, [
+            'user_agent' => $attemptUserAgent,
+            'retries'    => $retries,
+            'timeout'    => $timeout,
+            'min_words'  => $minWords,
+        ]);
+
+        return $this->normalizeResult($url, $attemptMethod, $extraction);
+    }
+
     /**
      * Extract article content using an AI provider.
      *
@@ -585,6 +607,14 @@ class SourceExtractionService
     /**
      * @return array{url: string, meta: array<string, mixed>}
      */
+    public function resolveSourceUrl(string $url, int $timeout = 15): array
+    {
+        return $this->normalizeSourceUrl($url, $timeout);
+    }
+
+    /**
+     * @return array{url: string, meta: array<string, mixed>}
+     */
     private function normalizeSourceUrl(string $url, int $timeout): array
     {
         $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?: ''));
@@ -592,52 +622,54 @@ class SourceExtractionService
             return ['url' => $url, 'meta' => []];
         }
 
-        try {
-            $articleId = $this->extractGoogleNewsArticleId($url);
-            if (!$articleId) {
-                return [
-                    'url' => $url,
-                    'meta' => [
-                        'provider' => 'google-news',
-                        'status' => 'missing_article_id',
-                    ],
-                ];
-            }
+        return Cache::remember('publish:google-news-url:' . sha1($url), now()->addHours(12), function () use ($url, $timeout) {
+            try {
+                $articleId = $this->extractGoogleNewsArticleId($url);
+                if (!$articleId) {
+                    return [
+                        'url' => $url,
+                        'meta' => [
+                            'provider' => 'google-news',
+                            'status' => 'missing_article_id',
+                        ],
+                    ];
+                }
 
-            $decodedUrl = $this->decodeGoogleNewsArticleId($articleId, $timeout);
-            if (!$decodedUrl) {
+                $decodedUrl = $this->decodeGoogleNewsArticleId($articleId, $timeout);
+                if (!$decodedUrl) {
+                    return [
+                        'url' => $url,
+                        'meta' => [
+                            'provider' => 'google-news',
+                            'status' => 'decode_failed',
+                            'article_id' => $articleId,
+                        ],
+                    ];
+                }
+
                 return [
-                    'url' => $url,
+                    'url' => $decodedUrl,
                     'meta' => [
                         'provider' => 'google-news',
-                        'status' => 'decode_failed',
+                        'status' => 'decoded',
                         'article_id' => $articleId,
+                        'requested_url' => $url,
+                        'resolved_url' => $decodedUrl,
+                    ],
+                ];
+            } catch (\Throwable $e) {
+                Log::warning('[SourceExtraction] Google News URL normalization failed: ' . $e->getMessage());
+
+                return [
+                    'url' => $url,
+                    'meta' => [
+                        'provider' => 'google-news',
+                        'status' => 'decode_error',
+                        'error' => $e->getMessage(),
                     ],
                 ];
             }
-
-            return [
-                'url' => $decodedUrl,
-                'meta' => [
-                    'provider' => 'google-news',
-                    'status' => 'decoded',
-                    'article_id' => $articleId,
-                    'requested_url' => $url,
-                    'resolved_url' => $decodedUrl,
-                ],
-            ];
-        } catch (\Throwable $e) {
-            Log::warning('[SourceExtraction] Google News URL normalization failed: ' . $e->getMessage());
-
-            return [
-                'url' => $url,
-                'meta' => [
-                    'provider' => 'google-news',
-                    'status' => 'decode_error',
-                    'error' => $e->getMessage(),
-                ],
-            ];
-        }
+        });
     }
 
     private function extractGoogleNewsArticleId(string $url): ?string

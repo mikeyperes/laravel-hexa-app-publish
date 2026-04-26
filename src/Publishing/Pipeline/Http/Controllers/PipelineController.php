@@ -453,7 +453,7 @@ class PipelineController extends Controller
         $resolvedSelection = $catalog->resolveSearchSelection($selection);
         $model = (string) ($resolvedSelection['model'] ?? '');
         $topic = $request->input('topic');
-        $count = min((int) $request->input('count', 4), 6);
+        $count = min((int) $request->input('count', 10), 10);
         $provider = $resolvedSelection['provider'] ?? null;
         $excludeUrls = array_filter((array) $request->input('exclude_urls', []));
         $draft = $request->filled('draft_id')

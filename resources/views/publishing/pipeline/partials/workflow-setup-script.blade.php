@@ -447,7 +447,7 @@
 
             const searchAgentLabel = this.aiSearchOptionLabels?.[this.aiSearchModel] || this.aiSearchModel;
             this._logAi('info', 'Starting AI article search for: ' + this.aiSearchTopic);
-            this._logAi('info', 'Requesting top 6 articles via ' + searchAgentLabel + ' with web search...');
+            this._logAi('info', 'Requesting top 10 articles via ' + searchAgentLabel + ' with web search...');
 
             try {
                 // Collect URLs from current results + already-added sources to exclude duplicates on re-search
@@ -462,7 +462,7 @@
                     body: JSON.stringify({
                         topic: this.aiSearchTopic,
                         draft_id: this.draftId || null,
-                        count: 6,
+                        count: 10,
                         model: this.aiSearchModel,
                         exclude_urls: excludeUrls.length > 0 ? excludeUrls : undefined,
                     }),
