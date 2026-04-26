@@ -2,7 +2,7 @@
 
 return [
 
-    'version' => '18.16.2',
+    'version' => '18.16.3',
 
     /*
     |--------------------------------------------------------------------------
@@ -215,7 +215,7 @@ return [
         'google-news-rss',
         'gnews',
         'newsdata',
-        'currents',
+        'currents_news',
         'web-scrape',
     ],
 

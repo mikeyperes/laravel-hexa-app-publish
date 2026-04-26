@@ -11,6 +11,7 @@ use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Discovery\Links\Health\Services\LinkHealthService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
+use hexa_app_publish\Discovery\Sources\Health\Services\SourceAccessStrategyService;
 use hexa_app_publish\Publishing\Campaigns\Services\NewsDiscoveryOptionsService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
@@ -466,51 +467,14 @@ class PipelineController extends Controller
             $searchPrompt .= "\n\nDo NOT include any of these URLs or articles from the same pages — they were already found:\n{$excludeList}";
         }
 
-        if ($provider === 'grok') {
-            if (!class_exists(\hexa_package_grok\Services\GrokService::class)) {
-                return response()->json(['success' => false, 'message' => 'Grok package not available.'], 400);
-            }
-            $grok = app(\hexa_package_grok\Services\GrokService::class);
-            $raw = $grok->chat(
-                "You are a research assistant with web access. Find real, recent news articles. Output ONLY valid JSON.",
-                $searchPrompt,
-                $model,
-                0.3,
-                2048
-            );
-            $result = $this->parseSearchResult($raw, $model);
-        } elseif ($provider === 'openai') {
-            if (!class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)) {
-                return response()->json(['success' => false, 'message' => 'ChatGPT package not available.'], 400);
-            }
-            $chatgpt = app(\hexa_package_chatgpt\Services\ChatGptService::class);
-            $raw = $chatgpt->chat(
-                "You are a research assistant with web access. Find real, recent news articles. Output ONLY valid JSON.",
-                $searchPrompt,
-                $model,
-                0.3,
-                2048
-            );
-            $result = $this->parseSearchResult($raw, $model);
-        } elseif ($provider === 'gemini') {
-            if (!class_exists(\hexa_package_gemini\Services\GeminiService::class)) {
-                return response()->json(['success' => false, 'message' => 'Gemini package not available.'], 400);
-            }
-            $result = app(\hexa_package_gemini\Services\GeminiService::class)->searchArticles($topic, $count, $model);
-        } else {
-            if (!class_exists(\hexa_package_anthropic\Services\AnthropicService::class)) {
-                return response()->json(['success' => false, 'message' => 'Anthropic package not available.'], 400);
-            }
-            $anthropic = app(\hexa_package_anthropic\Services\AnthropicService::class);
-            $result = $anthropic->searchArticles($topic, $count, $model ?: null);
-        }
+        $result = app(\hexa_app_publish\Discovery\Sources\Services\AiOptimizedArticleSearchService::class)->search($topic, $count, $model);
 
         if ($result['success'] && !empty($result['data']['usage'])) {
             $usedModel = $result['data']['model'] ?? $model;
             $result['data']['cost'] = round($catalog->calculateCost($usedModel, (array) $result['data']['usage']), 6);
         }
 
-        $verifiedPrimary = $this->verifyArticleCandidates((array) data_get($result, 'data.articles', []), $count);
+        $verifiedPrimary = $this->verifyArticleCandidates((array) data_get($result, 'data.articles', []), $count, [], $topic);
         $articles = $verifiedPrimary['articles'];
         $fallbackStats = ['checked' => 0, 'kept' => 0, 'discarded' => 0];
         $fallbackResult = null;
@@ -527,7 +491,8 @@ class PipelineController extends Controller
                 $verifiedFallback = $this->verifyArticleCandidates(
                     (array) data_get($fallbackResult, 'data.articles', []),
                     $count - count($articles),
-                    array_column($articles, 'url')
+                    array_column($articles, 'url'),
+                    $topic
                 );
 
                 $fallbackStats = $verifiedFallback['stats'];
@@ -692,15 +657,72 @@ class PipelineController extends Controller
      * @param array<int, string> $excludeUrls
      * @return array{articles: array<int, array<string, mixed>>, stats: array{checked: int, kept: int, discarded: int}}
      */
-    private function verifyArticleCandidates(array $articles, int $limit, array $excludeUrls = []): array
+    private function verifyArticleCandidates(array $articles, int $limit, array $excludeUrls = [], ?string $topic = null): array
     {
         return app(LinkHealthService::class)->verifyArticleCandidates(
             $articles,
             $limit,
             $excludeUrls,
-            null,
+            fn (array $candidate): bool => $this->matchesSearchTopic($candidate, $topic)
+                && !app(SourceAccessStrategyService::class)->shouldBlockDiscoveryCandidate((string) ($candidate['url'] ?? '')),
             'pipeline'
         );
+    }
+
+    /**
+     * @param array<string, mixed> $candidate
+     */
+    private function matchesSearchTopic(array $candidate, ?string $topic): bool
+    {
+        if ($this->isLowValueSearchCandidate($candidate)) {
+            return false;
+        }
+
+        if (!$topic) {
+            return true;
+        }
+
+        $requiredTerms = array_slice($this->searchTopicTokens($topic), 0, 3);
+        $minimumRequiredHits = count($requiredTerms) >= 3 ? 2 : 1;
+        $textTokens = $this->searchTopicTokens(trim((string) (($candidate['title'] ?? '') . ' ' . ($candidate['description'] ?? ''))));
+        $topicHits = count(array_intersect($textTokens, $this->searchTopicTokens($topic)));
+        $requiredHits = count(array_intersect($textTokens, $requiredTerms));
+
+        if ($requiredTerms !== [] && $requiredHits < $minimumRequiredHits) {
+            return false;
+        }
+
+        return $topicHits >= $minimumRequiredHits || $requiredHits >= $minimumRequiredHits;
+    }
+
+    /**
+     * @param array<string, mixed> $candidate
+     */
+    private function isLowValueSearchCandidate(array $candidate): bool
+    {
+        $text = Str::lower(trim((string) (($candidate['title'] ?? '') . ' ' . ($candidate['description'] ?? '') . ' ' . ($candidate['url'] ?? ''))));
+
+        return (bool) preg_match('/(\btop\s+\d+\b|\bpower\s+list\b|\bblog\s+posts\b|\bhow\s+to\b|\bguide\b|\btips\b|\broundup\b|\bsponsored\b|\badvertorial\b|\baward\b|\bawards\b|\/awards?\/|\/lists?\/)/', $text);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function searchTopicTokens(string $text): array
+    {
+        $text = Str::lower($text);
+        $text = preg_replace('/[^a-z0-9\s]+/', ' ', $text);
+        $parts = preg_split('/\s+/', (string) $text, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $stopWords = [
+            'about', 'after', 'amid', 'analysis', 'article', 'articles', 'because', 'before', 'between', 'breaking',
+            'commentary', 'could', 'daily', 'editorial', 'feature', 'from', 'have', 'into', 'latest', 'more', 'most',
+            'news', 'over', 'reuters', 'says', 'show', 'story', 'than', 'that', 'their', 'them', 'these', 'they',
+            'this', 'those', 'today', 'under', 'update', 'updates', 'what', 'when', 'where', 'which', 'while', 'with',
+        ];
+
+        return array_values(array_unique(array_filter($parts, static function ($part) use ($stopWords) {
+            return strlen($part) >= 3 && !in_array($part, $stopWords, true);
+        })));
     }
 
     /**

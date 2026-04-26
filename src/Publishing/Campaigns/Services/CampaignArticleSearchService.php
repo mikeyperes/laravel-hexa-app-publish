@@ -172,68 +172,8 @@ class CampaignArticleSearchService
      */
     protected function searchWithModel(string $topic, int $count, string $model): array
     {
-        $provider = $this->catalog->providerForModel($model);
-        $prompt = "Search Google for {$count} recent news articles about: {$topic}. "
-            . "Return only LIVE, canonical article pages from reputable publishers. "
-            . "Every returned article must support ONE coherent story angle or tightly shared theme. "
-            . "If the topic is broad, narrow it to one concrete sub-angle and return only articles that fit that same angle. "
-            . "Do NOT mix unrelated countries, disconnected events, or separate storylines into one result set. "
-            . "Do NOT guess URL slugs. Do NOT return homepages, search pages, topic pages, category pages, author pages, archive pages, AMP pages, cached pages, redirect links, or Google intermediary links. "
-            . "For each article return the exact canonical URL, the article title, and a brief description under 20 words. "
-            . "Return ONLY a JSON array of objects with keys: url, title, description.";
-
         try {
-            if ($provider === 'grok') {
-                if (!class_exists(\hexa_package_grok\Services\GrokService::class)) {
-                    return ['success' => false, 'message' => 'Grok package not available.', 'data' => null];
-                }
-
-                $raw = app(\hexa_package_grok\Services\GrokService::class)->chat(
-                    'You are a research assistant with web access. Find real, recent news articles. Output ONLY valid JSON.',
-                    $prompt,
-                    $model,
-                    0.3,
-                    2048
-                );
-
-                return $this->withPrompt($this->parseSearchResult($raw, $model), $prompt);
-            }
-
-            if ($provider === 'openai') {
-                if (!class_exists(\hexa_package_chatgpt\Services\ChatGptService::class)) {
-                    return ['success' => false, 'message' => 'ChatGPT package not available.', 'data' => null];
-                }
-
-                $raw = app(\hexa_package_chatgpt\Services\ChatGptService::class)->chat(
-                    'You are a research assistant with web access. Find real, recent news articles. Output ONLY valid JSON.',
-                    $prompt,
-                    $model,
-                    0.3,
-                    2048
-                );
-
-                return $this->withPrompt($this->parseSearchResult($raw, $model), $prompt);
-            }
-
-            if ($provider === 'gemini') {
-                if (!class_exists(\hexa_package_gemini\Services\GeminiService::class)) {
-                    return ['success' => false, 'message' => 'Gemini package not available.', 'data' => null];
-                }
-
-                return $this->withPrompt(
-                    app(\hexa_package_gemini\Services\GeminiService::class)->searchArticles($topic, $count, $model),
-                    $prompt
-                );
-            }
-
-            if (!class_exists(\hexa_package_anthropic\Services\AnthropicService::class)) {
-                return ['success' => false, 'message' => 'Anthropic package not available.', 'data' => null];
-            }
-
-            return $this->withPrompt(
-                app(\hexa_package_anthropic\Services\AnthropicService::class)->searchArticles($topic, $count, $model),
-                $prompt
-            );
+            return app(\hexa_app_publish\Discovery\Sources\Services\AiOptimizedArticleSearchService::class)->search($topic, $count, $model);
         } catch (\Throwable $e) {
             return ['success' => false, 'message' => $e->getMessage(), 'data' => null];
         }

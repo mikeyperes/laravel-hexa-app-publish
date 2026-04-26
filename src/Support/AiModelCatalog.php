@@ -7,13 +7,14 @@ use hexa_core\AI\Services\AiModelCatalog as CoreAiModelCatalog;
 class AiModelCatalog extends CoreAiModelCatalog
 {
     private const SEARCH_PRIORITY = [
-        'grok-3-mini',
-        'grok-3',
-        'grok-4-1-fast',
         'gemini-2.5-flash',
-        'gemini-2.5-flash-lite',
         'claude-haiku-4-5-20251001',
+        'gpt-4o-mini',
+        'grok-3-mini',
+        'gemini-2.5-flash-lite',
+        'grok-3',
         'gpt-4o',
+        'grok-4-1-fast',
     ];
 
     private const SPIN_PRIORITY = [
