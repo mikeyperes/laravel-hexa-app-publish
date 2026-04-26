@@ -62,6 +62,15 @@ class AiModelCatalog extends CoreAiModelCatalog
 
     public function defaultSearchSelection(): ?string
     {
+        foreach (['gemini', 'grok', 'openai', 'anthropic'] as $provider) {
+            $selection = self::OPTIMIZED_SEARCH_PREFIX . $provider;
+            foreach ($this->optimizedSearchEntries() as $entry) {
+                if (($entry['id'] ?? null) === $selection) {
+                    return $selection;
+                }
+            }
+        }
+
         return $this->defaultSearchModel();
     }
 

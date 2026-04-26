@@ -449,6 +449,7 @@ class PipelineController extends Controller
 
         $catalog = app(AiModelCatalog::class);
         $selection = (string) $request->input('model', ($catalog->defaultSearchSelection() ?: ''));
+        $requestedSelection = $selection;
         $resolvedSelection = $catalog->resolveSearchSelection($selection);
         $model = (string) ($resolvedSelection['model'] ?? '');
         $topic = $request->input('topic');
@@ -471,7 +472,30 @@ class PipelineController extends Controller
             $searchPrompt .= "\n\nDo NOT include any of these URLs or articles from the same pages — they were already found:\n{$excludeList}";
         }
 
-        $result = app(\hexa_app_publish\Discovery\Sources\Services\AiOptimizedArticleSearchService::class)->search($topic, $count, $selection);
+        $searchService = app(\hexa_app_publish\Discovery\Sources\Services\AiOptimizedArticleSearchService::class);
+        $result = $searchService->search($topic, $count, $selection);
+        $aiFallbackUsed = false;
+        $aiFallbackFrom = null;
+
+        if (!(bool) ($result['success'] ?? false) || empty((array) data_get($result, 'data.articles', []))) {
+            foreach (['optimized:grok', 'optimized:openai', 'grok-3-mini', 'gpt-4o-mini'] as $fallbackSelection) {
+                if ($fallbackSelection === $selection) {
+                    continue;
+                }
+
+                $candidateResult = $searchService->search($topic, $count, $fallbackSelection);
+                if ((bool) ($candidateResult['success'] ?? false) && !empty((array) data_get($candidateResult, 'data.articles', []))) {
+                    $aiFallbackUsed = true;
+                    $aiFallbackFrom = $selection;
+                    $selection = $fallbackSelection;
+                    $resolvedSelection = $catalog->resolveSearchSelection($selection);
+                    $provider = $resolvedSelection['provider'] ?? $provider;
+                    $model = (string) ($resolvedSelection['model'] ?? $model);
+                    $result = $candidateResult;
+                    break;
+                }
+            }
+        }
 
         if ($result['success'] && !empty($result['data']['usage'])) {
             $usedModel = $result['data']['model'] ?? $model;
@@ -482,6 +506,44 @@ class PipelineController extends Controller
 
         $verifiedPrimary = $this->verifyArticleCandidates((array) data_get($result, 'data.articles', []), $count, [], $topic);
         $articles = $verifiedPrimary['articles'];
+
+        if (empty($articles) && !$aiFallbackUsed) {
+            foreach (['optimized:grok', 'optimized:openai', 'grok-3-mini', 'gpt-4o-mini'] as $fallbackSelection) {
+                if ($fallbackSelection === $selection) {
+                    continue;
+                }
+
+                $candidateResult = $searchService->search($topic, $count, $fallbackSelection);
+                if (!(bool) ($candidateResult['success'] ?? false) || empty((array) data_get($candidateResult, 'data.articles', []))) {
+                    continue;
+                }
+
+                $candidateVerified = $this->verifyArticleCandidates((array) data_get($candidateResult, 'data.articles', []), $count, [], $topic);
+                if (empty($candidateVerified['articles'])) {
+                    continue;
+                }
+
+                $aiFallbackUsed = true;
+                $aiFallbackFrom = $requestedSelection;
+                $selection = $fallbackSelection;
+                $resolvedSelection = $catalog->resolveSearchSelection($selection);
+                $provider = $resolvedSelection['provider'] ?? $provider;
+                $model = (string) ($resolvedSelection['model'] ?? $model);
+                $result = $candidateResult;
+                $verifiedPrimary = $candidateVerified;
+                $articles = $candidateVerified['articles'];
+
+                if ($result['success'] && !empty($result['data']['usage'])) {
+                    $usedModel = $result['data']['model'] ?? $model;
+                    if ($usedModel) {
+                        $result['data']['cost'] = round($catalog->calculateCost($usedModel, (array) $result['data']['usage']), 6);
+                    }
+                }
+
+                break;
+            }
+        }
+
         $fallbackStats = ['checked' => 0, 'kept' => 0, 'discarded' => 0];
         $fallbackResult = null;
         $fallbackUsed = false;
@@ -537,9 +599,19 @@ class PipelineController extends Controller
                     'backend' => data_get($result, 'data.search_backend', $provider),
                 ],
             ]);
+            $failureMessage = 'Search found candidates, but none verified as live, on-topic article URLs.';
+            if (!$result['success']) {
+                $failureMessage = (string) ($result['message'] ?? $failureMessage);
+            }
+            if ($fallbackResult && (bool) ($fallbackResult['success'] ?? false)) {
+                $failureMessage .= ' Deterministic news fallback also found candidates, but none survived live verification.';
+            } elseif ($fallbackResult) {
+                $failureMessage = (string) (($fallbackResult['message'] ?? null) ?: $failureMessage);
+            }
+
             return response()->json([
                 'success' => false,
-                'message' => (string) (($fallbackResult['message'] ?? null) ?: ($result['message'] ?? 'No live articles found.')),
+                'message' => $failureMessage,
                 'data' => [
                     'verification' => [
                         'primary' => $verifiedPrimary['stats'],
@@ -577,6 +649,8 @@ class PipelineController extends Controller
                 'search_backend' => $fallbackUsed ? 'hybrid_live_verification' : (data_get($result, 'data.search_backend') ?: $provider),
                 'search_backend_label' => !empty($backendLabels) ? implode(' + ', $backendLabels) : 'Live article verification',
                 'fallback_reason' => $fallbackUsed ? data_get($fallbackResult, 'data.fallback_reason') : null,
+                'ai_fallback_used' => $aiFallbackUsed,
+                'ai_fallback_from' => $aiFallbackFrom,
                 'verification' => [
                     'primary' => $verifiedPrimary['stats'],
                     'fallback' => $fallbackStats,
@@ -595,6 +669,8 @@ class PipelineController extends Controller
                 'search_backend' => $fallbackUsed ? 'hybrid_live_verification' : (data_get($result, 'data.search_backend') ?: $provider),
                 'search_backend_label' => !empty($backendLabels) ? implode(' + ', $backendLabels) : 'Live article verification',
                 'fallback_reason' => $fallbackUsed ? data_get($fallbackResult, 'data.fallback_reason') : null,
+                'ai_fallback_used' => $aiFallbackUsed,
+                'ai_fallback_from' => $aiFallbackFrom,
                 'verification' => [
                     'primary' => $verifiedPrimary['stats'],
                     'fallback' => $fallbackStats,
@@ -611,8 +687,8 @@ class PipelineController extends Controller
     private function fallbackArticleSearch(string $topic, int $count, string $reason): array
     {
         $fallback = app(SourceDiscoveryService::class)->searchArticles($topic, [
-            'per_page' => max(2, min(10, $count)),
-            'sources' => ['gnews', 'newsdata', 'currents_news'],
+            'per_page' => max(4, min(12, $count * 2)),
+            'sources' => ['google-news-rss', 'gnews', 'newsdata', 'currents_news'],
         ]);
 
         if (!(bool) data_get($fallback, 'success', false) || empty(data_get($fallback, 'data.articles', []))) {

@@ -29,7 +29,7 @@ class OptimizedNewsSearchService
         $sources = $this->normalizeSources((array) ($options['sources'] ?? ['gnews', 'newsdata', 'currents_news', 'google-news-rss']));
         $queries = $queryPlan['queries'];
         $seedArticles = $this->normalizeSeedArticles((array) ($options['seed_articles'] ?? []), $topic);
-        $perQuery = max($count + 2, 5);
+        $perQuery = max($count + 4, 8);
         $providerTotals = [];
         $providerErrors = [];
         $queryDiagnostics = [];
@@ -96,9 +96,11 @@ class OptimizedNewsSearchService
             $lookup[$candidate['url']] = $candidate;
         }
 
+        $verificationPool = max($count * 6, 24);
+        $verificationLimit = max($count * 3, $count + 4);
         $verified = $this->linkHealth->verifyArticleCandidates(
-            array_slice($ranked, 0, max($count * 4, 16)),
-            max($count * 2, $count + 2),
+            array_slice($ranked, 0, $verificationPool),
+            $verificationLimit,
             [],
             fn (array $candidate): bool => $this->matchesTopic($candidate, $topic, $queryPlan)
                 && !$this->sourceAccessStrategy->shouldBlockDiscoveryCandidate((string) ($candidate['url'] ?? '')),
@@ -311,8 +313,18 @@ class OptimizedNewsSearchService
             $score += 1.5;
         }
 
-        if (preg_match('/\d{4}\/\d{2}|\d{4}-\d{2}-\d{2}/', $path)) {
-            $score += 1.0;
+        if (preg_match_all('/(20\d{2})/', $path, $matches)) {
+            $currentYear = (int) now()->format('Y');
+            $years = array_map('intval', $matches[1] ?? []);
+            $staleYear = !empty($years) ? min($years) : null;
+
+            if ($staleYear !== null) {
+                if ($staleYear >= ($currentYear - 1)) {
+                    $score += 1.0;
+                } else {
+                    $score -= 3.0;
+                }
+            }
         }
 
         return $score;
@@ -404,6 +416,7 @@ class OptimizedNewsSearchService
     {
         $variants = [$topic];
         $requiredPhrase = trim(implode(' ', array_slice($requiredTerms, 0, 3)));
+        $topicTokens = $this->tokens($topic);
 
         if ($requiredPhrase !== '' && !Str::contains(Str::lower($topic), Str::lower($requiredPhrase))) {
             $variants[] = trim($topic . ' ' . $requiredPhrase);
@@ -411,6 +424,18 @@ class OptimizedNewsSearchService
 
         $variants[] = trim($topic . ' latest news');
         $variants[] = trim($topic . ' recent news article');
+
+        if (count($topicTokens) <= 3) {
+            foreach (['business news', 'company leadership', 'executive appointments', 'industry developments'] as $suffix) {
+                $variants[] = trim($topic . ' ' . $suffix);
+            }
+        }
+
+        if (in_array('female', $topicTokens, true) && in_array('ceo', $topicTokens, true)) {
+            $variants[] = 'women CEOs business news';
+            $variants[] = 'female chief executive appointments';
+            $variants[] = 'women company leadership latest news';
+        }
 
         return array_values(array_unique(array_filter(array_map('trim', $variants))));
     }
@@ -482,6 +507,17 @@ class OptimizedNewsSearchService
             ];
         }
 
+        if (count($articles) <= $limit) {
+            return [
+                'articles' => array_slice($articles, 0, $limit),
+                'meta' => [
+                    'anchor_title' => $articles[0]['title'] ?? null,
+                    'mode' => 'within_limit',
+                    'kept' => count($articles),
+                ],
+            ];
+        }
+
         $pairScores = [];
         $anchorIndex = 0;
         $anchorScore = -1.0;
@@ -515,6 +551,18 @@ class OptimizedNewsSearchService
             if ($score >= 0.18) {
                 $coherent[] = $article;
             }
+        }
+
+        $minimumUseful = min($limit, 3);
+        if (count($coherent) < $minimumUseful && count($articles) >= $minimumUseful) {
+            return [
+                'articles' => array_slice($articles, 0, $limit),
+                'meta' => [
+                    'anchor_title' => (string) ($anchor['title'] ?? ''),
+                    'mode' => 'ranked_fallback',
+                    'kept' => min(count($articles), $limit),
+                ],
+            ];
         }
 
         return [
