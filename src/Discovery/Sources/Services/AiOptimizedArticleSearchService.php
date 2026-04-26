@@ -15,9 +15,17 @@ class AiOptimizedArticleSearchService
     /**
      * @return array{success: bool, message: string, data: array<string, mixed>|null}
      */
-    public function search(string $topic, int $count, string $model): array
+    public function search(string $topic, int $count, string $selection): array
     {
-        $provider = $this->catalog->providerForModel($model);
+        $resolved = $this->catalog->resolveSearchSelection($selection);
+        $provider = (string) ($resolved['provider'] ?? '');
+        $model = (string) ($resolved['model'] ?? '');
+        $backendLabel = (string) ($resolved['backend_label'] ?? 'AI Search');
+        $optimized = (($resolved['mode'] ?? 'model') === 'optimized');
+
+        if ($provider === '' || $model === '') {
+            return ['success' => false, 'message' => 'Search selection could not be resolved.', 'data' => null];
+        }
 
         return match ($provider) {
             'grok' => $this->dispatch(
@@ -26,7 +34,8 @@ class AiOptimizedArticleSearchService
                 $topic,
                 $count,
                 $model,
-                'Grok Optimized Search'
+                $backendLabel,
+                $optimized
             ),
             'openai' => $this->dispatch(
                 \hexa_package_chatgpt\Services\ChatGptService::class,
@@ -34,7 +43,8 @@ class AiOptimizedArticleSearchService
                 $topic,
                 $count,
                 $model,
-                'OpenAI Optimized Search'
+                $backendLabel,
+                $optimized
             ),
             'gemini' => $this->dispatch(
                 \hexa_package_gemini\Services\GeminiService::class,
@@ -42,7 +52,8 @@ class AiOptimizedArticleSearchService
                 $topic,
                 $count,
                 $model,
-                'Gemini Optimized Search'
+                $backendLabel,
+                $optimized
             ),
             default => $this->dispatch(
                 \hexa_package_anthropic\Services\AnthropicService::class,
@@ -50,7 +61,8 @@ class AiOptimizedArticleSearchService
                 $topic,
                 $count,
                 $model,
-                'Claude Optimized Search'
+                $backendLabel,
+                $optimized
             ),
         };
     }
@@ -59,17 +71,19 @@ class AiOptimizedArticleSearchService
      * @param class-string $serviceClass
      * @return array{success: bool, message: string, data: array<string, mixed>|null}
      */
-    protected function dispatch(string $serviceClass, string $missingMessage, string $topic, int $count, string $model, string $backendLabel): array
+    protected function dispatch(string $serviceClass, string $missingMessage, string $topic, int $count, string $model, string $backendLabel, bool $optimized = false): array
     {
         if (!class_exists($serviceClass)) {
             return ['success' => false, 'message' => $missingMessage, 'data' => null];
         }
 
         $service = app($serviceClass);
-        if (method_exists($service, 'searchArticlesOptimized')) {
+        if ($optimized && method_exists($service, 'searchArticlesOptimized')) {
             $result = $service->searchArticlesOptimized($topic, $count, $model);
         } elseif (method_exists($service, 'searchArticles')) {
             $result = $service->searchArticles($topic, $count, $model);
+        } elseif (method_exists($service, 'searchArticlesOptimized')) {
+            $result = $service->searchArticlesOptimized($topic, $count, $model);
         } else {
             return ['success' => false, 'message' => $missingMessage, 'data' => null];
         }

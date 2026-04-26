@@ -709,7 +709,7 @@
                     <div class="mt-2">
                         <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Search Agent</label>
                         <select x-model="aiSearchModel" class="border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
-                            @foreach(($aiModelGroups ?? []) as $company => $models)
+                            @foreach(($aiSearchGroups ?? $aiModelGroups ?? []) as $company => $models)
                             <optgroup label="{{ $company }}">
                                 @foreach($models as $model)
                                     <option value="{{ $model['id'] }}">{{ $model['label'] }}</option>
@@ -1465,6 +1465,7 @@ function publishPipeline() {
         uploadedSourceText: '',
         aiSearchTopic: '',
         aiSearchHistory: JSON.parse(localStorage.getItem('hws_search_history') || '[]'),
+        aiSearchOptionLabels: @json(($aiSearchOptionLabels ?? [])),
         aiSearchModel: @json(($pipelineDefaults['search_model'] ?? null)),
         aiSearchCount: 4,
         aiSearching: false,

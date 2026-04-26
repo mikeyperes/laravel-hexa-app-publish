@@ -239,8 +239,10 @@ class PipelineController extends Controller
             'filenamePattern'   => \hexa_core\Models\Setting::getValue('wp_photo_filename_pattern', 'hexa_{draft_id}_{seo_name}'),
             'aiDetectors'       => $aiDetectors,
             'aiModelGroups'     => $aiCatalog->groupedSelectOptions(),
+            'aiSearchGroups'    => $aiCatalog->groupedSearchSelectOptions(),
+            'aiSearchOptionLabels' => $aiCatalog->searchOptionLabels(),
             'pipelineDefaults'  => [
-                'search_model' => $aiCatalog->defaultSearchModel(),
+                'search_model' => $aiCatalog->defaultSearchSelection(),
                 'spin_model' => $aiCatalog->defaultSpinModel(),
             ],
             'pipelinePayload'   => $pipelinePayload,
@@ -446,10 +448,12 @@ class PipelineController extends Controller
         ]);
 
         $catalog = app(AiModelCatalog::class);
-        $model = (string) $request->input('model', ($catalog->defaultSearchModel() ?: ''));
+        $selection = (string) $request->input('model', ($catalog->defaultSearchSelection() ?: ''));
+        $resolvedSelection = $catalog->resolveSearchSelection($selection);
+        $model = (string) ($resolvedSelection['model'] ?? '');
         $topic = $request->input('topic');
         $count = min((int) $request->input('count', 4), 6);
-        $provider = $catalog->providerForModel($model);
+        $provider = $resolvedSelection['provider'] ?? null;
         $excludeUrls = array_filter((array) $request->input('exclude_urls', []));
         $draft = $request->filled('draft_id')
             ? $this->resolveAuthorizedDraft((int) $request->input('draft_id'))
@@ -467,11 +471,13 @@ class PipelineController extends Controller
             $searchPrompt .= "\n\nDo NOT include any of these URLs or articles from the same pages — they were already found:\n{$excludeList}";
         }
 
-        $result = app(\hexa_app_publish\Discovery\Sources\Services\AiOptimizedArticleSearchService::class)->search($topic, $count, $model);
+        $result = app(\hexa_app_publish\Discovery\Sources\Services\AiOptimizedArticleSearchService::class)->search($topic, $count, $selection);
 
         if ($result['success'] && !empty($result['data']['usage'])) {
             $usedModel = $result['data']['model'] ?? $model;
-            $result['data']['cost'] = round($catalog->calculateCost($usedModel, (array) $result['data']['usage']), 6);
+            if ($usedModel) {
+                $result['data']['cost'] = round($catalog->calculateCost($usedModel, (array) $result['data']['usage']), 6);
+            }
         }
 
         $verifiedPrimary = $this->verifyArticleCandidates((array) data_get($result, 'data.articles', []), $count, [], $topic);
@@ -511,7 +517,7 @@ class PipelineController extends Controller
                 'substage' => 'failed',
                 'status' => 'failed',
                 'provider' => $provider,
-                'model' => $model,
+                'model' => $model ?: $selection,
                 'agent' => 'pipeline-search',
                 'method' => 'ai_search_articles',
                 'success' => false,
@@ -519,6 +525,7 @@ class PipelineController extends Controller
                 'request_payload' => [
                     'topic' => $topic,
                     'count' => $count,
+                    'selection' => $selection,
                     'exclude_urls' => array_values($excludeUrls),
                     'prompt' => $searchPrompt,
                 ],
@@ -554,7 +561,7 @@ class PipelineController extends Controller
             'substage' => $fallbackUsed ? 'complete_with_fallback' : 'complete',
             'status' => 'success',
             'provider' => $provider,
-            'model' => $model,
+            'model' => $model ?: $selection,
             'agent' => 'pipeline-search',
             'method' => 'ai_search_articles',
             'success' => true,

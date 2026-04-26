@@ -445,8 +445,9 @@
             this.aiHasSearched = false;
             this.aiLog = [];
 
+            const searchAgentLabel = this.aiSearchOptionLabels?.[this.aiSearchModel] || this.aiSearchModel;
             this._logAi('info', 'Starting AI article search for: ' + this.aiSearchTopic);
-            this._logAi('info', 'Requesting top 6 articles via ' + this.aiSearchModel + ' with web search...');
+            this._logAi('info', 'Requesting top 6 articles via ' + searchAgentLabel + ' with web search...');
 
             try {
                 // Collect URLs from current results + already-added sources to exclude duplicates on re-search
