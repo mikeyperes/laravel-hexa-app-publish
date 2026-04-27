@@ -4,11 +4,14 @@ namespace hexa_app_publish\Publishing\Pipeline\Http\Controllers;
 
 use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\PressReleaseDetectFieldsRequest;
+use hexa_app_publish\Publishing\Pipeline\Http\Requests\PressReleaseImportNotionEpisodeRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\PressReleaseDetectPhotosRequest;
+use hexa_app_publish\Publishing\Pipeline\Http\Requests\PressReleaseSearchNotionEpisodesRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\PressReleaseDocumentUploadRequest;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineStateService;
 use hexa_app_publish\Publishing\Pipeline\Services\PressReleaseFieldDetectionService;
 use hexa_app_publish\Publishing\Pipeline\Services\PressReleasePhotoDetectionService;
+use hexa_app_publish\Publishing\Pipeline\Services\PressReleaseNotionPodcastImportService;
 use hexa_app_publish\Publishing\Pipeline\Services\PressReleaseSourceResolver;
 use hexa_app_publish\Publishing\Pipeline\Services\PressReleaseWorkflowService;
 use hexa_core\Http\Controllers\Controller;
@@ -24,8 +27,65 @@ class PressReleaseWorkflowController extends Controller
         private PressReleaseSourceResolver $sourceResolver,
         private PressReleaseFieldDetectionService $fieldDetection,
         private PressReleasePhotoDetectionService $photoDetection,
+        private PressReleaseNotionPodcastImportService $notionPodcastImport,
         private UploadService $uploadService
     ) {}
+
+    public function searchNotionEpisodes(PressReleaseSearchNotionEpisodesRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $this->resolveDraft((int) $validated['draft_id']);
+
+        $result = $this->notionPodcastImport->searchEpisodes(
+            (string) ($validated['query'] ?? ''),
+            (int) ($validated['limit'] ?? 10)
+        );
+
+        return response()->json([
+            'success' => (bool) ($result['success'] ?? false),
+            'message' => $result['message'] ?? '',
+            'records' => $result['records'] ?? [],
+        ], ($result['success'] ?? false) ? 200 : 422);
+    }
+
+    public function importNotionEpisode(PressReleaseImportNotionEpisodeRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $draft = $this->resolveDraft((int) $validated['draft_id']);
+        $payload = $this->stateService->payload($draft);
+        $pressRelease = $this->workflow->normalizeState($payload['pressRelease'] ?? []);
+
+        $result = $this->notionPodcastImport->importEpisode((string) $validated['page_id']);
+        if (!($result['success'] ?? false)) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'] ?? 'Failed to import podcast episode from Notion.',
+            ], 422);
+        }
+
+        $pressRelease['submit_method'] = 'notion-podcast';
+        $pressRelease['resolved_source_text'] = $result['source_text'] ?? '';
+        $pressRelease['resolved_source_preview'] = $result['preview'] ?? '';
+        $pressRelease['resolved_source_label'] = $result['label'] ?? 'Notion Podcast Episode';
+        $pressRelease['content_dump'] = $result['source_text'] ?? '';
+        $pressRelease['details'] = array_replace($pressRelease['details'] ?? [], $result['details'] ?? []);
+        $pressRelease['detected_photos'] = $result['detected_photos'] ?? [];
+        $pressRelease['notion_episode'] = $result['selected_episode'] ?? [];
+        $pressRelease['notion_guest'] = $result['selected_guest'] ?? [];
+        $pressRelease['notion_missing_fields'] = $result['missing_fields'] ?? [];
+        $pressRelease = $this->workflow->appendLog($pressRelease, 'success', 'Imported podcast episode from Notion.', [
+            'episode_id' => $pressRelease['notion_episode']['id'] ?? null,
+            'episode_title' => $pressRelease['notion_episode']['title'] ?? null,
+            'guest' => $pressRelease['notion_guest']['name'] ?? null,
+        ]);
+        $this->stateService->updatePressRelease($draft, $pressRelease);
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['message'] ?? 'Podcast episode imported from Notion.',
+            'press_release' => $pressRelease,
+        ]);
+    }
 
     public function uploadDocuments(PressReleaseDocumentUploadRequest $request): JsonResponse
     {

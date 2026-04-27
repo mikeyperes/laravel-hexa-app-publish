@@ -21,6 +21,10 @@ class PressReleaseWorkflowService
             'resolved_source_text' => '',
             'resolved_source_preview' => '',
             'resolved_source_label' => '',
+            'notion_episode_query' => '',
+            'notion_episode' => [],
+            'notion_guest' => [],
+            'notion_missing_fields' => [],
             'details' => [
                 'date' => '',
                 'location' => '',
@@ -43,6 +47,9 @@ class PressReleaseWorkflowService
 
         $normalized['document_files'] = $this->normalizeFiles($normalized['document_files'] ?? []);
         $normalized['photo_files'] = $this->normalizeFiles($normalized['photo_files'] ?? []);
+        $normalized['notion_episode'] = is_array($normalized['notion_episode'] ?? null) ? $normalized['notion_episode'] : [];
+        $normalized['notion_guest'] = is_array($normalized['notion_guest'] ?? null) ? $normalized['notion_guest'] : [];
+        $normalized['notion_missing_fields'] = array_values(array_filter(array_map('strval', (array) ($normalized['notion_missing_fields'] ?? [])), fn ($value) => trim($value) !== ''));
         $normalized['detected_photos'] = array_values(array_map(function (array $photo) {
             return [
                 'url' => (string) ($photo['url'] ?? ''),
@@ -119,9 +126,13 @@ class PressReleaseWorkflowService
     {
         $state = $this->normalizeState($state);
 
-        return !empty($state['polish_only'])
-            ? 'press-release-polish'
-            : 'press-release-spin';
+        $isPodcastImport = ($state['submit_method'] ?? '') === 'notion-podcast';
+
+        if (!empty($state['polish_only'])) {
+            return $isPodcastImport ? 'press-release-podcast-polish' : 'press-release-polish';
+        }
+
+        return $isPodcastImport ? 'press-release-podcast-spin' : 'press-release-spin';
     }
 
     private function normalizeFiles(array $files): array

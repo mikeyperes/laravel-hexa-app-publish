@@ -14,6 +14,9 @@ function pressReleaseWorkflowMixin(config) {
         pressReleaseDetectingFields: false,
         pressReleaseDetectingPhotos: false,
         pressReleaseFetchingDrivePhotos: false,
+        pressReleaseEpisodeSearching: false,
+        pressReleaseEpisodeResults: [],
+        pressReleaseImportingEpisodeId: null,
         _serverPipelineStateTimer: null,
         _savingPipelineStateServer: false,
 
@@ -34,6 +37,10 @@ function pressReleaseWorkflowMixin(config) {
             normalized.activity_log = Array.isArray(normalized.activity_log) ? normalized.activity_log : [];
             normalized.content_detect_log = Array.isArray(normalized.content_detect_log) ? normalized.content_detect_log : [];
             normalized.photo_detect_log = Array.isArray(normalized.photo_detect_log) ? normalized.photo_detect_log : [];
+            normalized.notion_episode_query = normalized.notion_episode_query || '';
+            normalized.notion_episode = normalized.notion_episode && typeof normalized.notion_episode === 'object' ? normalized.notion_episode : {};
+            normalized.notion_guest = normalized.notion_guest && typeof normalized.notion_guest === 'object' ? normalized.notion_guest : {};
+            normalized.notion_missing_fields = Array.isArray(normalized.notion_missing_fields) ? normalized.notion_missing_fields : [];
             normalized.detected_content = normalized.detected_content || '';
             normalized.detected_content_html = normalized.detected_content_html || '';
             normalized.detected_word_count = normalized.detected_word_count || 0;
@@ -67,7 +74,12 @@ function pressReleaseWorkflowMixin(config) {
                 return null;
             }
 
-            return this.pressRelease.polish_only ? 'press-release-polish' : 'press-release-spin';
+            const isPodcastImport = this.pressRelease.submit_method === 'notion-podcast';
+            if (this.pressRelease.polish_only) {
+                return isPodcastImport ? 'press-release-podcast-polish' : 'press-release-polish';
+            }
+
+            return isPodcastImport ? 'press-release-podcast-spin' : 'press-release-spin';
         },
 
         restorePressReleaseStateFromLegacy(state = {}) {
@@ -117,7 +129,8 @@ function pressReleaseWorkflowMixin(config) {
             return !!(
                 (this.pressRelease.content_dump || '').trim() ||
                 (this.pressRelease.public_url || '').trim() ||
-                (this.pressRelease.document_files || []).length
+                (this.pressRelease.document_files || []).length ||
+                this.pressRelease.notion_episode?.id
             );
         },
 
@@ -155,6 +168,10 @@ function pressReleaseWorkflowMixin(config) {
                 this.showNotification('error', 'Enter a public press release URL before continuing.');
                 return;
             }
+            if (method === 'notion-podcast' && !this.pressRelease.notion_episode?.id) {
+                this.showNotification('error', 'Select a Notion podcast episode before continuing.');
+                return;
+            }
             if (method === 'public-url' && !this.pressRelease.photo_public_url) {
                 this.pressRelease.photo_public_url = this.pressRelease.public_url;
             }
@@ -169,6 +186,66 @@ function pressReleaseWorkflowMixin(config) {
             this.openStep(5);
             this.invalidatePromptPreview('press_release_step4_continue', { fetch: true });
             this.savePipelineState();
+        },
+
+        async searchPressReleaseNotionEpisodes(loadRecent = false) {
+            this.pressReleaseEpisodeSearching = true;
+
+            try {
+                const response = await fetch('{{ route("publish.pipeline.press-release.search-notion-episodes") }}', {
+                    method: 'POST',
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({
+                        draft_id: this.draftId,
+                        query: loadRecent ? '' : (this.pressRelease.notion_episode_query || ''),
+                        limit: 10,
+                    }),
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Failed to search podcast episodes.');
+                }
+                this.pressReleaseEpisodeResults = Array.isArray(data.records) ? data.records : [];
+                if (!this.pressReleaseEpisodeResults.length) {
+                    this.showNotification('error', 'No podcast episodes matched that search.');
+                }
+            } catch (error) {
+                this.showNotification('error', error.message || 'Failed to search podcast episodes.');
+            }
+
+            this.pressReleaseEpisodeSearching = false;
+        },
+
+        async importPressReleaseNotionEpisode(record) {
+            if (!record?.id) {
+                this.showNotification('error', 'Invalid Notion episode selection.');
+                return;
+            }
+
+            this.pressReleaseImportingEpisodeId = record.id;
+
+            try {
+                const response = await fetch('{{ route("publish.pipeline.press-release.import-notion-episode") }}', {
+                    method: 'POST',
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({
+                        draft_id: this.draftId,
+                        page_id: record.id,
+                    }),
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success || !data.press_release) {
+                    throw new Error(data.message || 'Failed to import the selected podcast episode.');
+                }
+                this.pressRelease = this.normalizePressReleaseState(data.press_release || {});
+                this.savePipelineState();
+                this.invalidatePromptPreview('press_release_notion_episode_import', { fetch: this.currentStep === 5 || this.openSteps.includes(5) });
+                this.showNotification('success', data.message || 'Podcast episode imported from Notion.');
+            } catch (error) {
+                this.showNotification('error', error.message || 'Failed to import the selected podcast episode.');
+            }
+
+            this.pressReleaseImportingEpisodeId = null;
         },
 
         async uploadPressReleaseDocuments(files) {

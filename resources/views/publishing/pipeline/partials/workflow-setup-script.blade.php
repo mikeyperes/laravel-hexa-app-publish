@@ -167,6 +167,7 @@
                 });
                 const data = await resp.json();
                 this.templates = data.data || data || [];
+                this.autoSelectPressReleaseTemplate();
             } catch (e) { this.templates = []; }
             this.templatesLoading = false;
         },
@@ -260,8 +261,21 @@
             });
         },
 
+        autoSelectPressReleaseTemplate() {
+            if (this.template_overrides?.article_type !== 'press-release') return;
+            const current = this.templates.find(t => String(t.id) === String(this.selectedTemplateId));
+            if (current && current.article_type === 'press-release') return;
+            const preferred = this.templates.find(t => t.article_type === 'press-release' && t.name === 'Hexa PR Wire - Podcast Press Release')
+                || this.templates.find(t => t.article_type === 'press-release');
+            if (preferred) {
+                this.selectedTemplateId = String(preferred.id);
+                this.selectTemplate();
+            }
+        },
+
         autoSelectPrSource() {
             if (this.template_overrides?.article_type === 'press-release') {
+                this.autoSelectPressReleaseTemplate();
                 if (this.prSourceSites.length === 0) return;
                 // Save current non-PR site before switching
                 const currentInPr = this.prSourceSites.find(s => String(s.id) === this.selectedSiteId);

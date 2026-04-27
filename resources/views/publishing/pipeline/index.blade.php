@@ -221,7 +221,7 @@
                     </div>
                     <select x-show="!templatesLoading" x-model="selectedTemplateId" @change="selectTemplate(); editingTemplate = false" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="">-- No preset --</option>
-                        <template x-for="t in templates" :key="t.id">
+                        <template x-for="t in templates.filter(t => !currentArticleType || !t.article_type || t.article_type === currentArticleType)" :key="t.id">
                             <option :value="t.id" x-text="t.name"></option>
                         </template>
                     </select>

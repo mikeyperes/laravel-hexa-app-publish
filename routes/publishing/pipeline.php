@@ -29,6 +29,8 @@ Route::post('/article/publish/upload-source-doc', [PipelineController::class, 'u
 Route::post('/article/publish/upload-photo', [PipelineController::class, 'uploadPhoto'])->name('publish.pipeline.upload-photo');
 Route::post('/article/publish/delete-media', [PipelineController::class, 'deleteMedia'])->name('publish.pipeline.delete-media');
 Route::post('/article/publish/press-release/upload-documents', [PressReleaseWorkflowController::class, 'uploadDocuments'])->name('publish.pipeline.press-release.upload-documents');
+Route::post('/article/publish/press-release/notion/search-episodes', [PressReleaseWorkflowController::class, 'searchNotionEpisodes'])->name('publish.pipeline.press-release.search-notion-episodes');
+Route::post('/article/publish/press-release/notion/import-episode', [PressReleaseWorkflowController::class, 'importNotionEpisode'])->name('publish.pipeline.press-release.import-notion-episode');
 Route::post('/article/publish/press-release/detect-fields', [PressReleaseWorkflowController::class, 'detectFields'])->name('publish.pipeline.press-release.detect-fields');
 Route::post('/article/publish/press-release/detect-photos', [PressReleaseWorkflowController::class, 'detectPhotos'])->name('publish.pipeline.press-release.detect-photos');
 

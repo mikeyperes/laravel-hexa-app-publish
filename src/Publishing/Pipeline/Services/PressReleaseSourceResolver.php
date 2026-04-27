@@ -26,6 +26,7 @@ class PressReleaseSourceResolver
             'content-dump' => $this->resolveContentDump($state, $log),
             'upload-documents' => $this->resolveDocuments($state, $log),
             'public-url' => $this->resolvePublicUrl($state, $log),
+            'notion-podcast' => $this->resolveNotionPodcast($state, $log),
             default => [
                 'success' => false,
                 'source_text' => '',
@@ -161,6 +162,39 @@ class PressReleaseSourceResolver
             'preview' => mb_substr((string) ($result['text'] ?? ''), 0, 1000),
             'log' => $log,
             'message' => $result['message'] ?? '',
+        ];
+    }
+
+    private function resolveNotionPodcast(array $state, array $log): array
+    {
+        $text = trim((string) ($state['resolved_source_text'] ?? $state['content_dump'] ?? ''));
+        $title = trim((string) (($state['notion_episode']['title'] ?? '') ?: 'Notion Podcast Episode'));
+
+        $log[] = $this->entry('info', 'Using imported Notion podcast episode.', [
+            'episode_id' => $state['notion_episode']['id'] ?? null,
+            'title' => $title,
+        ]);
+
+        if ($text === '') {
+            $log[] = $this->entry('error', 'No imported Notion episode content is available yet.');
+
+            return [
+                'success' => false,
+                'source_text' => '',
+                'label' => 'Notion Podcast Episode',
+                'preview' => '',
+                'log' => $log,
+                'message' => 'Select a Notion podcast episode before continuing.',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'source_text' => $text,
+            'label' => 'Notion Podcast Episode · ' . $title,
+            'preview' => mb_substr($text, 0, 1000),
+            'log' => $log,
+            'message' => 'Resolved source from imported Notion podcast episode.',
         ];
     }
 

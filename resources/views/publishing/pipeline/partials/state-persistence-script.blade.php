@@ -618,7 +618,8 @@
                 }
             }
             if (draftState.publishAuthor) this.publishAuthor = draftState.publishAuthor;
-            if (!this.articleTitle && draftState.articleTitle) this.articleTitle = draftState.articleTitle;
+            const articleTitleLooksPlaceholder = !this.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test((this.articleTitle || '').trim());
+            if (articleTitleLooksPlaceholder && draftState.articleTitle) this.articleTitle = draftState.articleTitle;
             if (!this.articleDescription && draftState.articleDescription) this.articleDescription = draftState.articleDescription;
             if (!this.aiModel && draftState.aiModel) this.aiModel = draftState.aiModel;
             if ((!this.publishAction || this.publishAction === 'draft_local') && draftState.publishAction) {

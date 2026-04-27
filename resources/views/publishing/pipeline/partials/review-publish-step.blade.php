@@ -98,139 +98,6 @@
             </div>
         </div>
 
-        {{-- ═══ Review Section (row layout) ═══ --}}
-        <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 space-y-3">
-            <h5 class="text-base font-semibold text-gray-800 mb-2">Review</h5>
-
-            {{-- Article Info --}}
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Title</span><p class="text-sm font-bold text-gray-900 break-words" x-text="articleTitle || 'No title set'"></p></div>
-            <div x-show="articleDescription" class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Description</span><p class="text-sm text-gray-700 break-words" x-text="articleDescription"></p></div>
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Word Count</span><p class="text-sm font-bold text-gray-800" x-text="spunWordCount + ' words'"></p></div>
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Draft ID</span><p class="text-sm font-mono text-gray-800" x-text="'#' + draftId"></p></div>
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Draft URL</span><a :href="'/article/publish?id=' + draftId" class="text-sm text-blue-600 hover:underline break-all" x-text="'/article/publish?id=' + draftId"></a></div>
-
-            {{-- Publishing Info --}}
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
-                <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Website</span>
-                <div class="text-sm text-gray-800">
-                    <span x-text="selectedSite?.name || 'Not selected'"></span>
-                    <a x-show="selectedSite" :href="selectedSite?.url" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 ml-1 inline-flex items-center gap-0.5">
-                        <span x-text="selectedSite?.url" class="break-all"></span>
-                        <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                    </a>
-                </div>
-            </div>
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
-                <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Author</span>
-                <div class="text-sm text-gray-800 inline-flex items-center gap-1">
-                    <span x-text="publishAuthor || 'Not set'" :class="!publishAuthor ? 'text-orange-500' : ''"></span>
-                    <a x-show="publishAuthor && selectedSite" x-cloak :href="(selectedSite?.url || '').replace(/\/$/, '') + '/author/' + publishAuthor + '/'" target="_blank" class="text-blue-500 hover:text-blue-700">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                    </a>
-                    <span x-show="publishAuthorSource === 'profile'" x-cloak class="text-[10px] text-gray-400">(from site profile)</span>
-                    <a x-show="!publishAuthor && selectedSite?.id" x-cloak :href="selectedSite?.id ? '/publish/sites/' + selectedSite.id : '#'" target="_blank" class="text-xs text-orange-500 hover:text-orange-700">Set in site settings</a>
-                </div>
-            </div>
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Publish Action</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? (existingWpPostId ? 'Publish existing WordPress draft live' : 'Publish immediately') : (publishAction === 'draft_wp' ? (existingWpPostId ? 'Update existing WordPress draft' : 'Create WordPress draft') : (publishAction === 'future' ? (existingWpPostId ? 'Schedule existing WordPress post' : 'Schedule post') : 'Save as local draft'))"></p></div>
-            <div x-show="existingWpPostId" x-cloak class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 space-y-2">
-                <div class="flex items-start gap-3 text-sm">
-                    <span class="text-xs text-blue-500 w-28 flex-shrink-0 pt-0.5 uppercase tracking-wide">Existing WP Post</span>
-                    <div class="space-y-1 text-blue-900">
-                        <p><span class="font-mono" x-text="'#' + existingWpPostId"></span> already belongs to this article.</p>
-                        <p class="text-xs text-blue-700" x-text="existingWpStatus === 'publish' ? 'WordPress reports this post as live.' : 'WordPress reports this post as a draft. Publishing from here should update the same post instead of creating a duplicate.'"></p>
-                        <div class="flex flex-wrap gap-3 text-xs">
-                            <a x-show="existingWpAdminUrl" :href="existingWpAdminUrl" target="_blank" class="text-blue-700 hover:text-blue-900 underline">Open in WordPress admin</a>
-                            <a x-show="existingWpStatus === 'publish' && existingWpPostUrl" :href="existingWpPostUrl" target="_blank" class="text-blue-700 hover:text-blue-900 underline">Open live URL</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {{-- Template & Preset --}}
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Article Preset</span><p class="text-sm text-gray-800" x-text="selectedTemplate ? selectedTemplate.name : 'Default'"></p></div>
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">WP Preset</span><p class="text-sm text-gray-800" x-text="selectedPreset ? selectedPreset.name : 'None'"></p></div>
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">AI Model</span><p class="text-sm font-mono text-gray-800" x-text="aiModel"></p></div>
-
-            {{-- Content Stats --}}
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Photos</span><p class="text-sm text-gray-800" x-text="photoSuggestions.filter(p => !p.removed).length + ' photo(s)' + (featuredPhoto ? ' + featured' : '')"></p></div>
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Links</span><p class="text-sm text-gray-800" x-text="suggestedUrls.length + ' link(s)'"></p></div>
-            <div x-show="tokenUsage" class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Token Usage</span><p class="text-sm font-mono text-gray-800" x-text="(tokenUsage?.input_tokens || 0) + ' in / ' + (tokenUsage?.output_tokens || 0) + ' out'"></p></div>
-
-            {{-- AI Detection Summary --}}
-            <div x-show="aiDetectionRan" class="flex items-start gap-3 py-1.5 border-b border-gray-100">
-                <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">AI Detection</span>
-                <div class="text-sm">
-                    <span x-show="aiDetectionAllPass" class="text-green-600 font-medium">All Pass</span>
-                    <span x-show="!aiDetectionAllPass" class="text-red-600 font-medium">Flagged</span>
-                    <template x-for="(det, key) in aiDetectionResults" :key="key">
-                        <span class="text-xs text-gray-500 ml-2" x-text="key + ': ' + (det.score !== undefined ? det.score + '%' : (det.error ? 'Error' : '—'))"></span>
-                    </template>
-                </div>
-            </div>
-
-            {{-- Featured Image --}}
-            <div x-show="featuredPhoto" class="flex items-start gap-3 py-1.5 border-b border-gray-100">
-                <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Featured Image</span>
-                <div class="flex items-center gap-3">
-                    <img x-show="featuredPhoto?.url_thumb" :src="featuredPhoto?.url_thumb" class="w-16 h-12 object-cover rounded flex-shrink-0">
-                    <div class="text-xs text-gray-600">
-                        <p x-text="featuredAlt || 'No alt text'" class="break-words"></p>
-                        <p class="font-mono text-gray-400" x-text="featuredFilename || 'auto'"></p>
-                    </div>
-                </div>
-            </div>
-
-            {{-- Categories --}}
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
-                <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Categories</span>
-                <div class="flex flex-wrap gap-1">
-                    <template x-for="(cat, idx) in suggestedCategories" :key="idx">
-                        <span x-show="selectedCategories.includes(idx)" class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800" x-text="cat"></span>
-                    </template>
-                </div>
-            </div>
-
-            {{-- Tags --}}
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
-                <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Tags</span>
-                <div class="flex flex-wrap gap-1">
-                    <template x-for="(tag, idx) in suggestedTags" :key="idx">
-                        <span x-show="selectedTags.includes(idx)" class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800" x-text="tag"></span>
-                    </template>
-                </div>
-            </div>
-
-            {{-- Sources --}}
-            <div x-show="currentArticleType !== 'press-release'" class="flex items-start gap-3 py-1.5">
-                <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Sources</span>
-                <div class="space-y-0.5">
-                    <template x-for="(s, idx) in sources" :key="idx">
-                        <p class="text-xs text-gray-600 break-all" x-text="s.title || s.url"></p>
-                    </template>
-                </div>
-            </div>
-            <div x-show="currentArticleType === 'press-release'" x-cloak class="flex items-start gap-3 py-1.5">
-                <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Source</span>
-                <div class="space-y-1">
-                    <p class="text-xs text-gray-600" x-text="pressRelease.resolved_source_label || pressRelease.submit_method"></p>
-                    <p x-show="pressRelease.public_url" class="text-xs text-gray-500 break-all" x-text="pressRelease.public_url"></p>
-                    <p x-show="pressRelease.document_files.length > 0" class="text-xs text-gray-500" x-text="pressRelease.document_files.length + ' uploaded document(s)'"></p>
-                </div>
-            </div>
-        </div>
-
-        {{-- ═══ SEO Preview ═══ --}}
-        <div x-show="articleDescription || articleTitle" class="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-4 space-y-3">
-            <h5 class="text-sm font-semibold text-gray-700">SEO Preview</h5>
-            <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Meta Title</span><p class="text-sm text-blue-700 font-medium break-words" x-text="articleTitle || ''"></p></div>
-            <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Meta Description</span><p class="text-sm text-gray-600 break-words" x-text="articleDescription || ''"></p></div>
-            <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Title</span><p class="text-sm text-gray-700 break-words" x-text="articleTitle || ''"></p></div>
-            <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Description</span><p class="text-sm text-gray-600 break-words" x-text="articleDescription || ''"></p></div>
-            <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Type</span><p class="text-sm text-gray-600">article</p></div>
-            <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Twitter Card</span><p class="text-sm text-gray-600">summary_large_image</p></div>
-            <div x-show="featuredPhoto" class="flex items-start gap-3 py-1"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Image</span><p class="text-sm text-gray-600 break-all" x-text="featuredPhoto?.url_large || featuredPhoto?.url_thumb || ''"></p></div>
-        </div>
-
         {{-- ═══ Prepare for WordPress (only for WP actions) ═══ --}}
         <div x-show="!publishResult && (publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future')" x-cloak class="border border-gray-200 rounded-xl p-5 mb-4">
             <h5 class="text-sm font-semibold text-gray-700 mb-3">Preparation Details</h5>
@@ -508,3 +375,138 @@
         </div>
     </div>
 </div>
+
+
+        {{-- ═══ Review Section (row layout) ═══ --}}
+        <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 space-y-3">
+            <h5 class="text-base font-semibold text-gray-800 mb-2">Review</h5>
+
+            {{-- Article Info --}}
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Title</span><p class="text-sm font-bold text-gray-900 break-words" x-text="articleTitle || 'No title set'"></p></div>
+            <div x-show="articleDescription" class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Description</span><p class="text-sm text-gray-700 break-words" x-text="articleDescription"></p></div>
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Word Count</span><p class="text-sm font-bold text-gray-800" x-text="spunWordCount + ' words'"></p></div>
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Draft ID</span><p class="text-sm font-mono text-gray-800" x-text="'#' + draftId"></p></div>
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Draft URL</span><a :href="'/article/publish?id=' + draftId" class="text-sm text-blue-600 hover:underline break-all" x-text="'/article/publish?id=' + draftId"></a></div>
+
+            {{-- Publishing Info --}}
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
+                <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Website</span>
+                <div class="text-sm text-gray-800">
+                    <span x-text="selectedSite?.name || 'Not selected'"></span>
+                    <a x-show="selectedSite" :href="selectedSite?.url" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 ml-1 inline-flex items-center gap-0.5">
+                        <span x-text="selectedSite?.url" class="break-all"></span>
+                        <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    </a>
+                </div>
+            </div>
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
+                <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Author</span>
+                <div class="text-sm text-gray-800 inline-flex items-center gap-1">
+                    <span x-text="publishAuthor || 'Not set'" :class="!publishAuthor ? 'text-orange-500' : ''"></span>
+                    <a x-show="publishAuthor && selectedSite" x-cloak :href="(selectedSite?.url || '').replace(/\/$/, '') + '/author/' + publishAuthor + '/'" target="_blank" class="text-blue-500 hover:text-blue-700">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    </a>
+                    <span x-show="publishAuthorSource === 'profile'" x-cloak class="text-[10px] text-gray-400">(from site profile)</span>
+                    <a x-show="!publishAuthor && selectedSite?.id" x-cloak :href="selectedSite?.id ? '/publish/sites/' + selectedSite.id : '#'" target="_blank" class="text-xs text-orange-500 hover:text-orange-700">Set in site settings</a>
+                </div>
+            </div>
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Publish Action</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? (existingWpPostId ? 'Publish existing WordPress draft live' : 'Publish immediately') : (publishAction === 'draft_wp' ? (existingWpPostId ? 'Update existing WordPress draft' : 'Create WordPress draft') : (publishAction === 'future' ? (existingWpPostId ? 'Schedule existing WordPress post' : 'Schedule post') : 'Save as local draft'))"></p></div>
+            <div x-show="existingWpPostId" x-cloak class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 space-y-2">
+                <div class="flex items-start gap-3 text-sm">
+                    <span class="text-xs text-blue-500 w-28 flex-shrink-0 pt-0.5 uppercase tracking-wide">Existing WP Post</span>
+                    <div class="space-y-1 text-blue-900">
+                        <p><span class="font-mono" x-text="'#' + existingWpPostId"></span> already belongs to this article.</p>
+                        <p class="text-xs text-blue-700" x-text="existingWpStatus === 'publish' ? 'WordPress reports this post as live.' : 'WordPress reports this post as a draft. Publishing from here should update the same post instead of creating a duplicate.'"></p>
+                        <div class="flex flex-wrap gap-3 text-xs">
+                            <a x-show="existingWpAdminUrl" :href="existingWpAdminUrl" target="_blank" class="text-blue-700 hover:text-blue-900 underline">Open in WordPress admin</a>
+                            <a x-show="existingWpStatus === 'publish' && existingWpPostUrl" :href="existingWpPostUrl" target="_blank" class="text-blue-700 hover:text-blue-900 underline">Open live URL</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Template & Preset --}}
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Article Preset</span><p class="text-sm text-gray-800" x-text="selectedTemplate ? selectedTemplate.name : 'Default'"></p></div>
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">WP Preset</span><p class="text-sm text-gray-800" x-text="selectedPreset ? selectedPreset.name : 'None'"></p></div>
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">AI Model</span><p class="text-sm font-mono text-gray-800" x-text="aiModel"></p></div>
+
+            {{-- Content Stats --}}
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Photos</span><p class="text-sm text-gray-800" x-text="photoSuggestions.filter(p => !p.removed).length + ' photo(s)' + (featuredPhoto ? ' + featured' : '')"></p></div>
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Links</span><p class="text-sm text-gray-800" x-text="suggestedUrls.length + ' link(s)'"></p></div>
+            <div x-show="tokenUsage" class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Token Usage</span><p class="text-sm font-mono text-gray-800" x-text="(tokenUsage?.input_tokens || 0) + ' in / ' + (tokenUsage?.output_tokens || 0) + ' out'"></p></div>
+
+            {{-- AI Detection Summary --}}
+            <div x-show="aiDetectionRan" class="flex items-start gap-3 py-1.5 border-b border-gray-100">
+                <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">AI Detection</span>
+                <div class="text-sm">
+                    <span x-show="aiDetectionAllPass" class="text-green-600 font-medium">All Pass</span>
+                    <span x-show="!aiDetectionAllPass" class="text-red-600 font-medium">Flagged</span>
+                    <template x-for="(det, key) in aiDetectionResults" :key="key">
+                        <span class="text-xs text-gray-500 ml-2" x-text="key + ': ' + (det.score !== undefined ? det.score + '%' : (det.error ? 'Error' : '—'))"></span>
+                    </template>
+                </div>
+            </div>
+
+            {{-- Featured Image --}}
+            <div x-show="featuredPhoto" class="flex items-start gap-3 py-1.5 border-b border-gray-100">
+                <span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Featured Image</span>
+                <div class="flex items-center gap-3">
+                    <img x-show="featuredPhoto?.url_thumb" :src="featuredPhoto?.url_thumb" class="w-16 h-12 object-cover rounded flex-shrink-0">
+                    <div class="text-xs text-gray-600">
+                        <p x-text="featuredAlt || 'No alt text'" class="break-words"></p>
+                        <p class="font-mono text-gray-400" x-text="featuredFilename || 'auto'"></p>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Categories --}}
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
+                <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Categories</span>
+                <div class="flex flex-wrap gap-1">
+                    <template x-for="(cat, idx) in suggestedCategories" :key="idx">
+                        <span x-show="selectedCategories.includes(idx)" class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800" x-text="cat"></span>
+                    </template>
+                </div>
+            </div>
+
+            {{-- Tags --}}
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100">
+                <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Tags</span>
+                <div class="flex flex-wrap gap-1">
+                    <template x-for="(tag, idx) in suggestedTags" :key="idx">
+                        <span x-show="selectedTags.includes(idx)" class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800" x-text="tag"></span>
+                    </template>
+                </div>
+            </div>
+
+            {{-- Sources --}}
+            <div x-show="currentArticleType !== 'press-release'" class="flex items-start gap-3 py-1.5">
+                <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Sources</span>
+                <div class="space-y-0.5">
+                    <template x-for="(s, idx) in sources" :key="idx">
+                        <p class="text-xs text-gray-600 break-all" x-text="s.title || s.url"></p>
+                    </template>
+                </div>
+            </div>
+            <div x-show="currentArticleType === 'press-release'" x-cloak class="flex items-start gap-3 py-1.5">
+                <span class="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">Source</span>
+                <div class="space-y-1">
+                    <p class="text-xs text-gray-600" x-text="pressRelease.resolved_source_label || pressRelease.submit_method"></p>
+                    <p x-show="pressRelease.public_url" class="text-xs text-gray-500 break-all" x-text="pressRelease.public_url"></p>
+                    <p x-show="pressRelease.document_files.length > 0" class="text-xs text-gray-500" x-text="pressRelease.document_files.length + ' uploaded document(s)'"></p>
+                </div>
+            </div>
+        </div>
+
+        {{-- ═══ SEO Preview ═══ --}}
+        <div x-show="articleDescription || articleTitle" class="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-4 space-y-3">
+            <h5 class="text-sm font-semibold text-gray-700">SEO Preview</h5>
+            <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Meta Title</span><p class="text-sm text-blue-700 font-medium break-words" x-text="articleTitle || ''"></p></div>
+            <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Meta Description</span><p class="text-sm text-gray-600 break-words" x-text="articleDescription || ''"></p></div>
+            <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Title</span><p class="text-sm text-gray-700 break-words" x-text="articleTitle || ''"></p></div>
+            <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Description</span><p class="text-sm text-gray-600 break-words" x-text="articleDescription || ''"></p></div>
+            <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Type</span><p class="text-sm text-gray-600">article</p></div>
+            <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Twitter Card</span><p class="text-sm text-gray-600">summary_large_image</p></div>
+            <div x-show="featuredPhoto" class="flex items-start gap-3 py-1"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Image</span><p class="text-sm text-gray-600 break-all" x-text="featuredPhoto?.url_large || featuredPhoto?.url_thumb || ''"></p></div>
+        </div>
+

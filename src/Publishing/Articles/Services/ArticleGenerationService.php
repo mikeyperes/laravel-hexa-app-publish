@@ -161,6 +161,7 @@ class ArticleGenerationService
         $metadata = $this->extractMetadata($content);
         $metadata['data'] = $this->normalizeMetadataForArticleType($metadata['data'], $articleType, $sourceTexts);
         $content = $metadata['html'];
+        [$content, $metadata['data']] = $this->postProcessGeneratedOutput($content, $metadata['data'], $articleType, $sourceTexts);
         $content = $this->stripLeadingTitleHeading($content, (string) ($metadata['data']['titles'][0] ?? ''));
         $content = $this->stripLeadingSectionHeading($content);
 
@@ -644,6 +645,93 @@ class ArticleGenerationService
             $content = preg_replace('/<!--\s*FEATURED:\s*.+?\s*-->/', '', $content);
         }
         return ['html' => $content, 'search' => $data['search'] ?? null, 'featured_meta' => $data];
+    }
+
+    private function postProcessGeneratedOutput(string $content, array $metadata, ?string $articleType, array $sourceTexts): array
+    {
+        if ($articleType !== 'press-release') {
+            return [$content, $metadata];
+        }
+
+        $details = $this->extractValidatedDetails($sourceTexts);
+        $content = $this->normalizePressReleaseYoutubeEmbed($content);
+        $content = $this->normalizePressReleaseDateline($content, $details);
+
+        return [$content, $metadata];
+    }
+
+    private function extractValidatedDetails(array $sourceTexts): array
+    {
+        $combined = $this->flattenSourceTexts($sourceTexts);
+        if ($combined === '' || !preg_match('/=== Validated Details ===\s*(.*?)(?:\n===|\z)/s', $combined, $match)) {
+            return ['date' => '', 'location' => '', 'contact' => '', 'contact_url' => ''];
+        }
+
+        $detailsText = trim((string) $match[1]);
+        $extract = static function (string $label) use ($detailsText): string {
+            return preg_match('/^' . preg_quote($label, '/') . ':\s*(.+)$/mi', $detailsText, $valueMatch)
+                ? trim((string) $valueMatch[1])
+                : '';
+        };
+
+        return [
+            'date' => $extract('Date'),
+            'location' => $extract('Location'),
+            'contact' => $extract('Contact'),
+            'contact_url' => $extract('Contact URL'),
+        ];
+    }
+
+    private function flattenSourceTexts(array $sourceTexts): string
+    {
+        $chunks = [];
+        foreach ($sourceTexts as $source) {
+            if (is_array($source)) {
+                $chunks[] = trim((string) ($source['text'] ?? $source['content'] ?? $source['body'] ?? $source['title'] ?? ''));
+                continue;
+            }
+
+            $chunks[] = trim((string) $source);
+        }
+
+        return trim(implode("\n\n", array_filter($chunks)));
+    }
+
+    private function normalizePressReleaseYoutubeEmbed(string $content): string
+    {
+        $content = preg_replace('/<div\b[^>]*>\s*(<iframe\b[^>]*youtube\.com\/embed\/[^>]*><\/iframe>)\s*<\/div>/is', '$1', $content) ?? $content;
+        $content = preg_replace('/(<iframe\b[^>]*?)\s+style="[^"]*"/i', '$1', $content) ?? $content;
+
+        return $content;
+    }
+
+    private function normalizePressReleaseDateline(string $content, array $details): string
+    {
+        $date = trim((string) ($details['date'] ?? ''));
+        $location = trim((string) ($details['location'] ?? ''));
+        if ($date === '' || $location === '') {
+            return $content;
+        }
+
+        if (!preg_match('/<p\b[^>]*>(.*?)<\/p>/is', $content, $match)) {
+            return $content;
+        }
+
+        $firstParagraph = $match[1];
+        $lead = htmlspecialchars($location . ' (Hexa PR Wire - ' . $date . ')', ENT_QUOTES, 'UTF-8');
+        $updated = preg_replace(
+            '/^\s*(?:<strong>)?[^<]*?\(\s*Hexa PR Wire(?:\s*[-–]\s*[^)]*)?\)\s*(?:<\/strong>)?\s*[-–]\s*/u',
+            '<strong>' . $lead . '</strong> - ',
+            $firstParagraph,
+            1,
+            $count
+        );
+
+        if (!$count || $updated === null) {
+            return $content;
+        }
+
+        return preg_replace('/<p\b[^>]*>.*?<\/p>/is', '<p>' . $updated . '</p>', $content, 1) ?? $content;
     }
 
     /**

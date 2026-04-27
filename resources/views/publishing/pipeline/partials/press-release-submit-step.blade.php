@@ -12,7 +12,7 @@
             </div>
         </div>
         <div class="px-5 py-5 space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <button @click="setPressReleaseSubmitMethod('content-dump')" type="button" class="rounded-xl border p-4 text-left transition-colors" :class="pressRelease.submit_method === 'content-dump' ? 'border-purple-400 bg-purple-50 ring-1 ring-purple-300' : 'border-gray-200 hover:border-purple-300'">
                     <p class="text-sm font-semibold text-gray-800">Content Dump</p>
                     <p class="mt-1 text-xs text-gray-500">Paste the raw press release text or notes directly.</p>
@@ -24,6 +24,10 @@
                 <button @click="setPressReleaseSubmitMethod('public-url')" type="button" class="rounded-xl border p-4 text-left transition-colors" :class="pressRelease.submit_method === 'public-url' ? 'border-purple-400 bg-purple-50 ring-1 ring-purple-300' : 'border-gray-200 hover:border-purple-300'">
                     <p class="text-sm font-semibold text-gray-800">Submit Public URL</p>
                     <p class="mt-1 text-xs text-gray-500">Pull the release from a public page.</p>
+                </button>
+                <button @click="setPressReleaseSubmitMethod('notion-podcast')" type="button" class="rounded-xl border p-4 text-left transition-colors" :class="pressRelease.submit_method === 'notion-podcast' ? 'border-purple-400 bg-purple-50 ring-1 ring-purple-300' : 'border-gray-200 hover:border-purple-300'">
+                    <p class="text-sm font-semibold text-gray-800">Import Notion Podcast</p>
+                    <p class="mt-1 text-xs text-gray-500">Select a podcast episode. The linked guest is imported automatically.</p>
                 </button>
             </div>
 
@@ -58,6 +62,80 @@
                             <a :href="file.url" target="_blank" class="text-xs text-blue-600 hover:text-blue-800 flex-shrink-0">Open</a>
                         </div>
                     </template>
+                </div>
+            </div>
+
+
+            {{-- Notion podcast episode import --}}
+            <div x-show="pressRelease.submit_method === 'notion-podcast'" x-cloak class="space-y-4">
+                <div class="rounded-xl border border-purple-200 bg-purple-50/70 px-4 py-3 text-sm text-purple-900">
+                    Select a Michael Peres Podcast episode from Notion. The linked guest record is pulled from the relational People database automatically.
+                </div>
+
+                <div class="flex flex-col gap-3 md:flex-row md:items-end">
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Episode Search</label>
+                        <input type="text" x-model="pressRelease.notion_episode_query" @keydown.enter.prevent="searchPressReleaseNotionEpisodes(false)" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Search by guest, topic, or episode title">
+                    </div>
+                    <div class="flex gap-2">
+                        <button @click="searchPressReleaseNotionEpisodes(false)" :disabled="pressReleaseEpisodeSearching" type="button" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-2">
+                            <svg x-show="pressReleaseEpisodeSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <span x-text="pressReleaseEpisodeSearching ? 'Searching…' : 'Search Episodes'"></span>
+                        </button>
+                        <button @click="searchPressReleaseNotionEpisodes(true)" :disabled="pressReleaseEpisodeSearching" type="button" class="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm hover:border-purple-300 hover:text-purple-700 disabled:opacity-50">Load Recent</button>
+                    </div>
+                </div>
+
+                <div x-show="pressReleaseEpisodeResults.length > 0" x-cloak class="space-y-2">
+                    <template x-for="record in pressReleaseEpisodeResults" :key="record.id">
+                        <button type="button" @click="importPressReleaseNotionEpisode(record)" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-left hover:border-purple-300 hover:bg-purple-50 transition-colors">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-semibold text-gray-800 break-words" x-text="record.title"></p>
+                                    <p class="mt-1 text-xs text-gray-500 break-words" x-text="record.subtitle || 'Notion podcast interview record'"></p>
+                                </div>
+                                <span class="text-xs text-purple-600 font-medium flex-shrink-0" x-text="pressReleaseImportingEpisodeId === record.id ? 'Importing…' : 'Select'"></span>
+                            </div>
+                        </button>
+                    </template>
+                </div>
+
+                <div x-show="pressRelease.notion_episode && pressRelease.notion_episode.id" x-cloak class="rounded-xl border border-purple-200 bg-white overflow-hidden">
+                    <div class="px-4 py-3 border-b border-purple-100 bg-purple-50 flex items-start justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-semibold text-gray-900" x-text="pressRelease.notion_episode.title || 'Selected episode'"></p>
+                            <p class="text-xs text-gray-500 mt-1">Guest is auto-derived from the linked Notion People record.</p>
+                        </div>
+                        <button @click="importPressReleaseNotionEpisode(pressRelease.notion_episode)" :disabled="pressReleaseImportingEpisodeId === pressRelease.notion_episode.id" type="button" class="text-xs text-purple-600 hover:text-purple-800 font-medium">Refresh Import</button>
+                    </div>
+                    <div class="px-4 py-4 space-y-3 text-sm text-gray-700">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <p class="text-xs uppercase tracking-wide text-gray-400">Guest</p>
+                                <p class="mt-1 font-medium text-gray-900" x-text="pressRelease.notion_guest?.name || pressRelease.notion_episode?.guest || 'No linked guest found'"></p>
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase tracking-wide text-gray-400">Episode Date</p>
+                                <p class="mt-1 font-medium text-gray-900" x-text="pressRelease.notion_episode?.schedule || 'Not provided'"></p>
+                            </div>
+                        </div>
+                        <div x-show="(pressRelease.notion_episode?.live_links || []).length > 0" x-cloak>
+                            <p class="text-xs uppercase tracking-wide text-gray-400">Live Links</p>
+                            <div class="mt-2 space-y-1">
+                                <template x-for="link in (pressRelease.notion_episode?.live_links || [])" :key="link">
+                                    <a :href="link" target="_blank" rel="noopener noreferrer" class="block text-blue-600 hover:text-blue-800 break-all" x-text="link"></a>
+                                </template>
+                            </div>
+                        </div>
+                        <div x-show="(pressRelease.notion_missing_fields || []).length > 0" x-cloak class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+                            <p class="text-xs uppercase tracking-wide text-amber-700">Follow-up needed</p>
+                            <ul class="mt-2 list-disc pl-5 text-sm text-amber-900 space-y-1">
+                                <template x-for="item in (pressRelease.notion_missing_fields || [])" :key="item">
+                                    <li x-text="item"></li>
+                                </template>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             </div>
 
