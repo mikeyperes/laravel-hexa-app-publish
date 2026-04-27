@@ -9,6 +9,7 @@ function pressReleaseWorkflowMixin(config) {
         pipelinePayload: config.pipelinePayload || {},
         pressReleaseDefaultState: clone(config.pressReleaseDefaultState || {}),
         pressRelease: clone(config.pressReleaseDefaultState || {}),
+        pressReleasePhotoAssets: [],
         pressReleaseUploadingDocuments: false,
         pressReleaseDetectingContent: false,
         pressReleaseDetectingFields: false,
@@ -99,6 +100,39 @@ function pressReleaseWorkflowMixin(config) {
             });
         },
 
+        rebuildPressReleasePhotoAssets() {
+            const uploaded = (this.pressRelease.photo_files || []).map((file) => ({
+                key: 'upload-' + file.id,
+                label: file.original_name || file.filename || 'Uploaded photo',
+                filename: file.original_name || file.filename || 'uploaded-photo',
+                url: this.toAbsoluteMediaUrl(file.url),
+                thumbnail_url: this.toAbsoluteMediaUrl(file.url),
+                alt_text: '',
+                caption: '',
+                source_label: 'Uploaded Photo',
+                source: 'uploaded',
+                role: '',
+            }));
+
+            const detected = (this.pressRelease.detected_photos || []).map((photo, index) => ({
+                key: 'detected-' + index,
+                label: photo.alt_text || photo.caption || photo.url || 'Detected photo',
+                filename: photo.filename || ('detected-photo-' + (index + 1)),
+                url: this.toAbsoluteMediaUrl(photo.url),
+                thumbnail_url: this.toAbsoluteMediaUrl(photo.thumbnail_url || photo.url),
+                alt_text: photo.alt_text || '',
+                caption: photo.caption || '',
+                source_label: photo.source_label || photo.source || 'Detected from public URL',
+                source: photo.source || 'detected',
+                role: photo.role || '',
+                download_url: this.toAbsoluteMediaUrl(photo.download_url || photo.url),
+                view_url: this.toAbsoluteMediaUrl(photo.view_url || photo.url),
+            }));
+
+            this.pressReleasePhotoAssets = [...uploaded, ...detected].filter((asset) => !!asset.url);
+            return this.pressReleasePhotoAssets;
+        },
+
         buildPressReleaseSourceText(usePlaceholder = false) {
             const blocks = [];
             const sourceText = (this.pressRelease.resolved_source_text || this.pressRelease.content_dump || '').trim();
@@ -146,6 +180,8 @@ function pressReleaseWorkflowMixin(config) {
         },
 
         setPressReleaseSubmitMethod(method) {
+            if (!this.template_overrides) this.template_overrides = {};
+            this.template_overrides.article_type = 'press-release';
             this.pressRelease.submit_method = method;
             if (method !== 'detect-from-public-url' && !this.pressRelease.photo_public_url && this.pressRelease.public_url) {
                 this.pressRelease.photo_public_url = this.pressRelease.public_url;
@@ -237,7 +273,22 @@ function pressReleaseWorkflowMixin(config) {
                 if (!response.ok || !data.success || !data.press_release) {
                     throw new Error(data.message || 'Failed to import the selected podcast episode.');
                 }
+                if (!this.template_overrides) this.template_overrides = {};
+                this.template_overrides.article_type = 'press-release';
                 this.pressRelease = this.normalizePressReleaseState(data.press_release || {});
+                const importedAssets = this.rebuildPressReleasePhotoAssets();
+                const importedFeaturedUrl = this.toAbsoluteMediaUrl(this.pressRelease?.notion_episode?.featured_image_url || '');
+                const importedFeaturedAsset = importedAssets.find((asset) => importedFeaturedUrl && asset.url === importedFeaturedUrl)
+                    || importedAssets.find((asset) => asset.role === 'featured')
+                    || importedAssets.find((asset) => asset.source === 'notion-episode-media')
+                    || importedAssets[0]
+                    || null;
+                if (importedFeaturedAsset) {
+                    this.setPressReleaseFeaturedPhoto({ ...importedFeaturedAsset }, { notify: false });
+                    this.featuredImageSearch = '';
+                    this.featuredSearchPending = false;
+                }
+                this.applyPodcastPressReleaseMediaDefaults({ injectInline: false, notify: false });
                 this.savePipelineState();
                 this.invalidatePromptPreview('press_release_notion_episode_import', { fetch: this.currentStep === 5 || this.openSteps.includes(5) });
                 this.showNotification('success', data.message || 'Podcast episode imported from Notion.');
@@ -268,6 +319,7 @@ function pressReleaseWorkflowMixin(config) {
                 }
 
                 this.pressRelease.document_files = data.documents || [];
+                this.rebuildPressReleasePhotoAssets();
                 this.savePipelineState();
                 this.showNotification('success', data.message || 'Documents uploaded.');
             } catch (error) {
@@ -311,6 +363,7 @@ function pressReleaseWorkflowMixin(config) {
                 if (data.press_release) {
                     const normalized = this.normalizePressReleaseState(data.press_release);
                     Object.assign(this.pressRelease, normalized);
+                    this.rebuildPressReleasePhotoAssets();
                     this.savePipelineState();
                     this.invalidatePromptPreview('press_release_fields_detected', { fetch: true });
                 }
@@ -365,6 +418,7 @@ function pressReleaseWorkflowMixin(config) {
                     this.pressRelease.detected_photos = [...photos];
                     this.pressRelease.selected_photo_keys = {};
                     this.pressRelease.photo_detect_log = savedLog;
+                    this.rebuildPressReleasePhotoAssets();
                     this.savePipelineState();
                 }
 
@@ -404,19 +458,22 @@ function pressReleaseWorkflowMixin(config) {
                 const data = await response.json();
                 if (data.success && data.photos) {
                     log('success', 'Found ' + data.photos.length + ' photo(s) from Drive.');
-                    // Convert Drive photos to detected_photos format
                     const drivePhotos = data.photos.map(p => ({
                         url: p.thumbnailLink || p.webContentLink || p.webViewLink || '',
                         thumbnail_url: p.thumbnailLink || p.webContentLink || '',
                         alt_text: p.name || '',
                         caption: '',
                         source: 'google-drive',
+                        source_label: 'Google Drive Podcast Asset',
+                        role: 'inline',
                         download_url: p.webContentLink || '',
                         view_url: p.webViewLink || '',
                     }));
                     drivePhotos.forEach((p, i) => { log('step', (i + 1) + '. ' + p.alt_text); });
-                    this.pressRelease.detected_photos = [...drivePhotos];
+                    this.pressRelease.detected_photos = this.mergePressReleaseDetectedPhotos(drivePhotos);
                     this.pressRelease.selected_photo_keys = {};
+                    this.rebuildPressReleasePhotoAssets();
+                    this.applyPodcastPressReleaseMediaDefaults({ injectInline: false, notify: false });
                     this.savePipelineState();
                 } else {
                     log('error', data.message || 'Failed to fetch photos from Drive.');
@@ -652,35 +709,129 @@ function pressReleaseWorkflowMixin(config) {
             return base || 'press-release-photo';
         },
 
-        get pressReleasePhotoAssets() {
-            const uploaded = (this.pressRelease.photo_files || []).map((file) => ({
-                key: 'upload-' + file.id,
-                label: file.original_name || file.filename || 'Uploaded photo',
-                filename: file.original_name || file.filename || 'uploaded-photo',
-                url: this.toAbsoluteMediaUrl(file.url),
-                thumbnail_url: this.toAbsoluteMediaUrl(file.url),
-                alt_text: '',
-                caption: '',
-                source_label: 'Uploaded Photo',
-                source: 'uploaded',
-            }));
+        mergePressReleaseDetectedPhotos(newPhotos = []) {
+            const merged = [];
+            const seen = new Set();
+            const push = (photo) => {
+                if (!photo || !photo.url) return;
+                const key = this.toAbsoluteMediaUrl(photo.url);
+                if (!key || seen.has(key)) return;
+                seen.add(key);
+                merged.push({
+                    url: key,
+                    thumbnail_url: this.toAbsoluteMediaUrl(photo.thumbnail_url || photo.url),
+                    alt_text: photo.alt_text || '',
+                    caption: photo.caption || '',
+                    source: photo.source || 'detected',
+                    source_label: photo.source_label || photo.source || 'Detected photo',
+                    role: photo.role || '',
+                    download_url: this.toAbsoluteMediaUrl(photo.download_url || photo.url),
+                    view_url: this.toAbsoluteMediaUrl(photo.view_url || photo.url),
+                    filename: photo.filename || '',
+                });
+            };
 
-            const detected = (this.pressRelease.detected_photos || []).map((photo, index) => ({
-                key: 'detected-' + index,
-                label: photo.alt_text || photo.caption || photo.url || 'Detected photo',
-                filename: 'detected-photo-' + (index + 1),
-                url: this.toAbsoluteMediaUrl(photo.url),
-                thumbnail_url: this.toAbsoluteMediaUrl(photo.thumbnail_url || photo.url),
-                alt_text: photo.alt_text || '',
-                caption: photo.caption || '',
-                source_label: photo.source || 'Detected from public URL',
-                source: photo.source || 'detected',
-            }));
-
-            return [...uploaded, ...detected].filter((asset) => !!asset.url);
+            (this.pressRelease.detected_photos || []).forEach(push);
+            (newPhotos || []).forEach(push);
+            return merged;
         },
 
-        setPressReleaseFeaturedPhoto(asset) {
+        preferredPressReleaseFeaturedAsset() {
+            const featuredUrl = this.pressRelease?.notion_episode?.featured_image_url || '';
+            const assets = ((this.pressReleasePhotoAssets || []).length ? this.pressReleasePhotoAssets : this.rebuildPressReleasePhotoAssets())
+                .map((asset) => ({ ...asset }));
+            const match = assets.find((asset) => featuredUrl && asset.url === this.toAbsoluteMediaUrl(featuredUrl))
+                || assets.find((asset) => asset.role === 'featured')
+                || assets.find((asset) => asset.source === 'notion-episode-media')
+                || null;
+            return match ? { ...match } : null;
+        },
+
+        preferredPressReleaseInlineAsset() {
+            const inlineUrl = this.pressRelease?.notion_guest?.inline_photo_url || '';
+            const featuredUrl = this.toAbsoluteMediaUrl(this.pressRelease?.notion_episode?.featured_image_url || '');
+            const assets = ((this.pressReleasePhotoAssets || []).length ? this.pressReleasePhotoAssets : this.rebuildPressReleasePhotoAssets())
+                .map((asset) => ({ ...asset }));
+            const match = assets.find((asset) => inlineUrl && asset.url === this.toAbsoluteMediaUrl(inlineUrl))
+                || assets.find((asset) => asset.role === 'inline' && asset.url !== featuredUrl)
+                || assets.find((asset) => asset.source === 'notion-guest-media' && asset.url !== featuredUrl)
+                || assets.find((asset) => asset.source === 'google-drive' && asset.url !== featuredUrl)
+                || null;
+            return match ? { ...match } : null;
+        },
+
+        pressReleaseHasInlineAsset(url) {
+            const target = this.toAbsoluteMediaUrl(url);
+            const html = this.editorContent || this.spunContent || '';
+            return !!(target && html && html.includes(target));
+        },
+
+        buildPressReleaseInlineFigure(asset) {
+            const src = this.toAbsoluteMediaUrl(asset.url);
+            const alt = (asset.alt_text || '').replace(/"/g, '&quot;');
+            const caption = asset.caption || '';
+            return caption
+                ? '<figure><img src="' + src + '" alt="' + alt + '"><figcaption>' + caption + '</figcaption></figure>'
+                : '<p><img src="' + src + '" alt="' + alt + '"></p>';
+        },
+
+        injectPressReleaseInlineAssetIntoHtml(asset, html) {
+            const figure = this.buildPressReleaseInlineFigure(asset);
+            if (/<h[2-6]\b[^>]*>\s*About\b/i.test(html)) {
+                return html.replace(/<h[2-6]\b[^>]*>\s*About\b/i, figure + '$&');
+            }
+            if (/<h[2-6]\b/i.test(html)) {
+                return html.replace(/<h[2-6]\b/i, figure + '$&');
+            }
+            const paragraphMatches = html.match(/<p\b[^>]*>.*?<\/p>/gis) || [];
+            if (paragraphMatches.length >= 1) {
+                const first = paragraphMatches[0];
+                return html.replace(first, first + figure);
+            }
+            return html + figure;
+        },
+
+        applyPodcastPressReleaseMediaDefaults(options = {}) {
+            if (this.currentArticleType !== 'press-release' || this.pressRelease.submit_method !== 'notion-podcast') {
+                return;
+            }
+
+            const opts = { injectInline: false, notify: false, ...options };
+            this.rebuildPressReleasePhotoAssets();
+            const featuredAsset = this.preferredPressReleaseFeaturedAsset();
+            if (featuredAsset) {
+                this.setPressReleaseFeaturedPhoto(featuredAsset, { notify: opts.notify });
+                this.featuredImageSearch = '';
+                this.featuredSearchPending = false;
+            } else if (!this.featuredPhoto && (this.pressReleasePhotoAssets || []).length > 0) {
+                this.setPressReleaseFeaturedPhoto({ ...(this.pressReleasePhotoAssets[0] || {}) }, { notify: opts.notify });
+                this.featuredImageSearch = '';
+                this.featuredSearchPending = false;
+            }
+
+            if (!opts.injectInline) {
+                return;
+            }
+
+            const inlineAsset = this.preferredPressReleaseInlineAsset();
+            if (!inlineAsset || this.pressReleaseHasInlineAsset(inlineAsset.url)) {
+                return;
+            }
+
+            const nextHtml = this.injectPressReleaseInlineAssetIntoHtml(inlineAsset, this.editorContent || this.spunContent || '');
+            if (!nextHtml) {
+                return;
+            }
+
+            this.spunContent = nextHtml;
+            this.editorContent = nextHtml;
+            this.setSpinEditor?.(nextHtml);
+            this.rememberDraftBody?.(nextHtml);
+            this.queueAutoSaveDraft?.(300);
+        },
+
+        setPressReleaseFeaturedPhoto(asset, options = {}) {
+            const notify = options.notify !== false;
             const url = this.toAbsoluteMediaUrl(asset.url);
             const thumb = this.toAbsoluteMediaUrl(asset.thumbnail_url || asset.url);
             this.featuredPhoto = {
@@ -694,7 +845,9 @@ function pressReleaseWorkflowMixin(config) {
             this.featuredCaption = asset.caption || '';
             this.featuredFilename = this.filenameBaseFromAsset(asset) + '.jpg';
             this.savePipelineState();
-            this.showNotification('success', 'Press release photo set as featured image.');
+            if (notify) {
+                this.showNotification('success', 'Press release photo set as featured image.');
+            }
         },
 
         insertPressReleaseAssetIntoEditor(asset) {

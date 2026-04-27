@@ -2,6 +2,7 @@
 
 namespace hexa_app_publish\Publishing\Pipeline\Services;
 
+use hexa_package_google_drive\Services\GoogleDriveService;
 use hexa_package_notion\Services\NotionService;
 use Illuminate\Support\Str;
 
@@ -17,7 +18,7 @@ class PressReleaseNotionPodcastImportService
         if ($databaseId === '') {
             return [
                 'success' => false,
-                'message' => 'Podcast Interviews database is not configured in Notion.',
+                'message' => 'Podcast database is not configured in Notion.',
                 'records' => [],
             ];
         }
@@ -61,7 +62,6 @@ class PressReleaseNotionPodcastImportService
         $titleField = $this->notion->resolveTitlePropertyName($schemaResult['schema'] ?? []);
         $records = [];
         foreach (($result['results'] ?? []) as $page) {
-            $properties = $page['properties'] ?? [];
             $records[] = $this->normalizeEpisodeRecord($page, $titleField);
         }
 
@@ -109,16 +109,36 @@ class PressReleaseNotionPodcastImportService
             }
         }
 
-        $liveLinks = $this->normalizeUrlList($this->firstValue($episodeProperties, ['Live Link/s', 'Live Links', 'Live Link', 'Episode URL']));
-        $youtubeUrl = $this->firstYoutubeUrl($liveLinks);
+        $liveLinks = $this->normalizeUrlList($this->firstValue($episodeProperties, ['Live Link/s', 'Live Links', 'Live Link', 'Episode URL', 'Website Episode URL']));
+        $youtubeUrl = $this->resolveYoutubeUrl($episodeProperties, $liveLinks);
+        $youtubeEmbedUrl = $this->youtubeEmbedUrl($youtubeUrl);
         $podcastAssets = $this->normalizeUrlList($episodeProperties['Podcast Assets'] ?? []);
         $guestName = $this->guestNames($guestPages);
+        $personUrl = $this->preferredPersonUrl($guestPages);
+        $companyName = $this->guestCompanyName($guestPages);
+        $companyUrl = $this->preferredCompanyUrl($guestPages);
+        $driveFolderUrl = $this->firstDriveFolderUrl($podcastAssets);
+        $drivePhotos = $this->fetchDrivePhotos($driveFolderUrl, $guestName, $episodeTitle);
+        $episodeFeaturedImageUrl = $this->preferredEpisodeFeaturedImageUrl($episodeProperties, $podcastAssets, $youtubeUrl);
+        $inlineGuestImageUrl = $this->preferredInlineGuestImageUrl($drivePhotos, $guestPages, $episodeFeaturedImageUrl);
         $episodeDate = $this->formatDateValue($this->firstValue($episodeProperties, ['Schedule', 'Publish Date', 'Date', 'Entry Creation Date']));
         $details = [
             'date' => $episodeDate ?: now()->format('F j, Y'),
             'location' => 'Miami, Florida',
             'contact' => $guestName !== '' ? $guestName : trim((string) ($this->firstValue($episodeProperties, ['Host', 'Guest']) ?: '')),
             'contact_url' => $this->preferredContactUrl($guestPages, $liveLinks),
+        ];
+        $linkTargets = [
+            'person_name' => $guestName,
+            'person_url' => $personUrl,
+            'company_name' => $companyName,
+            'company_url' => $companyUrl,
+            'episode_url' => $liveLinks[0] ?? '',
+            'youtube_url' => $youtubeUrl,
+            'youtube_embed_url' => $youtubeEmbedUrl,
+            'featured_image_url' => $episodeFeaturedImageUrl,
+            'inline_guest_image_url' => $inlineGuestImageUrl,
+            'contact_url' => $details['contact_url'],
         ];
 
         $missing = [];
@@ -128,8 +148,14 @@ class PressReleaseNotionPodcastImportService
         if (empty($liveLinks)) {
             $missing[] = 'Live Link/s missing on the selected episode.';
         }
+        if ($youtubeUrl === null) {
+            $missing[] = 'YouTube URL missing on the selected episode.';
+        }
         if (empty($podcastAssets)) {
             $missing[] = 'Podcast Assets missing on the selected episode.';
+        }
+        if ($driveFolderUrl === '') {
+            $missing[] = 'Podcast Assets does not include a Google Drive folder URL.';
         }
         if ($episodeDate === '') {
             $missing[] = 'Schedule / publish date missing on the selected episode. Dateline will fall back to the current date unless you override it.';
@@ -137,12 +163,42 @@ class PressReleaseNotionPodcastImportService
         if ($details['contact_url'] === '') {
             $missing[] = 'Guest website / contact URL missing.';
         }
+        if ($personUrl === '') {
+            $missing[] = 'Guest profile link missing. Add a public personal URL in the related People record.';
+        }
+        if ($companyName === '' || $companyUrl === '') {
+            $missing[] = 'Guest company name or company URL missing in the related People record.';
+        }
+        if ($episodeFeaturedImageUrl === '') {
+            $missing[] = 'Featured Image URL missing on the selected podcast episode.';
+        }
+        if ($inlineGuestImageUrl === '') {
+            $missing[] = 'No inline guest/client image could be resolved from Podcast Assets or the People record.';
+        }
         if ($this->guestBio($guestPages) === '') {
             $missing[] = 'Guest biography is thin or missing in the related People record.';
         }
 
-        $sourceText = $this->buildSourceText($episodeTitle, $episodeProperties, $guestPages, $liveLinks, $podcastAssets, $youtubeUrl, $details, $missing);
-        $detectedPhotos = $this->buildDetectedPhotos($episodeTitle, $episodeProperties, $guestPages, $podcastAssets);
+        $sourceText = $this->buildSourceText(
+            $episodeTitle,
+            $episodeProperties,
+            $guestPages,
+            $liveLinks,
+            $podcastAssets,
+            $youtubeUrl,
+            $details,
+            $missing,
+            $linkTargets
+        );
+        $detectedPhotos = $this->buildDetectedPhotos(
+            $episodeTitle,
+            $episodeProperties,
+            $guestPages,
+            $podcastAssets,
+            $drivePhotos,
+            $episodeFeaturedImageUrl,
+            $inlineGuestImageUrl
+        );
 
         return [
             'success' => true,
@@ -159,7 +215,10 @@ class PressReleaseNotionPodcastImportService
                 'guest' => $guestName,
                 'live_links' => $liveLinks,
                 'youtube_url' => $youtubeUrl,
+                'youtube_embed_url' => $youtubeEmbedUrl,
                 'podcast_assets' => $podcastAssets,
+                'drive_folder_url' => $driveFolderUrl,
+                'featured_image_url' => $episodeFeaturedImageUrl,
                 'record_url' => $episodePage['url'] ?? null,
             ],
             'selected_guest' => [
@@ -167,6 +226,11 @@ class PressReleaseNotionPodcastImportService
                 'record_ids' => $guestIds,
                 'record_url' => $guestPages[0]['url'] ?? null,
                 'bio' => $this->guestBio($guestPages),
+                'person_url' => $personUrl,
+                'company_name' => $companyName,
+                'company_url' => $companyUrl,
+                'inline_photo_url' => $inlineGuestImageUrl,
+                'job_title' => $this->guestJobTitle($guestPages),
             ],
             'missing_fields' => $missing,
         ];
@@ -224,8 +288,17 @@ class PressReleaseNotionPodcastImportService
         ];
     }
 
-    private function buildSourceText(string $episodeTitle, array $episodeProperties, array $guestPages, array $liveLinks, array $podcastAssets, ?string $youtubeUrl, array $details, array $missing): string
-    {
+    private function buildSourceText(
+        string $episodeTitle,
+        array $episodeProperties,
+        array $guestPages,
+        array $liveLinks,
+        array $podcastAssets,
+        ?string $youtubeUrl,
+        array $details,
+        array $missing,
+        array $linkTargets
+    ): string {
         $parts = [];
         $parts[] = "=== Podcast Press Release Mission ===\nThis is a Hexa PR Wire press release for a Michael Peres Podcast episode. Write it as a formal release announcing the guest appearance and what the discussion covers. Use only the facts below.";
 
@@ -254,7 +327,7 @@ class PressReleaseNotionPodcastImportService
                 $guestTitle = $this->displayTitle($guestPage);
                 $guestProperties = $guestPage['properties'] ?? [];
                 $parts[] = "=== Guest Profile " . ($index + 1) . ": {$guestTitle} ===\n" . $this->renderPropertyBlock($guestProperties, [
-                    'Full Name', 'Name', 'Title / Job Title', 'Company', 'Current Company', 'Official Website', 'Company Website URL',
+                    'Full Name', 'Name', 'Title / Job Title', 'Business/Company Name', 'Company Name', 'Company', 'Current Company', 'Official Website', 'Company Website URL',
                     'Biography (Short)', 'Biography (Full)', 'Description', 'Mission Statement', 'Occupations', 'Awards', 'Products and Services',
                     'Personal LinkedIn URL', 'Personal Twitter URL', 'Personal Instagram URL', 'Personal Facebook URL', 'Wikipedia URL',
                     'Primary Email', 'Public Email', 'Telephone', 'Location', 'Location of Birth', 'Country of Citizenship', 'Featured Image URL', 'Personal Photos'
@@ -262,12 +335,28 @@ class PressReleaseNotionPodcastImportService
             }
         }
 
+        $parts[] = "=== Canonical Link Targets ===\n"
+            . 'Person Name: ' . ($linkTargets['person_name'] ?? '') . "\n"
+            . 'Person URL: ' . ($linkTargets['person_url'] ?? '') . "\n"
+            . 'Company Name: ' . ($linkTargets['company_name'] ?? '') . "\n"
+            . 'Company URL: ' . ($linkTargets['company_url'] ?? '') . "\n"
+            . 'Episode URL: ' . ($linkTargets['episode_url'] ?? '') . "\n"
+            . 'YouTube URL: ' . ($linkTargets['youtube_url'] ?? '') . "\n"
+            . 'YouTube Embed URL: ' . ($linkTargets['youtube_embed_url'] ?? '') . "\n"
+            . 'Featured Image URL: ' . ($linkTargets['featured_image_url'] ?? '') . "\n"
+            . 'Preferred Inline Guest Image URL: ' . ($linkTargets['inline_guest_image_url'] ?? '') . "\n"
+            . 'Contact URL: ' . ($linkTargets['contact_url'] ?? '');
+
         $parts[] = "=== Required Structural Cues ===\n"
             . "- Publication: Hexa PR Wire\n"
             . "- Podcast: The Michael Peres Podcast\n"
             . "- Dateline format: {$details['location']} (Hexa PR Wire - {$details['date']}) - opening announcement paragraph. If date is blank, infer it from the episode schedule if possible.\n"
             . "- Sections after the intro body should include: About the guest, About Michael Peres, About The Michael Peres Podcast, Contact Information.\n"
-            . "- If a YouTube URL is provided, include one responsive YouTube embed iframe in the body using the embed URL form.\n"
+            . "- If a YouTube URL or embed URL is provided, include one responsive YouTube embed iframe in the body.\n"
+            . "- The first mention of the guest/person must be linked to the Person URL when provided.\n"
+            . "- The first mention of the guest's company must be linked to the Company URL when provided.\n"
+            . "- Use the Episode Featured Image URL as the featured image. Do not substitute a generic stock or search image when a real episode thumbnail is provided.\n"
+            . "- Include exactly one inline guest/client image in the body when a preferred inline guest image URL is provided.\n"
             . "- Use the guest's actual organization, title, and biography from the related Notion Person record. Do not invent missing credentials.\n"
             . "- Preserve concrete discussion topics from the episode record and guest context.\n"
             . "- If supporting external URLs are clearly present above, use them. Otherwise do not invent or guess links.";
@@ -350,19 +439,65 @@ class PressReleaseNotionPodcastImportService
         return $key . ': ' . $value;
     }
 
-    private function buildDetectedPhotos(string $episodeTitle, array $episodeProperties, array $guestPages, array $podcastAssets): array
-    {
+    private function buildDetectedPhotos(
+        string $episodeTitle,
+        array $episodeProperties,
+        array $guestPages,
+        array $podcastAssets,
+        array $drivePhotos,
+        string $episodeFeaturedImageUrl,
+        string $inlineGuestImageUrl
+    ): array {
         $candidates = [];
+
+        if ($episodeFeaturedImageUrl !== '') {
+            $candidates[] = [
+                'url' => $episodeFeaturedImageUrl,
+                'thumbnail_url' => $episodeFeaturedImageUrl,
+                'alt_text' => $episodeTitle,
+                'caption' => $episodeTitle,
+                'source' => 'notion-episode-media',
+                'source_label' => 'Notion Episode Thumbnail',
+                'role' => 'featured',
+                'download_url' => $episodeFeaturedImageUrl,
+                'view_url' => $episodeFeaturedImageUrl,
+            ];
+        }
+
+        foreach ($drivePhotos as $photo) {
+            $url = trim((string) ($photo['url'] ?? ''));
+            if ($url === '') {
+                continue;
+            }
+
+            $role = $url === $episodeFeaturedImageUrl ? 'featured' : ($url === $inlineGuestImageUrl ? 'inline' : 'inline');
+            $candidates[] = [
+                'url' => $url,
+                'thumbnail_url' => (string) ($photo['thumbnail_url'] ?? $url),
+                'alt_text' => (string) ($photo['alt_text'] ?? $episodeTitle),
+                'caption' => (string) ($photo['caption'] ?? ($role === 'featured' ? $episodeTitle : $episodeTitle . ' guest photo')),
+                'source' => (string) ($photo['source'] ?? 'google-drive'),
+                'source_label' => (string) ($photo['source_label'] ?? 'Google Drive Podcast Asset'),
+                'role' => $role,
+                'download_url' => (string) ($photo['download_url'] ?? $url),
+                'view_url' => (string) ($photo['view_url'] ?? $url),
+            ];
+        }
+
         foreach ($podcastAssets as $url) {
-            if (!$this->looksLikeRenderableImageUrl($url)) {
+            if (!$this->looksLikeRenderableImageUrl((string) $url)) {
                 continue;
             }
             $candidates[] = [
-                'url' => $url,
-                'thumbnail_url' => $url,
+                'url' => (string) $url,
+                'thumbnail_url' => (string) $url,
                 'alt_text' => $episodeTitle,
                 'caption' => 'Podcast asset for ' . $episodeTitle,
                 'source' => 'notion-podcast-assets',
+                'source_label' => 'Notion Podcast Asset',
+                'role' => ((string) $url === $episodeFeaturedImageUrl) ? 'featured' : 'inline',
+                'download_url' => (string) $url,
+                'view_url' => (string) $url,
             ];
         }
 
@@ -380,6 +515,10 @@ class PressReleaseNotionPodcastImportService
                     'alt_text' => $episodeTitle,
                     'caption' => $episodeTitle,
                     'source' => 'notion-episode-media',
+                    'source_label' => 'Notion Episode Media',
+                    'role' => ($url === $episodeFeaturedImageUrl) ? 'featured' : 'inline',
+                    'download_url' => $url,
+                    'view_url' => $url,
                 ];
             }
         }
@@ -400,12 +539,17 @@ class PressReleaseNotionPodcastImportService
                         'alt_text' => $guestTitle,
                         'caption' => $guestTitle . ' on The Michael Peres Podcast',
                         'source' => 'notion-guest-media',
+                        'source_label' => 'Notion Guest Media',
+                        'role' => ($url === $inlineGuestImageUrl) ? 'inline' : 'inline',
+                        'download_url' => $url,
+                        'view_url' => $url,
                     ];
                 }
             }
         }
 
-        $deduped = [];
+        $featured = [];
+        $inline = [];
         $seen = [];
         foreach ($candidates as $candidate) {
             $url = trim((string) ($candidate['url'] ?? ''));
@@ -413,10 +557,14 @@ class PressReleaseNotionPodcastImportService
                 continue;
             }
             $seen[$url] = true;
-            $deduped[] = $candidate;
+            if (($candidate['role'] ?? '') === 'featured') {
+                $featured[] = $candidate;
+            } else {
+                $inline[] = $candidate;
+            }
         }
 
-        return array_slice($deduped, 0, 12);
+        return array_slice(array_merge($featured, $inline), 0, 12);
     }
 
     private function preferredContactUrl(array $guestPages, array $liveLinks): string
@@ -460,6 +608,19 @@ class PressReleaseNotionPodcastImportService
         }
 
         return implode(', ', array_values(array_unique(array_filter($names))));
+    }
+
+    private function guestJobTitle(array $guestPages): string
+    {
+        foreach ($guestPages as $guestPage) {
+            $properties = $guestPage['properties'] ?? [];
+            $value = $this->firstValue($properties, ['Title / Job Title', 'Job Title', 'Position']);
+            if ($this->hasValue($value)) {
+                return trim((string) $value);
+            }
+        }
+
+        return '';
     }
 
     private function displayTitle(array $page): string
@@ -513,11 +674,22 @@ class PressReleaseNotionPodcastImportService
                 $item = 'https://' . $item;
             }
             if (preg_match('/^https?:\/\//i', $item)) {
-                $urls[] = $item;
+                $urls[] = rtrim($item, ".,);");
             }
         }
 
         return array_values(array_unique($urls));
+    }
+
+    private function resolveYoutubeUrl(array $episodeProperties, array $liveLinks): ?string
+    {
+        $explicit = $this->normalizeUrlList($this->firstValue($episodeProperties, ['YouTube URL', 'Youtube URL', 'YouTube']));
+        $url = $this->firstYoutubeUrl($explicit);
+        if ($url !== null) {
+            return $url;
+        }
+
+        return $this->firstYoutubeUrl($liveLinks);
     }
 
     private function firstYoutubeUrl(array $urls): ?string
@@ -529,6 +701,216 @@ class PressReleaseNotionPodcastImportService
         }
 
         return null;
+    }
+
+    private function youtubeEmbedUrl(?string $url): ?string
+    {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return null;
+        }
+
+        $parts = parse_url($url);
+        if (!is_array($parts)) {
+            return null;
+        }
+
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        $path = trim((string) ($parts['path'] ?? ''), '/');
+        parse_str((string) ($parts['query'] ?? ''), $query);
+
+        $videoId = '';
+        if ($host === 'youtu.be') {
+            $videoId = $path;
+        } elseif (str_contains($host, 'youtube.com')) {
+            if ($path === 'watch') {
+                $videoId = trim((string) ($query['v'] ?? ''));
+            } elseif (str_starts_with($path, 'embed/')) {
+                $videoId = trim(substr($path, 6));
+            } elseif (str_starts_with($path, 'shorts/')) {
+                $videoId = trim(substr($path, 7));
+            }
+        }
+
+        $videoId = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $videoId);
+        if ($videoId === '') {
+            return null;
+        }
+
+        return 'https://www.youtube.com/embed/' . $videoId;
+    }
+
+    private function preferredPersonUrl(array $guestPages): string
+    {
+        $fields = ['Personal LinkedIn URL', 'Wikipedia URL', 'Personal Twitter URL', 'Personal Instagram URL', 'YouTube URL', 'Official Website'];
+        foreach ($guestPages as $guestPage) {
+            $properties = $guestPage['properties'] ?? [];
+            foreach ($fields as $field) {
+                $urls = $this->normalizeUrlList($this->firstValue($properties, [$field]));
+                if (!empty($urls)) {
+                    return $urls[0];
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function guestCompanyName(array $guestPages): string
+    {
+        $fields = ['Business/Company Name', 'Company Name', 'Company', 'Current Company', 'Organization', 'Employer'];
+        foreach ($guestPages as $guestPage) {
+            $properties = $guestPage['properties'] ?? [];
+            $value = $this->firstValue($properties, $fields);
+            if ($this->hasValue($value)) {
+                return trim((string) $value);
+            }
+
+            $jobTitle = trim((string) ($this->firstValue($properties, ['Title / Job Title', 'Job Title', 'Position']) ?: ''));
+            if ($jobTitle !== '' && preg_match('/\b(?:founder|co-founder|ceo|president|owner|director|host)\s+(?:of|at)\s+(.+)$/iu', $jobTitle, $match)) {
+                return trim($match[1], " 	
+ ,.");
+            }
+        }
+
+        return '';
+    }
+
+    private function preferredCompanyUrl(array $guestPages): string
+    {
+        $fields = ['Company Website URL', 'Official Website', 'Crunchbase URL', 'MuckRack URL', 'F6S URL'];
+        foreach ($guestPages as $guestPage) {
+            $properties = $guestPage['properties'] ?? [];
+            foreach ($fields as $field) {
+                $urls = $this->normalizeUrlList($this->firstValue($properties, [$field]));
+                if (!empty($urls)) {
+                    return $urls[0];
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function firstDriveFolderUrl(array $urls): string
+    {
+        foreach ($urls as $url) {
+            $url = trim((string) $url);
+            if ($url !== '' && str_contains($url, 'drive.google.com/drive/folders')) {
+                return $url;
+            }
+        }
+
+        foreach ($urls as $url) {
+            $url = trim((string) $url);
+            if ($url !== '' && str_contains($url, 'drive.google.com')) {
+                return $url;
+            }
+        }
+
+        return '';
+    }
+
+    private function fetchDrivePhotos(string $driveFolderUrl, string $guestName, string $episodeTitle): array
+    {
+        $driveFolderUrl = trim($driveFolderUrl);
+        if ($driveFolderUrl === '') {
+            return [];
+        }
+
+        try {
+            $drive = app(GoogleDriveService::class);
+            $reference = $drive->resolveFolderReference($driveFolderUrl);
+            if (!$reference) {
+                return [];
+            }
+
+            $result = $drive->listPhotos($reference['id'], true, $reference['resourceKey'] ?? null);
+            if (!($result['success'] ?? false)) {
+                return [];
+            }
+
+            $photos = [];
+            foreach (($result['photos'] ?? []) as $photo) {
+                if (!is_array($photo)) {
+                    continue;
+                }
+                $url = trim((string) ($photo['web_content_link'] ?? $photo['thumbnail_link'] ?? $photo['web_view_link'] ?? ''));
+                if ($url === '') {
+                    continue;
+                }
+
+                $name = trim((string) ($photo['name'] ?? 'Podcast asset'));
+                $alt = $guestName !== '' && stripos($name, $guestName) !== false ? $guestName : ($guestName !== '' ? $guestName . ' podcast asset' : $episodeTitle);
+                $photos[] = [
+                    'url' => $url,
+                    'thumbnail_url' => (string) ($photo['thumbnail_link'] ?? $url),
+                    'alt_text' => $alt,
+                    'caption' => $guestName !== '' ? $guestName . ' on The Michael Peres Podcast' : ('Podcast asset for ' . $episodeTitle),
+                    'source' => 'google-drive',
+                    'source_label' => 'Google Drive Podcast Asset',
+                    'download_url' => (string) ($photo['web_content_link'] ?? $url),
+                    'view_url' => (string) ($photo['web_view_link'] ?? $url),
+                    'filename' => $name,
+                    'mime_type' => (string) ($photo['mime_type'] ?? ''),
+                    'width' => $photo['width'] ?? null,
+                    'height' => $photo['height'] ?? null,
+                ];
+            }
+
+            return array_values($photos);
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    private function preferredEpisodeFeaturedImageUrl(array $episodeProperties, array $podcastAssets, ?string $youtubeUrl): string
+    {
+        foreach (['Featured Image URL', 'Thumbnail', 'Image URL', 'Attachment URL', 'Additional Image URLs'] as $field) {
+            foreach ($this->normalizeUrlList($this->firstValue($episodeProperties, [$field])) as $url) {
+                if ($this->looksLikeRenderableImageUrl($url)) {
+                    return $url;
+                }
+            }
+        }
+
+        foreach ($podcastAssets as $url) {
+            if ($this->looksLikeRenderableImageUrl((string) $url)) {
+                return (string) $url;
+            }
+        }
+
+        $embedUrl = $this->youtubeEmbedUrl($youtubeUrl);
+        if (is_string($embedUrl) && preg_match('~/embed/([A-Za-z0-9_-]+)$~', $embedUrl, $matches)) {
+            return 'https://img.youtube.com/vi/' . $matches[1] . '/hqdefault.jpg';
+        }
+
+        return '';
+    }
+
+    private function preferredInlineGuestImageUrl(array $drivePhotos, array $guestPages, string $featuredImageUrl = ''): string
+    {
+        foreach ($drivePhotos as $photo) {
+            $url = trim((string) ($photo['url'] ?? ''));
+            if ($url !== '' && $url !== $featuredImageUrl) {
+                return $url;
+            }
+        }
+
+        foreach ($guestPages as $guestPage) {
+            foreach (($guestPage['properties'] ?? []) as $key => $value) {
+                if (!preg_match('/photo|image|headshot|portrait|thumbnail/i', (string) $key)) {
+                    continue;
+                }
+                foreach ($this->normalizeUrlList($value) as $url) {
+                    if ($this->looksLikeRenderableImageUrl($url) && $url !== $featuredImageUrl) {
+                        return $url;
+                    }
+                }
+            }
+        }
+
+        return '';
     }
 
     private function looksLikeRenderableImageUrl(string $url): bool
@@ -543,7 +925,12 @@ class PressReleaseNotionPodcastImportService
         if (preg_match('/\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i', $url)) {
             return true;
         }
-        return str_contains($url, 'googleusercontent.com') || str_contains($url, 'ytimg.com') || str_contains($url, 'cdn');
+
+        return str_contains($url, 'googleusercontent.com')
+            || str_contains($url, 'ytimg.com')
+            || str_contains($url, '/wp-content/uploads/')
+            || str_contains($url, 'cloudfront.net')
+            || str_contains($url, 'cdn');
     }
 
     private function formatDateValue(mixed $value): string

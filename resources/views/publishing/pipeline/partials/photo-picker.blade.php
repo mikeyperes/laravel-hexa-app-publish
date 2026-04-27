@@ -151,7 +151,7 @@
             this.instagramImportError = e.message;
         }
         this.instagramImporting = false;
-    }
+    },
 
 
     pickPhoto(photo, key) {

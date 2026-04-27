@@ -70,6 +70,7 @@ class PressReleaseWorkflowController extends Controller
         $pressRelease['content_dump'] = $result['source_text'] ?? '';
         $pressRelease['details'] = array_replace($pressRelease['details'] ?? [], $result['details'] ?? []);
         $pressRelease['detected_photos'] = $result['detected_photos'] ?? [];
+        $pressRelease['google_drive_url'] = $result['selected_episode']['drive_folder_url'] ?? ($pressRelease['google_drive_url'] ?? '');
         $pressRelease['notion_episode'] = $result['selected_episode'] ?? [];
         $pressRelease['notion_guest'] = $result['selected_guest'] ?? [];
         $pressRelease['notion_missing_fields'] = $result['missing_fields'] ?? [];

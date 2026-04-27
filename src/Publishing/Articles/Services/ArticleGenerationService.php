@@ -654,7 +654,10 @@ class ArticleGenerationService
         }
 
         $details = $this->extractValidatedDetails($sourceTexts);
+        $targets = $this->extractPodcastPressReleaseTargets($sourceTexts);
         $content = $this->normalizePressReleaseYoutubeEmbed($content);
+        $content = $this->ensurePodcastPressReleaseYoutubeEmbed($content, $targets);
+        $content = $this->ensurePodcastPressReleaseFirstMentionLinks($content, $targets);
         $content = $this->normalizePressReleaseDateline($content, $details);
 
         return [$content, $metadata];
@@ -703,6 +706,156 @@ class ArticleGenerationService
         $content = preg_replace('/(<iframe\b[^>]*?)\s+style="[^"]*"/i', '$1', $content) ?? $content;
 
         return $content;
+    }
+
+    private function extractPodcastPressReleaseTargets(array $sourceTexts): array
+    {
+        $combined = $this->flattenSourceTexts($sourceTexts);
+        if ($combined === '' || !str_contains($combined, '=== Podcast Press Release Mission ===')) {
+            return [];
+        }
+
+        if (!preg_match('/=== Canonical Link Targets ===\s*(.*?)(?:\n===|\z)/s', $combined, $match)) {
+            return [];
+        }
+
+        $block = trim((string) $match[1]);
+        $extract = static function (string $label) use ($block): string {
+            return preg_match('/^' . preg_quote($label, '/') . ':\s*(.+)$/mi', $block, $valueMatch)
+                ? trim((string) $valueMatch[1])
+                : '';
+        };
+
+        return [
+            'person_name' => $extract('Person Name'),
+            'person_url' => $extract('Person URL'),
+            'company_name' => $extract('Company Name'),
+            'company_url' => $extract('Company URL'),
+            'episode_url' => $extract('Episode URL'),
+            'youtube_url' => $extract('YouTube URL'),
+            'youtube_embed_url' => $extract('YouTube Embed URL'),
+            'featured_image_url' => $extract('Featured Image URL'),
+            'inline_guest_image_url' => $extract('Preferred Inline Guest Image URL'),
+            'contact_url' => $extract('Contact URL'),
+        ];
+    }
+
+    private function ensurePodcastPressReleaseYoutubeEmbed(string $content, array $targets): string
+    {
+        $embedUrl = trim((string) ($targets['youtube_embed_url'] ?? ''));
+        if ($embedUrl === '' || preg_match('/youtube\.com\/embed\//i', $content)) {
+            return $content;
+        }
+
+        $iframe = '<div class="podcast-youtube-embed"><iframe width="560" height="315" src="'
+            . e($embedUrl)
+            . '" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>';
+
+        if (preg_match('/<h[2-6]\b[^>]*>\s*About\b/i', $content)) {
+            return preg_replace('/<h[2-6]\b[^>]*>\s*About\b/i', $iframe . '$0', $content, 1) ?? ($content . $iframe);
+        }
+
+        if (preg_match('/<h[2-6]\b/i', $content)) {
+            return preg_replace('/<h[2-6]\b/i', $iframe . '$0', $content, 1) ?? ($content . $iframe);
+        }
+
+        if (preg_match('/(<p\b[^>]*>.*?<\/p>)/is', $content, $match)) {
+            return preg_replace('/' . preg_quote($match[1], '/') . '/is', $match[1] . $iframe, $content, 1) ?? ($content . $iframe);
+        }
+
+        return $content . $iframe;
+    }
+
+    private function ensurePodcastPressReleaseFirstMentionLinks(string $content, array $targets): string
+    {
+        $content = $this->linkFirstPlainTextOccurrence(
+            $content,
+            trim((string) ($targets['person_name'] ?? '')),
+            trim((string) ($targets['person_url'] ?? ''))
+        );
+
+        return $this->linkFirstPlainTextOccurrence(
+            $content,
+            trim((string) ($targets['company_name'] ?? '')),
+            trim((string) ($targets['company_url'] ?? ''))
+        );
+    }
+
+    private function linkFirstPlainTextOccurrence(string $content, string $label, string $url): string
+    {
+        if ($content === '' || $label === '' || $url === '' || !class_exists(\DOMDocument::class)) {
+            return $content;
+        }
+
+        if (preg_match('/<a\b[^>]*>\s*' . preg_quote($label, '/') . '\s*<\/a>/iu', $content)) {
+            return $content;
+        }
+
+        $previous = libxml_use_internal_errors(true);
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+        $html = '<?xml encoding="utf-8" ?><div id="hexa-link-root">' . $content . '</div>';
+        if (!$dom->loadHTML($html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD)) {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+            return $content;
+        }
+
+        $xpath = new \DOMXPath($dom);
+        $nodes = $xpath->query('//text()[normalize-space() != "" and not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::h1) and not(ancestor::h2) and not(ancestor::h3) and not(ancestor::h4) and not(ancestor::h5) and not(ancestor::h6)]');
+        if (!$nodes) {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+            return $content;
+        }
+
+        foreach ($nodes as $textNode) {
+            $text = $textNode->nodeValue ?? '';
+            $offset = mb_stripos($text, $label);
+            if ($offset === false) {
+                continue;
+            }
+
+            $before = mb_substr($text, 0, $offset);
+            $match = mb_substr($text, $offset, mb_strlen($label));
+            $after = mb_substr($text, $offset + mb_strlen($label));
+            $fragment = $dom->createDocumentFragment();
+
+            if ($before !== '') {
+                $fragment->appendChild($dom->createTextNode($before));
+            }
+
+            $anchor = $dom->createElement('a');
+            $anchor->setAttribute('href', $url);
+            $anchor->setAttribute('target', '_blank');
+            $anchor->setAttribute('rel', 'noopener noreferrer');
+            $anchor->appendChild($dom->createTextNode($match));
+            $fragment->appendChild($anchor);
+
+            if ($after !== '') {
+                $fragment->appendChild($dom->createTextNode($after));
+            }
+
+            $textNode->parentNode?->replaceChild($fragment, $textNode);
+            $root = $dom->getElementById('hexa-link-root');
+            $result = $root ? $this->innerHtml($root) : $content;
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+            return $result;
+        }
+
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        return $content;
+    }
+
+    private function innerHtml(\DOMNode $node): string
+    {
+        $html = '';
+        foreach ($node->childNodes as $child) {
+            $html .= $node->ownerDocument?->saveHTML($child) ?? '';
+        }
+
+        return $html;
     }
 
     private function normalizePressReleaseDateline(string $content, array $details): string

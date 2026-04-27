@@ -57,6 +57,10 @@ class PressReleaseWorkflowService
                 'alt_text' => (string) ($photo['alt_text'] ?? ''),
                 'caption' => (string) ($photo['caption'] ?? ''),
                 'source' => (string) ($photo['source'] ?? ''),
+                'source_label' => (string) ($photo['source_label'] ?? ($photo['source'] ?? '')),
+                'role' => (string) ($photo['role'] ?? ''),
+                'download_url' => (string) ($photo['download_url'] ?? ($photo['url'] ?? '')),
+                'view_url' => (string) ($photo['view_url'] ?? ($photo['url'] ?? '')),
             ];
         }, array_filter((array) ($normalized['detected_photos'] ?? []), fn ($photo) => is_array($photo) && !empty($photo['url']))));
 

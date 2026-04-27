@@ -127,6 +127,49 @@
                                 </template>
                             </div>
                         </div>
+                        <div class="rounded-lg border border-blue-200 bg-blue-50/70 px-3 py-3">
+                            <div class="flex items-center justify-between gap-3">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-blue-700">Spin Confirmation</p>
+                                <span class="text-[11px] text-blue-700">These links and media will be enforced in the press release.</span>
+                            </div>
+                            <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Guest link target</p>
+                                    <template x-if="pressRelease.notion_guest?.person_url">
+                                        <a :href="pressRelease.notion_guest.person_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_guest.person_url"></a>
+                                    </template>
+                                    <p x-show="!pressRelease.notion_guest?.person_url" x-cloak class="mt-1 text-amber-700">Missing person URL</p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Company link target</p>
+                                    <template x-if="pressRelease.notion_guest?.company_url">
+                                        <a :href="pressRelease.notion_guest.company_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_guest.company_url"></a>
+                                    </template>
+                                    <p x-show="!pressRelease.notion_guest?.company_url" x-cloak class="mt-1 text-amber-700">Missing company URL</p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">YouTube embed source</p>
+                                    <template x-if="pressRelease.notion_episode?.youtube_url">
+                                        <a :href="pressRelease.notion_episode.youtube_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_episode.youtube_url"></a>
+                                    </template>
+                                    <p x-show="!pressRelease.notion_episode?.youtube_url" x-cloak class="mt-1 text-amber-700">Missing YouTube URL</p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Episode featured image</p>
+                                    <template x-if="pressRelease.notion_episode?.featured_image_url">
+                                        <a :href="pressRelease.notion_episode.featured_image_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_episode.featured_image_url"></a>
+                                    </template>
+                                    <p x-show="!pressRelease.notion_episode?.featured_image_url" x-cloak class="mt-1 text-amber-700">Missing featured image URL</p>
+                                </div>
+                                <div class="md:col-span-2">
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Inline guest image</p>
+                                    <template x-if="pressRelease.notion_guest?.inline_photo_url">
+                                        <a :href="pressRelease.notion_guest.inline_photo_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_guest.inline_photo_url"></a>
+                                    </template>
+                                    <p x-show="!pressRelease.notion_guest?.inline_photo_url" x-cloak class="mt-1 text-amber-700">Missing guest/client image for inline use</p>
+                                </div>
+                            </div>
+                        </div>
                         <div x-show="(pressRelease.notion_missing_fields || []).length > 0" x-cloak class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
                             <p class="text-xs uppercase tracking-wide text-amber-700">Follow-up needed</p>
                             <ul class="mt-2 list-disc pl-5 text-sm text-amber-900 space-y-1">

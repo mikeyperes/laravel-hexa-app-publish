@@ -264,10 +264,13 @@
 
                     // Featured image — auto-fetch with results
                     const hasPrSubjectPhotoAssets = this.isPrArticleMode() && this.selectedPrPhotoAssets(1).length > 0;
-                    if (data.featured_image && !hasPrSubjectPhotoAssets) {
+                    const hasPodcastPressReleaseAssets = this.currentArticleType === 'press-release'
+                        && this.pressRelease?.submit_method === 'notion-podcast'
+                        && this.pressReleasePhotoAssets.length > 0;
+                    if (data.featured_image && !hasPrSubjectPhotoAssets && !hasPodcastPressReleaseAssets) {
                         this.featuredImageSearch = data.featured_image;
                         this.featuredSearchPending = true;
-                    } else if (hasPrSubjectPhotoAssets) {
+                    } else if (hasPrSubjectPhotoAssets || hasPodcastPressReleaseAssets) {
                         this.featuredImageSearch = '';
                         this.featuredSearchPending = false;
                     }
@@ -300,6 +303,9 @@
                     this.syncDeferredEnrichmentState('spin_success');
                     if (this.isPrArticleMode()) {
                         this.$nextTick(() => this.hydratePrArticleSelectedMedia());
+                    }
+                    if (hasPodcastPressReleaseAssets) {
+                        this.$nextTick(() => this.applyPodcastPressReleaseMediaDefaults({ injectInline: true, notify: false }));
                     }
 
                     this.queueAutoSaveDraft(300);
