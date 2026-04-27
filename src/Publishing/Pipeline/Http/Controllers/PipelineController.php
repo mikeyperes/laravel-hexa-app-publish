@@ -158,6 +158,10 @@ class PipelineController extends Controller
                 'id' => $draftSite->id,
                 'name' => $draftSite->name,
                 'url' => $draftSite->url,
+                'status' => $draftSite->status,
+                'default_author' => $draftSite->default_author,
+                'wp_username' => $draftSite->wp_username,
+                'connection_type' => $draftSite->connection_type,
             ] : null,
             'publishAuthor' => $draft->author ?: ($draftSite?->default_author ?? ''),
             'siteConnStatus' => $draftSite

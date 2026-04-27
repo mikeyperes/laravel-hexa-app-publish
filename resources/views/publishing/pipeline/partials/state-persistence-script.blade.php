@@ -655,17 +655,28 @@
             if (!this.scheduleDate && draftState.scheduleDate) {
                 this.scheduleDate = draftState.scheduleDate;
             }
-            if (!this.existingWpPostId && draftState.existingWpPostId) {
+            const draftWpPostId = draftState.existingWpPostId ? String(draftState.existingWpPostId) : '';
+            const currentWpPostId = this.existingWpPostId ? String(this.existingWpPostId) : '';
+            const shouldSyncWpStateFromDraft = !!draftWpPostId && (
+                !currentWpPostId
+                || currentWpPostId === draftWpPostId
+                || String(draftState.existingWpStatus || '').toLowerCase() === 'publish'
+            );
+
+            if (shouldSyncWpStateFromDraft) {
                 this.existingWpPostId = draftState.existingWpPostId;
-            }
-            if (!this.existingWpStatus && draftState.existingWpStatus) {
-                this.existingWpStatus = draftState.existingWpStatus;
-            }
-            if (!this.existingWpPostUrl && draftState.existingWpPostUrl) {
-                this.existingWpPostUrl = draftState.existingWpPostUrl;
-            }
-            if (!this.existingWpAdminUrl && draftState.existingWpAdminUrl) {
-                this.existingWpAdminUrl = draftState.existingWpAdminUrl;
+                this.existingWpStatus = draftState.existingWpStatus || this.existingWpStatus || '';
+                this.existingWpPostUrl = draftState.existingWpPostUrl || this.existingWpPostUrl || '';
+                this.existingWpAdminUrl = draftState.existingWpAdminUrl || this.existingWpAdminUrl || '';
+
+                if (String(this.existingWpStatus || '').toLowerCase() === 'publish' && this.publishAction !== 'draft_local') {
+                    this.publishAction = 'publish';
+                }
+
+                if (this.publishResult && String(this.publishResult.post_id || '') === draftWpPostId) {
+                    this.publishResult.post_status = draftState.existingWpStatus || this.publishResult.post_status || '';
+                    this.publishResult.post_url = draftState.existingWpPostUrl || this.publishResult.post_url || '';
+                }
             }
             if ((!Array.isArray(this.suggestedCategories) || this.suggestedCategories.length === 0) && Array.isArray(draftState.categories) && draftState.categories.length > 0) {
                 this.suggestedCategories = this.normalizeUniqueTextList(draftState.categories, 10);

@@ -16,33 +16,44 @@
     <div x-show="openSteps.includes(7)" x-cloak x-collapse class="px-4 pb-4">
 
         {{-- ═══ Action Dock ═══ --}}
-        <div x-show="!publishResult" x-cloak x-ref="publishActionBox" x-init="$nextTick(() => _focusPublishActionBox({ behavior: 'auto' }))" class="border border-gray-200 rounded-xl p-5 mb-4 bg-white">
+        <div x-ref="publishActionBox" x-init="$nextTick(() => _focusPublishActionBox({ behavior: 'auto' }))" class="border border-gray-200 rounded-xl p-5 mb-4 bg-white">
             <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                 <div class="flex-1 space-y-4">
                     <div>
                         <h5 class="text-sm font-semibold text-gray-700">Publish Actions</h5>
                         <p class="mt-1 text-xs text-gray-500" x-show="publishAction === 'draft_local'" x-cloak>Use this to keep working locally without sending anything to WordPress.</p>
-                        <p class="mt-1 text-xs text-gray-500" x-show="publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future'" x-cloak>Step 1: prepare the WordPress payload. Step 2: publish, update the draft, or schedule the same post from this panel.</p>
+                        <p class="mt-1 text-xs text-gray-500" x-show="publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future'" x-cloak>Step 1: prepare the WordPress payload. Step 2: publish or update the same post from this panel. After a post is live, you can keep editing, re-prepare, and publish the update from here.</p>
                     </div>
 
                     <div x-show="existingWpPostId" x-cloak class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-                        This draft already owns WordPress post <span class="font-mono" x-text="'#' + existingWpPostId"></span>. Use <span class="font-medium">Publish existing WordPress draft live</span> to promote that same post, or <span class="font-medium">Update existing WordPress draft</span> to keep refining it safely.
+                        <template x-if="existingWpStatus === 'publish'">
+                            <div class="space-y-2">
+                                <p>WordPress post <span class="font-mono" x-text="'#' + existingWpPostId"></span> is already live. Edit the article, run prepare again, then use <span class="font-medium">Update live WordPress post</span> to replace the same post without leaving this editor.</p>
+                                <div class="flex flex-wrap gap-3 text-xs">
+                                    <button type="button" @click="openStep(6); currentStep = 6; _syncStepToUrl && _syncStepToUrl()" class="text-blue-700 hover:text-blue-900 underline">Edit article content</button>
+                                    <button type="button" @click="publishAction = 'publish'; $nextTick(() => _focusPublishActionBox())" class="text-blue-700 hover:text-blue-900 underline">Re-prepare this live post</button>
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="existingWpStatus !== 'publish'">
+                            <p>This draft already owns WordPress post <span class="font-mono" x-text="'#' + existingWpPostId"></span>. Use <span class="font-medium">Publish existing WordPress draft live</span> to promote that same post, or <span class="font-medium">Update existing WordPress draft</span> to keep refining it safely.</p>
+                        </template>
                     </div>
 
                     <div class="grid gap-2 lg:grid-cols-2">
                         <label class="flex items-center gap-2 cursor-pointer rounded-lg border border-gray-200 px-3 py-2 text-sm hover:border-blue-300 hover:bg-blue-50/40">
                             <input type="radio" x-model="publishAction" value="publish" class="text-blue-600">
-                            <span x-text="existingWpPostId ? 'Publish existing WordPress draft live' : 'Publish immediately'"></span>
+                            <span x-text="existingWpStatus === 'publish' ? 'Update live WordPress post' : (existingWpPostId ? 'Publish existing WordPress draft live' : 'Publish immediately')"></span>
                         </label>
                         <label class="flex items-center gap-2 cursor-pointer rounded-lg border border-gray-200 px-3 py-2 text-sm hover:border-blue-300 hover:bg-blue-50/40">
                             <input type="radio" x-model="publishAction" value="draft_local" class="text-blue-600">
                             <span>Save as local draft</span>
                         </label>
-                        <label class="flex items-center gap-2 cursor-pointer rounded-lg border border-gray-200 px-3 py-2 text-sm hover:border-blue-300 hover:bg-blue-50/40">
+                        <label x-show="existingWpStatus !== 'publish'" x-cloak class="flex items-center gap-2 cursor-pointer rounded-lg border border-gray-200 px-3 py-2 text-sm hover:border-blue-300 hover:bg-blue-50/40">
                             <input type="radio" x-model="publishAction" value="draft_wp" class="text-blue-600">
                             <span x-text="existingWpPostId ? 'Update existing WordPress draft' : 'Push as WordPress draft'"></span>
                         </label>
-                        <label class="flex items-center gap-2 cursor-pointer rounded-lg border border-gray-200 px-3 py-2 text-sm hover:border-blue-300 hover:bg-blue-50/40">
+                        <label x-show="existingWpStatus !== 'publish'" x-cloak class="flex items-center gap-2 cursor-pointer rounded-lg border border-gray-200 px-3 py-2 text-sm hover:border-blue-300 hover:bg-blue-50/40">
                             <input type="radio" x-model="publishAction" value="future" class="text-blue-600">
                             <span x-text="existingWpPostId ? 'Schedule existing WordPress post' : 'Schedule'"></span>
                         </label>
@@ -62,9 +73,9 @@
                             : (_prepareOperationIsActive()
                                 ? 'Preparing WordPress payload...'
                                 : (prepareComplete
-                                    ? 'Prepared. Publish controls are ready.'
+                                    ? (existingWpStatus === 'publish' ? 'Prepared. Update the live post when you are ready.' : 'Prepared. Publish controls are ready.')
                                     : 'Prepare is required before WordPress actions are enabled.'))"></p>
-                        <p class="mt-1 text-xs text-gray-500" x-show="publishAction !== 'draft_local' && existingWpPostId" x-cloak>WordPress post <span class="font-mono" x-text="'#' + existingWpPostId"></span> will be updated instead of duplicated.</p>
+                        <p class="mt-1 text-xs text-gray-500" x-show="publishAction !== 'draft_local' && existingWpPostId" x-cloak x-text="existingWpStatus === 'publish' ? ('WordPress post #' + existingWpPostId + ' is live and will be updated in place.') : ('WordPress post #' + existingWpPostId + ' will be updated instead of duplicated.')"></p>
                     </div>
 
                     <div x-show="publishing || publishOperationStatus || _prepareOperationIsActive() || prepareOperationStatus" x-cloak class="text-[11px] text-gray-500 space-y-1">
@@ -77,12 +88,12 @@
                     <div class="flex flex-col gap-3">
                         <button x-show="publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future'" x-cloak @click="prepareForWp()" :disabled="_prepareOperationIsActive()" class="text-white px-5 py-2.5 rounded-lg text-sm disabled:opacity-50 flex items-center justify-center gap-2" :class="prepareComplete && prepareIntegrityIssues.length === 0 && !prepareChecklist.some(c => c.status === 'failed' || c.status === 'skipped') ? 'bg-green-600 hover:bg-green-700' : (prepareComplete ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-600 hover:bg-blue-700')">
                             <svg x-show="_prepareOperationIsActive()" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                            <span x-text="_prepareOperationIsActive() ? (prepareOperationStatus === 'queued' ? 'Queued...' : 'Preparing...') : (prepareComplete && prepareChecklist.some(c => c.status === 'failed' || c.status === 'skipped') ? 'Retry Prepare' : (prepareComplete ? 'Prepared' : 'Prepare for WordPress'))"></span>
+                            <span x-text="_prepareOperationIsActive() ? (prepareOperationStatus === 'queued' ? 'Queued...' : 'Preparing...') : (prepareComplete && prepareChecklist.some(c => c.status === 'failed' || c.status === 'skipped') ? 'Retry Prepare' : (prepareComplete ? (existingWpStatus === 'publish' ? 'Re-prepare Live Post' : 'Prepared') : (existingWpStatus === 'publish' ? 'Prepare Live Update' : 'Prepare for WordPress')))"></span>
                         </button>
 
                         <button @click="publishArticle()" :disabled="publishing || ((publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future') && !prepareComplete)" class="bg-green-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2">
                             <svg x-show="publishing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                            <span x-text="publishing ? (publishOperationStatus === 'queued' ? 'Queued...' : 'Publishing...') : (publishAction === 'draft_local' ? 'Save Local Draft' : (publishAction === 'draft_wp' ? (existingWpPostId ? 'Update WP Draft' : 'Create WP Draft') : (publishAction === 'future' ? (existingWpPostId ? 'Schedule Existing Post' : 'Schedule Post') : (existingWpPostId ? 'Publish Existing Draft' : 'Publish'))))"></span>
+                            <span x-text="publishing ? (publishOperationStatus === 'queued' ? 'Queued...' : 'Publishing...') : (publishAction === 'draft_local' ? 'Save Local Draft' : (publishAction === 'draft_wp' ? (existingWpPostId ? 'Update WP Draft' : 'Create WP Draft') : (publishAction === 'future' ? (existingWpPostId ? 'Schedule Existing Post' : 'Schedule Post') : (existingWpStatus === 'publish' ? 'Update Live Post' : (existingWpPostId ? 'Publish Existing Draft' : 'Publish')))))"></span>
                         </button>
 
                         <button @click="saveDraftNow()" :disabled="savingDraft" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-50 flex items-center justify-center gap-2">
@@ -99,7 +110,7 @@
         </div>
 
         {{-- ═══ Prepare for WordPress (only for WP actions) ═══ --}}
-        <div x-show="!publishResult && (publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future')" x-cloak class="border border-gray-200 rounded-xl p-5 mb-4">
+        <div x-show="publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future'" x-cloak class="border border-gray-200 rounded-xl p-5 mb-4">
             <h5 class="text-sm font-semibold text-gray-700 mb-3">Preparation Details</h5>
             <p class="text-xs text-gray-500 mb-4">The action dock above stays live. Use this section to inspect checklist progress, uploaded media, integrity fixes, and the full activity log.</p>
             <div x-show="_prepareOperationIsActive() || prepareOperationStatus" x-cloak class="mb-4 text-[11px] text-gray-500 space-y-1">
@@ -327,6 +338,14 @@
 
             {{-- Quick access buttons --}}
             <div x-show="selectedSite?.url" class="flex flex-wrap gap-2 mb-4">
+                <button type="button" @click="openStep(6); currentStep = 6; _syncStepToUrl && _syncStepToUrl()" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-gray-700 text-xs font-medium rounded-lg border border-gray-300 hover:bg-gray-50">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    Continue Editing
+                </button>
+                <button type="button" @click="publishAction = 'publish'; currentStep = 7; openStep(7); $nextTick(() => _focusPublishActionBox())" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-blue-700 text-xs font-medium rounded-lg border border-blue-200 hover:bg-blue-50">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    Re-prepare Update
+                </button>
                 <a x-show="publishResult?.post_status === 'publish' && publishResult?.post_url" :href="publishResult?.post_url" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                     View Live
@@ -410,7 +429,7 @@
                     <a x-show="!publishAuthor && selectedSite?.id" x-cloak :href="selectedSite?.id ? '/publish/sites/' + selectedSite.id : '#'" target="_blank" class="text-xs text-orange-500 hover:text-orange-700">Set in site settings</a>
                 </div>
             </div>
-            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Publish Action</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? (existingWpPostId ? 'Publish existing WordPress draft live' : 'Publish immediately') : (publishAction === 'draft_wp' ? (existingWpPostId ? 'Update existing WordPress draft' : 'Create WordPress draft') : (publishAction === 'future' ? (existingWpPostId ? 'Schedule existing WordPress post' : 'Schedule post') : 'Save as local draft'))"></p></div>
+            <div class="flex items-start gap-3 py-1.5 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Publish Action</span><p class="text-sm text-gray-800" x-text="publishAction === 'publish' ? (existingWpStatus === 'publish' ? 'Update live WordPress post' : (existingWpPostId ? 'Publish existing WordPress draft live' : 'Publish immediately')) : (publishAction === 'draft_wp' ? (existingWpPostId ? 'Update existing WordPress draft' : 'Create WordPress draft') : (publishAction === 'future' ? (existingWpPostId ? 'Schedule existing WordPress post' : 'Schedule post') : 'Save as local draft'))"></p></div>
             <div x-show="existingWpPostId" x-cloak class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 space-y-2">
                 <div class="flex items-start gap-3 text-sm">
                     <span class="text-xs text-blue-500 w-28 flex-shrink-0 pt-0.5 uppercase tracking-wide">Existing WP Post</span>
@@ -509,4 +528,3 @@
             <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Twitter Card</span><p class="text-sm text-gray-600">summary_large_image</p></div>
             <div x-show="featuredPhoto" class="flex items-start gap-3 py-1"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Image</span><p class="text-sm text-gray-600 break-all" x-text="featuredPhoto?.url_large || featuredPhoto?.url_thumb || ''"></p></div>
         </div>
-
