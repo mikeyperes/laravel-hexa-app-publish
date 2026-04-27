@@ -20,6 +20,7 @@ class SpinRequest extends PipelineRequest
             'master_setting_ids' => 'nullable|array',
             'master_setting_ids.*' => 'integer|exists:publish_master_settings,id',
             'pr_subject_context' => 'nullable|string|max:50000',
+            'article_type' => 'nullable|string|max:100',
         ];
     }
 }

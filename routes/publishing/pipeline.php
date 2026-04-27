@@ -5,6 +5,7 @@ use hexa_app_publish\Publishing\Pipeline\Http\Controllers\PipelineActivityContro
 use hexa_app_publish\Publishing\Pipeline\Http\Controllers\PipelineOperationController;
 use hexa_app_publish\Publishing\Pipeline\Http\Controllers\PipelineStateController;
 use hexa_app_publish\Publishing\Pipeline\Http\Controllers\PressReleaseWorkflowController;
+use hexa_app_publish\Publishing\Pipeline\Http\Controllers\PrArticleWorkflowController;
 
 Route::get('/article/publish', [PipelineController::class, 'index'])->name('publish.pipeline');
 Route::post('/article/publish/check-sources', [PipelineController::class, 'checkSources'])->name('publish.pipeline.check');
@@ -33,6 +34,7 @@ Route::post('/article/publish/press-release/notion/search-episodes', [PressRelea
 Route::post('/article/publish/press-release/notion/import-episode', [PressReleaseWorkflowController::class, 'importNotionEpisode'])->name('publish.pipeline.press-release.import-notion-episode');
 Route::post('/article/publish/press-release/detect-fields', [PressReleaseWorkflowController::class, 'detectFields'])->name('publish.pipeline.press-release.detect-fields');
 Route::post('/article/publish/press-release/detect-photos', [PressReleaseWorkflowController::class, 'detectPhotos'])->name('publish.pipeline.press-release.detect-photos');
+Route::post('/article/publish/pr-article/import-context-url', [PrArticleWorkflowController::class, 'importContextUrl'])->name('publish.pipeline.pr-article.import-context-url');
 
 // User search (shared AJAX endpoint for type-ahead)
 Route::get('/api/users/search', [PipelineController::class, 'searchUsers'])->name('publish.users.search');

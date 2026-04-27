@@ -429,19 +429,25 @@
             const sourceTexts = this.currentArticleType === 'press-release'
                 ? [this.buildPressReleaseSourceText(true)]
                 : (
-                    this.approvedSources.length > 0
-                        ? this.approvedSources.map(i => this.checkResults[i]?.text || '').filter(Boolean)
-                        : ['[Source articles will be inserted here]']
+                    this.isPrArticleMode()
+                        ? [this.buildPrArticleSourceText(true)].filter(Boolean)
+                        : (
+                            this.approvedSources.length > 0
+                                ? this.approvedSources.map(i => this.checkResults[i]?.text || '').filter(Boolean)
+                                : ['[Source articles will be inserted here]']
+                        )
                 );
 
             return {
                 source_texts: sourceTexts,
                 template_id: this.selectedTemplateId || null,
                 preset_id: this.selectedPresetId || null,
-                prompt_slug: this.currentPressReleasePromptSlug(),
+                prompt_slug: this.currentWorkflowPromptSlug(),
                 custom_prompt: this.customPrompt || null,
                 web_research: this.spinWebResearch,
                 supporting_url_type: this.supportingUrlType || 'matching_content_type',
+                pr_subject_context: this.isPrArticleMode() ? this.buildPrSubjectContext() : null,
+                article_type: this.currentArticleType || null,
             };
         },
 
@@ -528,6 +534,10 @@
                 if (state.openSteps) this.openSteps = Array.isArray(state.openSteps) ? state.openSteps : Object.values(state.openSteps);
                 if (state.completedSteps) this.completedSteps = Array.isArray(state.completedSteps) ? state.completedSteps : Object.values(state.completedSteps);
                 this.pressRelease = this.restorePressReleaseStateFromLegacy(state);
+                this.selectedPrProfiles = (Array.isArray(this.selectedPrProfiles) ? this.selectedPrProfiles : [])
+                    .map((profile) => this.normalizePrProfileForState(profile))
+                    .filter((profile) => !!profile.id);
+                this.prSubjectData = this.sanitizePrSubjectDataForPersistence(this.prSubjectData || {});
 
                 // Site connection (nested object)
                 if (state.selectedSiteId) {
@@ -551,6 +561,11 @@
                     this.rememberDraftBody(restoredEditorHtml);
                     this.setSpinEditor(restoredEditorHtml);
                     this.extractArticleLinks(restoredEditorHtml);
+                    const titleLooksPlaceholder = !this.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test(String(this.articleTitle || '').trim());
+                    if (titleLooksPlaceholder) {
+                        const derivedTitle = this.deriveArticleTitleFromHtml(restoredEditorHtml);
+                        if (derivedTitle) this.articleTitle = derivedTitle;
+                    }
                 }
 
                 // Title from suggested titles
@@ -673,6 +688,10 @@
                 this.photoSuggestions = draftState.photoSuggestions.map((ps, idx) => this.normalizePhotoSuggestionState(ps, idx));
                 this._lastInlinePhotoHydrationSignature = '';
             }
+            if ((!this.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test(String(this.articleTitle || '').trim())) && (this.editorContent || this.spunContent || draftState.body)) {
+                const derivedTitle = this.deriveArticleTitleFromHtml(this.editorContent || this.spunContent || draftState.body || '');
+                if (derivedTitle) this.articleTitle = derivedTitle;
+            }
             if (!this.featuredImageSearch && draftState.featuredImageSearch) {
                 this.featuredImageSearch = draftState.featuredImageSearch;
             }
@@ -685,12 +704,19 @@
             // Auto-complete steps based on restored data
             if (this.selectedUser && !this.completedSteps.includes(1)) this.completedSteps.push(1);
             if (this.selectedSiteId && !this.completedSteps.includes(2)) this.completedSteps.push(2);
-            if ((this.currentArticleType === 'press-release' ? this.hasPressReleaseSubmittedContent() : this.sources.length > 0) && !this.completedSteps.includes(3)) this.completedSteps.push(3);
-            if ((this.currentArticleType === 'press-release' ? this.hasPressReleaseValidationData() : this.checkResults.length > 0) && !this.completedSteps.includes(4)) this.completedSteps.push(4);
+            const hasStep3Data = this.currentArticleType === 'press-release'
+                ? this.hasPressReleaseSubmittedContent()
+                : (this.isPrArticleMode() ? this.selectedPrProfiles.length > 0 : this.sources.length > 0);
+            const hasStep4Data = this.currentArticleType === 'press-release'
+                ? this.hasPressReleaseValidationData()
+                : (this.isPrArticleMode() ? this.selectedPrProfiles.length > 0 : this.checkResults.length > 0);
+            if (hasStep3Data && !this.completedSteps.includes(3)) this.completedSteps.push(3);
+            if (hasStep4Data && !this.completedSteps.includes(4)) this.completedSteps.push(4);
             if (this.spunContent && !this.completedSteps.includes(5)) this.completedSteps.push(5);
             if (this.spunContent && !this.completedSteps.includes(6)) this.completedSteps.push(6);
 
             const finishRestore = () => {
+                this.syncPrArticleForCurrentArticleType({ force: false });
                 const restoredStateSignature = this._stableSignature(this.buildPipelineStateSnapshot());
                 this._lastLocalPipelineStateSignature = restoredStateSignature;
                 this._lastServerPipelineStateSignature = restoredStateSignature;
@@ -726,6 +752,12 @@
                 this.scheduleThumbStateReconcile('restore_complete');
                 this.queueInlinePhotoAutoHydration('restore_complete');
                 this.queueFeaturedImageAutoHydration('restore_complete');
+                if (this.isPrArticleMode()) {
+                    this.selectedPrProfiles.forEach((profile) => {
+                        this.loadProfileData(profile, { preserveSelections: true, skipSave: true });
+                    });
+                    this.$nextTick(() => this.hydratePrArticleSelectedMedia());
+                }
                 if (this.shouldAutoLoadPromptPreview()) {
                     this._queuePromptRefresh('restore_complete');
                 }
@@ -879,6 +911,11 @@
             this.$watch('photoSuggestions', invalidatePrepare);
             this.$watch('selectedTemplateId', () => { if (!this._restoring) this.invalidatePromptPreview('template_changed'); });
             this.$watch('selectedPresetId', () => { if (!this._restoring) this.invalidatePromptPreview('preset_changed'); });
+            this.$watch('template_overrides.article_type', () => {
+                if (this._restoring) return;
+                this.syncPrArticleForCurrentArticleType({ force: false });
+                this.invalidatePromptPreview('article_type_changed');
+            });
             this.$watch('currentStep', step => {
                 if (this._restoring) return;
                 if (step === 6 || this.openSteps.includes(6)) {
@@ -941,6 +978,8 @@
                 'pressRelease',
                 // PR Full Feature — profile subjects
                 'selectedPrProfiles',
+                'prArticle',
+                'prSubjectData',
                 // Press Release syndication selection
                 'selectedSyndicationCats',
             ];
@@ -1144,6 +1183,9 @@
             this.siteConn = { testing: false, status: null, message: '', authors: [], log: [], defaultAuthor: null };
             this.pressRelease = this.normalizePressReleaseState({});
             this.selectedPrProfiles = [];
+            this.prArticle = this.normalizePrArticleState({});
+            this.prSubjectData = {};
+            this.prArticleContextImporting = false;
             this._previousSiteId = null;
             this.editingPreset = false;
             this.editingTemplate = false;

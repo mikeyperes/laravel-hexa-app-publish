@@ -23,6 +23,7 @@ use hexa_app_publish\Publishing\Pipeline\Services\PipelineStateService;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineDraftSessionService;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineOperationExecutor;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineOperationService;
+use hexa_app_publish\Publishing\Pipeline\Services\PrArticleWorkflowService;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineWorkflowRegistry;
 use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineOperation;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
@@ -251,6 +252,7 @@ class PipelineController extends Controller
             'initialUserTemplates' => $initialUserTemplates,
             'workflowDefinitions' => $this->workflowRegistry->definitions(),
             'pressReleaseDefaultState' => app(\hexa_app_publish\Publishing\Pipeline\Services\PressReleaseWorkflowService::class)->defaultState(),
+            'prArticleDefaultState' => app(PrArticleWorkflowService::class)->defaultState(),
         ]);
     }
 
@@ -295,9 +297,10 @@ class PipelineController extends Controller
             $validated['preset_id'] ?? null,
             $validated['custom_prompt'] ?? null,
             null,
-            null,
+            $validated['pr_subject_context'] ?? null,
             true,
-            $validated['prompt_slug'] ?? null
+            $validated['prompt_slug'] ?? null,
+            $validated['article_type'] ?? null
         );
 
         $prompt = $result['prompt'];
@@ -1134,6 +1137,7 @@ class PipelineController extends Controller
                 'supporting_url_type'=> $validated['supporting_url_type'] ?? 'matching_content_type',
                 'change_request'     => $validated['change_request'] ?? null,
                 'pr_subject_context' => $validated['pr_subject_context'] ?? null,
+                'article_type'       => $validated['article_type'] ?? null,
                 'web_research'       => $request->boolean('web_research', false),
                 'agent'              => !empty($validated['change_request']) ? 'pipeline-revise' : 'pipeline-spin',
             ]

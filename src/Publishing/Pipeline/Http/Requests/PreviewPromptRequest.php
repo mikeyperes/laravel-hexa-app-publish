@@ -14,6 +14,8 @@ class PreviewPromptRequest extends PipelineRequest
             'prompt_slug' => 'nullable|string|max:255',
             'custom_prompt' => 'nullable|string|max:5000',
             'supporting_url_type' => 'nullable|string|max:100',
+            'pr_subject_context' => 'nullable|string|max:50000',
+            'article_type' => 'nullable|string|max:100',
         ];
     }
 }

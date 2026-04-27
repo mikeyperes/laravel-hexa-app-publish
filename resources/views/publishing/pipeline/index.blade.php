@@ -303,7 +303,140 @@
                         </div>
                         <div>
                             <h4 class="text-base font-semibold text-gray-800" x-text="currentArticleType === 'pr-full-feature' ? 'PR Full Feature' : 'Expert Article'"></h4>
-                            <p class="text-xs text-gray-400">Select profiles to feature in this article</p>
+                            <p class="text-xs text-gray-400" x-text="currentArticleType === 'pr-full-feature' ? 'Build a polished editorial feature around one or more Notion subjects.' : 'Build a topic-first expert article and weave the Notion subject in as the authority voice.'"></p>
+                        </div>
+                    </div>
+
+                    <div class="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-4">
+                        <div class="flex items-start justify-between gap-4">
+                            <div>
+                                <h5 class="text-sm font-semibold text-gray-900">Article Direction</h5>
+                                <p class="text-xs text-gray-600 mt-1" x-show="currentArticleType === 'pr-full-feature'">Select the main subject, define the editorial angle, and explain what the writer must emphasize. The article should market the client through credible feature writing, not overt promotion.</p>
+                                <p class="text-xs text-gray-600 mt-1" x-show="currentArticleType === 'expert-article'">Define the topic, the subject's position, and whether the subject should lead visually or appear more subtly. The article should stay topic-first while using the client as the expert authority.</p>
+                            </div>
+                            <div class="text-[11px] text-gray-500 bg-white border border-blue-200 rounded-lg px-3 py-2 max-w-xs">
+                                <strong class="text-gray-800 block mb-1">Writer guidance</strong>
+                                Include what to focus on, whose view matters most, which related records matter, how promotional the tone should feel, and what quotes or positioning must show up.
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Main Subject</label>
+                                <select x-model="prArticle.main_subject_id" @change="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                                    <option value="">Choose main subject…</option>
+                                    <template x-for="profile in selectedPrProfiles" :key="'subject-' + profile.id">
+                                        <option :value="profile.id" x-text="profile.name"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Promotional Level</label>
+                                <select x-model="prArticle.promotional_level" @change="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                                    <option value="editorial-subtle">Editorial / subtle marketing</option>
+                                    <option value="balanced-feature">Balanced feature</option>
+                                    <option value="high-visibility">High visibility, still journalistic</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Tone</label>
+                                <select x-model="prArticle.tone" @change="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                                    <option value="journalistic">Journalistic</option>
+                                    <option value="authoritative">Authoritative</option>
+                                    <option value="expert-analytical">Expert / analytical</option>
+                                    <option value="warm-editorial">Warm editorial</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Quote Plan</label>
+                                <select x-model="prArticle.quote_count" @change="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                                    <template x-if="currentArticleType === 'pr-full-feature'">
+                                        <optgroup label="PR Full Feature">
+                                            <option value="1">1 quote</option>
+                                            <option value="2">2 quotes</option>
+                                            <option value="3">3 quotes</option>
+                                        </optgroup>
+                                    </template>
+                                    <template x-if="currentArticleType === 'expert-article'">
+                                        <optgroup label="Expert Article">
+                                            <option value="3">3 quotes</option>
+                                            <option value="4">4 quotes</option>
+                                            <option value="5">5 quotes</option>
+                                        </optgroup>
+                                    </template>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Article Focus Instructions</label>
+                                <textarea x-model="prArticle.focus_instructions" @change="savePipelineState()" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 resize-y" placeholder="Explain the main angle, what the writer should emphasize, what to mention or avoid, which subject matters most, and how the article should frame the story."></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Quote Guidance</label>
+                                <textarea x-model="prArticle.quote_guidance" @change="savePipelineState()" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 resize-y" placeholder="Add any guidance for fabricated or supplied quotes, viewpoints, or lines the subject should support in the article."></textarea>
+                            </div>
+                        </div>
+
+                        <div x-show="currentArticleType === 'pr-full-feature'" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <label class="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
+                                <input type="checkbox" class="rounded border-gray-300 text-blue-600" x-model="prArticle.include_subject_name_in_title" @change="savePipelineState()">
+                                <span class="text-sm text-gray-700">Include the main subject name in the headline.</span>
+                            </label>
+                            <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600">
+                                Real subject photos selected below will be used for the featured image and inline images when available.
+                            </div>
+                        </div>
+
+                        <div x-show="currentArticleType === 'expert-article'" x-cloak class="space-y-4">
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Subject Position On The Topic</label>
+                                    <textarea x-model="prArticle.subject_position" @change="savePipelineState()" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 resize-y" placeholder="Explain the subject's thesis, position, or interpretation so the article aligns with their view."></textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Photo Mode</label>
+                                    <select x-model="prArticle.feature_photo_mode" @change="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                                        <option value="featured_and_inline">Use the subject as featured image + inline photos</option>
+                                        <option value="inline_only">Inline subject photos only</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div>
+                                        <h6 class="text-sm font-semibold text-gray-800">Topic Context</h6>
+                                        <p class="text-xs text-gray-500">You can import a specific live article for context, or provide topic keywords if you want the AI to build the expert article around a broader issue.</p>
+                                    </div>
+                                    <select x-model="prArticle.expert_source_mode" @change="savePipelineState()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                        <option value="keywords">Keywords / topic</option>
+                                        <option value="url">Specific article URL</option>
+                                        <option value="none">No external topic source</option>
+                                    </select>
+                                </div>
+
+                                <div x-show="prArticle.expert_source_mode === 'keywords'" x-cloak>
+                                    <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Topic Keywords</label>
+                                    <textarea x-model="prArticle.expert_keywords" @change="savePipelineState()" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 resize-y" placeholder="Add the keywords, issue, or thesis the article should focus on. Example: AI chip export controls, Nvidia, semiconductor supply chain, geopolitical risk"></textarea>
+                                </div>
+
+                                <div x-show="prArticle.expert_source_mode === 'url'" x-cloak class="space-y-3">
+                                    <div class="flex flex-col lg:flex-row gap-3">
+                                        <input type="url" x-model="prArticle.expert_context_url" @change="savePipelineState()" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400" placeholder="Paste a live article URL to import as the issue context">
+                                        <button @click="importPrArticleContextUrl()" type="button" class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50" :disabled="prArticleContextImporting || !prArticle.expert_context_url">
+                                            <svg x-show="prArticleContextImporting" x-cloak class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                            <span x-text="prArticleContextImporting ? 'Importing…' : 'Import Article Context'"></span>
+                                        </button>
+                                    </div>
+                                    <div x-show="prArticle.expert_context_extracted?.title || prArticle.expert_context_extracted?.text" x-cloak class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3">
+                                        <p class="text-sm font-semibold text-gray-900" x-text="prArticle.expert_context_extracted?.title || 'Imported topic context'"></p>
+                                        <p class="text-xs text-gray-500 mt-1" x-text="(prArticle.expert_context_extracted?.word_count || 0) + ' words imported from the context article'"></p>
+                                        <p x-show="prArticle.expert_context_extracted?.excerpt" x-cloak class="text-sm text-gray-700 mt-2" x-text="prArticle.expert_context_extracted?.excerpt"></p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -367,7 +500,7 @@
                                             <a :href="'/profiles/' + profile.id" target="_blank" class="text-blue-500 hover:text-blue-700" title="View profile">
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                                             </a>
-                                            <button @click="selectedPrProfiles.splice(pidx, 1); delete prSubjectData[profile.id]; savePipelineState();" class="text-red-400 hover:text-red-600" title="Remove">
+                                            <button @click="removePrProfile(pidx, profile.id)" class="text-red-400 hover:text-red-600" title="Remove">
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                             </button>
                                         </div>
@@ -488,7 +621,7 @@
                         <p x-show="selectedPrProfiles.length === 0" class="text-sm text-gray-400">No subjects selected. Search and add profiles above.</p>
                     </div>
 
-                    <button @click="completeStep(3); completeStep(4); openStep(5)" :disabled="selectedPrProfiles.length === 0"
+                    <button @click="continuePrArticleStep3()" :disabled="selectedPrProfiles.length === 0"
                         class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
                         Continue to AI & Spin &rarr;
                     </button>
@@ -1398,6 +1531,7 @@ function publishPipeline() {
             pipelinePayload: @json($pipelinePayloadSanitized ?? []),
             pressReleaseDefaultState: @json($pressReleaseDefaultState ?? []),
         }),
+        prArticleDefaultState: @json($prArticleDefaultState ?? []),
         // Step tracking
         currentStep: 1,
         openSteps: [1],
@@ -1433,6 +1567,8 @@ function publishPipeline() {
         prProfileSearching: false,
         prProfileDropdownOpen: false,
         prSubmitCard: 'content',
+        prArticle: @json($prArticleDefaultState ?? []),
+        prArticleContextImporting: false,
         selectedPrProfiles: [],
         prSubjectData: {},
 

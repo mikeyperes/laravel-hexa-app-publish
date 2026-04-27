@@ -195,14 +195,18 @@
             // Collect verified source texts
             const sourceTexts = this.currentArticleType === 'press-release'
                 ? [this.buildPressReleaseSourceText(false)].filter(Boolean)
-                : this.checkResults
-                    .filter(r => r.success && r.text)
-                    .map(r => r.text);
+                : (this.isPrArticleMode()
+                    ? [this.buildPrArticleSourceText(false)].filter(Boolean)
+                    : this.checkResults
+                        .filter(r => r.success && r.text)
+                        .map(r => r.text));
 
             if (sourceTexts.length === 0) {
                 this.spinError = this.currentArticleType === 'press-release'
                     ? 'No submitted press release source text is available yet. Detect fields or provide content first.'
-                    : 'No verified source texts available. Please check sources first.';
+                    : (this.isPrArticleMode()
+                        ? 'No PR article source package is ready yet. Load subject context or import topic context first.'
+                        : 'No verified source texts available. Please check sources first.');
                 this.spinning = false;
                 return;
             }
@@ -216,11 +220,12 @@
                         source_texts: sourceTexts,
                         template_id: this.selectedTemplateId || null,
                         preset_id: this.selectedPresetId || null,
-                        prompt_slug: this.currentPressReleasePromptSlug(),
+                        prompt_slug: this.currentWorkflowPromptSlug(),
                         model: this.aiModel,
                         custom_prompt: this.customPrompt || null,
                         supporting_url_type: this.supportingUrlType || 'matching_content_type',
-                        pr_subject_context: this.buildPrSubjectContext(),
+                        pr_subject_context: this.isPrArticleMode() ? this.buildPrSubjectContext() : null,
+                        article_type: this.currentArticleType || null,
                         web_research: this.spinWebResearch,
                     })
                 });
@@ -228,17 +233,14 @@
 
                 if (data.success) {
                     this.resetGeneratedArticleStateForSpin();
-                    this.spunContent = data.html;
-                    this.editorContent = data.html;
+                    let nextHtml = data.html;
                     this.spunWordCount = data.word_count;
-                    this.rememberDraftBody(data.html);
                     this.tokenUsage = data.usage;
-                    this.setSpinEditor(data.html);
                     this.lastAiCall = { user_name: data.user_name, model: data.model, provider: data.provider, usage: data.usage, cost: data.cost, ip: data.ip, timestamp_utc: data.timestamp_utc };
                     this.showNotification('success', data.message);
                     this._logSpin('success', 'Article generated — ' + data.word_count + ' words');
                     this._logSpin('info', 'Model: ' + (data.model || this.aiModel) + ' | Cost: $' + (data.cost || 0).toFixed(4) + ' | Tokens: ' + ((data.usage?.input_tokens || 0) + '+' + (data.usage?.output_tokens || 0)));
-                    this.extractArticleLinks(data.html);
+                    this.extractArticleLinks(nextHtml);
 
                     // Metadata from single prompt (titles, categories, tags)
                     if (data.metadata) {
@@ -246,10 +248,28 @@
                         this.applyGeneratedMetadata(data.metadata);
                     }
 
+                    const titleLooksPlaceholder = !this.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test(String(this.articleTitle || '').trim());
+                    const resolvedTitle = this.deriveArticleTitleFromHtml(nextHtml)
+                        || this.articleTitle
+                        || this.fallbackPrArticleTitle();
+                    if (resolvedTitle && titleLooksPlaceholder) {
+                        this.articleTitle = resolvedTitle;
+                    }
+                    nextHtml = this.ensureArticleTitleInHtml(nextHtml, this.articleTitle || resolvedTitle || '');
+
+                    this.spunContent = nextHtml;
+                    this.editorContent = nextHtml;
+                    this.setSpinEditor(nextHtml);
+                    this.rememberDraftBody(nextHtml);
+
                     // Featured image — auto-fetch with results
-                    if (data.featured_image) {
+                    const hasPrSubjectPhotoAssets = this.isPrArticleMode() && this.selectedPrPhotoAssets(1).length > 0;
+                    if (data.featured_image && !hasPrSubjectPhotoAssets) {
                         this.featuredImageSearch = data.featured_image;
                         this.featuredSearchPending = true;
+                    } else if (hasPrSubjectPhotoAssets) {
+                        this.featuredImageSearch = '';
+                        this.featuredSearchPending = false;
                     }
                     if (data.featured_meta) {
                         this.featuredAlt = data.featured_meta.alt || '';
@@ -278,6 +298,9 @@
                     }
 
                     this.syncDeferredEnrichmentState('spin_success');
+                    if (this.isPrArticleMode()) {
+                        this.$nextTick(() => this.hydratePrArticleSelectedMedia());
+                    }
 
                     this.queueAutoSaveDraft(300);
 
@@ -341,8 +364,11 @@
                         source_texts: [currentContent],
                         template_id: this.selectedTemplateId || null,
                         preset_id: this.selectedPresetId || null,
+                        prompt_slug: this.currentWorkflowPromptSlug(true),
                         model: this.aiModel,
                         change_request: this.spinChangeRequest,
+                        pr_subject_context: this.isPrArticleMode() ? this.buildPrSubjectContext() : null,
+                        article_type: this.currentArticleType || null,
                     })
                 });
                 const data = await resp.json();

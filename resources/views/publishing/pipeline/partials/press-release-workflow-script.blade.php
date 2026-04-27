@@ -613,6 +613,21 @@ function pressReleaseWorkflowMixin(config) {
             state.selectedUser = this.sanitizeSelectedUserForPersistence(state.selectedUser);
             state.photoSuggestions = this.sanitizePhotoSuggestionsForPersistence(state.photoSuggestions || []);
             state.featuredPhoto = this.sanitizePhotoAssetForPersistence(state.featuredPhoto || null);
+            state.selectedPrProfiles = (Array.isArray(state.selectedPrProfiles) ? state.selectedPrProfiles : [])
+                .map((profile) => this.normalizePrProfileForState(profile))
+                .filter((profile) => !!profile.id);
+            state.prSubjectData = this.sanitizePrSubjectDataForPersistence(state.prSubjectData || {});
+
+            const titleLooksPlaceholder = !state.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test(String(state.articleTitle || '').trim());
+            if (titleLooksPlaceholder && state.spunContent) {
+                const derivedTitle = this.deriveArticleTitleFromHtml(state.spunContent);
+                if (derivedTitle) {
+                    state.articleTitle = derivedTitle;
+                }
+            }
+            if (!state.editorContent && state.spunContent) {
+                state.editorContent = state.spunContent;
+            }
 
             return state;
         },
