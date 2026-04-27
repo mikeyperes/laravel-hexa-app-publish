@@ -137,6 +137,21 @@ class PressReleaseWorkflowController extends Controller
         $payload = $this->stateService->payload($draft);
         $pressRelease = $this->workflow->normalizeState($payload['pressRelease'] ?? []);
 
+        if (($pressRelease['submit_method'] ?? '') === 'notion-podcast') {
+            $pressRelease = $this->workflow->appendLog($pressRelease, 'info', 'Skipped AI field detection; using imported Notion podcast details.', [
+                'details' => $pressRelease['details'] ?? [],
+            ]);
+            $this->stateService->updatePressRelease($draft, $pressRelease);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Using imported Notion podcast details.',
+                'fields' => $pressRelease['details'],
+                'press_release' => $pressRelease,
+                'resolved_source_preview' => $pressRelease['resolved_source_preview'] ?? '',
+            ]);
+        }
+
         $source = $this->sourceResolver->resolve($pressRelease);
         $pressRelease = $this->workflow->replaceLog($pressRelease, $source['log'] ?? []);
 
@@ -175,6 +190,20 @@ class PressReleaseWorkflowController extends Controller
         $draft = $this->resolveDraft((int) $validated['draft_id']);
         $payload = $this->stateService->payload($draft);
         $pressRelease = $this->workflow->normalizeState($payload['pressRelease'] ?? []);
+
+        if (($pressRelease['submit_method'] ?? '') === 'notion-podcast' && !empty($pressRelease['detected_photos'])) {
+            $pressRelease = $this->workflow->appendLog($pressRelease, 'info', 'Using imported Notion podcast media instead of URL photo detection.', [
+                'count' => count((array) ($pressRelease['detected_photos'] ?? [])),
+            ]);
+            $this->stateService->updatePressRelease($draft, $pressRelease);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Using imported Notion podcast media.',
+                'photos' => $pressRelease['detected_photos'],
+                'press_release' => $pressRelease,
+            ]);
+        }
 
         $photoUrl = trim((string) ($pressRelease['photo_public_url'] ?: $pressRelease['public_url']));
         if ($photoUrl === '') {

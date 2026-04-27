@@ -550,6 +550,13 @@
                     this.$nextTick(() => {
                         this.selectedSiteId = String(state.selectedSiteId);
                         this.selectedSite = this.sites.find(s => s.id == state.selectedSiteId) || state.selectedSite || null;
+                        const cacheKey = this.siteConnectionCacheKey?.(state.selectedSiteId);
+                        if (cacheKey) {
+                            const restored = this.restoreSiteConnection(state.selectedSiteId, cacheKey);
+                            if (restored && this.selectedSite) {
+                                this.selectedSite.status = 'connected';
+                            }
+                        }
                     });
                 }
 
@@ -632,6 +639,9 @@
                 this.siteConn.status = draftState.siteConnStatus ?? this.siteConn.status;
                 if (draftState.siteConnStatus === true) {
                     this.siteConn.message = 'Loaded from saved draft.';
+                    if (this.selectedSite) {
+                        this.selectedSite.status = 'connected';
+                    }
                 }
             }
             if (draftState.publishAuthor) this.publishAuthor = draftState.publishAuthor;
@@ -745,8 +755,20 @@
                     }
                 }
 
+                if (this.selectedSiteId) {
+                    const cacheKey = this.siteConnectionCacheKey?.(this.selectedSiteId);
+                    if (cacheKey) {
+                        const restored = this.restoreSiteConnection(this.selectedSiteId, cacheKey);
+                        if (restored && this.selectedSite) {
+                            this.selectedSite.status = 'connected';
+                        }
+                    }
+                }
+
                 if (this.selectedSiteId && (!Array.isArray(this.siteConn.authors) || this.siteConn.authors.length === 0)) {
-                    this.loadSiteAuthors(this.selectedSiteId);
+                    this.loadSiteAuthors(this.selectedSiteId, {
+                        cacheKey: this.siteConnectionCacheKey?.(this.selectedSiteId),
+                    });
                 }
 
                 this.syncDeferredEnrichmentState('restore_complete', { log: false });
@@ -903,7 +925,9 @@
             this.$watch('siteConn.authors', () => this.queuePipelineStateSave());
             this.$watch('selectedSiteId', siteId => {
                 if (!this._restoring && siteId && (!Array.isArray(this.siteConn.authors) || this.siteConn.authors.length === 0)) {
-                    this.loadSiteAuthors(siteId);
+                    this.loadSiteAuthors(siteId, {
+                        cacheKey: this.siteConnectionCacheKey?.(siteId),
+                    });
                 }
             });
             // Reset prepare state when photos change after prepare is complete

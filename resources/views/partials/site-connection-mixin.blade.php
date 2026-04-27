@@ -23,6 +23,7 @@
                 authors: [],
                 log: [],
                 defaultAuthor: null,
+                lastVerifiedAt: null,
             },
 
             /**
@@ -41,6 +42,7 @@
                 this.siteConn.log = [];
                 this.siteConn.authors = [];
                 this.siteConn.defaultAuthor = null;
+                this.siteConn.lastVerifiedAt = null;
 
                 const time = () => new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 this.siteConn.log.push({ type: 'info', message: 'Testing WordPress connection...', time: time() });
@@ -66,6 +68,10 @@
                         this.siteConn.defaultAuthor = d.default_author;
                     }
 
+                    if (d.success) {
+                        this.siteConn.lastVerifiedAt = new Date().toISOString();
+                    }
+
                     if (d.success && options.onSuccess) {
                         options.onSuccess.call(this, d);
                     }
@@ -85,6 +91,7 @@
                         message: this.siteConn.message,
                         authors: this.siteConn.authors,
                         default_author: this.siteConn.defaultAuthor,
+                        verified_at: this.siteConn.lastVerifiedAt,
                     }));
                 }
             },
@@ -96,18 +103,30 @@
              * @param {string} cacheKey
              * @returns {boolean} true if restored successfully
              */
-            restoreSiteConnection(siteId, cacheKey) {
+            restoreSiteConnection(siteId, cacheKey, options = {}) {
                 if (!cacheKey) return false;
                 try {
                     const saved = localStorage.getItem(cacheKey);
                     if (!saved) return false;
                     const conn = JSON.parse(saved);
-                    if (conn.site_id != siteId || conn.status !== true || !conn.authors?.length) return false;
+                    const maxAgeMs = Number(options.maxAgeMs || (12 * 60 * 60 * 1000));
+                    const verifiedAt = conn.verified_at ? Date.parse(conn.verified_at) : NaN;
+                    if (
+                        conn.site_id != siteId
+                        || conn.status !== true
+                        || !Array.isArray(conn.authors)
+                        || conn.authors.length === 0
+                        || Number.isNaN(verifiedAt)
+                        || (Date.now() - verifiedAt) > maxAgeMs
+                    ) {
+                        return false;
+                    }
 
                     this.siteConn.status = conn.status;
                     this.siteConn.message = conn.message;
                     this.siteConn.authors = conn.authors;
                     this.siteConn.defaultAuthor = conn.default_author || null;
+                    this.siteConn.lastVerifiedAt = conn.verified_at || null;
                     return true;
                 } catch (e) {
                     return false;
@@ -120,7 +139,7 @@
              * @param {number|string} siteId
              * @returns {Promise<Array>}
              */
-            async loadSiteAuthors(siteId) {
+            async loadSiteAuthors(siteId, options = {}) {
                 if (!siteId) return [];
 
                 if (Object.prototype.hasOwnProperty.call(this, 'authorsLoading')) {
@@ -136,6 +155,32 @@
                     this.siteConn.authors = Array.isArray(data.authors) ? data.authors : [];
                     if (data.default_author) {
                         this.siteConn.defaultAuthor = data.default_author;
+                    }
+                    if (data.success !== false && this.siteConn.authors.length > 0) {
+                        this.siteConn.status = true;
+                        this.siteConn.message = 'Connected';
+                        this.siteConn.lastVerifiedAt = new Date().toISOString();
+                        if (this.selectedSite && String(this.selectedSite.id || '') === String(siteId)) {
+                            this.selectedSite.status = 'connected';
+                        }
+                        if (data.default_author && !this.publishAuthor) {
+                            this.publishAuthor = data.default_author;
+                            this.publishAuthorSource = 'profile';
+                        }
+
+                        const cacheKey = options.cacheKey
+                            || (typeof this.siteConnectionCacheKey === 'function' ? this.siteConnectionCacheKey(siteId) : null);
+
+                        if (cacheKey) {
+                            localStorage.setItem(cacheKey, JSON.stringify({
+                                site_id: siteId,
+                                status: true,
+                                message: this.siteConn.message,
+                                authors: this.siteConn.authors,
+                                default_author: this.siteConn.defaultAuthor,
+                                verified_at: this.siteConn.lastVerifiedAt,
+                            }));
+                        }
                     }
 
                     return this.siteConn.authors;

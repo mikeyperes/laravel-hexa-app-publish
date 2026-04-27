@@ -658,6 +658,7 @@ class ArticleGenerationService
         $content = $this->normalizePressReleaseYoutubeEmbed($content);
         $content = $this->ensurePodcastPressReleaseYoutubeEmbed($content, $targets);
         $content = $this->ensurePodcastPressReleaseFirstMentionLinks($content, $targets);
+        $content = $this->ensurePodcastPressReleaseInlineGuestImage($content, $targets);
         $content = $this->normalizePressReleaseDateline($content, $details);
 
         return [$content, $metadata];
@@ -779,6 +780,44 @@ class ArticleGenerationService
             trim((string) ($targets['company_name'] ?? '')),
             trim((string) ($targets['company_url'] ?? ''))
         );
+    }
+
+    private function ensurePodcastPressReleaseInlineGuestImage(string $content, array $targets): string
+    {
+        $imageUrl = trim((string) ($targets['inline_guest_image_url'] ?? ''));
+        if ($content === '' || $imageUrl === '' || str_contains($content, $imageUrl)) {
+            return $content;
+        }
+
+        $personName = trim((string) ($targets['person_name'] ?? ''));
+        $companyName = trim((string) ($targets['company_name'] ?? ''));
+        $alt = e($personName !== '' ? $personName : 'Podcast guest');
+        $captionBase = $personName !== '' ? $personName : 'Podcast guest';
+        $caption = $companyName !== '' ? ($captionBase . ' of ' . $companyName) : $captionBase;
+
+        $figure = '<figure class="podcast-inline-guest-photo"><img src="'
+            . e($imageUrl)
+            . '" alt="'
+            . $alt
+            . '" loading="lazy"><figcaption>'
+            . e($caption)
+            . '</figcaption></figure>';
+
+        if (preg_match('/<h[2-6]\b[^>]*>\s*About\b/i', $content)) {
+            return preg_replace('/<h[2-6]\b[^>]*>\s*About\b/i', $figure . '$0', $content, 1) ?? ($content . $figure);
+        }
+
+        $paragraphMatches = [];
+        if (preg_match_all('/<p\b[^>]*>.*?<\/p>/is', $content, $paragraphMatches) && count($paragraphMatches[0]) >= 1) {
+            $insertAfter = $paragraphMatches[0][min(1, count($paragraphMatches[0]) - 1)];
+            return preg_replace('/' . preg_quote($insertAfter, '/') . '/is', $insertAfter . $figure, $content, 1) ?? ($content . $figure);
+        }
+
+        if (preg_match('/<h[2-6]\b/i', $content)) {
+            return preg_replace('/<h[2-6]\b/i', $figure . '$0', $content, 1) ?? ($content . $figure);
+        }
+
+        return $content . $figure;
     }
 
     private function linkFirstPlainTextOccurrence(string $content, string $label, string $url): string

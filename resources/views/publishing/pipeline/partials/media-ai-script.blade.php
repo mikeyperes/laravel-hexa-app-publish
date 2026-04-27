@@ -34,10 +34,17 @@
             this._logSpin('info', 'Running AI detection scan...');
 
             const spinEditor = tinymce.get('spin-preview-editor');
-            const html = spinEditor ? spinEditor.getContent() : this.spunContent;
+            const editorHtml = spinEditor ? (spinEditor.getContent() || '') : '';
+            const html = (editorHtml && editorHtml.trim()) ? editorHtml : (this.spunContent || '');
             const tmp = document.createElement('div');
             tmp.innerHTML = html;
-            const plainText = tmp.textContent || tmp.innerText;
+            const plainText = (tmp.textContent || tmp.innerText || '').trim();
+
+            if (!plainText) {
+                this._logSpin('warning', 'Skipped AI detection because no article text was available yet.');
+                this.aiDetecting = false;
+                return;
+            }
 
             try {
                 const resp = await fetch('{{ route("publish.pipeline.detect-ai") }}', {

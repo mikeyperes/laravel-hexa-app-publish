@@ -296,7 +296,7 @@
                 </div>
 
                 {{-- Expert Article / PR Full Feature (shared section) --}}
-                <div x-show="currentArticleType === 'expert-article' || currentArticleType === 'pr-full-feature'" class="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+                <div x-show="currentArticleType === 'expert-article' || currentArticleType === 'pr-full-feature'" class="bg-white border border-gray-200 rounded-xl p-6 flex flex-col gap-4">
                     <div class="flex items-center gap-3 mb-2">
                         <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
                             <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
@@ -307,7 +307,7 @@
                         </div>
                     </div>
 
-                    <div class="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-4">
+                    <div class="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-4" style="order: 2;">
                         <div class="flex items-start justify-between gap-4">
                             <div>
                                 <h5 class="text-sm font-semibold text-gray-900">Article Direction</h5>
@@ -323,7 +323,7 @@
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Main Subject</label>
-                                <select x-model="prArticle.main_subject_id" @change="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                                <select x-model="prArticle.main_subject_id" @change="savePipelineState()" :disabled="selectedPrProfiles.length === 0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed">
                                     <option value="">Choose main subject…</option>
                                     <template x-for="profile in selectedPrProfiles" :key="'subject-' + profile.id">
                                         <option :value="profile.id" x-text="profile.name"></option>
@@ -441,7 +441,7 @@
                     </div>
 
                     {{-- PR Subject Picker --}}
-                    <div class="space-y-3">
+                    <div class="space-y-3" style="order: 1;">
                         <label class="text-sm font-medium text-gray-700">Select PR Subjects</label>
                         <div class="relative">
                             <input type="text" x-model="prProfileSearch" @input.debounce.300ms="searchPrProfiles()" @focus="searchPrProfiles()"
@@ -525,6 +525,21 @@
                                         </div>
                                     </div>
 
+                                    <div x-show="prSubjectData[profile.id]?.googleDocs?.length > 0" x-cloak class="px-5 py-3 border-b border-gray-100">
+                                        <h5 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Imported Google Docs Context</h5>
+                                        <div class="space-y-2">
+                                            <template x-for="doc in (prSubjectData[profile.id]?.googleDocs || [])" :key="doc.document_id || doc.url">
+                                                <div class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                                                    <div class="flex items-center justify-between gap-3">
+                                                        <p class="text-xs font-semibold text-gray-900" x-text="doc.title || 'Google Doc'"></p>
+                                                        <a :href="doc.url" target="_blank" class="text-[11px] text-blue-600 hover:text-blue-700">Open</a>
+                                                    </div>
+                                                    <p class="mt-1 text-xs text-gray-600 whitespace-pre-wrap" x-text="doc.preview"></p>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+
                                     {{-- Photos section with checkboxes --}}
                                     <div x-show="prSubjectData[profile.id]?.photos?.length > 0" x-cloak class="px-5 py-3 border-b border-gray-100">
                                         <div class="flex items-center justify-between mb-2">
@@ -587,6 +602,17 @@
                                                                                     <span class="text-gray-800 break-words" x-text="typeof v === 'object' ? JSON.stringify(v) : v"></span>
                                                                                 </div>
                                                                             </template>
+                                                                            <div x-show="entry.google_docs?.length > 0" x-cloak class="pt-2 space-y-2">
+                                                                                <template x-for="doc in (entry.google_docs || [])" :key="doc.document_id || doc.url">
+                                                                                    <div class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                                                                                        <div class="flex items-center justify-between gap-3">
+                                                                                            <p class="text-xs font-semibold text-gray-900" x-text="doc.title || 'Google Doc'"></p>
+                                                                                            <a :href="doc.url" target="_blank" class="text-[11px] text-blue-600 hover:text-blue-700">Open</a>
+                                                                                        </div>
+                                                                                        <p class="mt-1 text-xs text-gray-600 whitespace-pre-wrap" x-text="doc.preview"></p>
+                                                                                    </div>
+                                                                                </template>
+                                                                            </div>
                                                                         </div>
                                                                     </template>
                                                                 </div>
@@ -622,7 +648,8 @@
                     </div>
 
                     <button @click="continuePrArticleStep3()" :disabled="selectedPrProfiles.length === 0"
-                        class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                        class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style="order: 3;">
                         Continue to AI & Spin &rarr;
                     </button>
                 </div>

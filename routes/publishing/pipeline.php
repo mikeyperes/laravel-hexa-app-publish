@@ -35,6 +35,7 @@ Route::post('/article/publish/press-release/notion/import-episode', [PressReleas
 Route::post('/article/publish/press-release/detect-fields', [PressReleaseWorkflowController::class, 'detectFields'])->name('publish.pipeline.press-release.detect-fields');
 Route::post('/article/publish/press-release/detect-photos', [PressReleaseWorkflowController::class, 'detectPhotos'])->name('publish.pipeline.press-release.detect-photos');
 Route::post('/article/publish/pr-article/import-context-url', [PrArticleWorkflowController::class, 'importContextUrl'])->name('publish.pipeline.pr-article.import-context-url');
+Route::post('/article/publish/pr-article/import-google-docs', [PrArticleWorkflowController::class, 'importGoogleDocsContext'])->name('publish.pipeline.pr-article.import-google-docs');
 
 // User search (shared AJAX endpoint for type-ahead)
 Route::get('/api/users/search', [PipelineController::class, 'searchUsers'])->name('publish.users.search');

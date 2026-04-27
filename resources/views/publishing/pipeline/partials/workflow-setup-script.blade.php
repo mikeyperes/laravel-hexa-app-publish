@@ -204,26 +204,40 @@
         },
 
         // ── Step 3: Website ───────────────────────────────
+        siteConnectionCacheKey(siteId = null) {
+            const normalized = String(siteId || '').trim();
+            return normalized ? ('publishSiteConnection:' + normalized) : null;
+        },
+
         selectSite() {
             if (this.selectedSiteId) {
                 this.selectedSite = this.sites.find(s => s.id == this.selectedSiteId) || this.prSourceSites.find(s => s.id == this.selectedSiteId) || null;
                 if (this.selectedSite) {
-                    // Use cached connection status from DB instead of live-testing
+                    const cacheKey = this.siteConnectionCacheKey(this.selectedSiteId);
+                    const restoredFromCache = cacheKey ? this.restoreSiteConnection(this.selectedSiteId, cacheKey) : false;
+
                     this.siteConn.log = [];
                     this.siteConn.testing = false;
                     // Always reset author to this site's default (or clear it)
                     this.publishAuthor = this.selectedSite.default_author || '';
                     this.publishAuthorSource = this.selectedSite.default_author ? 'profile' : '';
-                    if (this.selectedSite.status === 'connected') {
+                    if (restoredFromCache) {
+                        this.selectedSite.status = 'connected';
+                        if (this.siteConn.defaultAuthor && !this.publishAuthor) {
+                            this.publishAuthor = this.siteConn.defaultAuthor;
+                            this.publishAuthorSource = 'profile';
+                        }
+                        this.completeStep(2);
+                    } else if (this.selectedSite.status === 'connected') {
                         this.siteConn.status = true;
                         this.siteConn.message = 'Connected';
                         this.completeStep(2);
-                        if (!this.siteConn.authors.length) {
-                            this.loadSiteAuthors(this.selectedSiteId);
-                        }
                     } else {
                         this.siteConn.status = false;
                         this.siteConn.message = this.selectedSite.status === 'error' ? 'Connection error' : 'Not connected';
+                    }
+                    if (!this.siteConn.authors.length) {
+                        this.loadSiteAuthors(this.selectedSiteId, { cacheKey });
                     }
                     this._logActivity('site', this.siteConn.status === true ? 'success' : 'warning', 'Selected site ' + this.selectedSite.name, {
                         stage: 'selection',
@@ -253,8 +267,12 @@
         refreshSiteConnection() {
             if (!this.selectedSiteId) return;
             this.testSiteConnection(this.selectedSiteId, this.csrfToken, {
+                cacheKey: this.siteConnectionCacheKey(this.selectedSiteId),
                 onSuccess: (d) => {
                     if (d.default_author) { this.publishAuthor = d.default_author; this.publishAuthorSource = 'profile'; }
+                    if (this.selectedSite) {
+                        this.selectedSite.status = 'connected';
+                    }
                     this.completeStep(2);
                     this.autoSaveDraft();
                 },
@@ -791,6 +809,8 @@
                     fields,
                     driveUrl: this.looksLikeGoogleDriveFolderUrl(state.driveUrl || '') ? String(state.driveUrl) : '',
                     photos,
+                    googleDocs: [],
+                    loadingGoogleDocs: false,
                     loadingPhotos: false,
                     notionUrl: String(state.notionUrl || ''),
                     relations: relations.map((rel) => ({
@@ -817,6 +837,92 @@
             });
 
             return normalized;
+        },
+
+        extractGoogleDocUrlsFromValue(value) {
+            if (typeof value !== 'string' || !value) return [];
+            const matches = value.match(/https:\/\/docs\.google\.com\/document\/d\/[A-Za-z0-9_-]+[^\s)"]*/g) || [];
+            return [...new Set(matches.map((match) => String(match).trim()))];
+        },
+
+        collectGoogleDocUrlsFromRecord(record = {}) {
+            const urls = [];
+            const fields = Array.isArray(record.fields) ? record.fields : [];
+            for (const field of fields) {
+                urls.push(...this.extractGoogleDocUrlsFromValue(field?.display_value || ''));
+                urls.push(...this.extractGoogleDocUrlsFromValue(field?.value || ''));
+            }
+
+            const properties = record?.detail?.properties && typeof record.detail.properties === 'object'
+                ? record.detail.properties
+                : {};
+            Object.values(properties).forEach((value) => {
+                urls.push(...this.extractGoogleDocUrlsFromValue(typeof value === 'string' ? value : ''));
+            });
+
+            return [...new Set(urls)];
+        },
+
+        async fetchPrGoogleDocsContext(urls = []) {
+            const uniqueUrls = [...new Set((Array.isArray(urls) ? urls : []).map((url) => String(url || '').trim()).filter(Boolean))].slice(0, 8);
+            if (uniqueUrls.length === 0 || !this.draftId) {
+                return { success: true, documents: [] };
+            }
+
+            const resp = await fetch('{{ route("publish.pipeline.pr-article.import-google-docs") }}', {
+                method: 'POST',
+                headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({
+                    draft_id: this.draftId,
+                    urls: uniqueUrls,
+                }),
+            });
+            const data = await resp.json();
+
+            if (!resp.ok || !data.success) {
+                throw new Error(data.message || 'Failed to read Google Docs context.');
+            }
+
+            return data;
+        },
+
+        async loadPrGoogleDocsForProfile(profileId) {
+            const pd = this.prSubjectData[profileId];
+            if (!pd || pd.loadingGoogleDocs) return;
+            const urls = this.collectGoogleDocUrlsFromRecord({ fields: pd.fields });
+            if (!urls.length) {
+                pd.googleDocs = [];
+                return;
+            }
+
+            pd.loadingGoogleDocs = true;
+            try {
+                const data = await this.fetchPrGoogleDocsContext(urls);
+                pd.googleDocs = Array.isArray(data.documents) ? data.documents : [];
+            } catch (e) {
+                pd.googleDocs = [];
+            } finally {
+                pd.loadingGoogleDocs = false;
+            }
+        },
+
+        async loadPrGoogleDocsForEntry(entry) {
+            if (!entry || entry.loadingGoogleDocs) return;
+            const urls = this.collectGoogleDocUrlsFromRecord({ detail: entry.detail || {} });
+            if (!urls.length) {
+                entry.google_docs = [];
+                return;
+            }
+
+            entry.loadingGoogleDocs = true;
+            try {
+                const data = await this.fetchPrGoogleDocsContext(urls);
+                entry.google_docs = Array.isArray(data.documents) ? data.documents : [];
+            } catch (e) {
+                entry.google_docs = [];
+            } finally {
+                entry.loadingGoogleDocs = false;
+            }
         },
 
         async searchPrProfiles() {
@@ -873,6 +979,8 @@
                 fields: Array.isArray(existing.fields) ? existing.fields : [],
                 driveUrl: this.looksLikeGoogleDriveFolderUrl(existing.driveUrl || '') ? String(existing.driveUrl) : '',
                 photos: this.mergePrPhotoCollections([], existing.photos || []),
+                googleDocs: Array.isArray(existing.googleDocs) ? existing.googleDocs : [],
+                loadingGoogleDocs: false,
                 loadingPhotos: false,
                 notionUrl: String(existing.notionUrl || ''),
                 relations: Array.isArray(existing.relations) ? existing.relations : [],
@@ -919,6 +1027,7 @@
                         if (pd.driveUrl) {
                             this.loadProfilePhotos(normalizedProfile);
                         }
+                        await this.loadPrGoogleDocsForProfile(normalizedProfile.id);
                     }
                 } catch (e) {}
             }
@@ -945,7 +1054,7 @@
                 });
                 const data = await resp.json();
                 if (data.success) {
-                    rel.entries = (data.entries || []).map(e => ({ ...e, open: false, loading: false, detail: null }));
+                    rel.entries = (data.entries || []).map(e => ({ ...e, open: false, loading: false, loadingGoogleDocs: false, detail: null, google_docs: [] }));
                     rel.count = data.total || rel.entries.length;
                     rel.loaded = true;
                 }
@@ -970,7 +1079,10 @@
                     body: JSON.stringify({ fresh: false }),
                 });
                 const data = await resp.json();
-                if (data.success) entry.detail = data.page || null;
+                if (data.success) {
+                    entry.detail = data.page || null;
+                    await this.loadPrGoogleDocsForEntry(entry);
+                }
             } catch (e) {}
             entry.loading = false;
         },
@@ -991,6 +1103,15 @@
             if (!pd) return;
             if (!pd.selectedEntries) pd.selectedEntries = {};
             pd.selectedEntries[entryId] = !pd.selectedEntries[entryId];
+            if (pd.selectedEntries[entryId]) {
+                for (const rel of (pd.relations || [])) {
+                    const entry = (rel.entries || []).find((candidate) => String(candidate.id) === String(entryId));
+                    if (entry && !entry.detail && !entry.loading) {
+                        this.loadPrEntryDetail(profileId, rel.slug, entryId);
+                        break;
+                    }
+                }
+            }
             this.savePipelineState();
         },
 
@@ -1113,6 +1234,33 @@
             this.editorContent = html;
             this.spunContent = html;
             this.hydrateResolvedPhotoPlaceholders('pr_article_placeholder_injected');
+        },
+
+        async ensurePrSubjectContextReady() {
+            for (const profile of this.selectedPrProfiles || []) {
+                const pd = this.prSubjectData[profile.id];
+                if (!pd) continue;
+
+                if (!pd.loaded && !pd.loading) {
+                    await this.loadProfileData(profile, { preserveSelections: true, skipSave: true });
+                }
+
+                if (!Array.isArray(pd.googleDocs) || pd.googleDocs.length === 0) {
+                    await this.loadPrGoogleDocsForProfile(profile.id);
+                }
+
+                const selectedIds = Object.keys(pd.selectedEntries || {}).filter((id) => pd.selectedEntries[id]);
+                for (const rel of (pd.relations || [])) {
+                    for (const entry of (rel.entries || [])) {
+                        if (!selectedIds.includes(String(entry.id))) continue;
+                        if (!entry.detail && !entry.loading) {
+                            await this.loadPrEntryDetail(profile.id, rel.slug, entry.id);
+                        } else if (entry.detail && (!Array.isArray(entry.google_docs) || entry.google_docs.length === 0) && !entry.loadingGoogleDocs) {
+                            await this.loadPrGoogleDocsForEntry(entry);
+                        }
+                    }
+                }
+            }
         },
 
         hydratePrArticleSelectedMedia() {
@@ -1283,6 +1431,21 @@
                     section += '\n';
                 }
 
+                if (Array.isArray(pd.googleDocs) && pd.googleDocs.length > 0) {
+                    section += 'GOOGLE DOC CONTEXT (PROFILE-LEVEL):\n';
+                    for (const doc of pd.googleDocs) {
+                        section += '- ' + (doc.title || 'Google Doc') + '\n';
+                        section += '  URL: ' + (doc.url || '') + '\n';
+                        if (doc.preview) {
+                            section += '  Preview: ' + doc.preview.substring(0, 600) + '\n';
+                        }
+                        if (doc.text) {
+                            section += '  Extracted Text: ' + doc.text.substring(0, 2500) + '\n';
+                        }
+                    }
+                    section += '\n';
+                }
+
                 const selectedIds = Object.keys(pd.selectedEntries || {}).filter(id => pd.selectedEntries[id]);
                 if (selectedIds.length > 0 && pd.relations?.length) {
                     for (const rel of pd.relations) {
@@ -1300,6 +1463,20 @@
                                     if (!value) continue;
                                     fieldCount += 1;
                                     section += '    ' + k + ': ' + value.substring(0, 500) + '\n';
+                                }
+                            }
+                            if (Array.isArray(entry.google_docs) && entry.google_docs.length > 0) {
+                                for (const doc of entry.google_docs) {
+                                    section += '    Google Doc: ' + (doc.title || 'Google Doc') + '\n';
+                                    if (doc.url) {
+                                        section += '      URL: ' + doc.url + '\n';
+                                    }
+                                    if (doc.preview) {
+                                        section += '      Preview: ' + doc.preview.substring(0, 600) + '\n';
+                                    }
+                                    if (doc.text) {
+                                        section += '      Extracted Text: ' + doc.text.substring(0, 2500) + '\n';
+                                    }
                                 }
                             }
                         }
@@ -1369,6 +1546,7 @@
             }
 
             this.syncPrArticleForCurrentArticleType();
+            await this.ensurePrSubjectContextReady();
 
             if (this.currentArticleType === 'expert-article'
                 && this.prArticle.expert_source_mode === 'url'

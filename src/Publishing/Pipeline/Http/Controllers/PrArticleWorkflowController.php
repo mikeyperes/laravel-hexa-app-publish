@@ -5,13 +5,16 @@ namespace hexa_app_publish\Publishing\Pipeline\Http\Controllers;
 use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_core\Http\Controllers\Controller;
+use hexa_package_google_docs\Services\GoogleDocsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class PrArticleWorkflowController extends Controller
 {
     public function __construct(
-        private SourceExtractionService $sourceExtraction
+        private SourceExtractionService $sourceExtraction,
+        private GoogleDocsService $googleDocs,
     ) {}
 
     public function importContextUrl(Request $request): JsonResponse
@@ -50,6 +53,59 @@ class PrArticleWorkflowController extends Controller
                 'word_count' => (int) ($result['word_count'] ?? 0),
                 'image_url' => trim((string) ($result['image'] ?? '')),
             ],
+        ]);
+    }
+
+    public function importGoogleDocsContext(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'draft_id' => 'required|integer|exists:publish_articles,id',
+            'urls' => 'required|array|min:1|max:10',
+            'urls.*' => 'required|string|min:20|max:4000',
+        ]);
+
+        $this->resolveDraft((int) $validated['draft_id']);
+
+        $documents = [];
+        $failures = [];
+
+        foreach (collect($validated['urls'])->map(fn ($url) => trim((string) $url))->filter()->unique()->take(8) as $url) {
+            $result = $this->googleDocs->fetchText($url);
+            if (!($result['success'] ?? false)) {
+                $failures[] = [
+                    'url' => $url,
+                    'message' => $result['message'] ?? 'Failed to read Google Doc.',
+                ];
+                continue;
+            }
+
+            $plainText = trim((string) ($result['plain_text'] ?? ''));
+            if ($plainText === '') {
+                $failures[] = [
+                    'url' => $url,
+                    'message' => 'Google Doc returned empty content.',
+                ];
+                continue;
+            }
+
+            $documents[] = [
+                'document_id' => (string) ($result['document_id'] ?? ''),
+                'url' => (string) ($result['normalized_url'] ?? $url),
+                'export_url' => (string) ($result['export_url'] ?? ''),
+                'title' => trim((string) ($result['title'] ?? 'Untitled Google Doc')),
+                'preview' => trim((string) ($result['preview'] ?? '')),
+                'text' => Str::limit($plainText, 6000, ''),
+                'word_count' => (int) preg_match_all('/\S+/u', $plainText),
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $documents === []
+                ? 'No readable Google Docs were found in the selected subject context.'
+                : count($documents) . ' Google Doc(s) imported for subject context.',
+            'documents' => array_values($documents),
+            'failures' => $failures,
         ]);
     }
 
