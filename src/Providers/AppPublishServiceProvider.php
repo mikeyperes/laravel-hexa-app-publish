@@ -15,7 +15,10 @@ use hexa_core\CronManager\Services\CronManagerService;
 use hexa_core\Forms\Services\FormRegistryService;
 use hexa_core\ListRegistry\Services\ListService;
 use hexa_core\Services\PackageRegistryService;
+use hexa_core\UserRoles\Models\Role;
+use hexa_app_publish\Publishing\Access\Services\PublishAccessService;
 use hexa_app_publish\Publishing\Accounts\Services\UserProfileDataService;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 
 class AppPublishServiceProvider extends ServiceProvider
@@ -47,11 +50,15 @@ class AppPublishServiceProvider extends ServiceProvider
 
         $this->registerPermissions();
 
+        $this->syncNonAdminSiteRolePatterns();
+
         $this->registerListCategories();
 
         $this->registerForms();
 
         $this->registerCrons();
+
+        $this->registerNonAdminWorkspaceGuard();
 
         // Register publish commands for both CLI and web-triggered Artisan::call() cron runs.
         $this->commands([RunCampaignsCommand::class, CleanupOrphanUploadsCommand::class]);
@@ -84,11 +91,10 @@ class AppPublishServiceProvider extends ServiceProvider
             // HWS-SIDEBAR-MENU-3L-BEGIN
             $registry->registerDomainGroup('Publishing', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', 10);
             $registry->registerDomainGroup('Discovery', 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z', 20);
-            $registry->registerSectionGroup('Article', 'Publishing', '', 10);
+            $registry->registerSectionGroup('Publish', 'Publishing', '', 10);
             $registry->registerSectionGroup('Campaigns', 'Publishing', '', 10);
             $registry->registerSectionGroup('Content', 'Discovery', '', 20);
             $registry->registerSectionGroup('Prompts', 'Publishing', '', 10);
-            $registry->registerSectionGroup('Publishing', 'Publishing', '', 10);
             $registry->registerSectionGroup('Schedule', 'Publishing', '', 10);
             $registry->registerSectionGroup('Search', 'Discovery', '', 20);
             // HWS-SIDEBAR-MENU-3L-END
@@ -99,14 +105,14 @@ class AppPublishServiceProvider extends ServiceProvider
             $registry->registerSidebarLink('publish.search.articles', 'Articles', 'M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z', 'Search', 'app-publish', 11);
 
             // Article (12)
-            $registry->registerSidebarLink('publish.pipeline', 'Publish Article', 'M13 5l7 7-7 7M5 5l7 7-7 7', 'Article', 'app-publish', 12);
-            $registry->registerSidebarLink('publish.editor', 'Editor', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', 'Article', 'app-publish', 13);
-            $registry->registerSidebarLink('publish.drafts.index', 'Drafts', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', 'Article', 'app-publish', 14);
-            $registry->registerSidebarLink('publish.bookmarks.index', 'Bookmarked Articles', 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z', 'Article', 'app-publish', 14);
-            $registry->registerSidebarLink('publish.templates.index', 'Article Presets', 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z', 'Article', 'app-publish', 15);
+            $registry->registerSidebarLink('publish.pipeline', 'Publish Article', 'M13 5l7 7-7 7M5 5l7 7-7 7', 'Publish', 'app-publish', 12);
+            $registry->registerSidebarLink('publish.editor', 'Editor', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', 'Publish', 'app-publish', 13);
+            $registry->registerSidebarLink('publish.drafts.index', 'Drafts', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', 'Publish', 'app-publish', 14);
+            $registry->registerSidebarLink('publish.bookmarks.index', 'Bookmarked Articles', 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z', 'Publish', 'app-publish', 14);
+            $registry->registerSidebarLink('publish.templates.index', 'Article Presets', 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z', 'Publish', 'app-publish', 15);
             $registry->registerSidebarLink('prompt-center.index', 'Prompt Center', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', 'Prompts', 'app-publish', 15);
             $registry->registerSidebarLink('prompt-center.create', 'New Prompt', 'M12 4v16m8-8H4', 'Prompts', 'app-publish', 15);
-            $registry->registerSidebarLink('publish.smart-edits.index', 'AI Smart Edit Templates', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', 'Article', 'app-publish', 15);
+            $registry->registerSidebarLink('publish.smart-edits.index', 'AI Smart Edit Templates', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', 'Publish', 'app-publish', 15);
 
             // Content (16)
             $registry->registerSidebarLink('publish.sites.index', 'Sites', 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9', 'Content', 'app-publish', 17);
@@ -118,10 +124,10 @@ class AppPublishServiceProvider extends ServiceProvider
             $registry->registerSidebarLink('publish.ai-activity.index', 'AI Activity', 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z', 'Content', 'app-publish', 19);
             $registry->registerSidebarLink('publish.scrape-activity', 'Scrape Activity', 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', 'Content', 'app-publish', 19);
 
-            // Publishing (20 — directly after Content)
-            $registry->registerSidebarLink('publish.prompts.index', 'Prompts', 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z', 'Publishing', 'app-publish', 20);
-            $registry->registerSidebarLink('publish.presets.index', 'WordPress Templates', 'M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4', 'Publishing', 'app-publish', 21);
-            $registry->registerSidebarLink('publish.settings.master', 'Settings', 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z', 'Publishing', 'app-publish', 22);
+            // Publish (20 — directly after Content)
+            $registry->registerSidebarLink('publish.prompts.index', 'Prompts', 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z', 'Publish', 'app-publish', 20);
+            $registry->registerSidebarLink('publish.presets.index', 'WordPress Templates', 'M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4', 'Publish', 'app-publish', 21);
+            $registry->registerSidebarLink('publish.settings.master', 'Settings', 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z', 'Publish', 'app-publish', 22);
 
             // Schedule (23)
             $registry->registerSidebarLink('publish.schedule.index', 'Calendar', 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', 'Schedule', 'app-publish', 23);
@@ -188,6 +194,31 @@ class AppPublishServiceProvider extends ServiceProvider
         ]);
     }
 
+    private function syncNonAdminSiteRolePatterns(): void
+    {
+        try {
+            if (!Schema::hasTable('roles')) {
+                return;
+            }
+
+            $siteRoutes = ['publish.sites.index', 'publish.sites.show'];
+
+            foreach (['user', 'employee', 'customer'] as $slug) {
+                $role = Role::where('slug', $slug)->first();
+                if (!$role) {
+                    continue;
+                }
+
+                $patterns = array_values(array_unique(array_merge($role->route_patterns ?? [], $siteRoutes)));
+                if (($role->route_patterns ?? []) !== $patterns) {
+                    $role->update(['route_patterns' => $patterns]);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Keep publish boot resilient when roles are not available.
+        }
+    }
+
     private function registerForms(): void
     {
         if (!class_exists(FormRegistryService::class)) {
@@ -222,6 +253,24 @@ class AppPublishServiceProvider extends ServiceProvider
             (string) config('hws-publish.campaign_cron_schedule', '* * * * *'),
             'Process due publishing campaigns and generate scheduled news articles.'
         );
+    }
+
+    private function registerNonAdminWorkspaceGuard(): void
+    {
+        $this->app['router']->pushMiddlewareToGroup('web', \hexa_app_publish\Http\Middleware\EnforceNonAdminWorkspaceScope::class);
+
+        view()->composer('layouts.app', function ($view) {
+            $user = auth()->user();
+            if (!$user) {
+                return;
+            }
+
+            if (app(PublishAccessService::class)->isAdmin($user)) {
+                return;
+            }
+
+            $view->getFactory()->startPush('scripts', view('app-publish::partials.non-admin-menu-guard')->render());
+        });
     }
 
     /**

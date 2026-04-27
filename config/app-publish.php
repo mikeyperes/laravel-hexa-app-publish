@@ -2,7 +2,7 @@
 
 return [
 
-    'version' => '18.16.6',
+    'version' => '18.16.7',
 
     /*
     |--------------------------------------------------------------------------
@@ -135,8 +135,6 @@ return [
     |
     */
     'campaign_supported_article_types' => [
-        'news-report',
-        'local-news',
         'editorial',
     ],
 

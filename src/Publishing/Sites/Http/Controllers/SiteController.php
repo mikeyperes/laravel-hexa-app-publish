@@ -4,6 +4,7 @@ namespace hexa_app_publish\Publishing\Sites\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
 use hexa_core\Services\GenericService;
+use hexa_app_publish\Publishing\Access\Services\PublishAccessService;
 use hexa_app_publish\Publishing\Accounts\Models\PublishAccount;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_app_publish\Services\PublishService;
@@ -21,6 +22,7 @@ class SiteController extends Controller
     protected PublishService $publishService;
     protected WordPressService $wp;
     protected WpToolkitService $wptoolkit;
+    protected PublishAccessService $access;
 
     /**
      * @param GenericService   $generic
@@ -28,12 +30,13 @@ class SiteController extends Controller
      * @param WordPressService $wp
      * @param WpToolkitService $wptoolkit
      */
-    public function __construct(GenericService $generic, PublishService $publishService, WordPressService $wp, WpToolkitService $wptoolkit)
+    public function __construct(GenericService $generic, PublishService $publishService, WordPressService $wp, WpToolkitService $wptoolkit, PublishAccessService $access)
     {
         $this->generic = $generic;
         $this->publishService = $publishService;
         $this->wp = $wp;
         $this->wptoolkit = $wptoolkit;
+        $this->access = $access;
     }
 
     /**
@@ -44,7 +47,14 @@ class SiteController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = PublishSite::with(['account', 'campaigns', 'articles']);
+        $user = $request->user();
+        $canManage = $this->access->isAdmin($user);
+
+        $query = $this->access->siteQuery($user)->with(['account']);
+
+        if ($canManage) {
+            $query->with(['campaigns', 'articles']);
+        }
 
         if ($request->filled('account_id')) {
             $query->where('publish_account_id', $request->input('account_id'));
@@ -63,11 +73,12 @@ class SiteController extends Controller
         }
 
         $sites = $query->orderByDesc('created_at')->get();
-        $accounts = PublishAccount::orderBy('name')->get();
+        $accounts = $this->access->accountQuery($user)->orderBy('name')->get();
 
         return view('app-publish::publishing.sites.index', [
             'sites' => $sites,
             'accounts' => $accounts,
+            'canManage' => $canManage,
         ]);
     }
 
@@ -167,10 +178,20 @@ class SiteController extends Controller
      */
     public function show(int $id): View
     {
-        $site = PublishSite::with(['account', 'campaigns', 'articles'])->findOrFail($id);
+        $user = auth()->user();
+        $canManage = $this->access->isAdmin($user);
+
+        $query = $this->access->siteQuery($user)->with(['account']);
+
+        if ($canManage) {
+            $query->with(['campaigns', 'articles']);
+        }
+
+        $site = $query->findOrFail($id);
 
         return view('app-publish::publishing.sites.show', [
             'site' => $site,
+            'canManage' => $canManage,
         ]);
     }
 

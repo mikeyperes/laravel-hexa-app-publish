@@ -139,13 +139,14 @@ class CampaignController extends Controller
                 'timezone' => auth()->user()?->timezone ?: config('hws.timezone', 'America/New_York'),
                 'run_at_time' => '09:00',
                 'drip_interval_minutes' => 60,
+                'article_type' => 'editorial',
                 'created_by' => auth()->id(),
             ]);
         }
 
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
         $campaignPresets = \hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset::orderBy('name')->get();
-        $aiTemplates = PublishTemplate::orderBy('name')->get();
+        $aiTemplates = $this->editorialCampaignTemplates()->orderBy('name')->get();
 
         return view('app-publish::publishing.campaigns.create', [
             'sites' => $sites,
@@ -170,7 +171,7 @@ class CampaignController extends Controller
         $validated = $request->validate([
             'user_id' => 'nullable|integer|exists:users,id',
             'publish_site_id' => 'required|exists:publish_sites,id',
-            'publish_template_id' => 'nullable|exists:publish_templates,id',
+            'publish_template_id' => ['nullable', Rule::exists('publish_templates', 'id')->where(fn ($query) => $query->where('article_type', 'editorial'))],
             'campaign_preset_id' => 'nullable|integer',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -197,6 +198,7 @@ class CampaignController extends Controller
 
         $validated['campaign_id'] = PublishCampaign::generateCampaignId();
         $validated['status'] = 'draft';
+        $validated['article_type'] = 'editorial';
         $validated['created_by'] = auth()->id();
         $validated['auto_publish'] = ($validated['delivery_mode'] ?? 'draft-local') === 'auto-publish';
         $validated['delivery_mode'] = $this->modeResolver->normalizeDeliveryMode($validated['delivery_mode'] ?? 'draft-local');
@@ -258,7 +260,7 @@ class CampaignController extends Controller
 
         $sites = PublishSite::where('status', 'connected')->orderBy('name')->get();
         $campaignPresets = \hexa_app_publish\Publishing\Campaigns\Models\CampaignPreset::with('user')->orderBy('name')->get();
-        $aiTemplates = PublishTemplate::with('account')->orderBy('name')->get();
+        $aiTemplates = $this->editorialCampaignTemplates()->with('account')->orderBy('name')->get();
         $timezone = $campaign->timezone ?: config('app.timezone', 'America/New_York');
         $cronJobs = \hexa_core\CronManager\Models\CronJob::query()
             ->where('package_name', 'app-publish')
@@ -895,7 +897,7 @@ class CampaignController extends Controller
         $validated = $request->validate([
             'user_id' => 'nullable|integer',
             'publish_site_id' => 'nullable|integer',
-            'publish_template_id' => 'nullable|integer',
+            'publish_template_id' => ['nullable', Rule::exists('publish_templates', 'id')->where(fn ($query) => $query->where('article_type', 'editorial'))],
             'campaign_preset_id' => 'nullable|integer',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -932,6 +934,8 @@ class CampaignController extends Controller
             $validated['delivery_mode'] = $this->modeResolver->normalizeDeliveryMode($validated['delivery_mode']);
             $validated['auto_publish'] = $validated['delivery_mode'] === 'auto-publish';
         }
+
+        $validated['article_type'] = 'editorial';
 
         $validated['timezone'] = $this->resolveCampaignTimezone(
             $validated['user_id'] ?? $campaign->user_id,
@@ -1136,8 +1140,14 @@ class CampaignController extends Controller
         }
 
         $dehydrated = $runtime->dehydrate(\hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm::FORM_KEY, $dirty, $context);
+        unset($dehydrated['article_type']);
 
         return !empty($dehydrated) ? $dehydrated : null;
+    }
+
+    private function editorialCampaignTemplates()
+    {
+        return PublishTemplate::query()->where('article_type', 'editorial');
     }
 
     private function valuesDiffer(mixed $left, mixed $right): bool

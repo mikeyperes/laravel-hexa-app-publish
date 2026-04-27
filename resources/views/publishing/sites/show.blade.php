@@ -4,16 +4,27 @@
 @section('header', $site->name)
 
 @section('content')
-<div class="space-y-6" x-data="siteActions()">
+<div class="space-y-6" @if($canManage) x-data="siteActions()" @endif>
 
-    {{-- Site header --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
-                <p class="text-sm text-gray-500 mb-1">Account: <a href="{{ route('publish.accounts.show', $site->account->id) }}" class="text-blue-600 hover:text-blue-800">{{ $site->account->name }}</a></p>
+                @if($site->account)
+                    <p class="text-sm text-gray-500 mb-1">
+                        Account:
+                        @if($canManage)
+                            <a href="{{ route('publish.accounts.show', $site->account->id) }}" class="text-blue-600 hover:text-blue-800">{{ $site->account->name }}</a>
+                        @else
+                            <span class="text-gray-700">{{ $site->account->name }}</span>
+                        @endif
+                    </p>
+                @endif
                 <h2 class="text-xl font-semibold text-gray-800 break-words">{{ $site->name }}</h2>
                 <p class="text-sm break-words mt-1"><a href="{{ $site->url }}" target="_blank" class="text-blue-600 hover:text-blue-800">{{ $site->url }} <svg class="inline w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a></p>
                 <p class="text-xs text-gray-400 mt-2">Connection: {{ $site->connection_type === 'wptoolkit' ? 'WP Toolkit' : 'REST API' }}</p>
+                @if($site->default_author)
+                    <p class="text-xs text-gray-400">Default author: {{ $site->default_author }}</p>
+                @endif
                 @if($site->last_connected_at)
                     <p class="text-xs text-gray-400">Last connected: {{ $site->last_connected_at->diffForHumans() }}</p>
                 @endif
@@ -26,22 +37,26 @@
                 @else
                     <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Disconnected</span>
                 @endif
+                @if($canManage)
                 <button @click="testConnection()" :disabled="testing" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-60 inline-flex items-center gap-2">
                     <svg x-show="testing" x-cloak class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
                     <span x-text="testing ? 'Testing...' : 'Test Connection'"></span>
                 </button>
                 <a href="{{ route('publish.sites.edit', $site->id) }}" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Edit</a>
+                @endif
             </div>
         </div>
         @if($site->last_error)
             <div class="mt-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2 break-words">{{ $site->last_error }}</div>
         @endif
+        @if($canManage)
         <div x-show="testResult" x-cloak class="mt-3 rounded-lg px-4 py-2 text-sm" :class="testSuccess ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'">
             <span x-text="testResult"></span>
         </div>
+        @endif
     </div>
 
-    {{-- Stats --}}
+    @if($canManage)
     <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
             <p class="text-2xl font-bold text-gray-800">{{ $site->campaigns->count() }}</p>
@@ -57,7 +72,6 @@
         </div>
     </div>
 
-    {{-- Campaigns on this site --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
         <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
             <h3 class="font-semibold text-gray-800">Campaigns</h3>
@@ -93,7 +107,6 @@
         @endif
     </div>
 
-    {{-- Recent articles --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
         <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
             <h3 class="font-semibold text-gray-800">Recent Articles</h3>
@@ -118,9 +131,39 @@
             </div>
         @endif
     </div>
+    @else
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 class="font-semibold text-gray-800 mb-4">Assigned Site Details</h3>
+        <dl class="grid gap-4 md:grid-cols-2 text-sm">
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Connection Type</dt>
+                <dd class="text-gray-800">{{ $site->connection_type === 'wptoolkit' ? 'WP Toolkit' : 'WordPress REST API' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Status</dt>
+                <dd class="text-gray-800">{{ ucfirst($site->status) }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Default Author</dt>
+                <dd class="text-gray-800">{{ $site->default_author ?: 'WordPress default author' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Last Connected</dt>
+                <dd class="text-gray-800">{{ $site->last_connected_at ? $site->last_connected_at->format('M j, Y g:i A T') : 'Not recorded' }}</dd>
+            </div>
+            @if($site->notes)
+            <div class="md:col-span-2">
+                <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Notes</dt>
+                <dd class="text-gray-800 whitespace-pre-wrap">{{ $site->notes }}</dd>
+            </div>
+            @endif
+        </dl>
+    </div>
+    @endif
 </div>
 @endsection
 
+@if($canManage)
 @push('scripts')
 <script>
 function siteActions() {
@@ -144,3 +187,4 @@ function siteActions() {
 }
 </script>
 @endpush
+@endif
