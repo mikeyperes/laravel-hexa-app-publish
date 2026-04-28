@@ -731,11 +731,30 @@
             return {
                 id: raw.id ?? null,
                 name: raw.name || '',
+                type: raw.type || '—',
+                type_slug: raw.type_slug || '',
                 description: raw.description || '',
+                photo_url: raw.photo_url || '',
                 external_source: raw.external_source || '',
                 external_id: raw.external_id || '',
+                context: raw.context || '',
                 fields: raw.fields && typeof raw.fields === 'object' ? raw.fields : {},
             };
+        },
+
+        prPhotoUrlIsBlocked(url = '') {
+            const raw = String(url || '').trim();
+            if (!raw) {
+                return true;
+            }
+
+            try {
+                const parsed = new URL(raw);
+                const host = String(parsed.hostname || '').toLowerCase();
+                return host === 'media.licdn.com' || host.endsWith('.licdn.com');
+            } catch (e) {
+                return false;
+            }
         },
 
         normalizePrSelectionMap(selection = {}) {
@@ -756,6 +775,10 @@
             }
 
             if (this.looksLikeGoogleDriveFolderUrl(url)) {
+                return null;
+            }
+
+            if (this.prPhotoUrlIsBlocked(url)) {
                 return null;
             }
 

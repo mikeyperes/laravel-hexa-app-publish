@@ -463,7 +463,7 @@
                                         </div>
                                         <div class="min-w-0 flex-1">
                                             <p class="text-sm font-medium text-gray-900 truncate" x-text="profile.name"></p>
-                                            <p class="text-xs text-gray-400" x-text="profile.type + (profile.description ? ' — ' + profile.description.substring(0, 60) : '')"></p>
+                                            <p class="text-xs text-gray-400" x-text="(profile.type || '—') + (profile.description ? ' — ' + profile.description.substring(0, 60) : '')"></p>
                                         </div>
                                         <span x-show="selectedPrProfiles.some(p => p.id === profile.id)" x-cloak class="text-xs text-gray-400">Added</span>
                                     </button>
@@ -484,7 +484,7 @@
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <p class="text-base font-bold text-gray-900" x-text="profile.name"></p>
-                                            <p class="text-xs text-gray-500" x-text="profile.type + (profile.description ? ' — ' + profile.description.substring(0, 80) : '')"></p>
+                                            <p class="text-xs text-gray-500" x-text="(profile.type || '—') + (profile.description ? ' — ' + profile.description.substring(0, 80) : '')"></p>
                                         </div>
                                         <div class="flex items-center gap-2 flex-shrink-0">
                                             <button @click="loadProfileData(profile)" :disabled="prSubjectData[profile.id]?.loading" class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50">
@@ -554,7 +554,10 @@
                                                 <label class="relative rounded-lg overflow-hidden border-2 aspect-square bg-gray-100 cursor-pointer transition-all"
                                                     :class="prSubjectData[profile.id]?.selectedPhotos?.[photo.id] ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-gray-200 hover:border-gray-300'">
                                                     <input type="checkbox" class="sr-only" @change="togglePrPhotoSelect(profile.id, photo.id)" :checked="prSubjectData[profile.id]?.selectedPhotos?.[photo.id]">
-                                                    <img :src="photo.thumbnailLink || photo.webContentLink" :alt="photo.name" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display='none'">
+                                                    <div class="absolute inset-0 hidden items-center justify-center px-3 text-center text-[11px] font-medium text-gray-500 bg-gray-50 js-pr-photo-fallback">
+                                                        Image blocked by source
+                                                    </div>
+                                                    <img :src="photo.thumbnailLink || photo.webContentLink" :alt="photo.name" class="w-full h-full object-cover" loading="lazy" onerror="this.classList.add('hidden'); this.parentElement.querySelector('.js-pr-photo-fallback')?.classList.remove('hidden'); this.parentElement.querySelector('.js-pr-photo-fallback')?.classList.add('flex');">
                                                     <div x-show="prSubjectData[profile.id]?.selectedPhotos?.[photo.id]" class="absolute top-1 right-1 w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center">
                                                         <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
                                                     </div>

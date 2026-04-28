@@ -120,9 +120,13 @@ class PipelineStateService
             return [
                 'id' => is_numeric($id) ? (int) $id : (string) $id,
                 'name' => trim((string) ($profile['name'] ?? '')),
+                'type' => trim((string) ($profile['type'] ?? '—')),
+                'type_slug' => trim((string) ($profile['type_slug'] ?? '')),
                 'description' => trim((string) ($profile['description'] ?? '')),
+                'photo_url' => trim((string) ($profile['photo_url'] ?? '')),
                 'external_source' => trim((string) ($profile['external_source'] ?? '')),
                 'external_id' => trim((string) ($profile['external_id'] ?? '')),
+                'context' => (string) ($profile['context'] ?? ''),
                 'fields' => is_array($profile['fields'] ?? null) ? $profile['fields'] : [],
             ];
         }, $profiles)));
