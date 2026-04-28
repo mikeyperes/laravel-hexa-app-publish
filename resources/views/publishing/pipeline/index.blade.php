@@ -463,7 +463,7 @@
                                         </div>
                                         <div class="min-w-0 flex-1">
                                             <p class="text-sm font-medium text-gray-900 truncate" x-text="profile.name"></p>
-                                            <p class="text-xs text-gray-400" x-text="(profile.type || '—') + (profile.description ? ' — ' + profile.description.substring(0, 60) : '')"></p>
+                                            <p x-show="(profile.type && profile.type !== '—') || profile.description" x-cloak class="text-xs text-gray-400" x-text="[profile.type && profile.type !== '—' ? profile.type : '', profile.description ? profile.description.substring(0, 60) : ''].filter(Boolean).join(' — ')"></p>
                                         </div>
                                         <span x-show="selectedPrProfiles.some(p => p.id === profile.id)" x-cloak class="text-xs text-gray-400">Added</span>
                                     </button>
@@ -484,7 +484,7 @@
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <p class="text-base font-bold text-gray-900" x-text="profile.name"></p>
-                                            <p class="text-xs text-gray-500" x-text="(profile.type || '—') + (profile.description ? ' — ' + profile.description.substring(0, 80) : '')"></p>
+                                            <p x-show="(profile.type && profile.type !== '—') || profile.description" x-cloak class="text-xs text-gray-500" x-text="[profile.type && profile.type !== '—' ? profile.type : '', profile.description ? profile.description.substring(0, 80) : ''].filter(Boolean).join(' — ')"></p>
                                         </div>
                                         <div class="flex items-center gap-2 flex-shrink-0">
                                             <button @click="loadProfileData(profile)" :disabled="prSubjectData[profile.id]?.loading" class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50">
