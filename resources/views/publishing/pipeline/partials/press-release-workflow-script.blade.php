@@ -17,9 +17,12 @@ function pressReleaseWorkflowMixin(config) {
         pressReleaseFetchingDrivePhotos: false,
         pressReleaseEpisodeSearching: false,
         pressReleaseEpisodeResults: [],
+        pressReleaseEpisodeDropdownOpen: false,
+        pressReleaseEpisodeNoResults: false,
         pressReleaseImportingEpisodeId: null,
         _serverPipelineStateTimer: null,
         _savingPipelineStateServer: false,
+        _pressReleaseEpisodeSearchToken: 0,
 
         normalizePressReleaseState(state = {}) {
             const defaults = clone(this.pressReleaseDefaultState || {});
@@ -224,8 +227,21 @@ function pressReleaseWorkflowMixin(config) {
             this.savePipelineState();
         },
 
-        async searchPressReleaseNotionEpisodes(loadRecent = false) {
+        async searchPressReleaseNotionEpisodes(loadRecent = false, options = {}) {
+            const notifyEmpty = options.notifyEmpty === true;
+            const query = loadRecent ? '' : String(this.pressRelease.notion_episode_query || '').trim();
+
+            if (!loadRecent && !query) {
+                this.pressReleaseEpisodeResults = [];
+                this.pressReleaseEpisodeNoResults = false;
+                this.pressReleaseEpisodeDropdownOpen = false;
+                return;
+            }
+
+            const token = ++this._pressReleaseEpisodeSearchToken;
             this.pressReleaseEpisodeSearching = true;
+            this.pressReleaseEpisodeDropdownOpen = true;
+            this.pressReleaseEpisodeNoResults = false;
 
             try {
                 const response = await fetch('{{ route("publish.pipeline.press-release.search-notion-episodes") }}', {
@@ -233,7 +249,7 @@ function pressReleaseWorkflowMixin(config) {
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         draft_id: this.draftId,
-                        query: loadRecent ? '' : (this.pressRelease.notion_episode_query || ''),
+                        query,
                         limit: 10,
                     }),
                 });
@@ -241,15 +257,28 @@ function pressReleaseWorkflowMixin(config) {
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || 'Failed to search podcast episodes.');
                 }
+                if (token !== this._pressReleaseEpisodeSearchToken) {
+                    return;
+                }
                 this.pressReleaseEpisodeResults = Array.isArray(data.records) ? data.records : [];
-                if (!this.pressReleaseEpisodeResults.length) {
+                this.pressReleaseEpisodeNoResults = this.pressReleaseEpisodeResults.length === 0;
+                this.pressReleaseEpisodeDropdownOpen = this.pressReleaseEpisodeResults.length > 0 || this.pressReleaseEpisodeNoResults;
+                if (!this.pressReleaseEpisodeResults.length && notifyEmpty) {
                     this.showNotification('error', 'No podcast episodes matched that search.');
                 }
             } catch (error) {
+                if (token !== this._pressReleaseEpisodeSearchToken) {
+                    return;
+                }
+                this.pressReleaseEpisodeResults = [];
+                this.pressReleaseEpisodeNoResults = false;
+                this.pressReleaseEpisodeDropdownOpen = false;
                 this.showNotification('error', error.message || 'Failed to search podcast episodes.');
+            } finally {
+                if (token === this._pressReleaseEpisodeSearchToken) {
+                    this.pressReleaseEpisodeSearching = false;
+                }
             }
-
-            this.pressReleaseEpisodeSearching = false;
         },
 
         async importPressReleaseNotionEpisode(record) {
@@ -273,6 +302,9 @@ function pressReleaseWorkflowMixin(config) {
                 if (!response.ok || !data.success || !data.press_release) {
                     throw new Error(data.message || 'Failed to import the selected podcast episode.');
                 }
+                this.pressReleaseEpisodeDropdownOpen = false;
+                this.pressReleaseEpisodeNoResults = false;
+                this.pressReleaseEpisodeResults = [];
                 if (!this.template_overrides) this.template_overrides = {};
                 this.template_overrides.article_type = 'press-release';
                 this.pressRelease = this.normalizePressReleaseState(data.press_release || {});

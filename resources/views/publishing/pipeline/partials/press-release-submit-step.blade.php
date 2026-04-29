@@ -73,31 +73,44 @@
                 </div>
 
                 <div class="flex flex-col gap-3 md:flex-row md:items-end">
-                    <div class="flex-1">
+                    <div class="relative flex-1">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Episode Search</label>
-                        <input type="text" x-model="pressRelease.notion_episode_query" @keydown.enter.prevent="searchPressReleaseNotionEpisodes(false)" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Search by guest, topic, or episode title">
+                        <input type="text"
+                            x-model="pressRelease.notion_episode_query"
+                            @input.debounce.300ms="searchPressReleaseNotionEpisodes(false)"
+                            @focus="searchPressReleaseNotionEpisodes(!String(pressRelease.notion_episode_query || '').trim(), { notifyEmpty: false })"
+                            @keydown.enter.prevent="searchPressReleaseNotionEpisodes(false, { notifyEmpty: true })"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm"
+                            placeholder="Search by guest, topic, or episode title">
+                        <svg x-show="pressReleaseEpisodeSearching" x-cloak class="absolute right-3 top-[42px] w-4 h-4 text-purple-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+
+                        <div x-show="pressReleaseEpisodeDropdownOpen" x-cloak @click.away="pressReleaseEpisodeDropdownOpen = false"
+                            class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+                            <template x-for="record in pressReleaseEpisodeResults" :key="record.id">
+                                <button type="button" @click="importPressReleaseNotionEpisode(record)"
+                                    class="w-full text-left px-4 py-3 hover:bg-purple-50 border-b border-gray-100 last:border-b-0 transition-colors">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div class="min-w-0 flex-1">
+                                            <p class="text-sm font-semibold text-gray-800 break-words" x-text="record.title"></p>
+                                            <p class="mt-1 text-xs text-gray-500 break-words" x-text="record.subtitle || 'Notion podcast interview record'"></p>
+                                        </div>
+                                        <span class="text-xs text-purple-600 font-medium flex-shrink-0" x-text="pressReleaseImportingEpisodeId === record.id ? 'Importing…' : 'Select'"></span>
+                                    </div>
+                                </button>
+                            </template>
+
+                            <div x-show="pressReleaseEpisodeNoResults && !pressReleaseEpisodeSearching" x-cloak class="px-4 py-3 text-sm text-gray-500">
+                                No podcast episodes matched that search.
+                            </div>
+                        </div>
                     </div>
                     <div class="flex gap-2">
-                        <button @click="searchPressReleaseNotionEpisodes(false)" :disabled="pressReleaseEpisodeSearching" type="button" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-2">
+                        <button @click="searchPressReleaseNotionEpisodes(false, { notifyEmpty: true })" :disabled="pressReleaseEpisodeSearching" type="button" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-2">
                             <svg x-show="pressReleaseEpisodeSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             <span x-text="pressReleaseEpisodeSearching ? 'Searching…' : 'Search Episodes'"></span>
                         </button>
-                        <button @click="searchPressReleaseNotionEpisodes(true)" :disabled="pressReleaseEpisodeSearching" type="button" class="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm hover:border-purple-300 hover:text-purple-700 disabled:opacity-50">Load Recent</button>
+                        <button @click="searchPressReleaseNotionEpisodes(true, { notifyEmpty: true })" :disabled="pressReleaseEpisodeSearching" type="button" class="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm hover:border-purple-300 hover:text-purple-700 disabled:opacity-50">Load Recent</button>
                     </div>
-                </div>
-
-                <div x-show="pressReleaseEpisodeResults.length > 0" x-cloak class="space-y-2">
-                    <template x-for="record in pressReleaseEpisodeResults" :key="record.id">
-                        <button type="button" @click="importPressReleaseNotionEpisode(record)" class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-left hover:border-purple-300 hover:bg-purple-50 transition-colors">
-                            <div class="flex items-start justify-between gap-3">
-                                <div class="min-w-0">
-                                    <p class="text-sm font-semibold text-gray-800 break-words" x-text="record.title"></p>
-                                    <p class="mt-1 text-xs text-gray-500 break-words" x-text="record.subtitle || 'Notion podcast interview record'"></p>
-                                </div>
-                                <span class="text-xs text-purple-600 font-medium flex-shrink-0" x-text="pressReleaseImportingEpisodeId === record.id ? 'Importing…' : 'Select'"></span>
-                            </div>
-                        </button>
-                    </template>
                 </div>
 
                 <div x-show="pressRelease.notion_episode && pressRelease.notion_episode.id" x-cloak class="rounded-xl border border-purple-200 bg-white overflow-hidden">
