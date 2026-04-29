@@ -38,7 +38,7 @@ class PipelineStateController extends Controller
         }
 
         if ($debugMode) {
-            \Log::info('[PipelineState] Save requested', [
+            hexaLogDebug('publish.pipeline-state', 'PipelineState save requested', [
                 'client_trace' => $clientTrace,
                 'draft_id' => $draft->id,
                 'tab_id' => $tabId,

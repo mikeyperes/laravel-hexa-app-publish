@@ -2123,7 +2123,7 @@ class PipelineController extends Controller
             return;
         }
 
-        \Log::info($message, $context);
+        hexaLogDebug('publish.pipeline', $message, $context);
     }
 
     private function resolveAuthorizedDraft(int $draftId): PublishArticle

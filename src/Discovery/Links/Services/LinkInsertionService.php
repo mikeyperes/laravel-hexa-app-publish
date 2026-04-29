@@ -6,7 +6,6 @@ use hexa_app_publish\Discovery\Links\Models\PublishLinkList;
 use hexa_app_publish\Discovery\Links\Models\PublishSitemap;
 use hexa_package_anthropic\Services\AnthropicService;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
 class LinkInsertionService
 {
@@ -83,7 +82,11 @@ class LinkInsertionService
             return ['success' => true, 'message' => count($urls) . ' URLs parsed.', 'url_count' => count($urls)];
 
         } catch (\Exception $e) {
-            Log::error('LinkInsertionService::parseSitemap error', ['url' => $sitemap->sitemap_url, 'error' => $e->getMessage()]);
+            hexaLogError('publish.link-insertion', 'LinkInsertionService parseSitemap error', [
+                'url' => $sitemap->sitemap_url,
+                'error' => $e->getMessage(),
+                'operation' => 'parse_sitemap',
+            ]);
             return ['success' => false, 'message' => 'Error: ' . $e->getMessage(), 'url_count' => 0];
         }
     }

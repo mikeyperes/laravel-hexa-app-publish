@@ -3,7 +3,6 @@
 namespace hexa_app_publish\Discovery\Sources\Services;
 
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
 /**
  * SourceDiscoveryService — single source of truth for article/news discovery.
@@ -157,7 +156,12 @@ class SourceDiscoveryService
                 default           => ['success' => false, 'articles' => [], 'total' => 0, 'error' => "Unknown provider: {$provider}"],
             };
         } catch (\Exception $e) {
-            Log::warning("[SourceDiscovery] {$provider} failed: " . $e->getMessage());
+            hexaLogWarning('publish.source-discovery', 'Source provider search failed', [
+                'provider' => $provider,
+                'query' => $query,
+                'error' => $e->getMessage(),
+                'operation' => 'search_provider',
+            ]);
             return ['success' => false, 'articles' => [], 'total' => 0, 'error' => "{$provider}: " . $e->getMessage()];
         }
     }

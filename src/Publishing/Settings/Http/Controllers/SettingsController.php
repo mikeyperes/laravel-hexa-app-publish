@@ -69,6 +69,17 @@ class SettingsController extends Controller
         };
 
         \hexa_core\Models\ActivityLog::log('settings', 'test_integration', "Integration test: {$service} — " . ($result['success'] ? 'success' : 'failed: ' . $result['message']));
+        $logContext = [
+            'service' => $service,
+            'success' => (bool) ($result['success'] ?? false),
+            'message' => $result['message'] ?? null,
+        ];
+
+        if (!empty($result['success'])) {
+            hexaLogInfo('publish.integration-test', "Integration test succeeded for {$service}.", $logContext);
+        } else {
+            hexaLogError('publish.integration-test', "Integration test failed for {$service}.", $logContext);
+        }
 
         return response()->json($result);
     }

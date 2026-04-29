@@ -8,7 +8,6 @@ use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Support\AiModelCatalog;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
@@ -122,7 +121,11 @@ class SourceExtractionService
 
             return $lastResult ?: $this->fail($url, 'Could not extract article content.');
         } catch (\Exception $e) {
-            Log::warning("[SourceExtraction] Failed for {$url}: " . $e->getMessage());
+            hexaLogWarning('publish.source-extraction', 'Source extraction failed', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+                'operation' => 'extract',
+            ]);
             $fail = $this->fail($url, $e->getMessage());
             $fail = $this->attachNormalizationMeta($fail, $requestedUrl, $url, $normalizationMeta);
             $this->logScrape($url, $method, $userAgent, $timeout, $retries, $fail, $source, $draftId);
@@ -306,7 +309,11 @@ class SourceExtractionService
                 ],
             ]);
         } catch (\Throwable $e) {
-            Log::warning('[ScrapeLog] Failed to log: ' . $e->getMessage());
+            hexaLogWarning('publish.source-extraction', 'ScrapeLog persistence failed', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+                'operation' => 'log_scrape',
+            ]);
         }
     }
 
@@ -588,7 +595,13 @@ class SourceExtractionService
                     'fetch_info'     => ['method' => 'ai', 'method_used' => 'ai', 'provider' => $provider, 'model' => $model],
                 ];
         } catch (\Exception $e) {
-            Log::warning("[SourceExtraction] AI extraction failed for {$url}: " . $e->getMessage());
+            hexaLogWarning('publish.source-extraction', 'AI extraction fallback failed', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+                'operation' => 'extract_with_ai_model',
+                'provider' => $provider,
+                'model' => $model,
+            ]);
             return $this->fail($url, 'AI extraction error: ' . $e->getMessage());
         }
     }
@@ -658,7 +671,11 @@ class SourceExtractionService
                     ],
                 ];
             } catch (\Throwable $e) {
-                Log::warning('[SourceExtraction] Google News URL normalization failed: ' . $e->getMessage());
+                hexaLogWarning('publish.source-extraction', 'Google News URL normalization failed', [
+                    'url' => $url,
+                    'error' => $e->getMessage(),
+                    'operation' => 'normalize_google_news_url',
+                ]);
 
                 return [
                     'url' => $url,
