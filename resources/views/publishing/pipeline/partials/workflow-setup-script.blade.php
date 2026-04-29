@@ -955,7 +955,7 @@
                 const params = new URLSearchParams({
                     q: this.prProfileSearch || '',
                 });
-                ['person', 'company'].forEach((type) => params.append('types[]', type));
+                ['person', 'organization'].forEach((type) => params.append('types[]', type));
                 const resp = await fetch('{{ route("publish.profiles.search") }}?' + params.toString(), {
                     headers: { 'Accept': 'application/json' }
                 });

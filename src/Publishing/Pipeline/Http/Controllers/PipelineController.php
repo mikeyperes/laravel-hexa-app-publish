@@ -363,13 +363,16 @@ class PipelineController extends Controller
         $query = trim((string) $request->input('q', ''));
         $types = $request->input('types', $request->filled('type') ? [$request->input('type')] : ['person', 'company']);
         $types = collect(is_array($types) ? $types : [$types])
-            ->map(fn ($value) => Str::slug((string) $value))
-            ->filter(fn ($value) => in_array($value, ['person', 'company'], true))
+            ->map(function ($value) {
+                $slug = Str::slug((string) $value);
+                return $slug === 'company' ? 'organization' : $slug;
+            })
+            ->filter(fn ($value) => in_array($value, ['person', 'organization'], true))
             ->values()
             ->all();
 
         if ($types === []) {
-            $types = ['person', 'company'];
+            $types = ['person', 'organization'];
         }
 
         $notionImporterClass = 'hexa_package_notion\\Services\\NotionProfileImporter';
