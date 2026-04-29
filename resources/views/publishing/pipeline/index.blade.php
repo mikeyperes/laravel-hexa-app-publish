@@ -445,7 +445,7 @@
                         <label class="text-sm font-medium text-gray-700">Select PR Subjects</label>
                         <div class="relative">
                             <input type="text" x-model="prProfileSearch" @input.debounce.300ms="searchPrProfiles()" @focus="searchPrProfiles()"
-                                placeholder="Search profiles by name..."
+                                placeholder="Search Notion people and companies..."
                                 class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
                             <svg x-show="prProfileSearching" x-cloak class="absolute right-3 top-2.5 w-5 h-5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
 
@@ -455,8 +455,8 @@
                                 <template x-for="profile in prProfileResults" :key="profile.id">
                                     <button @click="addPrProfile(profile); prProfileDropdownOpen = false;"
                                         class="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 flex items-center gap-3"
-                                        :class="selectedPrProfiles.some(p => p.id === profile.id) ? 'opacity-40 cursor-not-allowed' : ''"
-                                        :disabled="selectedPrProfiles.some(p => p.id === profile.id)">
+                                        :class="selectedPrProfiles.some(p => String(p.id || '') === String(profile.id || profile.local_profile_id || '') || (p.external_source === 'notion' && String(p.external_id || '') === String(profile.external_id || ''))) ? 'opacity-40 cursor-not-allowed' : ''"
+                                        :disabled="selectedPrProfiles.some(p => String(p.id || '') === String(profile.id || profile.local_profile_id || '') || (p.external_source === 'notion' && String(p.external_id || '') === String(profile.external_id || '')))">
                                         <div class="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
                                             <img x-show="profile.photo_url" x-cloak :src="profile.photo_url" class="w-full h-full object-cover">
                                             <svg x-show="!profile.photo_url" class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
@@ -465,7 +465,7 @@
                                             <p class="text-sm font-medium text-gray-900 truncate" x-text="profile.name"></p>
                                             <p x-show="(profile.type && profile.type !== '—') || profile.description" x-cloak class="text-xs text-gray-400" x-text="[profile.type && profile.type !== '—' ? profile.type : '', profile.description ? profile.description.substring(0, 60) : ''].filter(Boolean).join(' — ')"></p>
                                         </div>
-                                        <span x-show="selectedPrProfiles.some(p => p.id === profile.id)" x-cloak class="text-xs text-gray-400">Added</span>
+                                        <span x-show="selectedPrProfiles.some(p => String(p.id || '') === String(profile.id || profile.local_profile_id || '') || (p.external_source === 'notion' && String(p.external_id || '') === String(profile.external_id || '')))" x-cloak class="text-xs text-gray-400">Added</span>
                                     </button>
                                 </template>
                             </div>

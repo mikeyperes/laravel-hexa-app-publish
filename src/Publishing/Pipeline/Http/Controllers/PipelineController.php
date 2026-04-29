@@ -360,17 +360,138 @@ class PipelineController extends Controller
      */
     public function searchProfiles(Request $request): JsonResponse
     {
-        $query = $request->input('q', '');
-        $type = $request->input('type');
+        $query = trim((string) $request->input('q', ''));
+        $types = $request->input('types', $request->filled('type') ? [$request->input('type')] : ['person', 'company']);
+        $types = collect(is_array($types) ? $types : [$types])
+            ->map(fn ($value) => Str::slug((string) $value))
+            ->filter(fn ($value) => in_array($value, ['person', 'company'], true))
+            ->values()
+            ->all();
+
+        if ($types === []) {
+            $types = ['person', 'company'];
+        }
+
+        $notionImporterClass = 'hexa_package_notion\\Services\\NotionProfileImporter';
+        $bridgeClass = 'hexa_package_notion\\Models\\NotionProfileBridge';
+        $profileClass = 'hexa_package_profiles\\Models\\Profile';
+
+        if (!class_exists($notionImporterClass) || !class_exists($bridgeClass) || !class_exists($profileClass)) {
+            return $this->searchLocalProfilesFallback($query, $request->input('type'));
+        }
+
+        $bridges = $bridgeClass::query()
+            ->with('profileType')
+            ->where('is_active', true)
+            ->get()
+            ->keyBy('id');
+
+        $profileRows = $profileClass::query()
+            ->where('external_source', 'notion')
+            ->whereNotNull('external_id')
+            ->get(['id', 'name', 'slug', 'description', 'photo_url', 'profile_type_id', 'external_id'])
+            ->keyBy(fn ($profile) => (string) $profile->external_id);
+
+        $importer = app($notionImporterClass);
+        $results = [];
+
+        foreach ($types as $typeSlug) {
+            foreach ($importer->search($query, $typeSlug) as $result) {
+                $externalId = (string) ($result['external_id'] ?? '');
+                if ($externalId === '' || isset($results[$externalId])) {
+                    continue;
+                }
+
+                $bridge = $bridges->get((int) ($result['bridge_id'] ?? 0));
+                $existing = $profileRows->get($externalId);
+                $preview = is_array($result['preview'] ?? null) ? $result['preview'] : [];
+
+                $results[$externalId] = [
+                    'id' => $existing?->id,
+                    'local_profile_id' => $existing?->id,
+                    'bridge_id' => $bridge?->id,
+                    'name' => (string) ($result['name'] ?? $existing?->name ?? 'Untitled'),
+                    'slug' => $existing?->slug,
+                    'description' => $existing?->description ?: $this->previewDescription($preview),
+                    'photo_url' => $existing?->photo_url ?: '',
+                    'type' => $bridge?->profileType?->name ?? Str::headline($typeSlug),
+                    'type_slug' => $bridge?->profileType?->slug ?? $typeSlug,
+                    'external_source' => 'notion',
+                    'external_id' => $externalId,
+                    'fields' => $preview,
+                ];
+            }
+        }
+
+        return response()->json(array_values(array_slice($results, 0, 20)));
+    }
+
+    public function resolveNotionSubject(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'bridge_id' => 'required|integer',
+            'notion_page_id' => 'required|string',
+            'name' => 'required|string|max:255',
+        ]);
+
+        $bridgeClass = 'hexa_package_notion\\Models\\NotionProfileBridge';
+        $profileClass = 'hexa_package_profiles\\Models\\Profile';
+
+        if (!class_exists($bridgeClass) || !class_exists($profileClass)) {
+            return response()->json(['success' => false, 'message' => 'Notion profile bridge is unavailable.'], 422);
+        }
+
+        $bridge = $bridgeClass::query()->with('profileType')->find($validated['bridge_id']);
+        if (!$bridge || !$bridge->is_active) {
+            return response()->json(['success' => false, 'message' => 'Notion bridge not found.'], 404);
+        }
+
+        $profile = $profileClass::query()
+            ->with(['type', 'customFields'])
+            ->where('external_source', 'notion')
+            ->where('external_id', $validated['notion_page_id'])
+            ->first();
+
+        if (!$profile) {
+            $baseSlug = Str::slug($validated['name']) ?: 'notion-profile';
+            $slug = $baseSlug;
+            $suffix = 2;
+
+            while ($profileClass::query()->where('slug', $slug)->exists()) {
+                $slug = $baseSlug . '-' . $suffix;
+                $suffix++;
+            }
+
+            $profile = $profileClass::query()->create([
+                'name' => $validated['name'],
+                'slug' => $slug,
+                'profile_type_id' => $bridge->profile_type_id,
+                'external_id' => $validated['notion_page_id'],
+                'external_source' => 'notion',
+                'is_active' => true,
+                'created_by' => auth()->id(),
+            ]);
+
+            $profile->load(['type', 'customFields']);
+        }
+
+        return response()->json([
+            'success' => true,
+            'profile' => $this->formatLocalProfileSearchPayload($profile),
+        ]);
+    }
+
+    protected function searchLocalProfilesFallback(string $query, ?string $type): JsonResponse
+    {
+        $profileClass = 'hexa_package_profiles\\Models\\Profile';
+        if (!class_exists($profileClass)) {
+            return response()->json([]);
+        }
 
         if (strlen($query) < 1) {
-            $profileClass = 'hexa_package_profiles\\Models\\Profile';
-            if (!class_exists($profileClass)) {
-                return response()->json([]);
-            }
             $profiles = $profileClass::with(['type', 'customFields'])
                 ->where('is_active', true)
-                ->when($type, fn($q) => $q->whereHas('type', fn($tq) => $tq->where('slug', $type)))
+                ->when($type, fn ($q) => $q->whereHas('type', fn ($tq) => $tq->where('slug', $type)))
                 ->orderBy('name')
                 ->limit(20)
                 ->get();
@@ -382,18 +503,37 @@ class PipelineController extends Controller
             $profiles = app($serviceClass)->searchProfiles($query, $type);
         }
 
-        return response()->json($profiles->map(fn($p) => [
-            'id'              => $p->id,
-            'name'            => $p->name,
-            'slug'            => $p->slug,
-            'description'     => $p->description,
-            'photo_url'       => $p->photo_url,
-            'type'            => $p->type?->name ?? '—',
-            'type_slug'       => $p->type?->slug ?? '',
-            'external_source' => $p->external_source ?? null,
-            'external_id'     => $p->external_id ?? null,
-            'fields'          => $p->customFields->pluck('field_value', 'field_key')->toArray(),
-        ])->values());
+        return response()->json($profiles->map(fn ($profile) => $this->formatLocalProfileSearchPayload($profile))->values());
+    }
+
+    protected function formatLocalProfileSearchPayload(object $profile): array
+    {
+        return [
+            'id'              => $profile->id,
+            'name'            => $profile->name,
+            'slug'            => $profile->slug,
+            'description'     => $profile->description,
+            'photo_url'       => $profile->photo_url,
+            'type'            => $profile->type?->name ?? '—',
+            'type_slug'       => $profile->type?->slug ?? '',
+            'external_source' => $profile->external_source ?? null,
+            'external_id'     => $profile->external_id ?? null,
+            'fields'          => method_exists($profile, 'customFields') ? $profile->customFields->pluck('field_value', 'field_key')->toArray() : [],
+        ];
+    }
+
+    protected function previewDescription(array $preview): string
+    {
+        foreach ($preview as $value) {
+            $text = trim((string) $value);
+            if ($text === '' || Str::startsWith($text, ['http://', 'https://'])) {
+                continue;
+            }
+
+            return Str::limit($text, 120);
+        }
+
+        return '';
     }
 
     /**

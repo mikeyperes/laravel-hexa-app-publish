@@ -42,3 +42,4 @@ Route::get('/api/users/search', [PipelineController::class, 'searchUsers'])->nam
 
 // Profile search (for PR subject picker)
 Route::get('/api/profiles/search', [PipelineController::class, 'searchProfiles'])->name('publish.profiles.search');
+Route::post('/api/profiles/search/resolve-notion', [PipelineController::class, 'resolveNotionSubject'])->name('publish.profiles.resolve-notion');

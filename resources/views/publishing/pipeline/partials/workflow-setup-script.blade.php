@@ -954,8 +954,8 @@
             try {
                 const params = new URLSearchParams({
                     q: this.prProfileSearch || '',
-                    type: 'person',
                 });
+                ['person', 'company'].forEach((type) => params.append('types[]', type));
                 const resp = await fetch('{{ route("publish.profiles.search") }}?' + params.toString(), {
                     headers: { 'Accept': 'application/json' }
                 });
@@ -966,16 +966,62 @@
             this.prProfileSearching = false;
         },
 
-        addPrProfile(profile) {
-            if (this.selectedPrProfiles.some(p => p.id === profile.id)) return;
+        async resolvePrProfile(profile) {
+            if (profile?.id) {
+                return profile;
+            }
+
+            if (profile?.external_source !== 'notion' || !profile?.external_id || !profile?.bridge_id) {
+                return null;
+            }
+
+            const response = await fetch('{{ route("publish.profiles.resolve-notion") }}', {
+                method: 'POST',
+                headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({
+                    bridge_id: profile.bridge_id,
+                    notion_page_id: profile.external_id,
+                    name: profile.name || 'Untitled',
+                }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success || !data.profile) {
+                throw new Error(data.message || 'Failed to load the selected Notion subject.');
+            }
+
+            return data.profile;
+        },
+
+        async addPrProfile(profile) {
+            if (this.selectedPrProfiles.some((selected) => (
+                String(selected.id || '') === String(profile.id || profile.local_profile_id || '')
+                || (selected.external_source === 'notion' && String(selected.external_id || '') === String(profile.external_id || ''))
+            ))) return;
+
+            let resolvedProfile = profile;
+            if (!resolvedProfile?.id && resolvedProfile?.external_source === 'notion') {
+                try {
+                    resolvedProfile = await this.resolvePrProfile(resolvedProfile);
+                } catch (error) {
+                    this.showNotification('error', error.message || 'Failed to register the selected Notion subject.');
+                    return;
+                }
+            }
+
+            if (!resolvedProfile?.id) {
+                this.showNotification('error', 'Selected subject could not be resolved.');
+                return;
+            }
+
             const normalizedProfile = this.normalizePrProfileForState({
-                ...profile,
-                context: profile.context || '',
+                ...resolvedProfile,
+                context: resolvedProfile.context || profile.context || '',
             });
             this.selectedPrProfiles.push(normalizedProfile);
             this.syncPrArticleForCurrentArticleType();
             this.prProfileSearch = '';
             this.prProfileResults = [];
+            this.prProfileDropdownOpen = false;
             this.savePipelineState();
             this.loadProfileData(normalizedProfile);
         },
