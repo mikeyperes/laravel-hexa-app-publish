@@ -790,11 +790,15 @@
                 this.scheduleThumbStateReconcile('restore_complete');
                 this.queueInlinePhotoAutoHydration('restore_complete');
                 this.queueFeaturedImageAutoHydration('restore_complete');
+                this.normalizeExistingPrArticleState?.();
                 if (this.isPrArticleMode()) {
-                    this.selectedPrProfiles.forEach((profile) => {
-                        this.loadProfileData(profile, { preserveSelections: true, skipSave: true });
-                    });
-                    this.$nextTick(() => this.hydratePrArticleSelectedMedia());
+                    Promise.all((this.selectedPrProfiles || []).map((profile) => this.loadProfileData(profile, { preserveSelections: true, skipSave: true })))
+                        .finally(() => {
+                            this.$nextTick(() => {
+                                this.hydratePrArticleSelectedMedia();
+                                this.normalizeExistingPrArticleState?.();
+                            });
+                        });
                 }
                 if (this.shouldAutoLoadPromptPreview()) {
                     this._queuePromptRefresh('restore_complete');
@@ -892,8 +896,16 @@
                                 if (state.template_dirty) Object.assign(this.template_dirty, state.template_dirty);
                             }
                             // Sync article_type to standalone dropdown
-                            if (this.selectedTemplate?.article_type && !this.template_overrides?.article_type) {
-                                this.template_overrides.article_type = this.selectedTemplate.article_type;
+                            const restoredArticleType = this.selectedTemplate?.article_type
+                                || this.template_overrides?.article_type
+                                || draftState.article_type
+                                || state?.article_type
+                                || serverState?.article_type
+                                || state?.pressRelease?.article_type
+                                || serverState?.pressRelease?.article_type
+                                || null;
+                            if (restoredArticleType && !this.template_overrides?.article_type) {
+                                this.template_overrides.article_type = restoredArticleType;
                             }
 
                             // Auto-select site from default preset if no site saved
