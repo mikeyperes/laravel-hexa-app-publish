@@ -52,7 +52,10 @@
         },
 
         applyGeneratedMetadata(metadata = {}) {
-            const titles = this.normalizeUniqueTextList(metadata.titles || [], 10);
+            const rawTitles = this.normalizeUniqueTextList(metadata.titles || [], 10);
+            const titles = this.isPrArticleMode()
+                ? this.normalizePrGeneratedTitles(rawTitles)
+                : rawTitles;
             const categories = this.normalizeUniqueTextList(metadata.categories || [], 10);
             const tags = this.normalizeUniqueTextList(metadata.tags || [], 10);
             const defaults = this.metadataSelectionDefaults(categories.length, tags.length);

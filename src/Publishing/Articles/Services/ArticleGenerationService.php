@@ -1051,6 +1051,16 @@ class ArticleGenerationService
             return false;
         }
 
+        if (in_array($articleType, ['pr-full-feature', 'expert-article'], true)) {
+            if (preg_match('/\b(?:a|an)?\s*(?:feature|expert|company|person|executive)\s+profile\b/i', $title)) {
+                return false;
+            }
+
+            if (preg_match('/^[^:]+:\s*(?:a|an)?\s*(?:feature|expert|company|person|executive)\s+profile$/i', $title)) {
+                return false;
+            }
+        }
+
         return true;
     }
 
