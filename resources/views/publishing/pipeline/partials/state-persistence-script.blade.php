@@ -569,10 +569,10 @@
                     this.rememberDraftBody(restoredEditorHtml);
                     this.setSpinEditor(restoredEditorHtml);
                     this.extractArticleLinks(restoredEditorHtml);
-                    const titleLooksPlaceholder = !this.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test(String(this.articleTitle || '').trim());
+                    const titleLooksPlaceholder = !this.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test(String(this.articleTitle || '').trim()) || (this.isPrArticleMode && this.isPrArticleMode() && this.isWeakPrArticleTitle && this.isWeakPrArticleTitle(this.articleTitle || ''));
                     if (titleLooksPlaceholder) {
                         const derivedTitle = this.deriveArticleTitleFromHtml(restoredEditorHtml);
-                        if (derivedTitle) this.articleTitle = derivedTitle;
+                        if (derivedTitle) this.articleTitle = this.ensurePrArticleTitleSubject ? this.ensurePrArticleTitleSubject(derivedTitle) : derivedTitle;
                     }
                 }
 
@@ -645,7 +645,7 @@
                 }
             }
             if (draftState.publishAuthor) this.publishAuthor = draftState.publishAuthor;
-            const articleTitleLooksPlaceholder = !this.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test((this.articleTitle || '').trim());
+            const articleTitleLooksPlaceholder = !this.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test((this.articleTitle || '').trim()) || (this.isPrArticleMode && this.isPrArticleMode() && this.isWeakPrArticleTitle && this.isWeakPrArticleTitle(this.articleTitle || ''));
             if (articleTitleLooksPlaceholder && draftState.articleTitle) this.articleTitle = draftState.articleTitle;
             if (!this.articleDescription && draftState.articleDescription) this.articleDescription = draftState.articleDescription;
             if (!this.aiModel && draftState.aiModel) this.aiModel = draftState.aiModel;
@@ -711,9 +711,9 @@
                 this.photoSuggestions = draftState.photoSuggestions.map((ps, idx) => this.normalizePhotoSuggestionState(ps, idx));
                 this._lastInlinePhotoHydrationSignature = '';
             }
-            if ((!this.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test(String(this.articleTitle || '').trim())) && (this.editorContent || this.spunContent || draftState.body)) {
+            if ((!this.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test(String(this.articleTitle || '').trim()) || (this.isPrArticleMode && this.isPrArticleMode() && this.isWeakPrArticleTitle && this.isWeakPrArticleTitle(this.articleTitle || ''))) && (this.editorContent || this.spunContent || draftState.body)) {
                 const derivedTitle = this.deriveArticleTitleFromHtml(this.editorContent || this.spunContent || draftState.body || '');
-                if (derivedTitle) this.articleTitle = derivedTitle;
+                if (derivedTitle) this.articleTitle = this.ensurePrArticleTitleSubject ? this.ensurePrArticleTitleSubject(derivedTitle) : derivedTitle;
             }
             if (!this.featuredImageSearch && draftState.featuredImageSearch) {
                 this.featuredImageSearch = draftState.featuredImageSearch;

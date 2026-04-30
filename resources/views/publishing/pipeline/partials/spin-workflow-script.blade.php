@@ -248,10 +248,15 @@
                         this.applyGeneratedMetadata(data.metadata);
                     }
 
-                    const titleLooksPlaceholder = !this.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test(String(this.articleTitle || '').trim());
-                    const resolvedTitle = this.deriveArticleTitleFromHtml(nextHtml)
-                        || this.articleTitle
-                        || this.fallbackPrArticleTitle();
+                    const currentTitle = String(this.articleTitle || '').trim();
+                    const titleLooksPlaceholder = !currentTitle
+                        || /^untitled(?:\s+pipeline\s+draft)?$/i.test(currentTitle)
+                        || (this.isPrArticleMode() && this.isWeakPrArticleTitle(currentTitle));
+                    const resolvedTitle = this.ensurePrArticleTitleSubject(
+                        this.deriveArticleTitleFromHtml(nextHtml)
+                        || (titleLooksPlaceholder ? '' : currentTitle)
+                        || this.fallbackPrArticleTitle()
+                    );
                     if (resolvedTitle && titleLooksPlaceholder) {
                         this.articleTitle = resolvedTitle;
                     }

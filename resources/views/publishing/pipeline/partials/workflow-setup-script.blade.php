@@ -675,42 +675,340 @@
             try {
                 const container = document.createElement('div');
                 container.innerHTML = raw;
-                const h1 = container.querySelector('h1');
-                if (h1 && h1.textContent) {
-                    return h1.textContent.trim();
+                const headings = Array.from(container.querySelectorAll('h1, h2'));
+                for (const heading of headings) {
+                    const text = String(heading.textContent || '').replace(/\s+/g, ' ').trim();
+                    if (text && text.length >= 18) {
+                        return text;
+                    }
+                }
+
+                const firstParagraph = container.querySelector('p');
+                const paragraphText = String(firstParagraph?.textContent || '').replace(/\s+/g, ' ').trim();
+                if (paragraphText) {
+                    const sentence = paragraphText.split(/(?<=[.!?])\s+/)[0].trim().replace(/^[–—\-]\s*/, '');
+                    if (sentence.length >= 30 && sentence.length <= 140) {
+                        return sentence;
+                    }
                 }
             } catch (e) {}
 
             return '';
         },
 
+        headlineCaseFromText(value = '', wordLimit = 10) {
+            const cleaned = String(value || '')
+                .replace(/https?:\/\/\S+/gi, ' ')
+                .replace(/[
+]+/g, ' ')
+                .replace(/[|•]+/g, ' ')
+                .replace(/[_]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            if (!cleaned) return '';
+
+            const words = cleaned.split(/\s+/).filter(Boolean).slice(0, wordLimit);
+            const stop = new Set(['and','or','the','a','an','of','for','to','in','on','with','by','from','at','into','about']);
+            return words.map((word, idx) => {
+                const lower = word.toLowerCase();
+                if (idx > 0 && stop.has(lower)) return lower;
+                return lower.charAt(0).toUpperCase() + lower.slice(1);
+            }).join(' ').replace(/[,:;\-]+$/, '').trim();
+        },
+
+        isWeakPrArticleTitle(value = '') {
+            const raw = String(value || '').trim();
+            if (!raw) return true;
+
+            const normalized = this.normalizeArticleHeadingText(raw);
+            const subjectNames = (this.selectedPrProfiles || [])
+                .map((profile) => this.normalizeArticleHeadingText(profile?.name || ''))
+                .filter(Boolean);
+
+            if (!normalized || normalized === 'untitled' || normalized === 'untitled pipeline draft') {
+                return true;
+            }
+
+            if (subjectNames.includes(normalized)) {
+                return true;
+            }
+
+            return normalized.split(' ').length <= 2 && subjectNames.some((name) => normalized === name);
+        },
+
+        ensurePrArticleTitleSubject(title = '') {
+            const cleaned = String(title || '').replace(/\s+/g, ' ').trim();
+            if (!cleaned || !this.isPrArticleMode()) {
+                return cleaned;
+            }
+
+            const mainSubject = this.selectedPrProfiles.find(p => Number(p.id) === Number(this.prArticle.main_subject_id || 0)) || this.selectedPrProfiles[0] || null;
+            const subjectName = String(mainSubject?.name || '').trim();
+            if (!subjectName) {
+                return cleaned;
+            }
+
+            const normalizedSubject = this.normalizeArticleHeadingText(subjectName);
+            const normalizedTitle = this.normalizeArticleHeadingText(cleaned);
+            if (!normalizedSubject || normalizedTitle.includes(normalizedSubject)) {
+                return cleaned;
+            }
+
+            if (this.currentArticleType === 'pr-full-feature' && this.prArticle.include_subject_name_in_title) {
+                return `${subjectName}: ${cleaned}`;
+            }
+
+            return cleaned;
+        },
+
         fallbackPrArticleTitle() {
             const mainSubject = this.selectedPrProfiles.find(p => Number(p.id) === Number(this.prArticle.main_subject_id || 0)) || this.selectedPrProfiles[0] || null;
             const subjectName = mainSubject?.name || 'Untitled';
+            const contextTitle = String(this.prArticle?.expert_context_extracted?.title || '').trim();
+            const keywordHeadline = this.headlineCaseFromText(this.prArticle?.expert_keywords || '', 10);
+            const focusHeadline = this.headlineCaseFromText(this.prArticle?.focus_instructions || '', 10);
 
             if (this.currentArticleType === 'expert-article') {
-                const importedTitle = String(this.prArticle?.expert_context_extracted?.title || '').trim();
-                if (importedTitle) {
-                    return `${subjectName} on ${importedTitle.replace(/\s+/g, ' ')}`.trim();
+                if (contextTitle) {
+                    return `${subjectName} on ${contextTitle.replace(/\s+/g, ' ')}`.trim();
                 }
-
-                const keywordHeadline = String(this.prArticle?.expert_keywords || '')
-                    .split(/\s+/)
-                    .filter(Boolean)
-                    .slice(0, 8)
-                    .join(' ')
-                    .trim();
-
                 if (keywordHeadline) {
                     return `${subjectName} on ${keywordHeadline}`.trim();
+                }
+                if (focusHeadline) {
+                    return `${subjectName} on ${focusHeadline}`.trim();
                 }
             }
 
             if (this.currentArticleType === 'pr-full-feature' && subjectName !== 'Untitled') {
-                return subjectName;
+                if (keywordHeadline) {
+                    return `${subjectName}: ${keywordHeadline}`.trim();
+                }
+                if (focusHeadline) {
+                    return `${subjectName}: ${focusHeadline}`.trim();
+                }
+                return `${subjectName}: A Feature Profile`;
             }
 
             return subjectName;
+        },
+
+        prPhotoFieldLabel(photo = {}) {
+            return String(photo.property || photo.field || photo.source_field || photo.name || '').trim();
+        },
+
+        prFriendlyPhotoLabel(profile = {}, photo = {}, fallbackIndex = 1) {
+            const source = String(photo.source || '').toLowerCase();
+            const fieldLabel = this.prPhotoFieldLabel(photo);
+            const rawName = String(photo.name || '').trim();
+            const profileName = String(profile?.name || 'Subject').trim() || 'Subject';
+            const cleanedFilename = rawName.replace(/\.[a-z0-9]{2,6}$/i, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+            const fieldLike = /(featured image url|profile image|headshot|photo url|portrait|image url)/i.test(fieldLabel);
+            const fileLike = /\.(jpg|jpeg|png|webp|gif|avif)$/i.test(rawName);
+
+            if (source === 'notion-profile') {
+                if (fieldLike || fileLike || !rawName) {
+                    return `${profileName} profile photo`;
+                }
+                return rawName;
+            }
+
+            if (fileLike && cleanedFilename) {
+                return cleanedFilename;
+            }
+
+            return rawName || fieldLabel || `${profileName} photo ${fallbackIndex}`;
+        },
+
+        prPhotoSourcePriority(photo = {}) {
+            const source = String(photo.source || '').toLowerCase();
+            if (source === 'notion-profile') return 0;
+            if (source === 'notion-drive') return 1;
+            return 2;
+        },
+
+        normalizePrSearchTerm(value = '') {
+            return String(value || '')
+                .replace(/https?:\/\/\S+/gi, ' ')
+                .replace(/[_]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        },
+
+        extractPrSearchPhrasesFromText(value = '', limit = 6) {
+            const cleaned = this.normalizePrSearchTerm(value);
+            if (!cleaned) return [];
+
+            const phrases = [];
+            const push = (candidate) => {
+                const term = this.normalizePrSearchTerm(candidate);
+                if (!term) return;
+                if (/^(featured image url|profile photo|image|photo|url)$/i.test(term)) return;
+                if (/\.(jpg|jpeg|png|webp|gif|avif)$/i.test(term)) return;
+                if (term.length < 4 || term.length > 80) return;
+                if (phrases.some((existing) => existing.toLowerCase() === term.toLowerCase())) return;
+                phrases.push(term);
+            };
+
+            cleaned.split(/[
+
+]+/).forEach((chunk) => {
+                chunk.split(/\s*[.;!?|]\s*|\s*,\s*/).forEach((part) => push(part));
+            });
+
+            if (!phrases.length) {
+                push(cleaned.split(/\s+/).slice(0, 8).join(' '));
+            }
+
+            return phrases.slice(0, limit);
+        },
+
+        buildPrArticleSearchTerms(limit = 12) {
+            const terms = [];
+            const add = (candidate) => {
+                const term = this.normalizePrSearchTerm(candidate);
+                if (!term) return;
+                if (/^https?:\/\//i.test(term)) return;
+                if (/\.(jpg|jpeg|png|webp|gif|avif)$/i.test(term)) return;
+                if (/^(featured image url|profile photo|image|photo|url)$/i.test(term)) return;
+                if (term.length < 3 || term.length > 90) return;
+                if (terms.some((existing) => existing.toLowerCase() === term.toLowerCase())) return;
+                terms.push(term);
+            };
+
+            const maybeAddFieldTerms = (label, value) => {
+                const fieldLabel = String(label || '').toLowerCase();
+                const fieldValue = String(value || '').trim();
+                if (!fieldValue) return;
+
+                if (/(title|job title|occupation|company|business\/company name|organizations founded|industry|expertise|topic|location|country)/i.test(fieldLabel)) {
+                    this.extractPrSearchPhrasesFromText(fieldValue, 2).forEach(add);
+                    return;
+                }
+
+                if (/(biography|description|about|summary)/i.test(fieldLabel)) {
+                    this.extractPrSearchPhrasesFromText(fieldValue, 3).forEach(add);
+                }
+            };
+
+            for (const profile of (this.selectedPrProfiles || [])) {
+                add(profile?.name || '');
+                if (profile?.description) {
+                    this.extractPrSearchPhrasesFromText(profile.description, 2).forEach(add);
+                }
+                if (profile?.context) {
+                    this.extractPrSearchPhrasesFromText(profile.context, 2).forEach(add);
+                }
+
+                const pd = this.prSubjectData[profile.id] || {};
+                for (const field of (pd.fields || [])) {
+                    maybeAddFieldTerms(field?.notion_field || field?.key, field?.display_value || field?.value || '');
+                }
+
+                for (const rel of (pd.relations || [])) {
+                    for (const entry of (rel.entries || [])) {
+                        if (!pd.selectedEntries?.[entry.id]) continue;
+                        add(entry?.title || '');
+                        if (entry?.detail?.properties) {
+                            for (const [key, value] of Object.entries(entry.detail.properties || {})) {
+                                if (typeof value === 'string') {
+                                    maybeAddFieldTerms(key, value);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            this.extractPrSearchPhrasesFromText(this.prArticle?.expert_keywords || '', 4).forEach(add);
+            this.extractPrSearchPhrasesFromText(this.prArticle?.focus_instructions || '', 4).forEach(add);
+            this.extractPrSearchPhrasesFromText(this.prArticle?.subject_position || '', 3).forEach(add);
+
+            return terms.slice(0, limit);
+        },
+
+        currentArticleSearchTerms() {
+            if (this.isPrArticleMode()) {
+                return this.buildPrArticleSearchTerms();
+            }
+            return [...new Set([...this.suggestedTags, ...this.photoSuggestions.map(p => p.search_term)].filter(Boolean))];
+        },
+
+        prPhotoAudit(profileId) {
+            const profile = (this.selectedPrProfiles || []).find((candidate) => Number(candidate.id) === Number(profileId)) || null;
+            const pd = this.prSubjectData[profileId] || {};
+            const photos = Array.isArray(pd.photos) ? pd.photos : [];
+            const direct = photos.filter((photo) => String(photo.source || '').toLowerCase() === 'notion-profile');
+            const drive = photos.filter((photo) => String(photo.source || '').toLowerCase() === 'notion-drive');
+            const selectedIds = Object.keys(pd.selectedPhotos || {}).filter((id) => pd.selectedPhotos[id]);
+            const selected = photos.filter((photo) => selectedIds.includes(String(photo.id)));
+            const directFields = [...new Set(direct.map((photo) => this.prPhotoFieldLabel(photo)).filter(Boolean))];
+            const mainSubjectId = Number(this.prArticle.main_subject_id || this.selectedPrProfiles[0]?.id || 0);
+            const featuredCandidate = Number(profileId) === mainSubjectId
+                ? (selected[0] || direct[0] || drive[0] || null)
+                : null;
+
+            return {
+                directCount: direct.length,
+                driveCount: drive.length,
+                driveAvailable: !!pd.driveUrl,
+                driveLoaded: drive.length > 0,
+                selectedCount: selected.length,
+                directFields,
+                featuredLabel: featuredCandidate ? this.prFriendlyPhotoLabel(profile || {}, featuredCandidate, 1) : '',
+            };
+        },
+
+        async loadDriveFallbackPhotos(profileId) {
+            const profile = (this.selectedPrProfiles || []).find((candidate) => Number(candidate.id) === Number(profileId));
+            if (!profile) return;
+            return this.loadProfilePhotos(profile);
+        },
+
+        selectAllPrPhotos(profileId) {
+            const pd = this.prSubjectData[profileId];
+            if (!pd) return;
+            pd.selectedPhotos = {};
+            (pd.photos || []).forEach((photo) => {
+                pd.selectedPhotos[photo.id] = true;
+            });
+            this.hydratePrArticleSelectedMedia();
+            this.savePipelineState();
+            this.queueAutoSaveDraft?.(250);
+        },
+
+        clearPrPhotos(profileId) {
+            const pd = this.prSubjectData[profileId];
+            if (!pd) return;
+            pd.selectedPhotos = {};
+            this.hydratePrArticleSelectedMedia();
+            this.savePipelineState();
+            this.queueAutoSaveDraft?.(250);
+        },
+
+        selectAllPrRelationEntries(profileId, slug) {
+            const pd = this.prSubjectData[profileId];
+            if (!pd) return;
+            const rel = (pd.relations || []).find((candidate) => candidate.slug === slug);
+            if (!rel) return;
+            pd.selectedEntries = pd.selectedEntries || {};
+            (rel.entries || []).forEach((entry) => {
+                pd.selectedEntries[entry.id] = true;
+            });
+            this.savePipelineState();
+        },
+
+        clearPrRelationEntries(profileId, slug) {
+            const pd = this.prSubjectData[profileId];
+            if (!pd) return;
+            const rel = (pd.relations || []).find((candidate) => candidate.slug === slug);
+            if (!rel) return;
+            pd.selectedEntries = pd.selectedEntries || {};
+            (rel.entries || []).forEach((entry) => {
+                delete pd.selectedEntries[entry.id];
+            });
+            this.savePipelineState();
         },
 
         normalizeArticleHeadingText(value = '') {
@@ -1167,9 +1465,6 @@
                         for (const rel of pd.relations) {
                             this.loadPrRelation(normalizedProfile.id, rel.slug);
                         }
-                        if (pd.driveUrl) {
-                            this.loadProfilePhotos(normalizedProfile);
-                        }
                         await this.loadPrGoogleDocsForProfile(normalizedProfile.id);
                     }
                 } catch (e) {}
@@ -1294,15 +1589,17 @@
             const thumb = photo.thumbnailLink || photo.webContentLink || photo.webViewLink || url;
             const inferredSource = String(photo.source || '').trim() || 'notion-profile';
             const sourceUrl = photo.source_url || photo.webViewLink || url;
+            const label = this.prFriendlyPhotoLabel(profile, photo, 1);
             return {
                 id: photo.id || null,
                 source: inferredSource,
                 source_url: sourceUrl,
+                source_field: this.prPhotoFieldLabel(photo),
                 url,
                 url_thumb: thumb,
                 url_large: url,
                 url_full: url,
-                alt: photo.name || profile.name || 'subject photo',
+                alt: label,
                 photographer: profile.name || '',
                 photographer_url: '',
                 width: Number(photo.width || 0),
@@ -1327,8 +1624,9 @@
                 const sourcePhotos = selectedIds.length > 0
                     ? (pd.photos || []).filter(photo => selectedIds.includes(String(photo.id)))
                     : (pd.photos || []);
+                const orderedPhotos = [...sourcePhotos].sort((a, b) => this.prPhotoSourcePriority(a) - this.prPhotoSourcePriority(b));
 
-                for (const photo of sourcePhotos) {
+                for (const photo of orderedPhotos) {
                     const asset = this.prPhotoAssetFromDrivePhoto(profile, photo);
                     if (!asset.url_large || this.looksLikeGoogleDriveFolderUrl(asset.url_large) || seen.has(asset.url_large)) continue;
                     assets.push(asset);
@@ -1719,11 +2017,12 @@
 
             this.syncPrArticleForCurrentArticleType();
 
+            const effectiveMode = String(this.prArticle.expert_source_mode || '').trim() || (String(this.prArticle.expert_context_url || '').trim() ? 'url' : (String(this.prArticle.expert_keywords || '').trim() ? 'keywords' : 'none'));
             const hasFocusInstructions = !!String(this.prArticle.focus_instructions || '').trim();
-            const hasContextKeywords = this.prArticle.expert_source_mode === 'keywords' && !!String(this.prArticle.expert_keywords || '').trim();
-            const hasContextUrl = this.prArticle.expert_source_mode === 'url' && !!String(this.prArticle.expert_context_url || '').trim();
-            const hasImportedContext = this.prArticle.expert_source_mode === 'url' && !!String(this.prArticle.expert_context_extracted?.text || '').trim();
-            const hasContextPackage = hasContextKeywords || hasContextUrl || hasImportedContext;
+            const hasContextKeywords = effectiveMode !== 'url' && !!String(this.prArticle.expert_keywords || '').trim();
+            const hasContextUrl = !!String(this.prArticle.expert_context_url || '').trim();
+            const hasImportedContext = !!String(this.prArticle.expert_context_extracted?.text || '').trim();
+            const hasContextPackage = effectiveMode === 'url' ? (hasContextUrl || hasImportedContext) : hasContextKeywords;
 
             if (this.currentArticleType === 'pr-full-feature') {
                 if (!hasContextPackage) {

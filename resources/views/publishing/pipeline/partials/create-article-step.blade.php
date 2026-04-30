@@ -208,11 +208,11 @@
             </div>
 
             {{-- Main Search Terms — key people, places, things from the article --}}
-            <div class="mt-4 bg-white border border-gray-200 rounded-lg p-4" x-show="suggestedTags.length > 0 || photoSuggestions.length > 0" x-cloak>
+            <div class="mt-4 bg-white border border-gray-200 rounded-lg p-4" x-show="currentArticleSearchTerms().length > 0" x-cloak>
                 <h5 class="text-sm font-semibold text-gray-700 mb-2">Main Search Terms</h5>
                 <p class="text-xs text-gray-400 mb-3">Click to copy — use these to search for photos</p>
                 <div class="flex flex-wrap gap-2">
-                    <template x-for="term in [...new Set([...suggestedTags, ...photoSuggestions.map(p => p.search_term)].filter(Boolean))]" :key="term">
+                    <template x-for="term in currentArticleSearchTerms()" :key="term">
                         <button type="button" @click.stop="
                             navigator.clipboard.writeText(term);
                             $el.classList.add('bg-green-100', 'text-green-700', 'border-green-300');

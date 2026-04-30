@@ -548,31 +548,54 @@
                                     </div>
 
                                     {{-- Photos section with checkboxes --}}
-                                    <div x-show="prSubjectData[profile.id]?.photos?.length > 0" x-cloak class="px-5 py-3 border-b border-gray-100">
+                                    <div x-show="prSubjectData[profile.id]?.photos?.length > 0 || prSubjectData[profile.id]?.driveUrl" x-cloak class="px-5 py-3 border-b border-gray-100">
+                                        <div class="rounded-lg border border-indigo-100 bg-indigo-50/40 px-3 py-3 mb-3 text-xs text-gray-700">
+                                            <div class="flex flex-wrap items-center gap-2 justify-between">
+                                                <div class="space-y-1">
+                                                    <p class="font-semibold text-gray-900">Photo source audit</p>
+                                                    <p>Direct Notion photo fields: <span class="font-medium" x-text="prPhotoAudit(profile.id).directFields.length ? prPhotoAudit(profile.id).directFields.join(', ') : 'None detected'"></span></p>
+                                                    <p>Google Drive fallback: <span class="font-medium" x-text="prPhotoAudit(profile.id).driveAvailable ? (prPhotoAudit(profile.id).driveLoaded ? 'Loaded manually' : 'Available but not loaded') : 'Not configured'"></span></p>
+                                                    <p x-show="prPhotoAudit(profile.id).featuredLabel" x-cloak>Automatic featured image candidate: <span class="font-medium" x-text="prPhotoAudit(profile.id).featuredLabel"></span></p>
+                                                </div>
+                                                <button x-show="prSubjectData[profile.id]?.driveUrl && !prPhotoAudit(profile.id).driveLoaded" x-cloak @click="loadDriveFallbackPhotos(profile.id)" :disabled="prSubjectData[profile.id]?.loadingPhotos" class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-700 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 disabled:opacity-50">
+                                                    <svg x-show="prSubjectData[profile.id]?.loadingPhotos" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                                    <span x-text="prSubjectData[profile.id]?.loadingPhotos ? 'Loading Drive photos…' : 'Load Drive fallback photos'"></span>
+                                                </button>
+                                            </div>
+                                        </div>
                                         <div class="flex items-center justify-between mb-2">
                                             <h5 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                                                 Photos
                                                 <span class="text-gray-300 font-normal ml-1" x-text="'(' + (prSubjectData[profile.id]?.photos?.length || 0) + ')'"></span>
                                             </h5>
-                                            <span class="text-[10px] text-gray-400">Check photos to include in article</span>
+                                            <div class="flex items-center gap-2 text-[10px] text-gray-400">
+                                                <span>Check photos to include in article</span>
+                                                <button @click="selectAllPrPhotos(profile.id)" type="button" class="text-indigo-600 hover:text-indigo-800">Select all</button>
+                                                <button @click="clearPrPhotos(profile.id)" type="button" class="text-gray-500 hover:text-gray-700">Select none</button>
+                                            </div>
                                         </div>
-                                        <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                                            <template x-for="photo in (prSubjectData[profile.id]?.photos || [])" :key="photo.id">
+                                        <div class="grid grid-cols-3 sm:grid-cols-4 gap-2" x-show="prSubjectData[profile.id]?.photos?.length > 0" x-cloak>
+                                            <template x-for="(photo, photoIdx) in (prSubjectData[profile.id]?.photos || [])" :key="photo.id">
                                                 <label class="relative rounded-lg overflow-hidden border-2 aspect-square bg-gray-100 cursor-pointer transition-all"
                                                     :class="prSubjectData[profile.id]?.selectedPhotos?.[photo.id] ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-gray-200 hover:border-gray-300'">
                                                     <input type="checkbox" class="sr-only" @change="togglePrPhotoSelect(profile.id, photo.id)" :checked="prSubjectData[profile.id]?.selectedPhotos?.[photo.id]">
                                                     <div class="absolute inset-0 hidden items-center justify-center px-3 text-center text-[11px] font-medium text-gray-500 bg-gray-50 js-pr-photo-fallback">
                                                         Image blocked by source
                                                     </div>
-                                                    <img :src="photo.thumbnailLink || photo.webContentLink" :alt="photo.name" class="w-full h-full object-cover" loading="lazy" onerror="this.classList.add('hidden'); this.parentElement.querySelector('.js-pr-photo-fallback')?.classList.remove('hidden'); this.parentElement.querySelector('.js-pr-photo-fallback')?.classList.add('flex');">
+                                                    <img :src="photo.thumbnailLink || photo.webContentLink" :alt="prFriendlyPhotoLabel(profile, photo, photoIdx + 1)" class="w-full h-full object-cover" loading="lazy" onerror="this.classList.add('hidden'); this.parentElement.querySelector('.js-pr-photo-fallback')?.classList.remove('hidden'); this.parentElement.querySelector('.js-pr-photo-fallback')?.classList.add('flex');">
                                                     <div x-show="prSubjectData[profile.id]?.selectedPhotos?.[photo.id]" class="absolute top-1 right-1 w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center">
                                                         <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
                                                     </div>
-                                                    <div class="absolute inset-x-0 bottom-0 bg-black/50 px-1.5 py-1">
-                                                        <p class="text-[9px] text-white truncate" x-text="photo.name"></p>
+                                                    <div class="absolute inset-x-0 bottom-0 bg-black/55 px-1.5 py-1 space-y-0.5">
+                                                        <p class="text-[9px] text-white truncate" x-text="prFriendlyPhotoLabel(profile, photo, photoIdx + 1)"></p>
+                                                        <p class="text-[9px] text-white/80 truncate" x-text="prPhotoFieldLabel(photo) || (String(photo.source || '').toLowerCase() === 'notion-drive' ? 'Google Drive fallback' : 'Notion direct field')"></p>
                                                     </div>
                                                 </label>
                                             </template>
+                                        </div>
+                                        <div x-show="prSubjectData[profile.id]?.loadingPhotos" x-cloak class="mt-3 flex items-center gap-2 text-xs text-gray-500">
+                                            <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                            Loading photos...
                                         </div>
                                     </div>
                                     <div x-show="prSubjectData[profile.id]?.loadingPhotos" x-cloak class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 text-xs text-gray-500">
@@ -589,7 +612,11 @@
                                                     <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 text-xs font-semibold text-gray-700">
                                                         <span x-text="rel.label"></span>
                                                         <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-gray-200 text-gray-600" x-text="rel.count || 0"></span>
-                                                        <svg x-show="rel.loading" class="w-3 h-3 animate-spin ml-auto text-indigo-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                                        <div class="ml-auto flex items-center gap-2 text-[10px] font-medium">
+                                                            <button @click="selectAllPrRelationEntries(profile.id, rel.slug)" type="button" class="text-indigo-600 hover:text-indigo-800">Select all</button>
+                                                            <button @click="clearPrRelationEntries(profile.id, rel.slug)" type="button" class="text-gray-500 hover:text-gray-700">Select none</button>
+                                                            <svg x-show="rel.loading" class="w-3 h-3 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                                        </div>
                                                     </div>
                                                     <div x-show="rel.entries?.length > 0" class="divide-y divide-gray-100">
                                                         <template x-for="entry in (rel.entries || [])" :key="entry.id">
@@ -606,7 +633,7 @@
                                                                     </div>
                                                                     <template x-if="entry.detail">
                                                                         <div class="space-y-1">
-                                                                            <template x-for="[k,v] in Object.entries(entry.detail.properties || {}).slice(0, 10)" :key="k">
+                                                                            <template x-for="[k,v] in Object.entries(entry.detail.properties || {})" :key="k">
                                                                                 <div class="flex gap-2">
                                                                                     <span class="text-gray-500 w-28 flex-shrink-0" x-text="k"></span>
                                                                                     <span class="text-gray-800 break-words" x-text="typeof v === 'object' ? JSON.stringify(v) : v"></span>
