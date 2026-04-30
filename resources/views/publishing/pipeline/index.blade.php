@@ -314,9 +314,16 @@
                                 <p class="text-xs text-gray-600 mt-1" x-show="currentArticleType === 'pr-full-feature'">Select the main subject, define the editorial angle, and explain what the writer must emphasize. The article should market the client through credible feature writing, not overt promotion.</p>
                                 <p class="text-xs text-gray-600 mt-1" x-show="currentArticleType === 'expert-article'">Define the topic, the subject's position, and whether the subject should lead visually or appear more subtly. The article should stay topic-first while using the client as the expert authority.</p>
                             </div>
-                            <div class="text-[11px] text-gray-500 bg-white border border-blue-200 rounded-lg px-3 py-2 max-w-xs">
-                                <strong class="text-gray-800 block mb-1">Writer guidance</strong>
-                                Include what to focus on, whose view matters most, which related records matter, how promotional the tone should feel, and what quotes or positioning must show up.
+                            <div class="w-full max-w-sm">
+                                <x-hexa-tooltip mode="collapse" title="Writer guidance" label="Show writing checklist" emoji="✍️" tone="blue">
+                                    <ul class="list-disc list-inside space-y-1">
+                                        <li>Explain the editorial angle, not just the topic.</li>
+                                        <li>Name whose perspective should lead the article.</li>
+                                        <li>Call out which related records or subjects must be woven in.</li>
+                                        <li>Describe how promotional or restrained the tone should feel.</li>
+                                        <li>List any must-hit quotes, positioning, or talking points.</li>
+                                    </ul>
+                                </x-hexa-tooltip>
                             </div>
                         </div>
 
