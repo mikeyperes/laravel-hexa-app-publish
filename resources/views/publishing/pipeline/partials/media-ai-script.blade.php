@@ -241,31 +241,73 @@
             this.checkingAllArticleLinks = false;
         },
 
-        async loadSyndicationCategories() {
-            if (!this.selectedSite?.id) return;
+        async loadSyndicationCategories(force = false) {
+            if (!this.selectedSite?.id || this.loadingSyndicationCats) return;
             this.loadingSyndicationCats = true;
             try {
-                const resp = await fetch('/publish/sites/' + this.selectedSite.id + '/categories', {
+                const url = new URL("/publish/sites/" + this.selectedSite.id + "/categories", window.location.origin);
+                url.searchParams.set("taxonomy", "publication");
+                if (force) {
+                    url.searchParams.set("force", "1");
+                }
+                const resp = await fetch(url.toString(), {
                     headers: this.requestHeaders(),
                 });
                 const data = await resp.json();
-                if (data.success && data.categories) {
-                    this.syndicationCategories = data.categories;
-                    // Auto-select all by default
-                    this.selectedSyndicationCats = data.categories.map(c => c.id);
+                if (data.success && Array.isArray(data.categories)) {
+                    const normalized = data.categories.map((cat) => ({
+                        ...cat,
+                        id: Number(cat.id),
+                        parent: Number(cat.parent || 0),
+                        depth: Number(cat.depth || 0),
+                        label: cat.label || cat.name || "",
+                        is_parent: !!cat.is_parent,
+                    }));
+                    this.syndicationCategories = normalized;
+                    this.syndicationCategoriesCacheMeta = {
+                        cached: !!data.cached,
+                        cached_at: data.cached_at || null,
+                        age_seconds: Number(data.age_seconds || 0),
+                        age_human: data.age_human || "just now",
+                    };
+                    const existing = Array.isArray(this.selectedSyndicationCats)
+                        ? this.selectedSyndicationCats.map((id) => Number(id))
+                        : [];
+                    const validIds = new Set(normalized.map((cat) => Number(cat.id)));
+                    const preserved = existing.filter((id) => validIds.has(Number(id)));
+                    this.selectedSyndicationCats = preserved.length > 0 && !force
+                        ? preserved
+                        : normalized.map((cat) => Number(cat.id));
+                    this.savePipelineState?.();
                 } else {
-                    this.showNotification('error', data.message || 'Failed to load categories');
+                    this.showNotification("error", data.message || "Failed to load publication taxonomy");
                 }
             } catch (e) {
-                this.showNotification('error', 'Error loading categories: ' + e.message);
+                this.showNotification("error", "Error loading publication taxonomy: " + e.message);
             }
             this.loadingSyndicationCats = false;
         },
 
+        resyncSyndicationCategories() {
+            return this.loadSyndicationCategories(true);
+        },
+
+        selectAllSyndicationCats() {
+            this.selectedSyndicationCats = (this.syndicationCategories || []).map((cat) => Number(cat.id));
+            this.savePipelineState?.();
+        },
+
+        clearSyndicationCats() {
+            this.selectedSyndicationCats = [];
+            this.savePipelineState?.();
+        },
+
         toggleSyndicationCat(id) {
-            const idx = this.selectedSyndicationCats.indexOf(id);
+            const normalizedId = Number(id);
+            const idx = this.selectedSyndicationCats.indexOf(normalizedId);
             if (idx > -1) this.selectedSyndicationCats.splice(idx, 1);
-            else this.selectedSyndicationCats.push(id);
+            else this.selectedSyndicationCats.push(normalizedId);
+            this.savePipelineState?.();
         },
 
         removeArticleLink(idx) {

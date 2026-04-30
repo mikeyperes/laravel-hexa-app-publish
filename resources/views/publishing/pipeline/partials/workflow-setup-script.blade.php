@@ -116,6 +116,10 @@
                 this.selectTemplate();
             }
 
+            if (this.template_overrides?.article_type) {
+                this.autoSelectPrSource();
+            }
+
             if (!this._restoring) this.autoSaveDraft();
         },
 
@@ -159,6 +163,7 @@
             this.templatesLoading = true;
             if (this._useBootstrappedTemplatesIfAvailable()) {
                 this.templatesLoading = false;
+                this.autoSelectPrSource();
                 return this.templates;
             }
             try {
@@ -167,7 +172,7 @@
                 });
                 const data = await resp.json();
                 this.templates = data.data || data || [];
-                this.autoSelectPressReleaseTemplate();
+                this.autoSelectPrSource();
             } catch (e) { this.templates = []; }
             this.templatesLoading = false;
         },
@@ -241,6 +246,9 @@
                     }
                     if (!this.siteConn.authors.length) {
                         this.loadSiteAuthors(this.selectedSiteId, { cacheKey });
+                    }
+                    if (this.currentArticleType === 'press-release' && this.selectedSite?.is_press_release_source && typeof this.loadSyndicationCategories === 'function') {
+                        this.loadSyndicationCategories(false);
                     }
                     this._logActivity('site', this.siteConn.status === true ? 'success' : 'warning', 'Selected site ' + this.selectedSite.name, {
                         stage: 'selection',
@@ -628,6 +636,9 @@
                 if (force || !this.prArticle.quote_count || this.prArticle.quote_count > 3) {
                     this.prArticle.quote_count = 2;
                 }
+                if (!['keywords', 'url', 'none'].includes(this.prArticle.expert_source_mode)) {
+                    this.prArticle.expert_source_mode = 'keywords';
+                }
                 this.prArticle.include_subject_name_in_title = this.prArticle.include_subject_name_in_title !== false;
                 this.prArticle.feature_photo_mode = 'featured_and_inline';
             }
@@ -696,20 +707,44 @@
             }
 
             if (this.currentArticleType === 'pr-full-feature' && subjectName !== 'Untitled') {
-                return `${subjectName}: A Feature Profile`;
+                return subjectName;
             }
 
             return subjectName;
         },
 
-        ensureArticleTitleInHtml(html = '', title = '') {
-            const bodyHtml = String(html || '');
-            const cleanTitle = String(title || '').trim();
-            if (!bodyHtml || !cleanTitle) return bodyHtml;
-            if (/<h1[\s>]/i.test(bodyHtml)) return bodyHtml;
+        normalizeArticleHeadingText(value = '') {
+            return String(value || '')
+                .replace(/\s+/g, ' ')
+                .replace(/[“”]/g, '"')
+                .replace(/[‘’]/g, "'")
+                .trim()
+                .toLowerCase();
+        },
 
-            const h1 = `<h1>${this._escHtml(cleanTitle)}</h1>\n`;
-            return h1 + bodyHtml;
+        ensureArticleTitleInHtml(html = '', title = '') {
+            const raw = String(html || '').trim();
+            if (!raw) return '';
+
+            try {
+                const container = document.createElement('div');
+                container.innerHTML = raw;
+                const firstHeading = container.querySelector('h1');
+                if (!firstHeading) {
+                    return raw;
+                }
+
+                const headingText = this.normalizeArticleHeadingText(firstHeading.textContent || '');
+                const titleText = this.normalizeArticleHeadingText(title || '');
+                const h1Count = container.querySelectorAll('h1').length;
+
+                if (headingText && (!titleText || headingText === titleText || h1Count === 1)) {
+                    firstHeading.remove();
+                    return container.innerHTML.trim();
+                }
+            } catch (e) {}
+
+            return raw;
         },
 
         looksLikeGoogleDriveFolderUrl(url = '') {
@@ -727,6 +762,42 @@
             } catch (e) {
                 return false;
             }
+        },
+
+        notionDatabaseLabel(typeOrSlug = '') {
+            const normalized = String(typeOrSlug || '').toLowerCase();
+            if (normalized.includes('organization') || normalized.includes('company')) {
+                return 'Company Database';
+            }
+            return 'Person Database';
+        },
+
+        notionTableLabelForProfile(profile = {}) {
+            return this.notionDatabaseLabel(profile?.type_slug || profile?.type || '');
+        },
+
+        notionAuditFieldLabel(entry = {}) {
+            return String(entry?.field || entry?.notion_field || entry?.key || '').trim();
+        },
+
+        notionAuditSourceLabel(entry = {}, fallbackTable = '') {
+            const table = String(entry?.source_table || fallbackTable || '').trim();
+            const field = String(entry?.source_field || entry?.field || entry?.notion_field || entry?.key || '').trim();
+            if (table && field) return `${table} > ${field}`;
+            return table || field || 'Notion';
+        },
+
+        prProfilePhotoUrl(photo = {}) {
+            return this.toAbsoluteMediaUrl(photo?.webContentLink || photo?.webViewLink || photo?.thumbnailLink || photo?.url || '');
+        },
+
+        isPrimaryPrProfilePhoto(profile = {}, photo = {}) {
+            if (this.currentArticleType === 'expert-article' && this.prArticle.feature_photo_mode === 'inline_only') {
+                return false;
+            }
+            const primary = this.selectedPrPhotoAssets(1)[0] || null;
+            if (!primary) return false;
+            return this.prProfilePhotoUrl(photo) === this.toAbsoluteMediaUrl(primary.url_large || primary.url || '');
         },
 
         normalizePrProfileForState(profile = {}) {
@@ -1107,6 +1178,9 @@
             pd.loaded = true;
             pd.loading = false;
             this.syncPrArticleForCurrentArticleType();
+            if (this.isPrArticleMode()) {
+                this.$nextTick(() => this.hydratePrArticleSelectedMedia());
+            }
             if (!options.skipSave) {
                 this.savePipelineState();
             }
@@ -1192,7 +1266,9 @@
             if (!pd) return;
             if (!pd.selectedPhotos) pd.selectedPhotos = {};
             pd.selectedPhotos[photoId] = !pd.selectedPhotos[photoId];
+            this.hydratePrArticleSelectedMedia();
             this.savePipelineState();
+            this.queueAutoSaveDraft?.(250);
         },
 
         bootstrapPrPhotoSelection(profileId) {
@@ -1414,30 +1490,34 @@
             if (this.currentArticleType === 'expert-article') {
                 lines.push('Subject position on the topic: ' + (this.prArticle.subject_position || 'Use the subject as a credible expert voice.'));
                 lines.push('Photo mode: ' + (this.prArticle.feature_photo_mode === 'inline_only' ? 'Inline subject photos only; no featured subject image.' : 'Use the subject as the featured image and also include inline photos.'));
-
-                if (this.prArticle.expert_source_mode === 'keywords' && this.prArticle.expert_keywords) {
-                    lines.push("\n=== TOPIC KEYWORDS ===\n" + this.prArticle.expert_keywords);
-                } else if (this.prArticle.expert_source_mode === 'keywords' && usePlaceholder) {
-                    lines.push("\n=== TOPIC KEYWORDS ===\n[Topic keywords will be inserted here]");
-                }
-
-                if (this.prArticle.expert_source_mode === 'url' && this.prArticle.expert_context_extracted?.text) {
-                    const imported = this.prArticle.expert_context_extracted;
-                    lines.push("\n=== IMPORTED TOPIC ARTICLE ===");
-                    lines.push('Title: ' + (imported.title || ''));
-                    lines.push('URL: ' + (imported.url || this.prArticle.expert_context_url || ''));
-                    if (imported.excerpt) {
-                        lines.push('Excerpt: ' + imported.excerpt);
-                    }
-                    if (imported.text) {
-                        lines.push("\n" + imported.text.substring(0, 12000));
-                    }
-                } else if (this.prArticle.expert_source_mode === 'url' && usePlaceholder) {
-                    lines.push("\n=== IMPORTED TOPIC ARTICLE ===\n[Imported article context will be inserted here]");
-                }
             } else {
                 lines.push('Photo mode: Use the main subject as the featured image when subject photos exist.');
                 lines.push('Inline client photos: Use 2-3 real subject photos in the body when available.');
+            }
+
+            const contextLabel = this.currentArticleType === 'expert-article' ? 'TOPIC CONTEXT' : 'EDITORIAL CONTEXT';
+            if (this.prArticle.expert_source_mode === 'keywords' && this.prArticle.expert_keywords) {
+                lines.push(`\n=== ${contextLabel} SEARCH TERMS ===\n` + this.prArticle.expert_keywords);
+            } else if (this.prArticle.expert_source_mode === 'keywords' && usePlaceholder) {
+                lines.push(`\n=== ${contextLabel} SEARCH TERMS ===\n[Context search terms will be inserted here]`);
+            }
+
+            if (this.prArticle.expert_source_mode === 'url' && this.prArticle.expert_context_extracted?.text) {
+                const imported = this.prArticle.expert_context_extracted;
+                lines.push(`\n=== IMPORTED ${contextLabel} ARTICLE ===`);
+                lines.push('Title: ' + (imported.title || ''));
+                lines.push('URL: ' + (imported.url || this.prArticle.expert_context_url || ''));
+                if (imported.excerpt) {
+                    lines.push('Excerpt: ' + imported.excerpt);
+                }
+                if (this.currentArticleType === 'pr-full-feature') {
+                    lines.push('Use this article as editorial backdrop only. Keep the client as the central feature subject.');
+                }
+                if (imported.text) {
+                    lines.push("\n" + imported.text.substring(0, 12000));
+                }
+            } else if (this.prArticle.expert_source_mode === 'url' && usePlaceholder) {
+                lines.push(`\n=== IMPORTED ${contextLabel} ARTICLE ===\n[Imported article context will be inserted here]`);
             }
 
             return lines.join("\n").trim();
@@ -1478,6 +1558,26 @@
                     parts.push((idx === 0 ? 'PRIMARY PHOTO' : 'PHOTO ' + (idx + 1)) + ': ' + (asset.alt || 'subject photo') + ' | URL: ' + (asset.url_large || asset.source_url || ''));
                 });
                 parts.push('Use the selected subject photo inventory. Emit one FEATURED marker when the brief allows it, and 2-3 PHOTO markers for inline placement where relevant.');
+                parts.push('');
+            }
+
+            if (this.prArticle.expert_source_mode === 'keywords' && this.prArticle.expert_keywords) {
+                parts.push('=== CONTEXT SEARCH TERMS ===');
+                parts.push(this.prArticle.expert_keywords);
+                parts.push('');
+            }
+
+            if (this.prArticle.expert_source_mode === 'url' && this.prArticle.expert_context_extracted?.text) {
+                parts.push('=== IMPORTED CONTEXT ARTICLE ===');
+                parts.push('Title: ' + (this.prArticle.expert_context_extracted.title || ''));
+                parts.push('URL: ' + (this.prArticle.expert_context_extracted.url || this.prArticle.expert_context_url || ''));
+                if (this.prArticle.expert_context_extracted.excerpt) {
+                    parts.push('Excerpt: ' + this.prArticle.expert_context_extracted.excerpt);
+                }
+                if (this.currentArticleType === 'pr-full-feature') {
+                    parts.push('Use this external article as editorial backdrop only. The profile subject remains the focus.');
+                }
+                parts.push(this.prArticle.expert_context_extracted.text.substring(0, 12000));
                 parts.push('');
             }
 
@@ -1618,9 +1718,32 @@
             }
 
             this.syncPrArticleForCurrentArticleType();
+
+            const hasFocusInstructions = !!String(this.prArticle.focus_instructions || '').trim();
+            const hasContextKeywords = this.prArticle.expert_source_mode === 'keywords' && !!String(this.prArticle.expert_keywords || '').trim();
+            const hasContextUrl = this.prArticle.expert_source_mode === 'url' && !!String(this.prArticle.expert_context_url || '').trim();
+            const hasImportedContext = this.prArticle.expert_source_mode === 'url' && !!String(this.prArticle.expert_context_extracted?.text || '').trim();
+            const hasContextPackage = hasContextKeywords || hasContextUrl || hasImportedContext;
+
+            if (this.currentArticleType === 'pr-full-feature') {
+                if (!hasContextPackage) {
+                    this.showNotification('error', 'Add editorial context terms or import a context article before continuing.');
+                    return;
+                }
+                if (!hasFocusInstructions) {
+                    this.showNotification('error', 'Tell the writer how to use that context in Article Focus Instructions before continuing.');
+                    return;
+                }
+            }
+
+            if (this.currentArticleType === 'expert-article' && !hasContextPackage) {
+                this.showNotification('error', 'Add topic context terms or import a context article before continuing.');
+                return;
+            }
+
             await this.ensurePrSubjectContextReady();
 
-            if (this.currentArticleType === 'expert-article'
+            if ((this.currentArticleType === 'expert-article' || this.currentArticleType === 'pr-full-feature')
                 && this.prArticle.expert_source_mode === 'url'
                 && this.prArticle.expert_context_url
                 && !this.prArticle.expert_context_extracted?.text) {
@@ -1651,6 +1774,7 @@
                 if (result.success) {
                     data.photos = this.mergePrPhotoCollections(data.photos, result.photos || []);
                     this.bootstrapPrPhotoSelection(profile.id);
+                    this.hydratePrArticleSelectedMedia();
                     this.savePipelineState();
                 }
             } catch (e) {}

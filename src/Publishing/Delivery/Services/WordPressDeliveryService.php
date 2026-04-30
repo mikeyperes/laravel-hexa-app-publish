@@ -84,6 +84,19 @@ class WordPressDeliveryService
 
         $postId = $result['data']['post_id'] ?? null;
 
+        if ($postId && !empty($options['publication_term_ids'])) {
+            $taxonomyResult = $this->wptoolkit->wpCliSetPostTerms(
+                $resolved['server'],
+                $site->wordpress_install_id,
+                (int) $postId,
+                'publication',
+                (array) $options['publication_term_ids']
+            );
+            if (!($taxonomyResult['success'] ?? false)) {
+                $result['message'] = trim(($result['message'] ?? 'Post created.') . ' Warning: ' . ($taxonomyResult['message'] ?? 'Failed to set publication terms.'));
+            }
+        }
+
         return $this->success(
             $site,
             $transportMode,
@@ -113,6 +126,19 @@ class WordPressDeliveryService
 
         if (!$result['success']) {
             return $this->failure($result['message'] ?? 'WP Toolkit update failed.', $transportMode);
+        }
+
+        if (!empty($options['publication_term_ids'])) {
+            $taxonomyResult = $this->wptoolkit->wpCliSetPostTerms(
+                $resolved['server'],
+                $site->wordpress_install_id,
+                $postId,
+                'publication',
+                (array) $options['publication_term_ids']
+            );
+            if (!($taxonomyResult['success'] ?? false)) {
+                $result['message'] = trim(($result['message'] ?? 'Post updated.') . ' Warning: ' . ($taxonomyResult['message'] ?? 'Failed to set publication terms.'));
+            }
         }
 
         return $this->success(
@@ -242,6 +268,10 @@ class WordPressDeliveryService
 
         if (!empty($options['tag_ids'])) {
             $postData['tags'] = array_values($options['tag_ids']);
+        }
+
+        if (!empty($options['publication_term_ids'])) {
+            $postData['publication'] = array_values($options['publication_term_ids']);
         }
 
         if (!empty($options['date'])) {

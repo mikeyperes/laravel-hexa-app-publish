@@ -69,8 +69,8 @@
             {{-- Notion podcast episode import --}}
             <div x-show="pressRelease.submit_method === 'notion-podcast'" x-cloak class="space-y-4"
                 @hexa-search-selected.window="if ($event.detail.component_id === 'press-release-episode-search') importPressReleaseNotionEpisode($event.detail.item)">
-                <div class="rounded-xl border border-purple-200 bg-purple-50/70 px-4 py-3 text-sm text-purple-900">
-                    Select a Michael Peres Podcast episode from Notion. The linked guest record is pulled from the relational People database automatically.
+                <div class="rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-3 text-sm text-blue-900">
+                    <span class="font-semibold">💡 Good to know:</span> select a podcast episode from Notion and the linked guest record, guest/company links, YouTube embed, episode thumbnail, and inline guest image are all enforced automatically.
                 </div>
 
                 <div class="space-y-3">
@@ -125,7 +125,10 @@
                             <p class="text-xs text-gray-500 mt-1">Guest is auto-derived from the linked Notion People record.</p>
                         </div>
                         <div class="flex items-center gap-3">
-                            <button @click="importPressReleaseNotionEpisode(pressRelease.notion_episode)" :disabled="pressReleaseImportingEpisodeId === pressRelease.notion_episode.id" type="button" class="text-xs text-purple-600 hover:text-purple-800 font-medium">Refresh Import</button>
+                            <button @click="importPressReleaseNotionEpisode(pressRelease.notion_episode)" :disabled="pressReleaseImportingEpisodeId === pressRelease.notion_episode.id" type="button" class="inline-flex items-center gap-2 text-xs text-purple-600 hover:text-purple-800 font-medium disabled:opacity-50">
+                                <svg x-show="pressReleaseImportingEpisodeId === pressRelease.notion_episode.id" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                <span x-text="pressReleaseImportingEpisodeId === pressRelease.notion_episode.id ? &quot;Refreshing…&quot; : &quot;Refresh Import&quot;"></span>
+                            </button>
                             <a x-show="pressRelease.notion_episode?.record_url" x-cloak
                                 :href="pressRelease.notion_episode.record_url"
                                 target="_blank" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700" title="Open in Notion">
@@ -164,9 +167,9 @@
                                     <div class="mt-3 space-y-3">
                                         <template x-for="entry in (pressRelease.notion_source_fields?.episode || [])" :key="'episode-' + entry.field + '-' + entry.source_field">
                                             <div class="grid grid-cols-1 gap-1 md:grid-cols-[180px_minmax(0,1fr)]">
-                                                <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500" x-text="entry.field"></p>
+                                                <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500" x-text="notionAuditFieldLabel(entry) || &quot;Field&quot;"></p>
                                                 <div>
-                                                    <p class="text-xs text-gray-400" x-text="entry.source_field"></p>
+                                                    <p class="text-xs text-gray-400" x-text="notionAuditSourceLabel(entry, &quot;Podcast Episode Database&quot;)"></p>
                                                     <p class="mt-1 text-sm text-gray-800 whitespace-pre-wrap break-words" x-text="entry.value"></p>
                                                 </div>
                                             </div>
@@ -180,7 +183,7 @@
                                             <div class="grid grid-cols-1 gap-1 md:grid-cols-[180px_minmax(0,1fr)]">
                                                 <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500" x-text="entry.field"></p>
                                                 <div>
-                                                    <p class="text-xs text-gray-400" x-text="entry.source_field"></p>
+                                                    <p class="text-xs text-gray-400" x-text="notionAuditSourceLabel(entry, &quot;Person Database&quot;)"></p>
                                                     <p class="mt-1 text-sm text-gray-800 whitespace-pre-wrap break-words" x-text="entry.value"></p>
                                                 </div>
                                             </div>
@@ -196,8 +199,8 @@
                                 <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                                     <template x-for="entry in (pressRelease.notion_source_fields?.enforcement || [])" :key="'enforce-' + entry.field + '-' + entry.source_field">
                                         <div>
-                                            <p class="text-[11px] uppercase tracking-wide text-gray-500" x-text="entry.field"></p>
-                                            <p class="text-xs text-gray-400" x-text="entry.source_field"></p>
+                                            <p class="text-[11px] uppercase tracking-wide text-gray-500" x-text="notionAuditFieldLabel(entry) || &quot;Field&quot;"></p>
+                                            <p class="text-xs text-gray-400" x-text="notionAuditSourceLabel(entry, &quot;Canonical Targets&quot;)"></p>
                                             <template x-if="String(entry.value || '').startsWith('http')">
                                                 <a :href="entry.value" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="entry.value"></a>
                                             </template>

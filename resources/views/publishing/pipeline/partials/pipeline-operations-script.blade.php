@@ -975,6 +975,7 @@
                 title: this.articleTitle || 'article',
                 site_id: this.selectedSite?.id || null,
                 categories: this.selectedCategoryNames(),
+                publication_term_ids: Array.isArray(this.selectedSyndicationCats) ? this.selectedSyndicationCats.map((id) => Number(id)) : [],
                 tags: this.selectedTagNames(),
                 draft_id: this.draftId,
                 photo_meta: this.photoSuggestions.filter(p => !p.removed && p.autoPhoto).map((p, i) => ({

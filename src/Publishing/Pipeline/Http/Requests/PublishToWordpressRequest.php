@@ -12,6 +12,7 @@ class PublishToWordpressRequest extends PipelineRequest
             'site_id' => 'required|integer|exists:publish_sites,id',
             'category_ids' => 'nullable|array',
             'tag_ids' => 'nullable|array',
+            'publication_term_ids' => 'nullable|array',
             'status' => 'required|in:publish,draft,future',
             'date' => 'nullable|date',
             'pipeline_session_id' => 'nullable|string|max:100',

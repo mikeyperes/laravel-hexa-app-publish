@@ -396,8 +396,8 @@
                             </div>
                         </div>
 
-                        <div x-show="currentArticleType === 'expert-article'" x-cloak class="space-y-4">
-                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div x-show="currentArticleType === 'expert-article' || currentArticleType === 'pr-full-feature'" x-cloak class="space-y-4">
+                            <div x-show="currentArticleType === 'expert-article'" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Subject Position On The Topic</label>
                                     <textarea x-model="prArticle.subject_position" @change="savePipelineState()" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 resize-y" placeholder="Explain the subject's thesis, position, or interpretation so the article aligns with their view."></textarea>
@@ -414,8 +414,8 @@
                             <div class="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
                                 <div class="flex items-center justify-between gap-3">
                                     <div>
-                                        <h6 class="text-sm font-semibold text-gray-800">Topic Context</h6>
-                                        <p class="text-xs text-gray-500">You can import a specific live article for context, or provide topic keywords if you want the AI to build the expert article around a broader issue.</p>
+                                        <h6 class="text-sm font-semibold text-gray-800" x-text="currentArticleType === 'pr-full-feature' ? 'Editorial Context' : 'Topic Context'"></h6>
+                                        <p class="text-xs text-gray-500" x-text="currentArticleType === 'pr-full-feature' ? 'Import a real article or enter editorial search terms, then tell the writer how to use that context in Article Focus Instructions above.' : 'You can import a specific live article for context, or provide topic keywords if you want the AI to build the expert article around a broader issue.'"></p>
                                     </div>
                                     <select x-model="prArticle.expert_source_mode" @change="savePipelineState()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
                                         <option value="keywords">Keywords / topic</option>
@@ -1723,6 +1723,7 @@ function publishPipeline() {
 
         // Step 8 — Publish (combined)
         syndicationCategories: [],
+        syndicationCategoriesCacheMeta: null,
         selectedSyndicationCats: [],
         loadingSyndicationCats: false,
         _previousSiteId: null,

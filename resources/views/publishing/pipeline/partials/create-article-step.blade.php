@@ -99,31 +99,47 @@
                     </div>
                 </div>
             </div>
-
-            {{-- Press Release Syndication Categories (hexaprwire only) --}}
+            {{-- Press Release Publication Taxonomy (hexaprwire only) --}}
             <div x-show="currentArticleType === 'press-release' && selectedSite?.is_press_release_source" x-cloak class="mt-3">
-                <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-3">
-                        <h5 class="text-sm font-semibold text-purple-800">Syndication Categories</h5>
-                        <button x-show="!syndicationCategories.length && !loadingSyndicationCats" @click="loadSyndicationCategories()" class="text-xs text-purple-600 hover:text-purple-800 inline-flex items-center gap-1">
-                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                            Load from WordPress
-                        </button>
-                        <span x-show="loadingSyndicationCats" x-cloak class="text-xs text-purple-500 inline-flex items-center gap-1">
-                            <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                            Loading...
-                        </span>
+                <div class="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-4">
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                            <h5 class="text-sm font-semibold text-purple-900">Publication Syndication</h5>
+                            <p class="text-xs text-purple-700 mt-1">This uses the live hierarchical <span class="font-semibold">publication</span> taxonomy from Hexa PR Wire. All publications are selected by default.</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 text-xs">
+                            <span x-show="syndicationCategoriesCacheMeta?.age_human && syndicationCategories.length > 0" x-cloak class="inline-flex items-center gap-1 rounded-full bg-white border border-purple-200 px-2.5 py-1 text-purple-700">
+                                <span>Cached</span>
+                                <span x-text="syndicationCategoriesCacheMeta?.age_human || 'just now'"></span>
+                            </span>
+                            <button x-show="syndicationCategories.length > 0 && !loadingSyndicationCats" x-cloak @click="selectAllSyndicationCats()" type="button" class="rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-purple-700 hover:bg-purple-100">Select all</button>
+                            <button x-show="syndicationCategories.length > 0 && !loadingSyndicationCats" x-cloak @click="clearSyndicationCats()" type="button" class="rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-purple-700 hover:bg-purple-100">Select none</button>
+                            <button @click="syndicationCategories.length ? resyncSyndicationCategories() : loadSyndicationCategories()" :disabled="loadingSyndicationCats" type="button" class="rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-purple-700 hover:bg-purple-100 disabled:opacity-50 inline-flex items-center gap-1">
+                                <svg x-show="loadingSyndicationCats" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                <span x-text="loadingSyndicationCats ? 'Syncing…' : (syndicationCategories.length ? 'Resync Source' : 'Load Taxonomy')"></span>
+                            </button>
+                        </div>
                     </div>
-                    <p class="text-xs text-purple-600 mb-3">Select categories to determine where this press release will be syndicated.</p>
-                    <div x-show="syndicationCategories.length > 0" class="grid grid-cols-2 md:grid-cols-3 gap-1">
+                    <p class="text-xs text-purple-600">Select the publications this release should syndicate to. Parent labels come directly from WordPress.</p>
+                    <div x-show="loadingSyndicationCats" x-cloak class="rounded-lg border border-purple-200 bg-white px-3 py-3 text-sm text-purple-700 inline-flex items-center gap-2">
+                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Loading publication taxonomy…
+                    </div>
+                    <div x-show="syndicationCategories.length > 0 && !loadingSyndicationCats" x-cloak class="space-y-1">
                         <template x-for="cat in syndicationCategories" :key="cat.id">
-                            <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700 py-1">
-                                <input type="checkbox" :value="cat.id" :checked="selectedSyndicationCats.includes(cat.id)" @click="toggleSyndicationCat(cat.id)" class="rounded border-gray-300 text-purple-600">
-                                <span x-text="cat.name"></span>
+                            <label class="flex items-start gap-2 cursor-pointer rounded-lg px-3 py-2 text-sm transition-colors" :class="selectedSyndicationCats.includes(cat.id) ? 'border border-purple-200 bg-white text-gray-900' : 'text-gray-700 hover:bg-white/70'">
+                                <input type="checkbox" :value="cat.id" :checked="selectedSyndicationCats.includes(cat.id)" @click="toggleSyndicationCat(cat.id)" class="mt-0.5 rounded border-gray-300 text-purple-600">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span :class="cat.is_parent ? 'font-semibold text-gray-900' : 'text-gray-700'" x-text="cat.label || cat.name"></span>
+                                        <span x-show="cat.is_parent" x-cloak class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700">Parent</span>
+                                    </div>
+                                    <p class="text-[11px] text-gray-400 mt-0.5" x-text="cat.slug || ''"></p>
+                                </div>
                             </label>
                         </template>
                     </div>
-                    <p x-show="!syndicationCategories.length && !loadingSyndicationCats" class="text-xs text-gray-400">Click "Load from WordPress" to fetch available syndication categories.</p>
+                    <p x-show="!syndicationCategories.length && !loadingSyndicationCats" x-cloak class="text-xs text-gray-500">Load the live publication taxonomy from WordPress, then confirm or trim the default all-publication selection.</p>
                 </div>
             </div>
 

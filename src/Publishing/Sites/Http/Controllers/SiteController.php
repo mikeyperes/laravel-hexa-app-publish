@@ -14,6 +14,7 @@ use hexa_package_wordpress\Services\WordPressService;
 use hexa_package_wptoolkit\Services\WpToolkitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 class SiteController extends Controller
@@ -364,7 +365,7 @@ class SiteController extends Controller
     /**
      * Get WordPress categories for a site via wp-cli.
      */
-    public function getCategories(int $id): JsonResponse
+    public function getCategories(Request $request, int $id): JsonResponse
     {
         $site = PublishSite::findOrFail($id);
         $resolved = $this->resolveServer($site);
@@ -372,9 +373,109 @@ class SiteController extends Controller
             return response()->json(['success' => false, 'categories' => [], 'message' => 'Server not configured.']);
         }
 
-        return response()->json(
-            $this->wptoolkit->wpCliListCategories($resolved['server'], (int) $site->wordpress_install_id)
-        );
+        $taxonomy = trim((string) $request->query('taxonomy', 'category')) ?: 'category';
+        $force = $request->boolean('force');
+
+        if ($taxonomy !== 'publication') {
+            return response()->json(
+                $this->wptoolkit->wpCliListCategories($resolved['server'], (int) $site->wordpress_install_id)
+            );
+        }
+
+        $cacheKey = sprintf('publish:site:%d:taxonomy:%s:v1', $site->id, $taxonomy);
+        if (!$force && ($cached = Cache::get($cacheKey))) {
+            return response()->json([
+                ...$cached,
+                'cache' => [
+                    'cached' => true,
+                    'cached_at' => $cached['fetched_at'] ?? null,
+                    'age_seconds' => $this->cacheAgeSeconds($cached['fetched_at'] ?? null),
+                    'age_human' => $this->cacheAgeHuman($cached['fetched_at'] ?? null),
+                ],
+            ]);
+        }
+
+        $result = $this->wptoolkit->wpCliListTaxonomyTerms($resolved['server'], (int) $site->wordpress_install_id, $taxonomy);
+        if (!($result['success'] ?? false)) {
+            return response()->json($result);
+        }
+
+        $payload = [
+            'success' => true,
+            'categories' => $this->flattenPublicationTerms($result['terms'] ?? []),
+            'taxonomy' => $taxonomy,
+            'taxonomy_label' => 'Publications',
+            'hierarchical' => true,
+            'message' => $result['message'] ?? 'Publication terms loaded.',
+            'fetched_at' => now()->toIso8601String(),
+        ];
+
+        Cache::put($cacheKey, $payload, now()->addHours(6));
+
+        return response()->json([
+            ...$payload,
+            'cache' => [
+                'cached' => false,
+                'cached_at' => $payload['fetched_at'],
+                'age_seconds' => 0,
+                'age_human' => 'just now',
+            ],
+        ]);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $terms
+     * @return array<int, array<string, mixed>>
+     */
+    private function flattenPublicationTerms(array $terms): array
+    {
+        $rows = [];
+        $children = [];
+
+        foreach ($terms as $term) {
+            $parent = (int) ($term['parent'] ?? 0);
+            $children[$parent][] = [
+                'id' => (int) ($term['id'] ?? $term['term_id'] ?? 0),
+                'parent' => $parent,
+                'name' => (string) ($term['name'] ?? ''),
+                'slug' => (string) ($term['slug'] ?? ''),
+                'count' => (int) ($term['count'] ?? 0),
+            ];
+        }
+
+        $walk = function (int $parentId = 0, int $depth = 0) use (&$walk, &$rows, $children): void {
+            foreach ($children[$parentId] ?? [] as $term) {
+                $rows[] = [
+                    ...$term,
+                    'depth' => $depth,
+                    'label' => str_repeat('— ', $depth) . $term['name'],
+                    'is_parent' => !empty($children[$term['id']] ?? []),
+                ];
+                $walk($term['id'], $depth + 1);
+            }
+        };
+
+        $walk();
+
+        return $rows;
+    }
+
+    private function cacheAgeSeconds(?string $fetchedAt): ?int
+    {
+        if (!$fetchedAt) {
+            return null;
+        }
+
+        return max(0, now()->diffInSeconds($fetchedAt));
+    }
+
+    private function cacheAgeHuman(?string $fetchedAt): string
+    {
+        if (!$fetchedAt) {
+            return 'unknown';
+        }
+
+        return now()->diffForHumans($fetchedAt, ['parts' => 2, 'short' => true]);
     }
 
     /**

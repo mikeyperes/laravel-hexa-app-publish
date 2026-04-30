@@ -143,6 +143,36 @@ function pressReleaseWorkflowMixin(config) {
             return this.pressReleasePhotoAssets;
         },
 
+        pressReleaseAssetKey(asset = {}, fallbackKey = '') {
+            return String(asset?.key || asset?.id || fallbackKey || asset?.url || '').trim();
+        },
+
+        pressReleaseAssetIsSelected(asset = {}, fallbackKey = '') {
+            const key = this.pressReleaseAssetKey(asset, fallbackKey);
+            return !!(key && this.pressRelease?.selected_photo_keys?.[key]);
+        },
+
+        togglePressReleaseAssetSelection(asset = {}, fallbackKey = '') {
+            const key = this.pressReleaseAssetKey(asset, fallbackKey);
+            if (!key) return;
+            if (!this.pressRelease.selected_photo_keys || typeof this.pressRelease.selected_photo_keys !== 'object') {
+                this.pressRelease.selected_photo_keys = {};
+            }
+            this.pressRelease.selected_photo_keys[key] = !this.pressRelease.selected_photo_keys[key];
+            this.savePipelineState();
+        },
+
+        pressReleaseAssetIsFeatured(asset = {}) {
+            const assetUrl = this.toAbsoluteMediaUrl(asset.url || '');
+            const featuredUrl = this.toAbsoluteMediaUrl(this.featuredPhoto?.url_large || this.featuredPhoto?.url || '');
+            return !!(assetUrl && featuredUrl && assetUrl === featuredUrl);
+        },
+
+        pressReleaseAssetIsInline(asset = {}) {
+            const assetUrl = this.toAbsoluteMediaUrl(asset.url || '');
+            return !!(assetUrl && this.pressReleaseHasInlineAsset(assetUrl));
+        },
+
         buildPressReleaseSourceText(usePlaceholder = false) {
             const blocks = [];
             const sourceText = (this.pressRelease.resolved_source_text || this.pressRelease.content_dump || '').trim();
@@ -316,6 +346,13 @@ function pressReleaseWorkflowMixin(config) {
                     this.setPressReleaseFeaturedPhoto({ ...importedFeaturedAsset }, { notify: false });
                     this.featuredImageSearch = '';
                     this.featuredSearchPending = false;
+                }
+                const importedInlineAsset = this.preferredPressReleaseInlineAsset();
+                const selectedKeys = {};
+                if (importedFeaturedAsset?.key) selectedKeys[importedFeaturedAsset.key] = true;
+                if (importedInlineAsset?.key) selectedKeys[importedInlineAsset.key] = true;
+                if (Object.keys(selectedKeys).length > 0) {
+                    this.pressRelease.selected_photo_keys = selectedKeys;
                 }
                 this.applyPodcastPressReleaseMediaDefaults({ injectInline: false, notify: false });
                 this.savePipelineState();
@@ -873,6 +910,13 @@ function pressReleaseWorkflowMixin(config) {
             this.featuredAlt = asset.alt_text || '';
             this.featuredCaption = asset.caption || '';
             this.featuredFilename = this.filenameBaseFromAsset(asset) + '.jpg';
+            const key = this.pressReleaseAssetKey(asset);
+            if (key) {
+                if (!this.pressRelease.selected_photo_keys || typeof this.pressRelease.selected_photo_keys !== 'object') {
+                    this.pressRelease.selected_photo_keys = {};
+                }
+                this.pressRelease.selected_photo_keys[key] = true;
+            }
             this.savePipelineState();
             if (notify) {
                 this.showNotification('success', 'Press release photo set as featured image.');
@@ -880,22 +924,30 @@ function pressReleaseWorkflowMixin(config) {
         },
 
         insertPressReleaseAssetIntoEditor(asset) {
-            const editor = window.tinymce?.get('spin-preview-editor');
+            const editor = window.tinymce?.get("spin-preview-editor");
             const src = this.toAbsoluteMediaUrl(asset.url);
-            const alt = (asset.alt_text || '').replace(/"/g, '&quot;');
-            const caption = asset.caption || '';
+            const alt = (asset.alt_text || "").replace(/"/g, "&quot;");
+            const caption = asset.caption || "";
             const figure = caption
-                ? '<figure><img src="' + src + '" alt="' + alt + '"><figcaption>' + caption + '</figcaption></figure>'
-                : '<p><img src="' + src + '" alt="' + alt + '"></p>';
+                ? "<figure><img src=\"" + src + "\" alt=\"" + alt + "\"><figcaption>" + caption + "</figcaption></figure>"
+                : "<p><img src=\"" + src + "\" alt=\"" + alt + "\"></p>";
 
             if (editor) {
                 editor.insertContent(figure);
                 this.editorContent = editor.getContent();
             } else {
-                this.editorContent = (this.editorContent || '') + figure;
+                this.editorContent = (this.editorContent || "") + figure;
             }
 
-            this.showNotification('success', 'Press release photo inserted into the article.');
+            const key = this.pressReleaseAssetKey(asset);
+            if (key) {
+                if (!this.pressRelease.selected_photo_keys || typeof this.pressRelease.selected_photo_keys !== "object") {
+                    this.pressRelease.selected_photo_keys = {};
+                }
+                this.pressRelease.selected_photo_keys[key] = true;
+            }
+
+            this.showNotification("success", "Press release photo inserted into the article.");
             this.queueAutoSaveDraft(300);
         },
     };
