@@ -699,7 +699,8 @@
         headlineCaseFromText(value = '', wordLimit = 10) {
             const cleaned = String(value || '')
                 .replace(/https?:\/\/\S+/gi, ' ')
-                .replace(/[\r\n]+/g, ' ')
+                .replace(/[
+]+/g, ' ')
                 .replace(/[|•]+/g, ' ')
                 .replace(/[_]+/g, ' ')
                 .replace(/\s+/g, ' ')
@@ -716,6 +717,37 @@
             }).join(' ').replace(/[,:;\-]+$/, '').trim();
         },
 
+        cleanPrTitleAngleCandidate(value = '', wordLimit = 12) {
+            let cleaned = String(value || '')
+                .replace(/https?:\/\/\S+/gi, ' ')
+                .replace(/[
+]+/g, ' ')
+                .replace(/[|•]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            if (!cleaned) return '';
+
+            cleaned = cleaned
+                .replace(/^title\s*:\s*/i, '')
+                .replace(/^(focus instructions?|article focus instructions?|quote guidance|subject position|topic context|editorial context|keywords?)\s*:\s*/i, '')
+                .replace(/^(focus on|highlight|show|explore|examine|discuss|cover|write about|explain|describe|use|build|select|define)\s+/i, '')
+                .replace(/(?:the article|this article|the writer|writer|must|should)/gi, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            const headline = this.headlineCaseFromText(cleaned, wordLimit)
+                .replace(/^[—:;\-\s]+|[—:;\-\s]+$/g, '')
+                .trim();
+
+            if (!headline) return '';
+            if (/(?:a|an)?\s*(?:feature|expert|company|person|executive)\s+profile/i.test(headline)) {
+                return '';
+            }
+
+            return headline;
+        },
+
         isWeakPrArticleTitle(value = '') {
             const raw = String(value || '').trim();
             if (!raw) return true;
@@ -729,11 +761,19 @@
                 return true;
             }
 
+            if (/(?:a|an)?\s*(?:feature|expert|company|person|executive)\s+profile/i.test(raw)) {
+                return true;
+            }
+
+            if (/^[^:]+:\s*(?:a|an)?\s*(?:feature|expert|company|person|executive)\s+profile$/i.test(raw)) {
+                return true;
+            }
+
             if (subjectNames.includes(normalized)) {
                 return true;
             }
 
-            return normalized.split(' ').length <= 2 && subjectNames.some((name) => normalized === name);
+            return normalized.split(' ').length <= 3 && subjectNames.some((name) => normalized === name);
         },
 
         ensurePrArticleTitleSubject(title = '') {
@@ -761,33 +801,84 @@
             return cleaned;
         },
 
+        prArticleAngleHeadline() {
+            const mainSubject = this.selectedPrProfiles.find(p => Number(p.id) === Number(this.prArticle.main_subject_id || 0)) || this.selectedPrProfiles[0] || null;
+            const mainPd = mainSubject ? (this.prSubjectData[mainSubject.id] || {}) : {};
+            const candidates = [];
+            const push = (candidate, limit = 12) => {
+                const cleaned = this.cleanPrTitleAngleCandidate(candidate, limit);
+                if (!cleaned) return;
+                if (candidates.some((existing) => existing.toLowerCase() === cleaned.toLowerCase())) return;
+                candidates.push(cleaned);
+            };
+
+            push(this.prArticle?.focus_instructions || '', 12);
+            push(this.prArticle?.expert_context_extracted?.title || '', 12);
+            push(this.prArticle?.expert_keywords || '', 10);
+            push(this.prArticle?.subject_position || '', 10);
+            push(mainSubject?.context || '', 10);
+
+            for (const field of (mainPd.fields || [])) {
+                const label = String(field?.notion_field || field?.key || '').toLowerCase();
+                const value = String(field?.display_value || field?.value || '').trim();
+                if (!value) continue;
+                if (/(short description|description|summary|about|title|job title|industry|expertise)/i.test(label)) {
+                    push(value, /(description|about|summary)/i.test(label) ? 9 : 8);
+                }
+                if (candidates.length >= 4) break;
+            }
+
+            return candidates[0] || '';
+        },
+
+        normalizePrGeneratedTitles(values = []) {
+            const seen = new Set();
+            const cleaned = [];
+
+            for (const rawValue of (Array.isArray(values) ? values : [])) {
+                let candidate = String(rawValue || '').replace(/^title\s*:\s*/i, '').replace(/\s+/g, ' ').trim();
+                if (!candidate) continue;
+                candidate = this.ensurePrArticleTitleSubject(candidate);
+                if (this.isWeakPrArticleTitle(candidate)) continue;
+                const key = candidate.toLowerCase();
+                if (seen.has(key)) continue;
+                seen.add(key);
+                cleaned.push(candidate);
+            }
+
+            const fallback = this.fallbackPrArticleTitle();
+            if (fallback) {
+                const fallbackKey = fallback.toLowerCase();
+                if (!seen.has(fallbackKey)) {
+                    cleaned.push(fallback);
+                }
+            }
+
+            return cleaned.slice(0, 10);
+        },
+
         fallbackPrArticleTitle() {
             const mainSubject = this.selectedPrProfiles.find(p => Number(p.id) === Number(this.prArticle.main_subject_id || 0)) || this.selectedPrProfiles[0] || null;
             const subjectName = mainSubject?.name || 'Untitled';
-            const contextTitle = String(this.prArticle?.expert_context_extracted?.title || '').trim();
-            const keywordHeadline = this.headlineCaseFromText(this.prArticle?.expert_keywords || '', 10);
-            const focusHeadline = this.headlineCaseFromText(this.prArticle?.focus_instructions || '', 10);
+            const angleHeadline = this.prArticleAngleHeadline();
 
             if (this.currentArticleType === 'expert-article') {
-                if (contextTitle) {
-                    return `${subjectName} on ${contextTitle.replace(/\s+/g, ' ')}`.trim();
-                }
-                if (keywordHeadline) {
-                    return `${subjectName} on ${keywordHeadline}`.trim();
-                }
-                if (focusHeadline) {
-                    return `${subjectName} on ${focusHeadline}`.trim();
+                if (angleHeadline) {
+                    if (this.normalizeArticleHeadingText(angleHeadline).includes(this.normalizeArticleHeadingText(subjectName))) {
+                        return angleHeadline;
+                    }
+                    return `${subjectName} on ${angleHeadline}`.trim();
                 }
             }
 
             if (this.currentArticleType === 'pr-full-feature' && subjectName !== 'Untitled') {
-                if (keywordHeadline) {
-                    return `${subjectName}: ${keywordHeadline}`.trim();
+                if (angleHeadline) {
+                    if (this.normalizeArticleHeadingText(angleHeadline).includes(this.normalizeArticleHeadingText(subjectName))) {
+                        return angleHeadline;
+                    }
+                    return `${subjectName}: ${angleHeadline}`.trim();
                 }
-                if (focusHeadline) {
-                    return `${subjectName}: ${focusHeadline}`.trim();
-                }
-                return `${subjectName}: A Feature Profile`;
+                return /^organization$/i.test(String(mainSubject?.type || '')) ? `Inside ${subjectName}` : `${subjectName} in Focus`;
             }
 
             return subjectName;
@@ -936,14 +1027,13 @@
             const profile = (this.selectedPrProfiles || []).find((candidate) => Number(candidate.id) === Number(profileId)) || null;
             const pd = this.prSubjectData[profileId] || {};
             const photos = Array.isArray(pd.photos) ? pd.photos : [];
-            const direct = photos.filter((photo) => String(photo.source || '').toLowerCase() === 'notion-profile');
-            const drive = photos.filter((photo) => String(photo.source || '').toLowerCase() === 'notion-drive');
-            const selectedIds = Object.keys(pd.selectedPhotos || {}).filter((id) => pd.selectedPhotos[id]);
-            const selected = photos.filter((photo) => selectedIds.includes(String(photo.id)));
-            const directFields = [...new Set(direct.map((photo) => this.prPhotoFieldLabel(photo)).filter(Boolean))];
-            const mainSubjectId = Number(this.prArticle.main_subject_id || this.selectedPrProfiles[0]?.id || 0);
-            const featuredCandidate = Number(profileId) === mainSubjectId
-                ? (selected[0] || direct[0] || drive[0] || null)
+            const direct = photos.filter((photo) => this.prProfilePhotoSource(photo, pd.driveUrl) !== 'notion-drive');
+            const drive = photos.filter((photo) => this.prProfilePhotoSource(photo, pd.driveUrl) === 'notion-drive');
+            const selectedInlineIds = Object.keys(pd.selectedInlinePhotos || {}).filter((id) => pd.selectedInlinePhotos[id]);
+            const selectedInline = this.prInlinePhotoCandidates(profileId).filter((photo) => selectedInlineIds.includes(String(photo.id)));
+            const directFields = [...new Set(direct.map((photo) => this.prPhotoFieldLabel(photo)).filter(Boolean).filter((label) => !/\.(jpg|jpeg|png|webp|gif|avif)$/i.test(label)))];
+            const featuredPhoto = Number(profileId) === Number(this.prArticle.main_subject_id || this.selectedPrProfiles[0]?.id || 0)
+                ? this.prSelectedFeaturedPhoto(profileId)
                 : null;
 
             return {
@@ -951,9 +1041,10 @@
                 driveCount: drive.length,
                 driveAvailable: !!pd.driveUrl,
                 driveLoaded: drive.length > 0,
-                selectedCount: selected.length,
+                inlineSelectedCount: selectedInline.length,
                 directFields,
-                featuredLabel: featuredCandidate ? this.prFriendlyPhotoLabel(profile || {}, featuredCandidate, 1) : '',
+                featuredLabel: featuredPhoto ? this.prFriendlyPhotoLabel(profile || {}, featuredPhoto, 1) : '',
+                featuredSourceLabel: featuredPhoto ? this.prPhotoOriginAuditLabel(profile || {}, featuredPhoto, pd.driveUrl) : '',
             };
         },
 
@@ -964,21 +1055,29 @@
         },
 
         selectAllPrPhotos(profileId) {
+            return this.selectAllPrInlinePhotos(profileId);
+        },
+
+        clearPrPhotos(profileId) {
+            return this.clearPrInlinePhotos(profileId);
+        },
+
+        selectAllPrInlinePhotos(profileId) {
             const pd = this.prSubjectData[profileId];
             if (!pd) return;
-            pd.selectedPhotos = {};
-            (pd.photos || []).forEach((photo) => {
-                pd.selectedPhotos[photo.id] = true;
+            pd.selectedInlinePhotos = {};
+            this.prInlinePhotoCandidates(profileId).forEach((photo) => {
+                pd.selectedInlinePhotos[photo.id] = true;
             });
             this.hydratePrArticleSelectedMedia();
             this.savePipelineState();
             this.queueAutoSaveDraft?.(250);
         },
 
-        clearPrPhotos(profileId) {
+        clearPrInlinePhotos(profileId) {
             const pd = this.prSubjectData[profileId];
             if (!pd) return;
-            pd.selectedPhotos = {};
+            pd.selectedInlinePhotos = {};
             this.hydratePrArticleSelectedMedia();
             this.savePipelineState();
             this.queueAutoSaveDraft?.(250);
@@ -1082,15 +1181,121 @@
             return table || field || 'Notion';
         },
 
+        notionProfileFieldSourceLabel(profile = {}, row = {}) {
+            const table = this.notionDatabaseLabel(profile?.type_slug || profile?.type || '');
+            const field = String(row?.notion_field || row?.key || row?.field || '').trim();
+            if (table && field) return `${table} > ${field}`;
+            return table || field || 'Notion';
+        },
+
         prProfilePhotoUrl(photo = {}) {
             return this.toAbsoluteMediaUrl(photo?.webContentLink || photo?.webViewLink || photo?.thumbnailLink || photo?.url || '');
+        },
+
+        prProfilePhotoSource(photo = {}, driveUrl = '') {
+            const explicit = String(photo?.source || '').trim().toLowerCase();
+            const fieldLabel = this.prPhotoFieldLabel(photo);
+            const rawName = String(photo?.name || '').trim();
+            const fileLike = /\.(jpg|jpeg|png|webp|gif|avif)$/i.test(fieldLabel) || /\.(jpg|jpeg|png|webp|gif|avif)$/i.test(rawName);
+            if (explicit === 'notion-drive') return 'notion-drive';
+            if (explicit === 'notion-profile' && driveUrl && fileLike) return 'notion-drive';
+            if (explicit) return explicit;
+            if (driveUrl && fileLike) return 'notion-drive';
+            return 'notion-profile';
+        },
+
+        prPhotoSourceLabel(photo = {}, driveUrl = '') {
+            return this.prProfilePhotoSource(photo, driveUrl) === 'notion-drive'
+                ? 'Google Drive gallery'
+                : 'Direct Notion field';
+        },
+
+        prPhotoOriginAuditLabel(profile = {}, photo = {}, driveUrl = '') {
+            if (!photo) return '';
+            if (this.prProfilePhotoSource(photo, driveUrl) === 'notion-drive') {
+                return 'Google Drive gallery';
+            }
+            const fieldLabel = this.prPhotoFieldLabel(photo);
+            const tableLabel = this.notionTableLabelForProfile(profile);
+            return fieldLabel ? `${tableLabel} > ${fieldLabel}` : `${tableLabel} direct photo`;
+        },
+
+        prPhotoIsAvatarLike(photo = {}, driveUrl = '') {
+            const haystack = [
+                photo?.thumbnailLink,
+                photo?.webContentLink,
+                photo?.webViewLink,
+                photo?.url,
+                photo?.name,
+                this.prPhotoFieldLabel(photo),
+                this.prProfilePhotoSource(photo, driveUrl),
+            ].join(' ').toLowerCase();
+
+            return /(linkedin|profile[-_]?displayphoto|shrink[_-]?800|googleusercontent|avatar|headshot-preview|profile-photo-preview)/i.test(haystack);
+        },
+
+        prFeaturedPhotoPriority(photo = {}, driveUrl = '') {
+            const source = this.prProfilePhotoSource(photo, driveUrl);
+            const label = this.prPhotoFieldLabel(photo);
+            const ratio = Number(photo.width || 0) > 0 && Number(photo.height || 0) > 0
+                ? Number(photo.width || 0) / Math.max(1, Number(photo.height || 1))
+                : 0;
+            let score = 100;
+
+            if (source === 'notion-profile') score -= 40;
+            if (source === 'notion-drive') score -= 25;
+            if (/(featured image|profile image|headshot|portrait|professional photo|featured)/i.test(label)) score -= 35;
+            if (/(personal photos|professional photos|gallery|album)/i.test(label)) score -= 15;
+            if (this.prPhotoIsAvatarLike(photo, driveUrl)) score += 80;
+            if (ratio > 1.15 && ratio < 2.2) score -= 12;
+            if (ratio > 0 && ratio < 0.8) score += 20;
+
+            return score;
+        },
+
+        prInlinePhotoPriority(photo = {}, driveUrl = '') {
+            const source = this.prProfilePhotoSource(photo, driveUrl);
+            const label = this.prPhotoFieldLabel(photo);
+            let score = 100;
+
+            if (source === 'notion-drive') score -= 45;
+            if (source === 'notion-profile') score -= 15;
+            if (/(personal photos|professional photos|gallery|album)/i.test(label)) score -= 20;
+            if (/(featured image|profile image|headshot|portrait)/i.test(label)) score -= 5;
+            if (this.prPhotoIsAvatarLike(photo, driveUrl)) score += 70;
+
+            return score;
+        },
+
+        prFeaturedPhotoCandidates(profileId) {
+            const pd = this.prSubjectData[profileId] || {};
+            const photos = Array.isArray(pd.photos) ? pd.photos : [];
+            return [...photos].sort((a, b) => this.prFeaturedPhotoPriority(a, pd.driveUrl) - this.prFeaturedPhotoPriority(b, pd.driveUrl));
+        },
+
+        prInlinePhotoCandidates(profileId) {
+            const pd = this.prSubjectData[profileId] || {};
+            const photos = Array.isArray(pd.photos) ? pd.photos : [];
+            const featuredId = String(pd.selectedFeaturedPhotoId || '');
+            return photos
+                .filter((photo) => String(photo.id) !== featuredId)
+                .sort((a, b) => this.prInlinePhotoPriority(a, pd.driveUrl) - this.prInlinePhotoPriority(b, pd.driveUrl));
+        },
+
+        prSelectedFeaturedPhoto(profileId = null) {
+            const resolvedProfileId = Number(profileId || this.prArticle.main_subject_id || this.selectedPrProfiles[0]?.id || 0);
+            if (!resolvedProfileId) return null;
+            const pd = this.prSubjectData[resolvedProfileId] || {};
+            const candidates = this.prFeaturedPhotoCandidates(resolvedProfileId);
+            const selectedId = String(pd.selectedFeaturedPhotoId || '');
+            return candidates.find((photo) => String(photo.id) === selectedId) || candidates[0] || null;
         },
 
         isPrimaryPrProfilePhoto(profile = {}, photo = {}) {
             if (this.currentArticleType === 'expert-article' && this.prArticle.feature_photo_mode === 'inline_only') {
                 return false;
             }
-            const primary = this.selectedPrPhotoAssets(1)[0] || null;
+            const primary = this.selectedPrFeaturedAsset() || null;
             if (!primary) return false;
             return this.prProfilePhotoUrl(photo) === this.toAbsoluteMediaUrl(primary.url_large || primary.url || '');
         },
@@ -1151,11 +1356,16 @@
                 return null;
             }
 
+            const propertyLabel = String(raw.property || raw.source_field || raw.field || '').trim();
+            const rawName = String(raw.name || raw.label || '').trim();
+            const fileLike = /\.(jpg|jpeg|png|webp|gif|avif)$/i.test(propertyLabel) || /\.(jpg|jpeg|png|webp|gif|avif)$/i.test(rawName);
+            const inferredSource = String(raw.source || '').trim().toLowerCase() || (fileLike ? 'notion-drive' : 'notion-profile');
+
             return {
                 id: raw.id ? String(raw.id) : ('photo-' + Math.random().toString(36).slice(2, 10)),
                 name: raw.name || raw.label || raw.property || 'Subject Photo',
-                property: raw.property || '',
-                source: raw.source || 'notion-profile',
+                property: raw.property || raw.source_field || raw.field || '',
+                source: inferredSource,
                 source_url: raw.source_url || raw.webViewLink || raw.webContentLink || raw.thumbnailLink || url,
                 thumbnailLink: raw.thumbnailLink || url,
                 webContentLink: raw.webContentLink || url,
@@ -1224,7 +1434,8 @@
                         })),
                     })).filter((rel) => rel.slug),
                     selectedEntries: this.normalizePrSelectionMap(state.selectedEntries || {}),
-                    selectedPhotos: this.normalizePrSelectionMap(state.selectedPhotos || {}),
+                    selectedFeaturedPhotoId: state.selectedFeaturedPhotoId ? String(state.selectedFeaturedPhotoId) : '',
+                    selectedInlinePhotos: this.normalizePrSelectionMap(state.selectedInlinePhotos || state.selectedPhotos || {}),
                 };
             });
 
@@ -1409,7 +1620,8 @@
             const normalizedProfile = this.normalizePrProfileForState(profile);
             const existing = this.prSubjectData[normalizedProfile.id] || {};
             const selectedEntries = preserveSelections ? this.normalizePrSelectionMap(existing.selectedEntries || {}) : {};
-            const selectedPhotos = preserveSelections ? this.normalizePrSelectionMap(existing.selectedPhotos || {}) : {};
+            const selectedInlinePhotos = preserveSelections ? this.normalizePrSelectionMap(existing.selectedInlinePhotos || existing.selectedPhotos || {}) : {};
+            const selectedFeaturedPhotoId = preserveSelections ? String(existing.selectedFeaturedPhotoId || '') : '';
 
             this.prSubjectData[normalizedProfile.id] = {
                 loading: false,
@@ -1423,7 +1635,8 @@
                 notionUrl: String(existing.notionUrl || ''),
                 relations: Array.isArray(existing.relations) ? existing.relations : [],
                 selectedEntries,
-                selectedPhotos,
+                selectedFeaturedPhotoId,
+                selectedInlinePhotos,
             };
 
             const pd = this.prSubjectData[normalizedProfile.id];
@@ -1451,7 +1664,11 @@
                         pd.driveUrl = this.looksLikeGoogleDriveFolderUrl(data.profile?.drive_url || '') ? data.profile.drive_url : '';
                         pd.notionUrl = data.profile?.notion_url || pd.notionUrl;
                         pd.photos = this.mergePrPhotoCollections(pd.photos, data.profile?.photo_candidates || []);
-                        this.bootstrapPrPhotoSelection(normalizedProfile.id);
+                        if (pd.driveUrl) {
+                            await this.loadProfilePhotos(normalizedProfile);
+                        } else {
+                            this.bootstrapPrPhotoSelection(normalizedProfile.id);
+                        }
                         pd.relations = (data.relations || []).map(r => ({
                             ...r,
                             open: true,
@@ -1554,10 +1771,27 @@
         },
 
         togglePrPhotoSelect(profileId, photoId) {
+            return this.togglePrInlinePhotoSelect(profileId, photoId);
+        },
+
+        togglePrInlinePhotoSelect(profileId, photoId) {
             const pd = this.prSubjectData[profileId];
             if (!pd) return;
-            if (!pd.selectedPhotos) pd.selectedPhotos = {};
-            pd.selectedPhotos[photoId] = !pd.selectedPhotos[photoId];
+            if (!pd.selectedInlinePhotos) pd.selectedInlinePhotos = {};
+            pd.selectedInlinePhotos[photoId] = !pd.selectedInlinePhotos[photoId];
+            this.hydratePrArticleSelectedMedia();
+            this.savePipelineState();
+            this.queueAutoSaveDraft?.(250);
+        },
+
+        setPrFeaturedPhoto(profileId, photoId) {
+            const pd = this.prSubjectData[profileId];
+            if (!pd) return;
+            pd.selectedFeaturedPhotoId = String(photoId || '');
+            if (pd.selectedInlinePhotos?.[photoId]) {
+                delete pd.selectedInlinePhotos[photoId];
+            }
+            this.bootstrapPrPhotoSelection(profileId);
             this.hydratePrArticleSelectedMedia();
             this.savePipelineState();
             this.queueAutoSaveDraft?.(250);
@@ -1566,25 +1800,33 @@
         bootstrapPrPhotoSelection(profileId) {
             const pd = this.prSubjectData[profileId];
             if (!pd || !Array.isArray(pd.photos) || pd.photos.length === 0) return;
-            const selectedIds = Object.keys(pd.selectedPhotos || {}).filter(id => pd.selectedPhotos[id]);
-            if (selectedIds.length > 0) return;
-
             const mainSubjectId = Number(this.prArticle.main_subject_id || this.selectedPrProfiles[0]?.id || 0);
             const isMainSubject = Number(profileId) === mainSubjectId;
+            const featuredCandidates = this.prFeaturedPhotoCandidates(profileId);
+            if (!pd.selectedFeaturedPhotoId && isMainSubject && featuredCandidates[0]) {
+                pd.selectedFeaturedPhotoId = String(featuredCandidates[0].id);
+            }
+
+            const selectedIds = Object.keys(pd.selectedInlinePhotos || {}).filter(id => pd.selectedInlinePhotos[id]);
+            if (selectedIds.length > 0) return;
+
+            const inlineCandidates = this.prInlinePhotoCandidates(profileId);
+            if (!inlineCandidates.length) return;
+
             const autoLimit = isMainSubject
                 ? Math.max(2, Number(this.prArticle.inline_photo_target || 3))
-                : 1;
+                : Math.min(1, inlineCandidates.length);
 
-            pd.selectedPhotos = pd.selectedPhotos || {};
-            (pd.photos || []).slice(0, autoLimit).forEach((photo) => {
-                pd.selectedPhotos[photo.id] = true;
+            pd.selectedInlinePhotos = pd.selectedInlinePhotos || {};
+            inlineCandidates.slice(0, autoLimit).forEach((photo) => {
+                pd.selectedInlinePhotos[photo.id] = true;
             });
         },
 
         prPhotoAssetFromDrivePhoto(profile, photo) {
             const url = photo.webContentLink || photo.webViewLink || photo.thumbnailLink || '';
             const thumb = photo.thumbnailLink || photo.webContentLink || photo.webViewLink || url;
-            const inferredSource = String(photo.source || '').trim() || 'notion-profile';
+            const inferredSource = this.prProfilePhotoSource(photo, this.prSubjectData?.[profile?.id]?.driveUrl || '');
             const sourceUrl = photo.source_url || photo.webViewLink || url;
             const label = this.prFriendlyPhotoLabel(profile, photo, 1);
             return {
@@ -1604,7 +1846,19 @@
             };
         },
 
-        selectedPrPhotoAssets(limit = null) {
+        selectedPrFeaturedAsset() {
+            if (!this.isPrArticleMode()) return null;
+            const mainSubjectId = Number(this.prArticle.main_subject_id || this.selectedPrProfiles[0]?.id || 0);
+            const profile = this.selectedPrProfiles.find((candidate) => Number(candidate.id) === mainSubjectId) || this.selectedPrProfiles[0] || null;
+            if (!profile) return null;
+            const photo = this.prSelectedFeaturedPhoto(profile.id);
+            if (!photo) return null;
+            const asset = this.prPhotoAssetFromDrivePhoto(profile, photo);
+            if (!asset.url_large || this.looksLikeGoogleDriveFolderUrl(asset.url_large)) return null;
+            return asset;
+        },
+
+        selectedPrInlineAssets(limit = null) {
             const mainSubjectId = Number(this.prArticle.main_subject_id || this.selectedPrProfiles[0]?.id || 0);
             const orderedProfiles = [
                 ...this.selectedPrProfiles.filter(p => Number(p.id) === mainSubjectId),
@@ -1617,13 +1871,12 @@
             for (const profile of orderedProfiles) {
                 const pd = this.prSubjectData[profile.id];
                 if (!pd) continue;
-                const selectedIds = Object.keys(pd.selectedPhotos || {}).filter(id => pd.selectedPhotos[id]);
+                const selectedIds = Object.keys(pd.selectedInlinePhotos || {}).filter(id => pd.selectedInlinePhotos[id]);
                 const sourcePhotos = selectedIds.length > 0
-                    ? (pd.photos || []).filter(photo => selectedIds.includes(String(photo.id)))
-                    : (pd.photos || []);
-                const orderedPhotos = [...sourcePhotos].sort((a, b) => this.prPhotoSourcePriority(a) - this.prPhotoSourcePriority(b));
+                    ? this.prInlinePhotoCandidates(profile.id).filter((photo) => selectedIds.includes(String(photo.id)))
+                    : this.prInlinePhotoCandidates(profile.id);
 
-                for (const photo of orderedPhotos) {
+                for (const photo of sourcePhotos) {
                     const asset = this.prPhotoAssetFromDrivePhoto(profile, photo);
                     if (!asset.url_large || this.looksLikeGoogleDriveFolderUrl(asset.url_large) || seen.has(asset.url_large)) continue;
                     assets.push(asset);
@@ -1635,6 +1888,26 @@
             }
 
             return assets;
+        },
+
+        selectedPrPhotoAssets(limit = null) {
+            const combined = [];
+            const seen = new Set();
+            const featured = this.selectedPrFeaturedAsset();
+            if (featured?.url_large) {
+                combined.push(featured);
+                seen.add(featured.url_large);
+                if (limit && combined.length >= limit) {
+                    return combined.slice(0, limit);
+                }
+            }
+            for (const asset of this.selectedPrInlineAssets(limit ? Math.max(limit - combined.length, 0) : null)) {
+                if (!asset?.url_large || seen.has(asset.url_large)) continue;
+                combined.push(asset);
+                seen.add(asset.url_large);
+                if (limit && combined.length >= limit) break;
+            }
+            return combined;
         },
 
         prInlinePlaceholderHtml(idx, label, altText) {
@@ -1710,27 +1983,29 @@
             if (!this.isPrArticleMode()) return;
             this.syncPrArticleForCurrentArticleType();
 
-            const selectedAssets = this.selectedPrPhotoAssets(Number(this.prArticle.inline_photo_target || 3));
-            if (!selectedAssets.length) return;
-
             const allowFeatured = this.currentArticleType === 'pr-full-feature'
                 || this.prArticle.feature_photo_mode !== 'inline_only';
+            const featuredAsset = allowFeatured ? this.selectedPrFeaturedAsset() : null;
+            const inlineAssets = this.selectedPrInlineAssets(Number(this.prArticle.inline_photo_target || 3));
 
             const hasSubjectFeatured = ['notion-drive', 'notion-profile'].includes(String(this.featuredPhoto?.source || '').toLowerCase());
-            if (allowFeatured && selectedAssets[0] && (!this.featuredPhoto || !hasSubjectFeatured)) {
-                this.applyFeaturedPhotoSelection(selectedAssets[0], { refreshMeta: false });
-                this.featuredAlt = selectedAssets[0].alt || this.featuredAlt || '';
+            const currentFeaturedUrl = this.toAbsoluteMediaUrl(this.featuredPhoto?.url_large || this.featuredPhoto?.url || '');
+            const nextFeaturedUrl = this.toAbsoluteMediaUrl(featuredAsset?.url_large || featuredAsset?.url || '');
+
+            if (allowFeatured && featuredAsset && (!this.featuredPhoto || !hasSubjectFeatured || currentFeaturedUrl !== nextFeaturedUrl)) {
+                this.applyFeaturedPhotoSelection(featuredAsset, { refreshMeta: false });
+                this.featuredAlt = featuredAsset.alt || this.featuredAlt || '';
                 this.featuredCaption = this.featuredCaption || '';
-                this.featuredFilename = this.featuredFilename || (this.buildFilename(selectedAssets[0].alt || 'featured subject', 0) + '.jpg');
+                this.featuredFilename = this.featuredFilename || (this.buildFilename(featuredAsset.alt || 'featured subject', 0) + '.jpg');
                 this.featuredImageSearch = '';
                 this.featuredSearchPending = false;
-            } else if (!allowFeatured) {
+            } else if ((!allowFeatured || !featuredAsset) && hasSubjectFeatured) {
                 this.featuredPhoto = null;
                 this.featuredImageSearch = '';
                 this.featuredSearchPending = false;
             }
 
-            this.photoSuggestions = selectedAssets.map((asset, idx) => this.normalizePhotoSuggestionState({
+            this.photoSuggestions = inlineAssets.map((asset, idx) => this.normalizePhotoSuggestionState({
                 position: idx,
                 search_term: asset.alt || ('selected client photo ' + (idx + 1)),
                 alt_text: asset.alt || '',
@@ -1743,6 +2018,10 @@
             }, idx));
             this.photoSuggestionsPending = false;
             this.$nextTick(() => {
+                if (!inlineAssets.length) {
+                    this.syncDeferredEnrichmentState('pr_article_media_seeded');
+                    return;
+                }
                 if (/photo-placeholder/i.test(this.editorContent || this.spunContent || '')) {
                     (this.photoSuggestions || []).forEach((ps, idx) => {
                         if (ps?.autoPhoto && !ps?.removed) {
@@ -2068,7 +2347,8 @@
                 });
                 const result = await resp.json();
                 if (result.success) {
-                    data.photos = this.mergePrPhotoCollections(data.photos, result.photos || []);
+                    const drivePhotos = (result.photos || []).map((photo) => ({ ...photo, source: photo?.source || 'notion-drive' }));
+                    data.photos = this.mergePrPhotoCollections(data.photos, drivePhotos);
                     this.bootstrapPrPhotoSelection(profile.id);
                     this.hydratePrArticleSelectedMedia();
                     this.savePipelineState();
