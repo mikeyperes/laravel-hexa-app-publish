@@ -699,8 +699,7 @@
         headlineCaseFromText(value = '', wordLimit = 10) {
             const cleaned = String(value || '')
                 .replace(/https?:\/\/\S+/gi, ' ')
-                .replace(/[
-]+/g, ' ')
+                .replace(/[\r\n]+/g, ' ')
                 .replace(/[|•]+/g, ' ')
                 .replace(/[_]+/g, ' ')
                 .replace(/\s+/g, ' ')
@@ -851,9 +850,7 @@
                 phrases.push(term);
             };
 
-            cleaned.split(/[
-
-]+/).forEach((chunk) => {
+            cleaned.split(/[\r\n]+/).forEach((chunk) => {
                 chunk.split(/\s*[.;!?|]\s*|\s*,\s*/).forEach((part) => push(part));
             });
 
