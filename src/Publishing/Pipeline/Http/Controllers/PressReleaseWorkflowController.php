@@ -17,6 +17,7 @@ use hexa_app_publish\Publishing\Pipeline\Services\PressReleaseWorkflowService;
 use hexa_core\Http\Controllers\Controller;
 use hexa_package_upload_portal\Upload\Core\Services\UploadService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class PressReleaseWorkflowController extends Controller
@@ -48,6 +49,28 @@ class PressReleaseWorkflowController extends Controller
         ], ($result['success'] ?? false) ? 200 : 422);
     }
 
+    public function smartSearchNotionEpisodes(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'draft_id' => ['required', 'integer'],
+            'q' => ['nullable', 'string'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:15'],
+        ]);
+
+        $this->resolveDraft((int) $validated['draft_id']);
+
+        $result = $this->notionPodcastImport->searchEpisodes(
+            (string) ($validated['q'] ?? ''),
+            (int) ($validated['limit'] ?? 10)
+        );
+
+        if (!($result['success'] ?? false)) {
+            return response()->json([]);
+        }
+
+        return response()->json(array_values($result['records'] ?? []));
+    }
+
     public function importNotionEpisode(PressReleaseImportNotionEpisodeRequest $request): JsonResponse
     {
         $validated = $request->validated();
@@ -70,10 +93,16 @@ class PressReleaseWorkflowController extends Controller
         $pressRelease['content_dump'] = $result['source_text'] ?? '';
         $pressRelease['details'] = array_replace($pressRelease['details'] ?? [], $result['details'] ?? []);
         $pressRelease['detected_photos'] = $result['detected_photos'] ?? [];
-        $pressRelease['google_drive_url'] = $result['selected_episode']['drive_folder_url'] ?? ($pressRelease['google_drive_url'] ?? '');
+        $pressRelease['photo_method'] = 'notion-import';
+        $pressRelease['google_drive_url'] = '';
         $pressRelease['notion_episode'] = $result['selected_episode'] ?? [];
         $pressRelease['notion_guest'] = $result['selected_guest'] ?? [];
         $pressRelease['notion_missing_fields'] = $result['missing_fields'] ?? [];
+        $pressRelease['notion_source_fields'] = $result['source_fields'] ?? [
+            'episode' => [],
+            'guest' => [],
+            'enforcement' => [],
+        ];
         $pressRelease = $this->workflow->appendLog($pressRelease, 'success', 'Imported podcast episode from Notion.', [
             'episode_id' => $pressRelease['notion_episode']['id'] ?? null,
             'episode_title' => $pressRelease['notion_episode']['title'] ?? null,

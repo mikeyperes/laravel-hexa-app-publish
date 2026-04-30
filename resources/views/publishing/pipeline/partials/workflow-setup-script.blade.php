@@ -232,9 +232,12 @@
                         this.siteConn.status = true;
                         this.siteConn.message = 'Connected';
                         this.completeStep(2);
-                    } else {
+                    } else if (this.selectedSite.status === 'error') {
                         this.siteConn.status = false;
-                        this.siteConn.message = this.selectedSite.status === 'error' ? 'Connection error' : 'Not connected';
+                        this.siteConn.message = 'Connection error';
+                    } else {
+                        this.siteConn.status = null;
+                        this.siteConn.message = 'Loading connection state...';
                     }
                     if (!this.siteConn.authors.length) {
                         this.loadSiteAuthors(this.selectedSiteId, { cacheKey });

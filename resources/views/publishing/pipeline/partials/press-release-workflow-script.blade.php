@@ -45,6 +45,13 @@ function pressReleaseWorkflowMixin(config) {
             normalized.notion_episode = normalized.notion_episode && typeof normalized.notion_episode === 'object' ? normalized.notion_episode : {};
             normalized.notion_guest = normalized.notion_guest && typeof normalized.notion_guest === 'object' ? normalized.notion_guest : {};
             normalized.notion_missing_fields = Array.isArray(normalized.notion_missing_fields) ? normalized.notion_missing_fields : [];
+            normalized.notion_source_fields = normalized.notion_source_fields && typeof normalized.notion_source_fields === 'object'
+                ? {
+                    episode: Array.isArray(normalized.notion_source_fields.episode) ? normalized.notion_source_fields.episode : [],
+                    guest: Array.isArray(normalized.notion_source_fields.guest) ? normalized.notion_source_fields.guest : [],
+                    enforcement: Array.isArray(normalized.notion_source_fields.enforcement) ? normalized.notion_source_fields.enforcement : [],
+                }
+                : { episode: [], guest: [], enforcement: [] };
             normalized.detected_content = normalized.detected_content || '';
             normalized.detected_content_html = normalized.detected_content_html || '';
             normalized.detected_word_count = normalized.detected_word_count || 0;
@@ -155,7 +162,7 @@ function pressReleaseWorkflowMixin(config) {
                 blocks.push("=== Validated Details ===\n" + detailLines.join("\n"));
             }
 
-            if (this.pressRelease.google_drive_url) {
+            if (this.pressRelease.google_drive_url && this.pressRelease.submit_method !== 'notion-podcast') {
                 blocks.push("=== Photo Source Reference ===\nGoogle Drive URL: " + this.pressRelease.google_drive_url);
             }
 
@@ -231,38 +238,28 @@ function pressReleaseWorkflowMixin(config) {
             const notifyEmpty = options.notifyEmpty === true;
             const query = loadRecent ? '' : String(this.pressRelease.notion_episode_query || '').trim();
 
-            if (!loadRecent && !query) {
-                this.pressReleaseEpisodeResults = [];
-                this.pressReleaseEpisodeNoResults = false;
-                this.pressReleaseEpisodeDropdownOpen = false;
-                return;
-            }
-
             const token = ++this._pressReleaseEpisodeSearchToken;
             this.pressReleaseEpisodeSearching = true;
-            this.pressReleaseEpisodeDropdownOpen = true;
+            this.pressReleaseEpisodeDropdownOpen = !!loadRecent;
             this.pressReleaseEpisodeNoResults = false;
 
             try {
-                const response = await fetch('{{ route("publish.pipeline.press-release.search-notion-episodes") }}', {
-                    method: 'POST',
-                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
-                    body: JSON.stringify({
-                        draft_id: this.draftId,
-                        query,
-                        limit: 10,
-                    }),
+                const searchUrl = new URL('{{ route("publish.pipeline.press-release.search-notion-episodes.live") }}', window.location.origin);
+                searchUrl.searchParams.set('draft_id', this.draftId);
+                searchUrl.searchParams.set('limit', '10');
+                if (query) {
+                    searchUrl.searchParams.set('q', query);
+                }
+                const response = await fetch(searchUrl.toString(), {
+                    headers: { Accept: 'application/json' },
                 });
                 const data = await response.json();
-                if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Failed to search podcast episodes.');
-                }
                 if (token !== this._pressReleaseEpisodeSearchToken) {
                     return;
                 }
-                this.pressReleaseEpisodeResults = Array.isArray(data.records) ? data.records : [];
+                this.pressReleaseEpisodeResults = Array.isArray(data) ? data : [];
                 this.pressReleaseEpisodeNoResults = this.pressReleaseEpisodeResults.length === 0;
-                this.pressReleaseEpisodeDropdownOpen = this.pressReleaseEpisodeResults.length > 0 || this.pressReleaseEpisodeNoResults;
+                this.pressReleaseEpisodeDropdownOpen = loadRecent && (this.pressReleaseEpisodeResults.length > 0 || this.pressReleaseEpisodeNoResults);
                 if (!this.pressReleaseEpisodeResults.length && notifyEmpty) {
                     this.showNotification('error', 'No podcast episodes matched that search.');
                 }
@@ -290,7 +287,7 @@ function pressReleaseWorkflowMixin(config) {
             this.pressReleaseImportingEpisodeId = record.id;
 
             try {
-                const response = await fetch('{{ route("publish.pipeline.press-release.import-notion-episode") }}', {
+                const response = await this._rawPipelineFetch('{{ route("publish.pipeline.press-release.import-notion-episode") }}', {
                     method: 'POST',
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
@@ -340,7 +337,7 @@ function pressReleaseWorkflowMixin(config) {
             Array.from(files).forEach((file) => form.append('documents[]', file));
 
             try {
-                const response = await fetch('{{ route("publish.pipeline.press-release.upload-documents") }}', {
+                const response = await this._rawPipelineFetch('{{ route("publish.pipeline.press-release.upload-documents") }}', {
                     method: 'POST',
                     headers: this.requestHeaders(),
                     body: form,
@@ -383,7 +380,7 @@ function pressReleaseWorkflowMixin(config) {
             this.pressReleaseDetectingFields = true;
 
             try {
-                const response = await fetch('{{ route("publish.pipeline.press-release.detect-fields") }}', {
+                const response = await this._rawPipelineFetch('{{ route("publish.pipeline.press-release.detect-fields") }}', {
                     method: 'POST',
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
@@ -429,7 +426,7 @@ function pressReleaseWorkflowMixin(config) {
 
             try {
                 log('info', 'Sending detection request to server...');
-                const response = await fetch('{{ route("publish.pipeline.press-release.detect-photos") }}', {
+                const response = await this._rawPipelineFetch('{{ route("publish.pipeline.press-release.detect-photos") }}', {
                     method: 'POST',
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ draft_id: this.draftId }),
@@ -482,7 +479,7 @@ function pressReleaseWorkflowMixin(config) {
             log('step', 'URL: ' + this.pressRelease.google_drive_url);
 
             try {
-                const response = await fetch('{{ route("notion.profile.fetch-photos") }}', {
+                const response = await this._rawPipelineFetch('{{ route("notion.profile.fetch-photos") }}', {
                     method: 'POST',
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ drive_url: this.pressRelease.google_drive_url }),

@@ -25,6 +25,11 @@ class PressReleaseWorkflowService
             'notion_episode' => [],
             'notion_guest' => [],
             'notion_missing_fields' => [],
+            'notion_source_fields' => [
+                'episode' => [],
+                'guest' => [],
+                'enforcement' => [],
+            ],
             'details' => [
                 'date' => '',
                 'location' => '',
@@ -50,6 +55,7 @@ class PressReleaseWorkflowService
         $normalized['notion_episode'] = is_array($normalized['notion_episode'] ?? null) ? $normalized['notion_episode'] : [];
         $normalized['notion_guest'] = is_array($normalized['notion_guest'] ?? null) ? $normalized['notion_guest'] : [];
         $normalized['notion_missing_fields'] = array_values(array_filter(array_map('strval', (array) ($normalized['notion_missing_fields'] ?? [])), fn ($value) => trim($value) !== ''));
+        $normalized['notion_source_fields'] = $this->normalizeSourceFields($normalized['notion_source_fields'] ?? []);
         $normalized['detected_photos'] = array_values(array_map(function (array $photo) {
             return [
                 'url' => (string) ($photo['url'] ?? ''),
@@ -119,7 +125,7 @@ class PressReleaseWorkflowService
             $parts[] = "=== Validated Details ===\n" . implode("\n", $detailLines);
         }
 
-        if (!empty($state['google_drive_url'])) {
+        if (!empty($state['google_drive_url']) && ($state['submit_method'] ?? '') !== 'notion-podcast') {
             $parts[] = "=== Photo Source Reference ===\nGoogle Drive URL: " . $state['google_drive_url'];
         }
 
@@ -152,5 +158,29 @@ class PressReleaseWorkflowService
                 'path' => (string) ($file['path'] ?? ''),
             ];
         }, array_filter($files, fn ($file) => is_array($file) && !empty(Arr::get($file, 'id')))));
+    }
+
+    private function normalizeSourceFields(mixed $raw): array
+    {
+        $sections = is_array($raw) ? $raw : [];
+        $normalized = [
+            'episode' => [],
+            'guest' => [],
+            'enforcement' => [],
+        ];
+
+        foreach (array_keys($normalized) as $section) {
+            $normalized[$section] = array_values(array_map(function (array $entry) {
+                return [
+                    'field' => (string) ($entry['field'] ?? ''),
+                    'value' => (string) ($entry['value'] ?? ''),
+                    'source_field' => (string) ($entry['source_field'] ?? ''),
+                ];
+            }, array_filter((array) ($sections[$section] ?? []), function ($entry) {
+                return is_array($entry) && filled($entry['value'] ?? null);
+            })));
+        }
+
+        return $normalized;
     }
 }

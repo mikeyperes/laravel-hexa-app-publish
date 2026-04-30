@@ -114,8 +114,6 @@
                     if (
                         conn.site_id != siteId
                         || conn.status !== true
-                        || !Array.isArray(conn.authors)
-                        || conn.authors.length === 0
                         || Number.isNaN(verifiedAt)
                         || (Date.now() - verifiedAt) > maxAgeMs
                     ) {
@@ -123,8 +121,8 @@
                     }
 
                     this.siteConn.status = conn.status;
-                    this.siteConn.message = conn.message;
-                    this.siteConn.authors = conn.authors;
+                    this.siteConn.message = conn.message || 'Connected';
+                    this.siteConn.authors = Array.isArray(conn.authors) ? conn.authors : [];
                     this.siteConn.defaultAuthor = conn.default_author || null;
                     this.siteConn.lastVerifiedAt = conn.verified_at || null;
                     return true;
@@ -144,6 +142,10 @@
 
                 if (Object.prototype.hasOwnProperty.call(this, 'authorsLoading')) {
                     this.authorsLoading = true;
+                }
+                if (this.siteConn.status === true && this.siteConn.authors.length === 0) {
+                    this.siteConn.testing = true;
+                    this.siteConn.message = 'Connected — loading authors...';
                 }
 
                 try {
@@ -187,6 +189,10 @@
                 } catch (e) {
                     return [];
                 } finally {
+                    if (this.siteConn.status === true) {
+                        this.siteConn.testing = false;
+                        this.siteConn.message = 'Connected';
+                    }
                     if (Object.prototype.hasOwnProperty.call(this, 'authorsLoading')) {
                         this.authorsLoading = false;
                     }
