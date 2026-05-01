@@ -655,10 +655,12 @@ class ArticleGenerationService
 
         $details = $this->extractValidatedDetails($sourceTexts);
         $targets = $this->extractPodcastPressReleaseTargets($sourceTexts);
-        $content = $this->normalizePressReleaseYoutubeEmbed($content);
+        $content = $this->normalizePressReleaseYoutubeEmbed($content, $targets);
         $content = $this->ensurePodcastPressReleaseYoutubeEmbed($content, $targets);
         $content = $this->ensurePodcastPressReleaseFirstMentionLinks($content, $targets);
-        $content = $this->ensurePodcastPressReleaseInlineGuestImage($content, $targets);
+        if (!$this->hasSelectedPressReleaseInlineMedia($sourceTexts)) {
+            $content = $this->ensurePodcastPressReleaseInlineGuestImage($content, $targets);
+        }
         $content = $this->normalizePressReleaseDateline($content, $details);
 
         return [$content, $metadata];
@@ -701,10 +703,28 @@ class ArticleGenerationService
         return trim(implode("\n\n", array_filter($chunks)));
     }
 
-    private function normalizePressReleaseYoutubeEmbed(string $content): string
+    private function normalizePressReleaseYoutubeEmbed(string $content, array $targets = []): string
     {
         $content = preg_replace('/<div\b[^>]*>\s*(<iframe\b[^>]*youtube\.com\/embed\/[^>]*><\/iframe>)\s*<\/div>/is', '$1', $content) ?? $content;
         $content = preg_replace('/(<iframe\b[^>]*?)\s+style="[^"]*"/i', '$1', $content) ?? $content;
+
+        $embedUrl = trim((string) ($targets['youtube_embed_url'] ?? ''));
+        if ($embedUrl === '') {
+            return $content;
+        }
+
+        $content = preg_replace_callback('/<iframe\b[^>]*src="([^"]*youtube[^\"]*)"[^>]*><\/iframe>/i', function (array $match) use ($embedUrl) {
+            $src = html_entity_decode((string) ($match[1] ?? ''), ENT_QUOTES, 'UTF-8');
+            $needsReplacement = $src === ''
+                || str_contains(Str::lower($src), 'your_video_id')
+                || !str_contains($src, $embedUrl);
+
+            if (!$needsReplacement) {
+                return $match[0];
+            }
+
+            return preg_replace('/src="[^"]*"/i', 'src="' . e($embedUrl) . '"', $match[0], 1) ?? $match[0];
+        }, $content, 1) ?? $content;
 
         return $content;
     }
@@ -741,8 +761,26 @@ class ArticleGenerationService
         ];
     }
 
-    private function ensurePodcastPressReleaseYoutubeEmbed(string $content, array $targets): string
+    private function hasSelectedPressReleaseInlineMedia(array $sourceTexts): bool
     {
+        $combined = $this->flattenSourceTexts($sourceTexts);
+        if ($combined === '' || !preg_match('/=== Selected Press Release Media ===\s*(.*?)(?:\n===|\z)/s', $combined, $match)) {
+            return false;
+        }
+
+        $block = trim((string) $match[1]);
+        if ($block === '') {
+            return false;
+        }
+
+        if (preg_match('/^Inline photo count:\s*(\d+)/mi', $block, $countMatch)) {
+            return ((int) ($countMatch[1] ?? 0)) > 0;
+        }
+
+        return preg_match('/^Inline Photo \d+ URL:\s*(.+)$/mi', $block) === 1;
+    }
+
+    private function ensurePodcastPressReleaseYoutubeEmbed(string $content, array $targets): string    {
         $embedUrl = trim((string) ($targets['youtube_embed_url'] ?? ''));
         if ($embedUrl === '' || preg_match('/youtube\.com\/embed\//i', $content)) {
             return $content;
@@ -792,8 +830,7 @@ class ArticleGenerationService
         $personName = trim((string) ($targets['person_name'] ?? ''));
         $companyName = trim((string) ($targets['company_name'] ?? ''));
         $alt = e($personName !== '' ? $personName : 'Podcast guest');
-        $captionBase = $personName !== '' ? $personName : 'Podcast guest';
-        $caption = $companyName !== '' ? ($captionBase . ' of ' . $companyName) : $captionBase;
+        $caption = $personName !== '' ? $personName : 'Podcast guest';
 
         $figure = '<figure class="podcast-inline-guest-photo"><img src="'
             . e($imageUrl)
@@ -905,25 +942,38 @@ class ArticleGenerationService
             return $content;
         }
 
-        if (!preg_match('/<p\b[^>]*>(.*?)<\/p>/is', $content, $match)) {
-            return $content;
+        $lead = htmlspecialchars($location . ' (Hexa PR Wire - ' . $date . ')', ENT_QUOTES, 'UTF-8');
+        $content = preg_replace('/^\s*FOR IMMEDIATE RELEASE\s*/iu', '', $content, 1) ?? $content;
+        $pattern = '/^\s*(?:Location:\s*)?(?:<strong>)?[^<\n]*?(?:\(\s*Hexa PR Wire(?:\s*[-–]\s*[^)]*)?\)|[–-]\s*(?:Date:\s*)?(?:\[[^\]]+\]|[A-Za-z]+\s+\d{1,2},\s+\d{4}))\s*(?:<\/strong>)?\s*[–-]\s*/u';
+
+        if (preg_match('/<p\b[^>]*>(.*?)<\/p>/is', $content, $match)) {
+            $firstParagraph = $match[1];
+            $updated = preg_replace(
+                $pattern,
+                '<strong>' . $lead . '</strong> - ',
+                $firstParagraph,
+                1,
+                $count
+            );
+
+            if ($count && $updated !== null) {
+                return preg_replace('/<p\b[^>]*>.*?<\/p>/is', '<p>' . $updated . '</p>', $content, 1) ?? $content;
+            }
         }
 
-        $firstParagraph = $match[1];
-        $lead = htmlspecialchars($location . ' (Hexa PR Wire - ' . $date . ')', ENT_QUOTES, 'UTF-8');
-        $updated = preg_replace(
-            '/^\s*(?:<strong>)?[^<]*?\(\s*Hexa PR Wire(?:\s*[-–]\s*[^)]*)?\)\s*(?:<\/strong>)?\s*[-–]\s*/u',
+        $updatedContent = preg_replace(
+            $pattern,
             '<strong>' . $lead . '</strong> - ',
-            $firstParagraph,
+            $content,
             1,
-            $count
+            $fallbackCount
         );
 
-        if (!$count || $updated === null) {
-            return $content;
+        if ($fallbackCount && $updatedContent !== null) {
+            return $updatedContent;
         }
 
-        return preg_replace('/<p\b[^>]*>.*?<\/p>/is', '<p>' . $updated . '</p>', $content, 1) ?? $content;
+        return $content;
     }
 
     /**

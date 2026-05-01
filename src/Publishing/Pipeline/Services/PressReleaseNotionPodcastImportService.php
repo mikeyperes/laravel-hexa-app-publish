@@ -4,6 +4,7 @@ namespace hexa_app_publish\Publishing\Pipeline\Services;
 
 use hexa_package_google_drive\Services\GoogleDriveService;
 use hexa_package_notion\Services\NotionService;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 class PressReleaseNotionPodcastImportService
@@ -112,6 +113,7 @@ class PressReleaseNotionPodcastImportService
         $liveLinks = $this->normalizeUrlList($this->firstValue($episodeProperties, ['Live Link/s', 'Live Links', 'Live Link', 'Episode URL', 'Website Episode URL']));
         $youtubeUrl = $this->resolveYoutubeUrl($episodeProperties, $liveLinks);
         $youtubeEmbedUrl = $this->youtubeEmbedUrl($youtubeUrl);
+        $transcriptIntro = $this->youtubeTranscriptIntro($youtubeUrl, 300);
         $podcastAssets = $this->normalizeUrlList($episodeProperties['Podcast Assets'] ?? []);
         $guestName = $this->guestNames($guestPages);
         $personUrl = $this->preferredPersonUrl($guestPages);
@@ -192,7 +194,8 @@ class PressReleaseNotionPodcastImportService
             $youtubeUrl,
             $details,
             $missing,
-            $linkTargets
+            $linkTargets,
+            $transcriptIntro
         );
         $detectedPhotos = $this->buildDetectedPhotos(
             $episodeTitle,
@@ -217,7 +220,8 @@ class PressReleaseNotionPodcastImportService
                 $guestPages,
                 $linkTargets,
                 $episodeFeaturedImage,
-                $inlineGuestImage
+                $inlineGuestImage,
+                $transcriptIntro
             ),
             'detected_photos' => $detectedPhotos,
             'selected_episode' => [
@@ -233,6 +237,8 @@ class PressReleaseNotionPodcastImportService
                 'featured_image_url' => $episodeFeaturedImageUrl,
                 'featured_image_source_field' => (string) ($episodeFeaturedImage['field'] ?? ''),
                 'record_url' => $episodePage['url'] ?? null,
+                'transcript_intro' => (string) ($transcriptIntro['text'] ?? ''),
+                'transcript_language' => (string) ($transcriptIntro['language'] ?? ''),
             ],
             'selected_guest' => [
                 'name' => $guestName,
@@ -313,36 +319,19 @@ class PressReleaseNotionPodcastImportService
         ?string $youtubeUrl,
         array $details,
         array $missing,
-        array $linkTargets
+        array $linkTargets,
+        array $transcriptIntro = []
     ): string {
         $parts = [];
-        $parts[] = "=== Podcast Press Release Mission ===\nThis is a Hexa PR Wire press release for a Michael Peres Podcast episode. Write it as a formal release announcing the guest appearance and what the discussion covers. Use only the facts below.";
-
-        $parts[] = "=== Episode Record ===\n" . $this->renderPropertyBlock($episodeProperties, [
-            'Status', 'Schedule', 'Name', 'Podcast Name', 'Season', 'Episode Number', 'Duration', 'Short Summary', 'Episode Summary', 'Excerpt',
-            'Episode Notes / Content', 'Questions', 'Submission Questions', 'Topics to avoid', 'Episode Categories', 'Episode Tags',
-            'Live Link/s', 'Website Episode URL', 'Website Episode Slug', 'YouTube URL', 'Spotify Episode URL', 'Apple Podcast Episode URL',
-            'RSS URL', 'Press Release Links', 'Additional Resources', 'Additional Information', 'Featured Image URL', 'Thumbnail', 'Photos',
-            'Additional Image URLs', 'Podcast Assets'
-        ]);
-
-        if (!empty($liveLinks)) {
-            $parts[] = "=== Episode Links ===\n" . implode("\n", array_map(fn (string $url) => '- ' . $url, $liveLinks));
-        }
-
-        if ($youtubeUrl) {
-            $parts[] = "=== YouTube Episode URL ===\n" . $youtubeUrl;
-        }
-
-        if (!empty($podcastAssets)) {
-            $parts[] = "=== Podcast Assets ===\n" . implode("\n", array_map(fn (string $url) => '- ' . $url, $podcastAssets));
-        }
+        $parts[] = "=== Podcast Press Release Mission ===
+This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead with the guest's real background, role, company, and why the appearance matters. Use the guest biography before the episode discussion. Keep the episode summary conservative and grounded in the source material below. Do not overclaim what was discussed. If the transcript, notes, or episode summary do not explicitly support a talking point, do not invent it.";
 
         if (!empty($guestPages)) {
             foreach ($guestPages as $index => $guestPage) {
                 $guestTitle = $this->displayTitle($guestPage);
                 $guestProperties = $guestPage['properties'] ?? [];
-                $parts[] = "=== Guest Profile " . ($index + 1) . ": {$guestTitle} ===\n" . $this->renderPropertyBlock($guestProperties, [
+                $parts[] = "=== Guest Profile " . ($index + 1) . ": {$guestTitle} ===
+" . $this->renderPropertyBlock($guestProperties, [
                     'Full Name', 'Name', 'Title / Job Title', 'Business/Company Name', 'Company Name', 'Company', 'Current Company', 'Official Website', 'Company Website URL',
                     'Biography (Short)', 'Biography (Full)', 'Description', 'Mission Statement', 'Occupations', 'Awards', 'Products and Services',
                     'Personal LinkedIn URL', 'Personal Twitter URL', 'Personal Instagram URL', 'Personal Facebook URL', 'Wikipedia URL',
@@ -351,37 +340,104 @@ class PressReleaseNotionPodcastImportService
             }
         }
 
-        $parts[] = "=== Canonical Link Targets ===\n"
-            . 'Person Name: ' . ($linkTargets['person_name'] ?? '') . "\n"
-            . 'Person URL: ' . ($linkTargets['person_url'] ?? '') . "\n"
-            . 'Company Name: ' . ($linkTargets['company_name'] ?? '') . "\n"
-            . 'Company URL: ' . ($linkTargets['company_url'] ?? '') . "\n"
-            . 'Episode URL: ' . ($linkTargets['episode_url'] ?? '') . "\n"
-            . 'YouTube URL: ' . ($linkTargets['youtube_url'] ?? '') . "\n"
-            . 'YouTube Embed URL: ' . ($linkTargets['youtube_embed_url'] ?? '') . "\n"
-            . 'Featured Image URL: ' . ($linkTargets['featured_image_url'] ?? '') . "\n"
-            . 'Preferred Inline Guest Image URL: ' . ($linkTargets['inline_guest_image_url'] ?? '') . "\n"
+        $parts[] = "=== Episode Record ===
+" . $this->renderPropertyBlock($episodeProperties, [
+            'Status', 'Schedule', 'Name', 'Podcast Name', 'Season', 'Episode Number', 'Duration', 'Short Summary', 'Episode Summary', 'Excerpt',
+            'Episode Notes / Content', 'Questions', 'Submission Questions', 'Topics to avoid', 'Episode Categories', 'Episode Tags',
+            'Guest Bio', 'Additional Information',
+            'Live Link/s', 'Website Episode URL', 'Website Episode Slug', 'YouTube URL', 'Spotify Episode URL', 'Apple Podcast Episode URL',
+            'RSS URL', 'Press Release Links', 'Additional Resources', 'Featured Image URL', 'Thumbnail', 'Photos',
+            'Additional Image URLs', 'Podcast Assets'
+        ]);
+
+        if (!empty($liveLinks)) {
+            $parts[] = "=== Episode Links ===
+" . implode("
+", array_map(fn (string $url) => '- ' . $url, $liveLinks));
+        }
+
+        if ($youtubeUrl) {
+            $parts[] = "=== YouTube Episode URL ===
+" . $youtubeUrl;
+        }
+
+        if (($transcriptIntro['text'] ?? '') !== '') {
+            $label = '=== Transcript Intro (First 5 Minutes';
+            if (($transcriptIntro['language'] ?? '') !== '') {
+                $label .= ' · ' . $transcriptIntro['language'];
+            }
+            $label .= ') ===';
+            $parts[] = $label . "
+" . $transcriptIntro['text'];
+        }
+
+        if (!empty($podcastAssets)) {
+            $parts[] = "=== Podcast Assets ===
+" . implode("
+", array_map(fn (string $url) => '- ' . $url, $podcastAssets));
+        }
+
+        $parts[] = "=== Canonical Link Targets ===
+"
+            . 'Person Name: ' . ($linkTargets['person_name'] ?? '') . "
+"
+            . 'Person URL: ' . ($linkTargets['person_url'] ?? '') . "
+"
+            . 'Company Name: ' . ($linkTargets['company_name'] ?? '') . "
+"
+            . 'Company URL: ' . ($linkTargets['company_url'] ?? '') . "
+"
+            . 'Episode URL: ' . ($linkTargets['episode_url'] ?? '') . "
+"
+            . 'YouTube URL: ' . ($linkTargets['youtube_url'] ?? '') . "
+"
+            . 'YouTube Embed URL: ' . ($linkTargets['youtube_embed_url'] ?? '') . "
+"
+            . 'Featured Image URL: ' . ($linkTargets['featured_image_url'] ?? '') . "
+"
+            . 'Preferred Inline Guest Image URL: ' . ($linkTargets['inline_guest_image_url'] ?? '') . "
+"
             . 'Contact URL: ' . ($linkTargets['contact_url'] ?? '');
 
-        $parts[] = "=== Required Structural Cues ===\n"
-            . "- Publication: Hexa PR Wire\n"
-            . "- Podcast: The Michael Peres Podcast\n"
-            . "- Dateline format: {$details['location']} (Hexa PR Wire - {$details['date']}) - opening announcement paragraph. If date is blank, infer it from the episode schedule if possible.\n"
-            . "- Sections after the intro body should include: About the guest, About Michael Peres, About The Michael Peres Podcast, Contact Information.\n"
-            . "- If a YouTube URL or embed URL is provided, include one responsive YouTube embed iframe in the body.\n"
-            . "- The first mention of the guest/person must be linked to the Person URL when provided.\n"
-            . "- The first mention of the guest's company must be linked to the Company URL when provided.\n"
-            . "- Use the Episode Featured Image URL as the featured image. Do not substitute a generic stock or search image when a real episode thumbnail is provided.\n"
-            . "- Include exactly one inline guest/client image in the body when a preferred inline guest image URL is provided.\n"
-            . "- Use the guest's actual organization, title, and biography from the related Notion Person record. Do not invent missing credentials.\n"
-            . "- Preserve concrete discussion topics from the episode record and guest context.\n"
+        $parts[] = "=== Required Structural Cues ===
+"
+            . "- Publication: Hexa PR Wire
+"
+            . "- Podcast: The Michael Peres Podcast
+"
+            . "- Dateline format: {$details['location']} (Hexa PR Wire - {$details['date']}) - opening announcement paragraph. If date is blank, infer it from the episode schedule if possible.
+"
+            . "- Structure the opening so the guest's background, credentials, company, and relevance come before the episode recap.
+"
+            . "- Sections after the intro body should include: About the guest, About Michael Peres, About The Michael Peres Podcast, Contact Information.
+"
+            . "- If a YouTube URL or embed URL is provided, include one responsive YouTube embed iframe in the body.
+"
+            . "- The first mention of the guest/person must be linked to the Person URL when provided.
+"
+            . "- The first mention of the guest's company must be linked to the Company URL when provided.
+"
+            . "- Use the Episode Featured Image URL as the featured image. Do not substitute a generic stock or search image when a real episode thumbnail is provided.
+"
+            . "- Include exactly one inline guest/client image in the body when a preferred inline guest image URL is provided.
+"
+            . "- Use the guest's actual organization, title, and biography from the related Notion Person record. Do not invent missing credentials.
+"
+            . "- Use the transcript intro, episode notes, questions, and summary only as grounded support. If they do not explicitly show that a topic was discussed, do not claim it was discussed.
+"
+            . "- Keep the summary factual and restrained. Avoid sensational or inflated language.
+"
             . "- If supporting external URLs are clearly present above, use them. Otherwise do not invent or guess links.";
 
         if (!empty($missing)) {
-            $parts[] = "=== Known Data Gaps ===\n" . implode("\n", array_map(fn (string $line) => '- ' . $line, $missing));
+            $parts[] = "=== Known Data Gaps ===
+" . implode("
+", array_map(fn (string $line) => '- ' . $line, $missing));
         }
 
-        return trim(implode("\n\n", array_filter($parts)));
+        return trim(implode("
+
+", array_filter($parts)));
     }
 
     private function renderPropertyBlock(array $properties, array $preferredKeys = [], bool $includeRemaining = false): string
@@ -466,6 +522,7 @@ class PressReleaseNotionPodcastImportService
         string $inlineGuestImageUrl
     ): array {
         $candidates = [];
+        $guestTitle = $this->guestNames($guestPages) ?: 'Guest';
 
         if ($episodeFeaturedImageUrl !== '') {
             $candidates[] = [
@@ -490,11 +547,11 @@ class PressReleaseNotionPodcastImportService
             $candidates[] = [
                 'url' => $url,
                 'thumbnail_url' => (string) ($photo['thumbnail_url'] ?? $url),
-                'alt_text' => (string) ($photo['alt_text'] ?? $episodeTitle),
-                'caption' => (string) ($photo['caption'] ?? ($episodeTitle . ' guest photo')),
+                'alt_text' => (string) ($photo['alt_text'] ?? $this->simpleGuestPhotoAlt($guestTitle)),
+                'caption' => (string) ($photo['caption'] ?? $this->simpleGuestPhotoCaption($guestTitle)),
                 'source' => (string) ($photo['source'] ?? 'notion-guest-drive'),
                 'source_label' => (string) ($photo['source_label'] ?? 'Linked Person Drive Photo'),
-                'role' => $url === $inlineGuestImageUrl ? 'inline' : 'inline',
+                'role' => 'inline',
                 'download_url' => (string) ($photo['download_url'] ?? $url),
                 'view_url' => (string) ($photo['view_url'] ?? $url),
             ];
@@ -506,12 +563,12 @@ class PressReleaseNotionPodcastImportService
                 continue;
             }
 
-            $role = $url === $episodeFeaturedImageUrl ? 'featured' : ($url === $inlineGuestImageUrl ? 'inline' : 'inline');
+            $role = $url === $episodeFeaturedImageUrl ? 'featured' : 'inline';
             $candidates[] = [
                 'url' => $url,
                 'thumbnail_url' => (string) ($photo['thumbnail_url'] ?? $url),
-                'alt_text' => (string) ($photo['alt_text'] ?? $episodeTitle),
-                'caption' => (string) ($photo['caption'] ?? ($role === 'featured' ? $episodeTitle : $episodeTitle . ' guest photo')),
+                'alt_text' => (string) ($photo['alt_text'] ?? ($role === 'featured' ? $episodeTitle : $this->simpleGuestPhotoAlt($guestTitle))),
+                'caption' => (string) ($photo['caption'] ?? ($role === 'featured' ? $episodeTitle : $this->simpleGuestPhotoCaption($guestTitle))),
                 'source' => (string) ($photo['source'] ?? 'google-drive'),
                 'source_label' => (string) ($photo['source_label'] ?? 'Google Drive Podcast Asset'),
                 'role' => $role,
@@ -524,14 +581,15 @@ class PressReleaseNotionPodcastImportService
             if (!$this->looksLikeRenderableImageUrl((string) $url)) {
                 continue;
             }
+            $role = ((string) $url === $episodeFeaturedImageUrl) ? 'featured' : 'inline';
             $candidates[] = [
                 'url' => (string) $url,
                 'thumbnail_url' => (string) $url,
-                'alt_text' => $episodeTitle,
-                'caption' => 'Podcast asset for ' . $episodeTitle,
+                'alt_text' => $role === 'featured' ? $episodeTitle : $this->simpleGuestPhotoAlt($guestTitle),
+                'caption' => $role === 'featured' ? $episodeTitle : $this->simpleGuestPhotoCaption($guestTitle),
                 'source' => 'notion-podcast-assets',
                 'source_label' => 'Notion Podcast Asset',
-                'role' => ((string) $url === $episodeFeaturedImageUrl) ? 'featured' : 'inline',
+                'role' => $role,
                 'download_url' => (string) $url,
                 'view_url' => (string) $url,
             ];
@@ -545,41 +603,44 @@ class PressReleaseNotionPodcastImportService
                 if (!$this->looksLikeRenderableImageUrl($url)) {
                     continue;
                 }
+                $role = ($url === $episodeFeaturedImageUrl) ? 'featured' : 'inline';
                 $candidates[] = [
                     'url' => $url,
                     'thumbnail_url' => $url,
-                    'alt_text' => $episodeTitle,
-                    'caption' => $episodeTitle,
+                    'alt_text' => $role === 'featured' ? $episodeTitle : $this->simpleGuestPhotoAlt($guestTitle),
+                    'caption' => $role === 'featured' ? $episodeTitle : $this->simpleGuestPhotoCaption($guestTitle),
                     'source' => 'notion-episode-media',
                     'source_label' => 'Notion Episode Media',
-                    'role' => ($url === $episodeFeaturedImageUrl) ? 'featured' : 'inline',
+                    'role' => $role,
                     'download_url' => $url,
                     'view_url' => $url,
                 ];
             }
         }
 
-        foreach ($guestPages as $guestPage) {
-            $guestTitle = $this->displayTitle($guestPage);
-            foreach (($guestPage['properties'] ?? []) as $key => $value) {
-                if (!preg_match('/photo|image|headshot|portrait|thumbnail/i', (string) $key)) {
-                    continue;
-                }
-                foreach ($this->normalizeUrlList($value) as $url) {
-                    if (!$this->looksLikeRenderableImageUrl($url)) {
+        if (empty($guestDrivePhotos)) {
+            foreach ($guestPages as $guestPage) {
+                $guestTitle = $this->displayTitle($guestPage) ?: $guestTitle;
+                foreach (($guestPage['properties'] ?? []) as $key => $value) {
+                    if (!preg_match('/photo|image|headshot|portrait|thumbnail/i', (string) $key)) {
                         continue;
                     }
-                    $candidates[] = [
-                        'url' => $url,
-                        'thumbnail_url' => $url,
-                        'alt_text' => $guestTitle,
-                        'caption' => $guestTitle . ' on The Michael Peres Podcast',
-                        'source' => 'notion-guest-media',
-                        'source_label' => 'Notion Guest Media',
-                        'role' => ($url === $inlineGuestImageUrl) ? 'inline' : 'inline',
-                        'download_url' => $url,
-                        'view_url' => $url,
-                    ];
+                    foreach ($this->normalizeUrlList($value) as $url) {
+                        if (!$this->looksLikeRenderableImageUrl($url)) {
+                            continue;
+                        }
+                        $candidates[] = [
+                            'url' => $url,
+                            'thumbnail_url' => $url,
+                            'alt_text' => $this->simpleGuestPhotoAlt($guestTitle),
+                            'caption' => $this->simpleGuestPhotoCaption($guestTitle),
+                            'source' => 'notion-guest-media',
+                            'source_label' => 'Notion Guest Media',
+                            'role' => 'inline',
+                            'download_url' => $url,
+                            'view_url' => $url,
+                        ];
+                    }
                 }
             }
         }
@@ -601,6 +662,124 @@ class PressReleaseNotionPodcastImportService
         }
 
         return array_slice(array_merge($featured, $inline), 0, 12);
+    }
+
+    private function simpleGuestPhotoCaption(string $guestName, string $fallback = ''): string
+    {
+        $guestName = trim($guestName);
+        if ($guestName !== '') {
+            return $guestName;
+        }
+
+        $fallback = trim(pathinfo($fallback, PATHINFO_FILENAME));
+        if ($fallback !== '') {
+            return trim(preg_replace('/[_-]+/', ' ', $fallback));
+        }
+
+        return 'Guest photo';
+    }
+
+    private function simpleGuestPhotoAlt(string $guestName, string $fallback = ''): string
+    {
+        return $this->simpleGuestPhotoCaption($guestName, $fallback);
+    }
+
+    private function youtubeTranscriptIntro(?string $url, int $maxSeconds = 300): array
+    {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return ['text' => '', 'language' => '', 'source_url' => ''];
+        }
+
+        try {
+            $response = Http::timeout(20)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+                    'Accept-Language' => 'en-US,en;q=0.9',
+                ])
+                ->get($url);
+            if (!$response->successful()) {
+                return ['text' => '', 'language' => '', 'source_url' => ''];
+            }
+
+            $html = $response->body();
+            if (!preg_match('/"captionTracks":(\[[^\]]+\])/s', $html, $matches)) {
+                return ['text' => '', 'language' => '', 'source_url' => ''];
+            }
+
+            $tracks = json_decode($matches[1], true);
+            if (!is_array($tracks) || empty($tracks)) {
+                return ['text' => '', 'language' => '', 'source_url' => ''];
+            }
+
+            usort($tracks, function (array $a, array $b) {
+                $rank = function (array $track): int {
+                    $lang = strtolower((string) ($track['languageCode'] ?? ''));
+                    if (in_array($lang, ['en', 'en-us', 'en-gb'], true)) {
+                        return 0;
+                    }
+                    if (str_contains($lang, 'en')) {
+                        return 1;
+                    }
+                    return 2;
+                };
+                return $rank($a) <=> $rank($b);
+            });
+
+            $track = $tracks[0] ?? [];
+            $baseUrl = html_entity_decode((string) ($track['baseUrl'] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            if ($baseUrl === '') {
+                return ['text' => '', 'language' => '', 'source_url' => ''];
+            }
+
+            $captionUrl = str_contains($baseUrl, 'fmt=') ? $baseUrl : $baseUrl . '&fmt=json3';
+            $captionResponse = Http::timeout(20)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+                    'Accept-Language' => 'en-US,en;q=0.9',
+                ])
+                ->get($captionUrl);
+            if (!$captionResponse->successful()) {
+                return ['text' => '', 'language' => '', 'source_url' => $captionUrl];
+            }
+
+            $payload = $captionResponse->json();
+            if (!is_array($payload)) {
+                return ['text' => '', 'language' => '', 'source_url' => $captionUrl];
+            }
+
+            $parts = [];
+            $maxMs = max(1, $maxSeconds) * 1000;
+            foreach (($payload['events'] ?? []) as $event) {
+                if (!is_array($event)) {
+                    continue;
+                }
+                $startMs = (int) ($event['tStartMs'] ?? 0);
+                if ($startMs >= $maxMs) {
+                    break;
+                }
+                $segmentText = '';
+                foreach (($event['segs'] ?? []) as $segment) {
+                    if (!is_array($segment)) {
+                        continue;
+                    }
+                    $segmentText .= (string) ($segment['utf8'] ?? '');
+                }
+                $segmentText = html_entity_decode($segmentText, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $segmentText = trim(preg_replace('/\s+/u', ' ', $segmentText));
+                if ($segmentText !== '') {
+                    $parts[] = $segmentText;
+                }
+            }
+
+            return [
+                'text' => trim(preg_replace('/\s+/u', ' ', implode(' ', $parts))),
+                'language' => (string) (($track['name']['simpleText'] ?? ($track['languageCode'] ?? '')) ?: ''),
+                'source_url' => $captionUrl,
+            ];
+        } catch (\Throwable $e) {
+            return ['text' => '', 'language' => '', 'source_url' => ''];
+        }
     }
 
     private function preferredContactUrl(array $guestPages, array $liveLinks): string
@@ -914,13 +1093,12 @@ class PressReleaseNotionPodcastImportService
                     continue;
                 }
 
-                $name = trim((string) ($photo['name'] ?? 'Podcast asset'));
-                $alt = $guestName !== '' && stripos($name, $guestName) !== false ? $guestName : ($guestName !== '' ? $guestName . ' podcast asset' : $episodeTitle);
+                $name = trim((string) ($photo['name'] ?? 'Guest photo'));
                 $photos[] = [
                     'url' => $url,
                     'thumbnail_url' => (string) ($photo['thumbnail_link'] ?? $url),
-                    'alt_text' => $alt,
-                    'caption' => $guestName !== '' ? $guestName . ' on The Michael Peres Podcast' : ('Podcast asset for ' . $episodeTitle),
+                    'alt_text' => $this->simpleGuestPhotoAlt($guestName, $name),
+                    'caption' => $this->simpleGuestPhotoCaption($guestName, $name),
                     'source' => $source,
                     'source_label' => $sourceLabel,
                     'download_url' => (string) ($photo['web_content_link'] ?? $url),
@@ -1034,23 +1212,42 @@ class PressReleaseNotionPodcastImportService
         array $guestPages,
         array $linkTargets,
         array $episodeFeaturedImage,
-        array $inlineGuestImage
+        array $inlineGuestImage,
+        array $transcriptIntro = []
     ): array {
         $guestProperties = $guestPages[0]['properties'] ?? [];
+        $episodeRows = $this->extractSourceFieldEntries($episodeProperties, [
+            'Name',
+            'Schedule',
+            'Short Summary',
+            'Episode Summary',
+            'Excerpt',
+            'Episode Notes / Content',
+            'Questions',
+            'Submission Questions',
+            'Guest Bio',
+            'Additional Information',
+        ], 'Podcast Episode Database');
+
+        if (($transcriptIntro['text'] ?? '') !== '') {
+            $episodeRows[] = $this->sourceFieldEntry(
+                'Transcript intro (first 5 minutes)',
+                (string) ($transcriptIntro['text'] ?? ''),
+                'YouTube captions',
+                'YouTube Transcript'
+            );
+        }
+        if (($transcriptIntro['language'] ?? '') !== '') {
+            $episodeRows[] = $this->sourceFieldEntry(
+                'Transcript language',
+                (string) ($transcriptIntro['language'] ?? ''),
+                'Caption track language',
+                'YouTube Transcript'
+            );
+        }
 
         return [
-            'episode' => $this->extractSourceFieldEntries($episodeProperties, [
-                'Name',
-                'Schedule',
-                'Short Summary',
-                'Episode Summary',
-                'Excerpt',
-                'Episode Notes / Content',
-                'Questions',
-                'Submission Questions',
-                'Guest Bio',
-                'Additional Information',
-            ], 'Podcast Episode Database'),
+            'episode' => array_values(array_filter($episodeRows)),
             'guest' => $this->extractSourceFieldEntries($guestProperties, [
                 'Full Name',
                 'Title / Job Title',
