@@ -563,6 +563,29 @@
                     .filter((profile) => !!profile.id);
                 this.prSubjectData = this.sanitizePrSubjectDataForPersistence(this.prSubjectData || {});
 
+                if (!this.template_overrides || typeof this.template_overrides !== 'object') {
+                    this.template_overrides = {};
+                }
+
+                const restoredPressReleaseState = this.normalizePressReleaseState(this.pressRelease || {});
+                const restoredPrSubjectCount = Array.isArray(this.selectedPrProfiles) ? this.selectedPrProfiles.length : 0;
+                const hasRestoredPressReleaseContent = !!(
+                    restoredPressReleaseState.submit_method
+                    || restoredPressReleaseState.content_dump
+                    || restoredPressReleaseState.public_url
+                    || (Array.isArray(restoredPressReleaseState.document_files) && restoredPressReleaseState.document_files.length > 0)
+                    || restoredPressReleaseState.notion_episode?.id
+                    || restoredPressReleaseState.notion_guest?.name
+                    || (Array.isArray(restoredPressReleaseState.detected_photos) && restoredPressReleaseState.detected_photos.length > 0)
+                );
+
+                if (hasRestoredPressReleaseContent && restoredPrSubjectCount === 0) {
+                    this.template_overrides.article_type = 'press-release';
+                    this.pressRelease.article_type = 'press-release';
+                } else if (restoredPrSubjectCount > 0 && !this.template_overrides.article_type) {
+                    this.template_overrides.article_type = 'pr-full-feature';
+                }
+
                 // Site connection (nested object)
                 if (state.selectedSiteId) {
                     this.selectedSiteId = String(state.selectedSiteId);
