@@ -14,12 +14,28 @@
             history.replaceState(null, '', url.toString());
         },
 
+        normalizedOpenSteps(step, keepCurrentOpen = false) {
+            const numericStep = Number(step || 0);
+            if (numericStep >= 4 && numericStep <= 7) {
+                return keepCurrentOpen ? [3] : [3, numericStep];
+            }
+            return keepCurrentOpen ? [] : [numericStep];
+        },
+
+        normalizeNestedOpenSteps(steps, currentStep = null) {
+            const normalized = Array.from(new Set((Array.isArray(steps) ? steps : []).map((step) => Number(step)).filter((step) => step >= 1 && step <= 7)));
+            const activeStep = Number(currentStep || this.currentStep || 0);
+            const hasNestedStep = normalized.some((step) => step >= 4 && step <= 7) || (activeStep >= 4 && activeStep <= 7);
+            if (hasNestedStep && !normalized.includes(3)) {
+                normalized.unshift(3);
+            }
+            return normalized;
+        },
+
         goToStep(step) {
             if (this.isStepAccessible(step)) {
                 this.currentStep = step;
-                if (!this.openSteps.includes(step)) {
-                    this.openSteps = [step];
-                }
+                this.openSteps = this.normalizeNestedOpenSteps(this.normalizedOpenSteps(step), step);
                 if (step === 5 || this.openSteps.includes(5)) {
                     this._queuePromptRefresh('go_to_step');
                 }
@@ -41,9 +57,9 @@
             if (!this.isStepAccessible(step)) return;
             this.currentStep = step;
             if (this.openSteps.includes(step)) {
-                this.openSteps = this.openSteps.filter(s => s !== step);
+                this.openSteps = this.normalizeNestedOpenSteps(this.normalizedOpenSteps(step, true), step);
             } else {
-                this.openSteps = [step];
+                this.openSteps = this.normalizeNestedOpenSteps(this.normalizedOpenSteps(step), step);
             }
             if (step === 5 && this.openSteps.includes(5)) {
                 this._queuePromptRefresh('toggle_step');
@@ -62,7 +78,7 @@
 
         openStep(step) {
             this.currentStep = step;
-            this.openSteps = [step];
+            this.openSteps = this.normalizeNestedOpenSteps(this.normalizedOpenSteps(step), step);
             if (step === 5 || this.openSteps.includes(5)) {
                 this._queuePromptRefresh('open_step');
             }

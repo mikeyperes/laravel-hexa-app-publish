@@ -556,6 +556,7 @@
                 // Arrays that may serialize as objects in Alpine proxy
                 if (state.openSteps) this.openSteps = Array.isArray(state.openSteps) ? state.openSteps : Object.values(state.openSteps);
                 if (state.completedSteps) this.completedSteps = Array.isArray(state.completedSteps) ? state.completedSteps : Object.values(state.completedSteps);
+                this.openSteps = this.normalizeNestedOpenSteps(this.openSteps, state.currentStep || this.currentStep);
                 this.pressRelease = this.restorePressReleaseStateFromLegacy(state);
                 this.rebuildPressReleasePhotoAssets?.();
                 this.selectedPrProfiles = (Array.isArray(this.selectedPrProfiles) ? this.selectedPrProfiles : [])
