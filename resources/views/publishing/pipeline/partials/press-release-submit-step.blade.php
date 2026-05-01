@@ -162,54 +162,42 @@
                                 <span class="text-[11px] text-blue-700">These episode, guest, links, and media values are what the AI will use.</span>
                             </div>
                             <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                <div class="rounded-lg border border-white/70 bg-white/80 p-3">
-                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Episode Fields Pulled From Notion</p>
-                                    <div class="mt-3 space-y-3">
-                                        <template x-for="entry in (pressRelease.notion_source_fields?.episode || [])" :key="'episode-' + entry.field + '-' + entry.source_field">
-                                            <div class="grid grid-cols-1 gap-1 md:grid-cols-[180px_minmax(0,1fr)]">
-                                                <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500" x-text="notionAuditFieldLabel(entry) || &quot;Field&quot;"></p>
-                                                <div>
-                                                    <p class="text-xs text-gray-400" x-text="notionAuditSourceLabel(entry, &quot;Podcast Episode Database&quot;)"></p>
-                                                    <p class="mt-1 text-sm text-gray-800 whitespace-pre-wrap break-words" x-text="entry.value"></p>
-                                                </div>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </div>
-                                <div class="rounded-lg border border-white/70 bg-white/80 p-3">
-                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Guest / Person Fields Pulled From Notion</p>
-                                    <div class="mt-3 space-y-3">
-                                        <template x-for="entry in (pressRelease.notion_source_fields?.guest || [])" :key="'guest-' + entry.field + '-' + entry.source_field">
-                                            <div class="grid grid-cols-1 gap-1 md:grid-cols-[180px_minmax(0,1fr)]">
-                                                <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500" x-text="entry.field"></p>
-                                                <div>
-                                                    <p class="text-xs text-gray-400" x-text="notionAuditSourceLabel(entry, &quot;Person Database&quot;)"></p>
-                                                    <p class="mt-1 text-sm text-gray-800 whitespace-pre-wrap break-words" x-text="entry.value"></p>
-                                                </div>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </div>
+                                @include('app-publish::publishing.pipeline.partials.notion-field-panel', [
+                                    'heading' => 'Episode Fields Pulled From Notion',
+                                    'rowsExpression' => 'pressRelease.notion_source_fields?.episode || []',
+                                    'rowKey' => "'episode-' + (row.field || row.source_field || rowIdx)",
+                                    'labelExpression' => "notionAuditFieldLabel(row) || 'Field'",
+                                    'sourceExpression' => 'notionAuditSourceLabel(row, "Podcast Episode Database")',
+                                    'valueExpression' => "row.value || ''",
+                                    'linkUrls' => false,
+                                    'panelClass' => 'rounded-lg border border-white/70 bg-white/80 p-3',
+                                ])
+                                @include('app-publish::publishing.pipeline.partials.notion-field-panel', [
+                                    'heading' => 'Guest / Person Fields Pulled From Notion',
+                                    'rowsExpression' => 'pressRelease.notion_source_fields?.guest || []',
+                                    'rowKey' => "'guest-' + (row.field || row.source_field || rowIdx)",
+                                    'labelExpression' => "notionAuditFieldLabel(row) || 'Field'",
+                                    'sourceExpression' => 'notionAuditSourceLabel(row, "Person Database")',
+                                    'valueExpression' => "row.value || ''",
+                                    'linkUrls' => false,
+                                    'panelClass' => 'rounded-lg border border-white/70 bg-white/80 p-3',
+                                ])
                             </div>
                             <div class="rounded-lg border border-blue-200 bg-white/80 px-3 py-3">
-                                <div class="flex items-center justify-between gap-3">
+                                <div class="flex items-center justify-between gap-3 mb-3">
                                     <p class="text-xs font-semibold uppercase tracking-wide text-blue-700">Enforced Links & Media</p>
                                     <span class="text-[11px] text-blue-700">The first guest mention, first company mention, YouTube embed, episode thumbnail, and inline guest image are enforced.</span>
                                 </div>
-                                <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                                    <template x-for="entry in (pressRelease.notion_source_fields?.enforcement || [])" :key="'enforce-' + entry.field + '-' + entry.source_field">
-                                        <div>
-                                            <p class="text-[11px] uppercase tracking-wide text-gray-500" x-text="notionAuditFieldLabel(entry) || &quot;Field&quot;"></p>
-                                            <p class="text-xs text-gray-400" x-text="notionAuditSourceLabel(entry, &quot;Canonical Targets&quot;)"></p>
-                                            <template x-if="String(entry.value || '').startsWith('http')">
-                                                <a :href="entry.value" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="entry.value"></a>
-                                            </template>
-                                            <template x-if="!String(entry.value || '').startsWith('http')">
-                                                <p class="mt-1 text-sm text-gray-800 whitespace-pre-wrap break-words" x-text="entry.value"></p>
-                                            </template>
-                                        </div>
-                                    </template>
-                                </div>
+                                @include('app-publish::publishing.pipeline.partials.notion-field-panel', [
+                                    'heading' => 'Canonical Targets',
+                                    'rowsExpression' => 'pressRelease.notion_source_fields?.enforcement || []',
+                                    'rowKey' => "'enforce-' + (row.field || row.source_field || rowIdx)",
+                                    'labelExpression' => "notionAuditFieldLabel(row) || 'Field'",
+                                    'sourceExpression' => 'notionAuditSourceLabel(row, "Canonical Targets")',
+                                    'valueExpression' => "row.value || ''",
+                                    'linkUrls' => true,
+                                    'panelClass' => 'rounded-lg border border-white/70 bg-white/80 p-3',
+                                ])
                             </div>
                             <div x-show="pressRelease.notion_guest?.record_url" x-cloak class="flex justify-end">
                                 <a :href="pressRelease.notion_guest.record_url" target="_blank" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700" title="Open guest in Notion">
@@ -328,60 +316,6 @@
         </div>
     </div>
 
-    {{-- ═══ Sub-card 2: Validate Release Details ═══ --}}
-    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div class="flex items-center gap-3 px-5 py-4 bg-blue-50 border-b border-blue-100">
-            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            </div>
-            <div class="flex-1">
-                <p class="text-sm font-semibold text-gray-800">Validate Release Details</p>
-                <p class="text-xs text-gray-400">Review and auto-detect date, location, contact from the submission</p>
-            </div>
-            <button @click="detectPressReleaseFields()" :disabled="pressReleaseDetectingFields" type="button" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
-                <svg x-show="pressReleaseDetectingFields" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                <span x-text="pressReleaseDetectingFields ? 'Detecting...' : 'Auto Detect'"></span>
-            </button>
-        </div>
-        <div class="px-5 py-5 space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Press Release Date</label>
-                    <input type="text" x-model="pressRelease.details.date" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. April 11, 2026">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                    <input type="text" x-model="pressRelease.details.location" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Miami, Florida">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Contact</label>
-                    <input type="text" x-model="pressRelease.details.contact" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Sarah Smith, media contact">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Contact URL</label>
-                    <input type="url" x-model="pressRelease.details.contact_url" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://example.com/contact">
-                </div>
-            </div>
-
-            {{-- Validation activity log --}}
-            <div x-show="pressRelease.activity_log.length > 0" x-cloak class="bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto">
-                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Detection Log</div>
-                <template x-for="(entry, idx) in pressRelease.activity_log" :key="idx">
-                    <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
-                        <span class="text-gray-500 flex-shrink-0" x-text="new Date(entry.timestamp).toLocaleTimeString('en-US', { hour12: false })"></span>
-                        <span class="break-words" :class="{
-                            'text-green-400': entry.type === 'success',
-                            'text-red-400': entry.type === 'error',
-                            'text-yellow-400': entry.type === 'warning',
-                            'text-blue-400': entry.type === 'info',
-                            'text-gray-300': entry.type === 'step'
-                        }" x-text="entry.message"></span>
-                    </div>
-                </template>
-            </div>
-        </div>
-    </div>
-
     {{-- ═══ Sub-card 3: Photos ═══ --}}
     <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div class="flex items-center gap-3 px-5 py-4 bg-green-50 border-b border-green-100">
@@ -467,39 +401,83 @@
                 </template>
             </div>
 
-            <div x-show="(pressRelease.detected_photos || []).length > 0 || (pressRelease.photo_files || []).length > 0" x-cloak>
-                <div class="flex items-center justify-between mb-2">
-                    <h5 class="text-sm font-semibold text-gray-700">Photo Assets</h5>
-                    <span class="text-xs text-gray-400" x-text="((pressRelease.detected_photos || []).length + (pressRelease.photo_files || []).length) + ' photo(s)'"></span>
+            <div x-show="pressReleasePhotoAssets.length > 0" x-cloak>
+                @include('app-publish::publishing.pipeline.partials.shared-media-picker', [
+                    'title' => 'Photo Assets',
+                    'description' => 'All candidate photos are shown once. Set one featured image and choose multiple inline photos from the same gallery.',
+                    'assetsExpression' => 'pressReleasePhotoAssets',
+                    'assetKeyExpression' => 'asset.key',
+                    'featuredSelectedExpression' => 'pressReleaseAssetIsFeatured(asset)',
+                    'inlineSelectedExpression' => 'pressReleaseAssetIsInline(asset)',
+                    'thumbUrlExpression' => 'asset.thumbnail_url || asset.url',
+                    'labelExpression' => 'asset.label',
+                    'sourceLabelExpression' => 'asset.source_label || asset.source || "detected"',
+                    'downloadUrlExpression' => 'asset.download_url || asset.url',
+                    'viewUrlExpression' => 'asset.view_url || asset.url',
+                    'setFeaturedAction' => 'setPressReleaseFeaturedPhoto(asset)',
+                    'toggleInlineAction' => 'togglePressReleaseInlinePhotoSelection(asset)',
+                    'featuredButtonTextExpression' => 'pressReleaseAssetIsFeatured(asset) ? "Featured Image" : "Set Featured"',
+                    'inlineButtonTextExpression' => 'pressReleaseAssetIsFeatured(asset) ? "Featured image" : (pressReleaseAssetIsInline(asset) ? "Inline Selected" : "Add Inline")',
+                    'inlineButtonDisabledExpression' => 'pressReleaseAssetIsFeatured(asset)',
+                    'countBadgeExpression' => 'pressReleasePhotoAssets.length + " photo(s)"',
+                    'featuredBadgeExpression' => 'pressRelease.featured_photo_key ? "Featured selected" : "Featured not set"',
+                    'inlineBadgeExpression' => '"Inline selected: " + Object.keys(pressRelease.inline_photo_keys || {}).filter((key) => pressRelease.inline_photo_keys[key]).length',
+                    'showSelectAll' => true,
+                    'selectAllAction' => 'selectAllPressReleaseInlinePhotos()',
+                    'clearInlineAction' => 'clearPressReleaseInlinePhotos()',
+                ])
+            </div>
+
+    {{-- ═══ Sub-card 2: Validate Release Details ═══ --}}
+    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div class="flex items-center gap-3 px-5 py-4 bg-blue-50 border-b border-blue-100">
+            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div class="flex-1">
+                <p class="text-sm font-semibold text-gray-800">Validate Release Details</p>
+                <p class="text-xs text-gray-400">Review and auto-detect date, location, contact from the submission</p>
+            </div>
+            <button @click="detectPressReleaseFields()" :disabled="pressReleaseDetectingFields" type="button" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+                <svg x-show="pressReleaseDetectingFields" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                <span x-text="pressReleaseDetectingFields ? 'Detecting...' : 'Auto Detect'"></span>
+            </button>
+        </div>
+        <div class="px-5 py-5 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Press Release Date</label>
+                    <input type="text" x-model="pressRelease.details.date" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. April 11, 2026">
                 </div>
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <template x-for="(photo, aidx) in (pressRelease.detected_photos || [])" :key="'det-' + aidx">
-                        <div class="rounded-xl overflow-hidden border-2 bg-white transition-all"
-                            :class="pressRelease.selected_photo_keys?.['det-' + aidx] ? 'border-green-500 ring-2 ring-green-200' : 'border-gray-200 hover:border-gray-300'">
-                            <div class="relative cursor-pointer select-none" @click.prevent="if (!pressRelease.selected_photo_keys) pressRelease.selected_photo_keys = {}; pressRelease.selected_photo_keys['det-' + aidx] = !pressRelease.selected_photo_keys['det-' + aidx]; savePipelineState()">
-                                <img :src="photo.thumbnail_url || photo.url" class="w-full h-56 object-cover pointer-events-none" loading="lazy" onerror="this.style.display='none'" draggable="false">
-                                <div x-show="pressRelease.selected_photo_keys?.['det-' + aidx]" class="absolute top-2 right-2 w-7 h-7 bg-green-500 rounded-full flex items-center justify-center shadow-md">
-                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
-                                </div>
-                                <div x-show="!pressRelease.selected_photo_keys?.['det-' + aidx]" class="absolute top-2 right-2 w-7 h-7 bg-white/80 border-2 border-gray-300 rounded-full"></div>
-                            </div>
-                            <div class="p-3">
-                                <p class="text-sm font-medium text-gray-800 break-words" x-text="photo.alt_text || photo.caption || 'Photo ' + (aidx + 1)"></p>
-                                <p class="text-xs text-gray-400 mt-0.5" x-text="photo.source || 'detected'"></p>
-                                <div class="flex items-center gap-2 mt-2">
-                                    <a :href="photo.download_url || photo.url" target="_blank" @click.stop class="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                                        Download
-                                    </a>
-                                    <a :href="photo.view_url || photo.url" target="_blank" @click.stop class="inline-flex items-center gap-1 text-xs text-gray-500 hover:underline">
-                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                                        Open
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </template>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                    <input type="text" x-model="pressRelease.details.location" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Miami, Florida">
                 </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Contact</label>
+                    <input type="text" x-model="pressRelease.details.contact" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Sarah Smith, media contact">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Contact URL</label>
+                    <input type="url" x-model="pressRelease.details.contact_url" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://example.com/contact">
+                </div>
+            </div>
+
+            {{-- Validation activity log --}}
+            <div x-show="pressRelease.activity_log.length > 0" x-cloak class="bg-gray-900 rounded-xl border border-gray-700 p-4 max-h-48 overflow-y-auto">
+                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Detection Log</div>
+                <template x-for="(entry, idx) in pressRelease.activity_log" :key="idx">
+                    <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-gray-800' : ''">
+                        <span class="text-gray-500 flex-shrink-0" x-text="new Date(entry.timestamp).toLocaleTimeString('en-US', { hour12: false })"></span>
+                        <span class="break-words" :class="{
+                            'text-green-400': entry.type === 'success',
+                            'text-red-400': entry.type === 'error',
+                            'text-yellow-400': entry.type === 'warning',
+                            'text-blue-400': entry.type === 'info',
+                            'text-gray-300': entry.type === 'step'
+                        }" x-text="entry.message"></span>
+                    </div>
+                </template>
             </div>
         </div>
     </div>

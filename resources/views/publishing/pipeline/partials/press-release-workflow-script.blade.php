@@ -237,6 +237,27 @@ function pressReleaseWorkflowMixin(config) {
             return this.togglePressReleaseInlinePhotoSelection(asset, fallbackKey);
         },
 
+        selectAllPressReleaseInlinePhotos() {
+            if (!this.pressRelease || typeof this.pressRelease !== 'object') return;
+            const next = {};
+            const featuredKey = String(this.pressRelease?.featured_photo_key || '').trim();
+            (this.pressReleasePhotoAssets || []).forEach((asset) => {
+                const key = this.pressReleaseAssetKey(asset);
+                if (!key || key === featuredKey) return;
+                next[key] = true;
+            });
+            this.pressRelease.inline_photo_keys = next;
+            this.syncPressReleaseSelectedPhotoKeys();
+            this.savePipelineState();
+        },
+
+        clearPressReleaseInlinePhotos() {
+            if (!this.pressRelease || typeof this.pressRelease !== 'object') return;
+            this.pressRelease.inline_photo_keys = {};
+            this.syncPressReleaseSelectedPhotoKeys();
+            this.savePipelineState();
+        },
+
         togglePressReleaseInlinePhotoSelection(asset = {}, fallbackKey = '', options = {}) {
             const key = this.pressReleaseAssetKey(asset, fallbackKey);
             if (!key) return;

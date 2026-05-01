@@ -699,8 +699,7 @@
         headlineCaseFromText(value = '', wordLimit = 10) {
             const cleaned = String(value || '')
                 .replace(/https?:\/\/\S+/gi, ' ')
-                .replace(/[
-]+/g, ' ')
+                .replace(/[\r\n]+/g, ' ')
                 .replace(/[|•]+/g, ' ')
                 .replace(/[_]+/g, ' ')
                 .replace(/\s+/g, ' ')
@@ -720,8 +719,7 @@
         cleanPrTitleAngleCandidate(value = '', wordLimit = 12) {
             let cleaned = String(value || '')
                 .replace(/https?:\/\/\S+/gi, ' ')
-                .replace(/[
-]+/g, ' ')
+                .replace(/[\r\n]+/g, ' ')
                 .replace(/[|•]+/g, ' ')
                 .replace(/\s+/g, ' ')
                 .trim();
@@ -732,7 +730,7 @@
                 .replace(/^title\s*:\s*/i, '')
                 .replace(/^(focus instructions?|article focus instructions?|quote guidance|subject position|topic context|editorial context|keywords?)\s*:\s*/i, '')
                 .replace(/^(focus on|highlight|show|explore|examine|discuss|cover|write about|explain|describe|use|build|select|define)\s+/i, '')
-                .replace(/(?:the article|this article|the writer|writer|must|should)/gi, ' ')
+                .replace(/\b(?:the article|this article|the writer|writer|must|should)\b/gi, ' ')
                 .replace(/\s+/g, ' ')
                 .trim();
 
@@ -741,7 +739,7 @@
                 .trim();
 
             if (!headline) return '';
-            if (/(?:a|an)?\s*(?:feature|expert|company|person|executive)\s+profile/i.test(headline)) {
+            if (/\b(?:a|an)?\s*(?:feature|expert|company|person|executive)\s+profile\b/i.test(headline)) {
                 return '';
             }
 
@@ -761,7 +759,7 @@
                 return true;
             }
 
-            if (/(?:a|an)?\s*(?:feature|expert|company|person|executive)\s+profile/i.test(raw)) {
+            if (/\b(?:a|an)?\s*(?:feature|expert|company|person|executive)\s+profile\b/i.test(raw)) {
                 return true;
             }
 
@@ -1141,6 +1139,36 @@
             return raw;
         },
 
+        normalizeExistingPrArticleState() {
+            if (!this.isPrArticleMode || !this.isPrArticleMode()) {
+                return;
+            }
+
+            const currentTitle = String(this.articleTitle || '').trim();
+            const normalizedTitles = this.normalizePrGeneratedTitles ? this.normalizePrGeneratedTitles(currentTitle ? [currentTitle] : []) : [];
+            const normalizedTitle = String(normalizedTitles[0] || '').trim();
+            if (normalizedTitle && (this.isWeakPrArticleTitle?.(currentTitle) || normalizedTitle !== currentTitle)) {
+                this.articleTitle = this.ensurePrArticleTitleSubject ? this.ensurePrArticleTitleSubject(normalizedTitle) : normalizedTitle;
+            }
+
+            const currentHtml = String(this.editorContent || this.spunContent || '').trim();
+            if (!currentHtml || !this.ensureArticleTitleInHtml) {
+                return;
+            }
+
+            const cleaned = this.ensureArticleTitleInHtml(currentHtml, this.articleTitle || currentTitle || normalizedTitle);
+            if (!cleaned || cleaned === currentHtml) {
+                return;
+            }
+
+            this.editorContent = cleaned;
+            this.spunContent = cleaned;
+            this.spunWordCount = this.countWordsFromHtml(cleaned);
+            this.rememberDraftBody(cleaned);
+            this.extractArticleLinks(cleaned);
+            this.$nextTick(() => this.setSpinEditor(cleaned));
+        },
+
         looksLikeGoogleDriveFolderUrl(url = '') {
             const raw = String(url || '').trim();
             if (!raw) return false;
@@ -1267,10 +1295,14 @@
             return score;
         },
 
-        prFeaturedPhotoCandidates(profileId) {
+        prPhotoCandidates(profileId) {
             const pd = this.prSubjectData[profileId] || {};
             const photos = Array.isArray(pd.photos) ? pd.photos : [];
             return [...photos].sort((a, b) => this.prFeaturedPhotoPriority(a, pd.driveUrl) - this.prFeaturedPhotoPriority(b, pd.driveUrl));
+        },
+
+        prFeaturedPhotoCandidates(profileId) {
+            return this.prPhotoCandidates(profileId);
         },
 
         prInlinePhotoCandidates(profileId) {
@@ -1772,6 +1804,25 @@
 
         togglePrPhotoSelect(profileId, photoId) {
             return this.togglePrInlinePhotoSelect(profileId, photoId);
+        },
+
+        isPrFeaturedPhotoSelected(profileId, photoId) {
+            const pd = this.prSubjectData[profileId] || {};
+            return String(pd.selectedFeaturedPhotoId || '') === String(photoId || '');
+        },
+
+        isPrInlinePhotoSelected(profileId, photoId) {
+            const pd = this.prSubjectData[profileId] || {};
+            return !!pd.selectedInlinePhotos?.[photoId];
+        },
+
+        prInlineSelectionOrdinal(profileId, photoId) {
+            const pd = this.prSubjectData[profileId] || {};
+            const orderedIds = this.prInlinePhotoCandidates(profileId)
+                .filter((photo) => !!pd.selectedInlinePhotos?.[photo.id])
+                .map((photo) => String(photo.id));
+            const idx = orderedIds.indexOf(String(photoId));
+            return idx === -1 ? null : idx + 1;
         },
 
         togglePrInlinePhotoSelect(profileId, photoId) {
