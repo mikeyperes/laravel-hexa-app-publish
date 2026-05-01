@@ -500,6 +500,11 @@
             const savedState = saved || legacySaved;
             let state = null;
             let restoredFromLocalState = false;
+            const parseSavedAt = (value) => {
+                if (!value) return null;
+                const ts = Date.parse(value);
+                return Number.isFinite(ts) ? ts : null;
+            };
 
             this._restoring = true;
 
@@ -518,6 +523,21 @@
                     state = null;
                 }
                 restoredFromLocalState = !!state;
+            }
+
+            const localSavedAt = state ? parseSavedAt(state._saved_at) : null;
+            const serverSavedAt = serverState ? parseSavedAt(serverState._saved_at) : null;
+            if (state && serverState) {
+                const shouldPreferServerState = (
+                    (serverSavedAt !== null && localSavedAt === null)
+                    || (serverSavedAt !== null && localSavedAt !== null && serverSavedAt > localSavedAt)
+                );
+                if (shouldPreferServerState) {
+                    state = serverState;
+                    restoredFromLocalState = false;
+                    this._safePipelineStateWrite(this.pipelineStateKey, JSON.stringify(serverState));
+                    localStorage.removeItem('publishPipelineState');
+                }
             }
 
             if (!state && serverState) {
@@ -743,10 +763,15 @@
 
             const finishRestore = () => {
                 this.syncPrArticleForCurrentArticleType({ force: false });
-                const restoredStateSignature = this._stableSignature(this.buildPipelineStateSnapshot());
+                const restoredState = this.buildPipelineStateSnapshot();
+                const restoredStateSignature = this._stableSignature(restoredState);
                 this._lastLocalPipelineStateSignature = restoredStateSignature;
                 this._lastServerPipelineStateSignature = restoredStateSignature;
-                this._safePipelineStateWrite(this.pipelineStateKey, JSON.stringify(this.buildPipelineStateSnapshot()));
+                const restoredStateForStorage = {
+                    ...restoredState,
+                    _saved_at: state?._saved_at || serverState?._saved_at || new Date().toISOString(),
+                };
+                this._safePipelineStateWrite(this.pipelineStateKey, JSON.stringify(restoredStateForStorage));
                 localStorage.removeItem('publishPipelineState');
                 this._restoring = false;
                 // Auto-select PR source if press-release type and only one source
@@ -799,6 +824,15 @@
                                 this.normalizeExistingPrArticleState?.();
                             });
                         });
+                }
+                if (this.currentArticleType === 'press-release' && this.pressRelease?.submit_method === 'notion-podcast') {
+                    this.$nextTick(async () => {
+                        this.applyPodcastPressReleaseMediaDefaults?.({
+                            injectInline: this.currentStep === 6 || (Array.isArray(this.openSteps) && this.openSteps.includes(6)),
+                            notify: false,
+                        });
+                        await this.maybeAutoRefreshLegacyNotionPodcastImport?.();
+                    });
                 }
                 if (this.shouldAutoLoadPromptPreview()) {
                     this._queuePromptRefresh('restore_complete');
@@ -973,6 +1007,9 @@
                 if (step === 6 || this.openSteps.includes(6)) {
                     this.queueInlinePhotoAutoHydration('step_change');
                     this.queueFeaturedImageAutoHydration('step_change');
+                    if (this.currentArticleType === 'press-release' && this.pressRelease?.submit_method === 'notion-podcast') {
+                        this.$nextTick(() => this.applyPodcastPressReleaseMediaDefaults?.({ injectInline: true, notify: false }));
+                    }
                 }
                 if ((step === 5 || this.openSteps.includes(5) || this.promptLogOpen) && !this.promptLoading) {
                     this._queuePromptRefresh('step_change');
@@ -982,6 +1019,9 @@
                 if (!this._restoring && Array.isArray(steps) && steps.includes(6)) {
                     this.queueInlinePhotoAutoHydration('open_steps');
                     this.queueFeaturedImageAutoHydration('open_steps');
+                    if (this.currentArticleType === 'press-release' && this.pressRelease?.submit_method === 'notion-podcast') {
+                        this.$nextTick(() => this.applyPodcastPressReleaseMediaDefaults?.({ injectInline: true, notify: false }));
+                    }
                 }
             });
             this.$watch('promptLogOpen', open => {
@@ -1111,7 +1151,8 @@
             }
 
             this._lastLocalPipelineStateSignature = signature;
-            this._safePipelineStateWrite(this.pipelineStateKey, JSON.stringify(state));
+            const persistedState = { ...state, _saved_at: new Date().toISOString() };
+            this._safePipelineStateWrite(this.pipelineStateKey, JSON.stringify(persistedState));
             localStorage.removeItem('publishPipelineState');
             this._logDebug('state', 'Local pipeline state persisted', {
                 stage: 'state',

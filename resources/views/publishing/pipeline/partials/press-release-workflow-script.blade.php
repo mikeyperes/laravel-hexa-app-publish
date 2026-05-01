@@ -22,6 +22,7 @@ function pressReleaseWorkflowMixin(config) {
         pressReleaseImportingEpisodeId: null,
         _serverPipelineStateTimer: null,
         _savingPipelineStateServer: false,
+        _pressReleaseLegacyRefreshEpisodeId: null,
         _pressReleaseEpisodeSearchToken: 0,
 
         normalizePressReleaseState(state = {}) {
@@ -55,7 +56,20 @@ function pressReleaseWorkflowMixin(config) {
             normalized.detected_content = normalized.detected_content || '';
             normalized.detected_content_html = normalized.detected_content_html || '';
             normalized.detected_word_count = normalized.detected_word_count || 0;
-            normalized.selected_photo_keys = normalized.selected_photo_keys || {};
+            const legacySelectedPhotoKeys = this.normalizePressReleaseSelectionMap(normalized.selected_photo_keys || {});
+            normalized.featured_photo_key = String(normalized.featured_photo_key || '').trim();
+            normalized.inline_photo_keys = this.normalizePressReleaseSelectionMap(normalized.inline_photo_keys || {});
+            if (!Object.keys(normalized.inline_photo_keys).length && Object.keys(legacySelectedPhotoKeys).length) {
+                normalized.inline_photo_keys = { ...legacySelectedPhotoKeys };
+            }
+            if (normalized.featured_photo_key && normalized.inline_photo_keys[normalized.featured_photo_key]) {
+                delete normalized.inline_photo_keys[normalized.featured_photo_key];
+            }
+            normalized.selected_photo_keys = {
+                ...legacySelectedPhotoKeys,
+                ...(normalized.featured_photo_key ? { [normalized.featured_photo_key]: true } : {}),
+                ...normalized.inline_photo_keys,
+            };
             normalized.polish_only = !!normalized.polish_only;
 
             return normalized;
@@ -123,59 +137,155 @@ function pressReleaseWorkflowMixin(config) {
                 source: 'uploaded',
                 role: '',
             }));
+            const detected = (this.pressRelease.detected_photos || []).map((photo, index) => {
+                const stablePreview = this.pressReleaseStableDrivePreviewUrl(photo);
+                return {
+                    key: String(photo.key || '').trim() || ('detected-' + index),
+                    label: photo.label || photo.alt_text || photo.caption || photo.url || 'Detected photo',
+                    filename: photo.filename || ('detected-photo-' + (index + 1)),
+                    url: this.toAbsoluteMediaUrl(photo.url),
+                    thumbnail_url: stablePreview || this.toAbsoluteMediaUrl(photo.thumbnail_url || photo.preview_url || photo.url),
+                    preview_url: stablePreview || this.toAbsoluteMediaUrl(photo.preview_url || photo.thumbnail_url || photo.url),
+                    source_url: this.toAbsoluteMediaUrl(photo.source_url || photo.download_url || photo.view_url || photo.url),
+                    alt_text: photo.alt_text || '',
+                    caption: photo.caption || '',
+                    source_label: photo.source_label || photo.source || 'Detected from public URL',
+                    source: photo.source || 'detected',
+                    origin: photo.origin || photo.source || '',
+                    role: photo.role || '',
+                    download_url: this.toAbsoluteMediaUrl(photo.download_url || photo.source_url || photo.url),
+                    view_url: this.toAbsoluteMediaUrl(photo.view_url || photo.url),
+                };
+            });
 
-            const detected = (this.pressRelease.detected_photos || []).map((photo, index) => ({
-                key: 'detected-' + index,
-                label: photo.alt_text || photo.caption || photo.url || 'Detected photo',
-                filename: photo.filename || ('detected-photo-' + (index + 1)),
-                url: this.toAbsoluteMediaUrl(photo.url),
-                thumbnail_url: this.toAbsoluteMediaUrl(photo.thumbnail_url || photo.url),
-                alt_text: photo.alt_text || '',
-                caption: photo.caption || '',
-                source_label: photo.source_label || photo.source || 'Detected from public URL',
-                source: photo.source || 'detected',
-                role: photo.role || '',
-                download_url: this.toAbsoluteMediaUrl(photo.download_url || photo.url),
-                view_url: this.toAbsoluteMediaUrl(photo.view_url || photo.url),
-            }));
-
-            this.pressReleasePhotoAssets = [...uploaded, ...detected].filter((asset) => !!asset.url);
+            let normalizedAssets = [...uploaded, ...detected].filter((asset) => !!asset.url);
+            if (this.pressReleaseShouldFilterLegacyGuestMedia(normalizedAssets)) {
+                normalizedAssets = normalizedAssets.filter((asset) => !this.pressReleaseAssetIsLegacyGuestMedia(asset));
+            }
+            this.pressReleasePhotoAssets = normalizedAssets;
+            const featuredUrl = this.toAbsoluteMediaUrl(this.featuredPhoto?.url_large || this.featuredPhoto?.url || '');
+            if (featuredUrl) {
+                const matchedFeaturedAsset = this.pressReleasePhotoAssets.find((asset) => asset.url === featuredUrl);
+                if (matchedFeaturedAsset?.key && !String(this.pressRelease?.featured_photo_key || '').trim()) {
+                    this.pressRelease.featured_photo_key = matchedFeaturedAsset.key;
+                }
+            }
+            if (this.pressRelease?.featured_photo_key && this.pressRelease?.inline_photo_keys?.[this.pressRelease.featured_photo_key]) {
+                delete this.pressRelease.inline_photo_keys[this.pressRelease.featured_photo_key];
+            }
+            this.syncPressReleaseSelectedPhotoKeys();
             return this.pressReleasePhotoAssets;
+        },
+
+        pressReleaseAssetIsLegacyGuestMedia(asset = {}) {
+            const source = String(asset?.source || '').toLowerCase();
+            const label = String(asset?.source_label || '').toLowerCase();
+            const urls = [asset?.url, asset?.source_url, asset?.download_url, asset?.view_url, asset?.thumbnail_url, asset?.preview_url]
+                .map((value) => this.toAbsoluteMediaUrl(value || '').toLowerCase())
+                .filter(Boolean);
+            return source.includes('notion-guest-media')
+                || label.includes('notion guest media')
+                || urls.some((value) => value.includes('media.licdn.com') || value.includes('.licdn.com') || value.includes('drive-storage'));
+        },
+
+        pressReleaseShouldFilterLegacyGuestMedia(assets = []) {
+            if (this.currentArticleType !== 'press-release' || this.pressRelease?.submit_method !== 'notion-podcast') {
+                return false;
+            }
+            return (assets || []).some((asset) => String(asset?.source || '').toLowerCase() === 'notion-guest-drive');
         },
 
         pressReleaseAssetKey(asset = {}, fallbackKey = '') {
             return String(asset?.key || asset?.id || fallbackKey || asset?.url || '').trim();
         },
 
+        normalizePressReleaseSelectionMap(map = {}) {
+            if (!map || typeof map !== 'object') {
+                return {};
+            }
+            return Object.entries(map).reduce((carry, [key, value]) => {
+                const normalizedKey = String(key || '').trim();
+                if (normalizedKey && value) {
+                    carry[normalizedKey] = true;
+                }
+                return carry;
+            }, {});
+        },
+
+        syncPressReleaseSelectedPhotoKeys() {
+            const union = {};
+            const featuredKey = String(this.pressRelease?.featured_photo_key || '').trim();
+            const inlineKeys = this.normalizePressReleaseSelectionMap(this.pressRelease?.inline_photo_keys || {});
+            if (featuredKey) {
+                union[featuredKey] = true;
+            }
+            Object.keys(inlineKeys).forEach((key) => {
+                union[key] = true;
+            });
+            if (this.pressRelease && typeof this.pressRelease === 'object') {
+                this.pressRelease.inline_photo_keys = inlineKeys;
+                this.pressRelease.selected_photo_keys = union;
+            }
+            return union;
+        },
+
         pressReleaseAssetIsSelected(asset = {}, fallbackKey = '') {
-            const key = this.pressReleaseAssetKey(asset, fallbackKey);
-            return !!(key && this.pressRelease?.selected_photo_keys?.[key]);
+            return this.pressReleaseAssetIsFeatured(asset, fallbackKey) || this.pressReleaseAssetIsInline(asset, fallbackKey);
         },
 
         togglePressReleaseAssetSelection(asset = {}, fallbackKey = '') {
-            const key = this.pressReleaseAssetKey(asset, fallbackKey);
-            if (!key) return;
-            if (!this.pressRelease.selected_photo_keys || typeof this.pressRelease.selected_photo_keys !== 'object') {
-                this.pressRelease.selected_photo_keys = {};
-            }
-            this.pressRelease.selected_photo_keys[key] = !this.pressRelease.selected_photo_keys[key];
-            this.savePipelineState();
+            return this.togglePressReleaseInlinePhotoSelection(asset, fallbackKey);
         },
 
-        pressReleaseAssetIsFeatured(asset = {}) {
+        togglePressReleaseInlinePhotoSelection(asset = {}, fallbackKey = '', options = {}) {
+            const key = this.pressReleaseAssetKey(asset, fallbackKey);
+            if (!key) return;
+            if (!this.pressRelease.inline_photo_keys || typeof this.pressRelease.inline_photo_keys !== 'object') {
+                this.pressRelease.inline_photo_keys = {};
+            }
+            const nextValue = options.force === null || typeof options.force === 'undefined'
+                ? !this.pressRelease.inline_photo_keys[key]
+                : !!options.force;
+            if (nextValue) {
+                this.pressRelease.inline_photo_keys[key] = true;
+            } else {
+                delete this.pressRelease.inline_photo_keys[key];
+            }
+            this.syncPressReleaseSelectedPhotoKeys();
+            if (options.save !== false) {
+                this.savePipelineState();
+            }
+        },
+
+        pressReleaseAssetIsFeatured(asset = {}, fallbackKey = '') {
+            const key = this.pressReleaseAssetKey(asset, fallbackKey);
+            if (key && String(this.pressRelease?.featured_photo_key || '').trim() === key) {
+                return true;
+            }
             const assetUrl = this.toAbsoluteMediaUrl(asset.url || '');
             const featuredUrl = this.toAbsoluteMediaUrl(this.featuredPhoto?.url_large || this.featuredPhoto?.url || '');
             return !!(assetUrl && featuredUrl && assetUrl === featuredUrl);
         },
 
-        pressReleaseAssetIsInline(asset = {}) {
+        pressReleaseAssetIsInline(asset = {}, fallbackKey = '') {
+            const key = this.pressReleaseAssetKey(asset, fallbackKey);
+            if (key && this.pressRelease?.inline_photo_keys?.[key]) {
+                return true;
+            }
+            const hasExplicitInlineSelections = Object.keys(this.pressRelease?.inline_photo_keys || {}).some((candidateKey) => this.pressRelease?.inline_photo_keys?.[candidateKey]);
             const assetUrl = this.toAbsoluteMediaUrl(asset.url || '');
-            return !!(assetUrl && this.pressReleaseHasInlineAsset(assetUrl));
+            return !hasExplicitInlineSelections && !!(assetUrl && this.pressReleaseHasInlineAsset(assetUrl));
         },
 
         buildPressReleaseSourceText(usePlaceholder = false) {
             const blocks = [];
-            const sourceText = (this.pressRelease.resolved_source_text || this.pressRelease.content_dump || '').trim();
+            let sourceText = (this.pressRelease.resolved_source_text || this.pressRelease.content_dump || '').trim();
+            if (this.currentArticleType === 'press-release' && this.pressRelease.submit_method === 'notion-podcast' && sourceText) {
+                sourceText = sourceText.replace(
+                    /- Include exactly one inline guest\/client image in the body when a preferred inline guest image URL is provided\./i,
+                    '- Use the selected inline subject photos listed below in the body. Do not use generic stock images in place of the selected subject photos.'
+                );
+            }
             if (sourceText) {
                 blocks.push("=== Submitted Source Material ===\n" + sourceText);
             } else if (usePlaceholder) {
@@ -190,6 +300,30 @@ function pressReleaseWorkflowMixin(config) {
             if (details.contact_url) detailLines.push('Contact URL: ' + details.contact_url);
             if (detailLines.length) {
                 blocks.push("=== Validated Details ===\n" + detailLines.join("\n"));
+            }
+
+            if (this.currentArticleType === 'press-release' && this.pressRelease.submit_method === 'notion-podcast') {
+                const featuredAsset = this.preferredPressReleaseFeaturedAsset();
+                const inlineAssets = this.selectedPressReleaseInlineAssets();
+                const mediaLines = ['=== Selected Press Release Media ==='];
+                if (featuredAsset) {
+                    mediaLines.push('Featured image URL: ' + this.pressReleaseSourceUploadUrl(featuredAsset));
+                    mediaLines.push('Featured image label: ' + (featuredAsset.label || featuredAsset.alt_text || 'Featured press release image'));
+                } else if (usePlaceholder) {
+                    mediaLines.push('Featured image URL: [Episode featured image URL will be inserted here]');
+                }
+
+                mediaLines.push('Inline photo count: ' + inlineAssets.length);
+                if (inlineAssets.length) {
+                    inlineAssets.forEach((asset, idx) => {
+                        mediaLines.push('Inline Photo ' + (idx + 1) + ' URL: ' + this.pressReleaseSourceUploadUrl(asset));
+                        mediaLines.push('Inline Photo ' + (idx + 1) + ' Caption: ' + (asset.caption || asset.alt_text || asset.label || ('Selected subject photo ' + (idx + 1))));
+                    });
+                    mediaLines.push('Instruction: Use the featured image as the WordPress featured image and weave the selected inline subject photos naturally into the body. Do not reuse the same inline photo more than once and do not substitute stock photos for these selected subject photos.');
+                } else if (usePlaceholder) {
+                    mediaLines.push('Inline Photo 1 URL: [Selected inline subject photo URLs will be inserted here]');
+                }
+                blocks.push(mediaLines.join("\n"));
             }
 
             if (this.pressRelease.google_drive_url && this.pressRelease.submit_method !== 'notion-podcast') {
@@ -307,13 +441,65 @@ function pressReleaseWorkflowMixin(config) {
                 }
             }
         },
+        pressReleaseNeedsLegacyNotionRefresh() {
+            if (this.currentArticleType !== 'press-release' || this.pressRelease?.submit_method !== 'notion-podcast') {
+                return false;
+            }
+            const episodeId = String(this.pressRelease?.notion_episode?.id || '').trim();
+            if (!episodeId || this.pressReleaseImportingEpisodeId === episodeId || this._pressReleaseLegacyRefreshEpisodeId === episodeId) {
+                return false;
+            }
+            const photos = Array.isArray(this.pressRelease?.detected_photos) ? this.pressRelease.detected_photos : [];
+            if (!photos.length) {
+                return false;
+            }
+            const inlineUrl = String(this.pressRelease?.notion_guest?.inline_photo_url || '').trim();
+            const hasLegacyLinkedIn = /media\.licdn\.com/i.test(inlineUrl)
+                || photos.some((photo) => /media\.licdn\.com/i.test(String(photo?.url || '')));
+            const hasLegacyGuestMedia = photos.some((photo) => {
+                const source = String(photo?.source || '').toLowerCase();
+                const label = String(photo?.source_label || '').toLowerCase();
+                return source.includes('notion-guest-media') || label.includes('notion guest media');
+            });
+            const hasDriveGuestMedia = photos.some((photo) => {
+                const source = String(photo?.source || '').toLowerCase();
+                const label = String(photo?.source_label || '').toLowerCase();
+                return source.includes('notion-guest-drive') || label.includes('drive photo');
+            });
+            return (hasLegacyLinkedIn || hasLegacyGuestMedia) && !hasDriveGuestMedia;
+        },
 
-        async importPressReleaseNotionEpisode(record) {
+        async maybeAutoRefreshLegacyNotionPodcastImport() {
+            if (!this.pressReleaseNeedsLegacyNotionRefresh()) {
+                return false;
+            }
+            const episodeId = String(this.pressRelease?.notion_episode?.id || '').trim();
+            if (!episodeId) {
+                return false;
+            }
+            this._pressReleaseLegacyRefreshEpisodeId = episodeId;
+            const requestedInlineCount = Math.max(1, Object.keys(this.normalizePressReleaseSelectionMap(this.pressRelease?.inline_photo_keys || {})).length || 1);
+            try {
+                await this.importPressReleaseNotionEpisode({ id: episodeId }, {
+                    notify: false,
+                    inlineCount: requestedInlineCount,
+                });
+                this.showNotification('info', 'Updated this draft to the latest Notion podcast media import.');
+                return true;
+            } catch (error) {
+                this._pressReleaseLegacyRefreshEpisodeId = null;
+                return false;
+            }
+        },
+
+        async importPressReleaseNotionEpisode(record, options = {}) {
             if (!record?.id) {
                 this.showNotification('error', 'Invalid Notion episode selection.');
                 return;
             }
 
+            const notify = options.notify !== false;
+            const preservedInlineCount = Math.max(1, Number(options.inlineCount || Object.keys(this.normalizePressReleaseSelectionMap(this.pressRelease?.inline_photo_keys || {})).length || 1));
             this.pressReleaseImportingEpisodeId = record.id;
 
             try {
@@ -347,22 +533,34 @@ function pressReleaseWorkflowMixin(config) {
                     this.featuredImageSearch = '';
                     this.featuredSearchPending = false;
                 }
-                const importedInlineAsset = this.preferredPressReleaseInlineAsset();
-                const selectedKeys = {};
-                if (importedFeaturedAsset?.key) selectedKeys[importedFeaturedAsset.key] = true;
-                if (importedInlineAsset?.key) selectedKeys[importedInlineAsset.key] = true;
-                if (Object.keys(selectedKeys).length > 0) {
-                    this.pressRelease.selected_photo_keys = selectedKeys;
-                }
+                const importedInlineAssets = importedAssets.filter((asset) => {
+                    if (!asset?.key) return false;
+                    if (importedFeaturedAsset?.key && asset.key === importedFeaturedAsset.key) return false;
+                    if (importedFeaturedUrl && asset.url === importedFeaturedUrl) return false;
+                    return true;
+                });
+                this.pressRelease.inline_photo_keys = {};
+                importedInlineAssets.slice(0, preservedInlineCount).forEach((asset) => {
+                    this.pressRelease.inline_photo_keys[asset.key] = true;
+                });
+                this.syncPressReleaseSelectedPhotoKeys();
                 this.applyPodcastPressReleaseMediaDefaults({ injectInline: false, notify: false });
                 this.savePipelineState();
                 this.invalidatePromptPreview('press_release_notion_episode_import', { fetch: this.currentStep === 5 || this.openSteps.includes(5) });
-                this.showNotification('success', data.message || 'Podcast episode imported from Notion.');
+                if (notify) {
+                    this.showNotification('success', data.message || 'Podcast episode imported from Notion.');
+                }
+                this._pressReleaseLegacyRefreshEpisodeId = null;
+                return data;
             } catch (error) {
-                this.showNotification('error', error.message || 'Failed to import the selected podcast episode.');
+                if (notify) {
+                    this.showNotification('error', error.message || 'Failed to import the selected podcast episode.');
+                }
+                this._pressReleaseLegacyRefreshEpisodeId = null;
+                throw error;
+            } finally {
+                this.pressReleaseImportingEpisodeId = null;
             }
-
-            this.pressReleaseImportingEpisodeId = null;
         },
 
         async uploadPressReleaseDocuments(files) {
@@ -483,6 +681,8 @@ function pressReleaseWorkflowMixin(config) {
                     const photos = data.press_release.detected_photos || [];
                     this.pressRelease.detected_photos = [...photos];
                     this.pressRelease.selected_photo_keys = {};
+                    this.pressRelease.inline_photo_keys = {};
+                    this.pressRelease.featured_photo_key = '';
                     this.pressRelease.photo_detect_log = savedLog;
                     this.rebuildPressReleasePhotoAssets();
                     this.savePipelineState();
@@ -538,6 +738,8 @@ function pressReleaseWorkflowMixin(config) {
                     drivePhotos.forEach((p, i) => { log('step', (i + 1) + '. ' + p.alt_text); });
                     this.pressRelease.detected_photos = this.mergePressReleaseDetectedPhotos(drivePhotos);
                     this.pressRelease.selected_photo_keys = {};
+                    this.pressRelease.inline_photo_keys = {};
+                    this.pressRelease.featured_photo_key = '';
                     this.rebuildPressReleasePhotoAssets();
                     this.applyPodcastPressReleaseMediaDefaults({ injectInline: false, notify: false });
                     this.savePipelineState();
@@ -657,6 +859,7 @@ function pressReleaseWorkflowMixin(config) {
             if (!this._pendingServerPipelineStateSave && signature === this._lastServerPipelineStateSignature) {
                 return true;
             }
+            const payloadForServer = { ...payload, _saved_at: new Date().toISOString() };
 
             this._savingPipelineStateServer = true;
             this._pendingServerPipelineStateSave = false;
@@ -669,7 +872,7 @@ function pressReleaseWorkflowMixin(config) {
                     body: JSON.stringify({
                         draft_id: this.draftId,
                         workflow_type: this.currentWorkflowKey(),
-                        payload,
+                        payload: payloadForServer,
                     }),
                 });
                 const data = await response.json().catch(() => ({}));
@@ -784,14 +987,19 @@ function pressReleaseWorkflowMixin(config) {
                 if (!key || seen.has(key)) return;
                 seen.add(key);
                 merged.push({
+                    key: String(photo.key || '').trim() || ('detected-' + merged.length),
+                    label: photo.label || photo.alt_text || photo.caption || photo.url || 'Detected photo',
                     url: key,
-                    thumbnail_url: this.toAbsoluteMediaUrl(photo.thumbnail_url || photo.url),
+                    thumbnail_url: this.toAbsoluteMediaUrl(photo.thumbnail_url || photo.preview_url || photo.url),
+                    preview_url: this.toAbsoluteMediaUrl(photo.preview_url || photo.thumbnail_url || photo.url),
+                    source_url: this.toAbsoluteMediaUrl(photo.source_url || photo.download_url || photo.view_url || photo.url),
                     alt_text: photo.alt_text || '',
                     caption: photo.caption || '',
                     source: photo.source || 'detected',
                     source_label: photo.source_label || photo.source || 'Detected photo',
+                    origin: photo.origin || photo.source || '',
                     role: photo.role || '',
-                    download_url: this.toAbsoluteMediaUrl(photo.download_url || photo.url),
+                    download_url: this.toAbsoluteMediaUrl(photo.download_url || photo.source_url || photo.url),
                     view_url: this.toAbsoluteMediaUrl(photo.view_url || photo.url),
                     filename: photo.filename || '',
                 });
@@ -814,16 +1022,111 @@ function pressReleaseWorkflowMixin(config) {
         },
 
         preferredPressReleaseInlineAsset() {
-            const inlineUrl = this.pressRelease?.notion_guest?.inline_photo_url || '';
+            const [asset] = this.selectedPressReleaseInlineAssets(1);
+            return asset ? { ...asset } : null;
+        },
+
+        selectedPressReleaseInlineAssets(limit = null) {
+            const rawSelectionCount = Object.keys(this.pressRelease?.inline_photo_keys || {}).filter((key) => this.pressRelease?.inline_photo_keys?.[key]).length;
             const featuredUrl = this.toAbsoluteMediaUrl(this.pressRelease?.notion_episode?.featured_image_url || '');
-            const assets = ((this.pressReleasePhotoAssets || []).length ? this.pressReleasePhotoAssets : this.rebuildPressReleasePhotoAssets())
-                .map((asset) => ({ ...asset }));
-            const match = assets.find((asset) => inlineUrl && asset.url === this.toAbsoluteMediaUrl(inlineUrl))
-                || assets.find((asset) => asset.role === 'inline' && asset.url !== featuredUrl)
-                || assets.find((asset) => asset.source === 'notion-guest-media' && asset.url !== featuredUrl)
-                || assets.find((asset) => asset.source === 'google-drive' && asset.url !== featuredUrl)
-                || null;
-            return match ? { ...match } : null;
+            const selectedInlineKeys = Object.keys(this.normalizePressReleaseSelectionMap(this.pressRelease?.inline_photo_keys || {}));
+            const selectedInlineKeySet = new Set(selectedInlineKeys);
+            let assets = ((this.pressReleasePhotoAssets || []).length ? this.pressReleasePhotoAssets : this.rebuildPressReleasePhotoAssets())
+                .map((asset) => ({ ...asset }))
+                .filter((asset) => this.toAbsoluteMediaUrl(asset.url || '') && this.toAbsoluteMediaUrl(asset.url || '') !== featuredUrl);
+            if (this.pressReleaseShouldFilterLegacyGuestMedia(assets)) {
+                assets = assets.filter((asset) => !this.pressReleaseAssetIsLegacyGuestMedia(asset));
+            }
+            const seen = new Set();
+            const selected = [];
+            assets.forEach((asset) => {
+                const key = this.pressReleaseAssetKey(asset);
+                const assetUrl = this.toAbsoluteMediaUrl(asset.url || '');
+                if (key && selectedInlineKeySet.has(key) && !seen.has(assetUrl)) {
+                    selected.push(asset);
+                    seen.add(assetUrl);
+                }
+            });
+
+            const requestedCount = rawSelectionCount > 0 ? rawSelectionCount : selected.length;
+            if (requestedCount > 0 && selected.length < requestedCount) {
+                assets.forEach((asset) => {
+                    if (selected.length >= requestedCount) return;
+                    const assetUrl = this.toAbsoluteMediaUrl(asset.url || '');
+                    if (!assetUrl || seen.has(assetUrl)) return;
+                    selected.push(asset);
+                    seen.add(assetUrl);
+                });
+            }
+
+            if (!selected.length) {
+                const inlineUrl = this.pressRelease?.notion_guest?.inline_photo_url || '';
+                const match = assets.find((asset) => inlineUrl && asset.url === this.toAbsoluteMediaUrl(inlineUrl))
+                    || assets.find((asset) => asset.source === 'notion-guest-drive')
+                    || assets.find((asset) => asset.source === 'google-drive')
+                    || assets.find((asset) => asset.role === 'inline' && !this.pressReleaseAssetIsLegacyGuestMedia(asset))
+                    || assets.find((asset) => asset.role === 'inline')
+                    || assets.find((asset) => asset.source === 'notion-guest-media')
+                    || null;
+                if (match) {
+                    selected.push(match);
+                }
+            }
+
+            return limit ? selected.slice(0, limit) : selected;
+        },
+
+        pressReleaseSourceUploadUrl(asset = {}) {
+            return this.toAbsoluteMediaUrl(asset.source_url || asset.download_url || asset.view_url || asset.url || asset.thumbnail_url || '');
+        },
+
+        pressReleaseExtractGoogleDriveFileId(value = '') {
+            const candidate = this.toAbsoluteMediaUrl(value);
+            if (!candidate) return '';
+            try {
+                const parsed = new URL(candidate, window.location.origin);
+                const directId = parsed.searchParams.get('id');
+                if (directId) return directId;
+                const match = parsed.pathname.match(/\/d\/([A-Za-z0-9_-]+)/i);
+                if (match && match[1]) return match[1];
+            } catch (error) {
+                const match = String(candidate).match(/[?&]id=([A-Za-z0-9_-]+)/i) || String(candidate).match(/\/d\/([A-Za-z0-9_-]+)/i);
+                if (match && match[1]) return match[1];
+            }
+            return '';
+        },
+
+        pressReleaseStableDrivePreviewUrl(asset = {}) {
+            const candidates = [
+                asset.source_url,
+                asset.download_url,
+                asset.view_url,
+                asset.thumbnail_url,
+                asset.preview_url,
+                asset.url,
+            ];
+            for (const candidate of candidates) {
+                const fileId = this.pressReleaseExtractGoogleDriveFileId(candidate || '');
+                if (fileId) {
+                    return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(fileId) + '&sz=w1600';
+                }
+            }
+            return '';
+        },
+
+        pressReleaseEditorPreviewUrl(asset = {}) {
+            const stableDrivePreview = this.pressReleaseStableDrivePreviewUrl(asset);
+            if (stableDrivePreview) {
+                return stableDrivePreview;
+            }
+
+            const preview = this.toAbsoluteMediaUrl(asset.thumbnail_url || asset.preview_url || asset.view_url || asset.download_url || asset.url || '');
+            if (/googleusercontent\.com/i.test(preview)) {
+                return preview
+                    .replace(/=s\d+(?:-[a-z0-9_]+)?$/i, '=w1600')
+                    .replace(/=w\d+(?:-[a-z0-9_]+)?$/i, '=w1600');
+            }
+            return preview;
         },
 
         pressReleaseHasInlineAsset(url) {
@@ -832,29 +1135,170 @@ function pressReleaseWorkflowMixin(config) {
             return !!(target && html && html.includes(target));
         },
 
-        buildPressReleaseInlineFigure(asset) {
-            const src = this.toAbsoluteMediaUrl(asset.url);
-            const alt = (asset.alt_text || '').replace(/"/g, '&quot;');
-            const caption = asset.caption || '';
-            return caption
-                ? '<figure><img src="' + src + '" alt="' + alt + '"><figcaption>' + caption + '</figcaption></figure>'
-                : '<p><img src="' + src + '" alt="' + alt + '"></p>';
+        buildPressReleaseInlineFigure(asset, position = 0) {
+            const escapeHtml = (value) => String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            const sourceUrl = this.pressReleaseSourceUploadUrl(asset);
+            const previewUrl = this.pressReleaseEditorPreviewUrl(asset) || sourceUrl;
+            const alt = escapeHtml(asset.alt_text || asset.label || 'Selected press release photo');
+            const caption = escapeHtml(asset.caption || asset.alt_text || asset.label || 'Selected press release photo');
+            const assetKey = escapeHtml(this.pressReleaseAssetKey(asset, 'press-release-inline-' + position));
+            return '<figure class="press-release-inline-photo podcast-inline-guest-photo" data-press-release-inline="1" data-asset-key="' + assetKey + '">'
+                + '<img src="' + previewUrl + '" data-source-url="' + sourceUrl + '" alt="' + alt + '" loading="lazy">'
+                + '<figcaption>' + caption + '</figcaption></figure>';
         },
 
-        injectPressReleaseInlineAssetIntoHtml(asset, html) {
-            const figure = this.buildPressReleaseInlineFigure(asset);
-            if (/<h[2-6]\b[^>]*>\s*About\b/i.test(html)) {
-                return html.replace(/<h[2-6]\b[^>]*>\s*About\b/i, figure + '$&');
+        removePressReleaseManagedInlineFigures(html, assets = null) {
+            let cleaned = String(html || '');
+            const selectedAssets = Array.isArray(assets) ? assets : this.selectedPressReleaseInlineAssets();
+            cleaned = cleaned.replace(/<figure\b[^>]*class="[^"]*(?:press-release-inline-photo|podcast-inline-guest-photo)[^"]*"[^>]*>[\s\S]*?<\/figure>/gi, '');
+            const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            selectedAssets.forEach((asset) => {
+                [this.pressReleaseSourceUploadUrl(asset), this.pressReleaseEditorPreviewUrl(asset)].forEach((candidate) => {
+                    if (!candidate) return;
+                    const quoted = escapeRegex(candidate).replace(/&/g, '&(?:amp;)?');
+                    cleaned = cleaned.replace(new RegExp('<figure\\b[^>]*>[\\s\\S]*?<img[^>]+(?:src|data-source-url)\\s*=\\s*["\\\']' + quoted + '["\\\'][\\s\\S]*?<\\/figure>', 'gi'), '');
+                    cleaned = cleaned.replace(new RegExp('<p\\b[^>]*>\\s*<img[^>]+(?:src|data-source-url)\\s*=\\s*["\\\']' + quoted + '["\\\'][^>]*>\\s*<\\/p>', 'gi'), '');
+                });
+            });
+            if (this.currentArticleType === 'press-release' && this.pressRelease?.submit_method === 'notion-podcast') {
+                cleaned = cleaned.replace(/<figure\b[^>]*>[\s\S]*?(?:media\.licdn\.com|drive-storage)[\s\S]*?<\/figure>/gi, '');
+                cleaned = cleaned.replace(/<p\b[^>]*>[\s\S]*?(?:media\.licdn\.com|drive-storage)[\s\S]*?<\/p>/gi, '');
+                cleaned = cleaned.replace(/<img[^>]+(?:media\.licdn\.com|drive-storage)[^>]*>\s*/gi, '');
             }
-            if (/<h[2-6]\b/i.test(html)) {
-                return html.replace(/<h[2-6]\b/i, figure + '$&');
+            return cleaned.replace(/\n{3,}/g, '\n\n').trim();
+        },
+
+        injectSelectedPressReleaseInlineAssetsIntoHtml(html, assets = null) {
+            const inlineAssets = Array.isArray(assets) ? assets : this.selectedPressReleaseInlineAssets();
+            let nextHtml = this.removePressReleaseManagedInlineFigures(html, inlineAssets);
+            if (!inlineAssets.length) {
+                return nextHtml;
             }
-            const paragraphMatches = html.match(/<p\b[^>]*>.*?<\/p>/gis) || [];
-            if (paragraphMatches.length >= 1) {
-                const first = paragraphMatches[0];
-                return html.replace(first, first + figure);
+
+            const figures = inlineAssets.map((asset, idx) => this.buildPressReleaseInlineFigure(asset, idx));
+            let inserted = 0;
+            let paragraphIndex = 0;
+            nextHtml = nextHtml.replace(/<\/p>/gi, (match) => {
+                paragraphIndex += 1;
+                if (inserted >= figures.length) {
+                    return match;
+                }
+                const shouldInsert = paragraphIndex === 2 || (paragraphIndex > 2 && ((paragraphIndex - 2) % 2 === 0));
+                if (!shouldInsert) {
+                    return match;
+                }
+                const figure = figures[inserted++] || '';
+                return match + '\n' + figure + '\n';
+            });
+
+            if (inserted < figures.length && /<h[2-6]\b[^>]*>\s*About\b/i.test(nextHtml)) {
+                const remainder = figures.slice(inserted).join('\n');
+                nextHtml = nextHtml.replace(/<h[2-6]\b[^>]*>\s*About\b/i, remainder + '\n$&');
+                inserted = figures.length;
             }
-            return html + figure;
+
+            while (inserted < figures.length) {
+                nextHtml += '\n' + figures[inserted++] + '\n';
+            }
+
+            return nextHtml.trim();
+        },
+
+        normalizePodcastPressReleaseYoutubeHtml(html) {
+            let nextHtml = String(html || '').trim();
+            const embedUrl = this.toAbsoluteMediaUrl(this.pressRelease?.notion_episode?.youtube_embed_url || '');
+            if (!nextHtml || !embedUrl) {
+                return nextHtml;
+            }
+
+            nextHtml = nextHtml.replace(/<div\b[^>]*>\s*(<iframe\b[^>]*youtube\.com\/embed\/[^>]*><\/iframe>)\s*<\/div>/gi, '$1');
+            nextHtml = nextHtml.replace(/(<iframe\b[^>]*?)\s+style="[^"]*"/gi, '$1');
+
+            let foundEmbed = false;
+            nextHtml = nextHtml.replace(/<iframe\b([^>]*)src="([^"]*youtube[^"]*)"([^>]*)><\/iframe>/gi, (match, before, src, after) => {
+                foundEmbed = true;
+                const decoded = String(src || '').replace(/&amp;/gi, '&');
+                const lower = decoded.toLowerCase();
+                if (decoded === embedUrl && !lower.includes('your_video_id')) {
+                    return match;
+                }
+                return '<iframe' + before + 'src="' + embedUrl + '"' + after + '></iframe>';
+            });
+
+            if (foundEmbed) {
+                return nextHtml;
+            }
+
+            const iframe = '<div class="podcast-youtube-embed"><iframe width="560" height="315" src="' + embedUrl + '" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>';
+
+            if (/<h[2-6]\b[^>]*>\s*About\b/i.test(nextHtml)) {
+                return nextHtml.replace(/<h[2-6]\b[^>]*>\s*About\b/i, iframe + '\n$&');
+            }
+
+            let inserted = false;
+            let paragraphIndex = 0;
+            nextHtml = nextHtml.replace(/<\/p>/gi, (match) => {
+                paragraphIndex += 1;
+                if (!inserted && paragraphIndex === 2) {
+                    inserted = true;
+                    return match + '\n' + iframe + '\n';
+                }
+                return match;
+            });
+
+            if (inserted) {
+                return nextHtml;
+            }
+
+            if (/<h[2-6]\b/i.test(nextHtml)) {
+                return nextHtml.replace(/<h[2-6]\b/i, iframe + '\n$&');
+            }
+
+            return nextHtml + '\n' + iframe;
+        },
+
+        normalizePodcastPressReleaseHtml(html, options = {}) {
+            let nextHtml = String(html || '').trim();
+            if (this.currentArticleType !== 'press-release' || this.pressRelease.submit_method !== 'notion-podcast' || !nextHtml) {
+                return nextHtml;
+            }
+
+            nextHtml = this.normalizePodcastPressReleaseYoutubeHtml(nextHtml);
+            const inlineAssets = Array.isArray(options.inlineAssets) ? options.inlineAssets : this.selectedPressReleaseInlineAssets();
+            nextHtml = this.injectSelectedPressReleaseInlineAssetsIntoHtml(nextHtml, inlineAssets);
+            return nextHtml.trim();
+        },
+
+        seedPressReleaseInlinePhotoSuggestions(inlineAssets = null) {
+            const assets = Array.isArray(inlineAssets) ? inlineAssets : this.selectedPressReleaseInlineAssets();
+            this.photoSuggestions = assets.map((asset, idx) => this.normalizePhotoSuggestionState({
+                position: idx,
+                search_term: asset.caption || asset.alt_text || asset.label || ('selected press release photo ' + (idx + 1)),
+                alt_text: asset.alt_text || asset.label || '',
+                caption: asset.caption || asset.alt_text || asset.label || '',
+                suggestedFilename: this.filenameBaseFromAsset(asset),
+                autoPhoto: {
+                    id: this.pressReleaseAssetKey(asset) || null,
+                    source: asset.source || 'notion-guest-drive',
+                    source_url: this.pressReleaseSourceUploadUrl(asset),
+                    url: this.pressReleaseEditorPreviewUrl(asset) || this.pressReleaseSourceUploadUrl(asset),
+                    url_thumb: this.pressReleaseEditorPreviewUrl(asset) || this.pressReleaseSourceUploadUrl(asset),
+                    url_large: this.pressReleaseEditorPreviewUrl(asset) || this.pressReleaseSourceUploadUrl(asset),
+                    url_full: this.pressReleaseSourceUploadUrl(asset),
+                    alt: asset.alt_text || asset.label || '',
+                    width: 0,
+                    height: 0,
+                },
+                confirmed: true,
+                removed: false,
+                loadAttempted: true,
+            }, idx));
+            this.photoSuggestionsPending = false;
+            this._lastInlinePhotoHydrationSignature = '';
         },
 
         applyPodcastPressReleaseMediaDefaults(options = {}) {
@@ -866,34 +1310,53 @@ function pressReleaseWorkflowMixin(config) {
             this.rebuildPressReleasePhotoAssets();
             const featuredAsset = this.preferredPressReleaseFeaturedAsset();
             if (featuredAsset) {
-                this.setPressReleaseFeaturedPhoto(featuredAsset, { notify: opts.notify });
+                this.setPressReleaseFeaturedPhoto(featuredAsset, { notify: opts.notify, save: false });
                 this.featuredImageSearch = '';
                 this.featuredSearchPending = false;
             } else if (!this.featuredPhoto && (this.pressReleasePhotoAssets || []).length > 0) {
-                this.setPressReleaseFeaturedPhoto({ ...(this.pressReleasePhotoAssets[0] || {}) }, { notify: opts.notify });
+                this.setPressReleaseFeaturedPhoto({ ...(this.pressReleasePhotoAssets[0] || {}) }, { notify: opts.notify, save: false });
                 this.featuredImageSearch = '';
                 this.featuredSearchPending = false;
             }
 
-            if (!opts.injectInline) {
+            let inlineAssets = this.selectedPressReleaseInlineAssets();
+            const hasInlineSelections = Object.keys(this.normalizePressReleaseSelectionMap(this.pressRelease?.inline_photo_keys || {})).length > 0;
+            if (inlineAssets[0] && !hasInlineSelections) {
+                this.togglePressReleaseInlinePhotoSelection(inlineAssets[0], inlineAssets[0].key, { force: true, save: false });
+                inlineAssets = this.selectedPressReleaseInlineAssets();
+            }
+
+            this.seedPressReleaseInlinePhotoSuggestions(inlineAssets);
+            const shouldInjectInline = !!opts.injectInline || this.currentStep === 6 || (Array.isArray(this.openSteps) && this.openSteps.includes(6));
+            if (!shouldInjectInline) {
+                this.syncPressReleaseSelectedPhotoKeys();
+                this.syncDeferredEnrichmentState?.('press_release_media_defaults');
+                this.savePipelineState();
                 return;
             }
 
-            const inlineAsset = this.preferredPressReleaseInlineAsset();
-            if (!inlineAsset || this.pressReleaseHasInlineAsset(inlineAsset.url)) {
+            const currentHtml = this._resolveCanonicalArticleHtml?.({ preferPrepared: false, hydrateState: false }) || this.editorContent || this.spunContent || this.lastNonEmptyDraftBody || '';
+            if (!currentHtml) {
+                this.syncPressReleaseSelectedPhotoKeys();
+                this.syncDeferredEnrichmentState?.('press_release_media_defaults');
+                this.savePipelineState();
                 return;
             }
 
-            const nextHtml = this.injectPressReleaseInlineAssetIntoHtml(inlineAsset, this.editorContent || this.spunContent || '');
-            if (!nextHtml) {
-                return;
+            const nextHtml = this.normalizePodcastPressReleaseHtml(currentHtml, { inlineAssets });
+            if (nextHtml && nextHtml !== currentHtml) {
+                this.spunContent = nextHtml;
+                this.editorContent = nextHtml;
+                this.spunWordCount = this.countWordsFromHtml?.(nextHtml) || this.spunWordCount;
+                this.setSpinEditor?.(nextHtml);
+                this.rememberDraftBody?.(nextHtml);
+                this.extractArticleLinks?.(nextHtml);
+                this.queueAutoSaveDraft?.(300);
             }
 
-            this.spunContent = nextHtml;
-            this.editorContent = nextHtml;
-            this.setSpinEditor?.(nextHtml);
-            this.rememberDraftBody?.(nextHtml);
-            this.queueAutoSaveDraft?.(300);
+            this.syncPressReleaseSelectedPhotoKeys();
+            this.syncDeferredEnrichmentState?.('press_release_media_defaults');
+            this.savePipelineState();
         },
 
         setPressReleaseFeaturedPhoto(asset, options = {}) {
@@ -912,42 +1375,37 @@ function pressReleaseWorkflowMixin(config) {
             this.featuredFilename = this.filenameBaseFromAsset(asset) + '.jpg';
             const key = this.pressReleaseAssetKey(asset);
             if (key) {
-                if (!this.pressRelease.selected_photo_keys || typeof this.pressRelease.selected_photo_keys !== 'object') {
-                    this.pressRelease.selected_photo_keys = {};
-                }
-                this.pressRelease.selected_photo_keys[key] = true;
+                this.pressRelease.featured_photo_key = key;
             }
-            this.savePipelineState();
+            this.syncPressReleaseSelectedPhotoKeys();
+            if (options.save !== false) {
+                this.savePipelineState();
+            }
             if (notify) {
                 this.showNotification('success', 'Press release photo set as featured image.');
             }
         },
 
         insertPressReleaseAssetIntoEditor(asset) {
-            const editor = window.tinymce?.get("spin-preview-editor");
-            const src = this.toAbsoluteMediaUrl(asset.url);
-            const alt = (asset.alt_text || "").replace(/"/g, "&quot;");
-            const caption = asset.caption || "";
-            const figure = caption
-                ? "<figure><img src=\"" + src + "\" alt=\"" + alt + "\"><figcaption>" + caption + "</figcaption></figure>"
-                : "<p><img src=\"" + src + "\" alt=\"" + alt + "\"></p>";
+            this.togglePressReleaseInlinePhotoSelection(asset, this.pressReleaseAssetKey(asset), { force: true, save: false });
+            const inlineAssets = this.selectedPressReleaseInlineAssets();
+            this.seedPressReleaseInlinePhotoSuggestions(inlineAssets);
 
-            if (editor) {
-                editor.insertContent(figure);
-                this.editorContent = editor.getContent();
-            } else {
-                this.editorContent = (this.editorContent || "") + figure;
+            const currentHtml = this._resolveCanonicalArticleHtml?.({ preferPrepared: false, hydrateState: false }) || this.editorContent || this.spunContent || '';
+            const nextHtml = this.normalizePodcastPressReleaseHtml(currentHtml, { inlineAssets });
+
+            if (nextHtml) {
+                this.spunContent = nextHtml;
+                this.editorContent = nextHtml;
+                this.spunWordCount = this.countWordsFromHtml?.(nextHtml) || this.spunWordCount;
+                this.setSpinEditor?.(nextHtml);
+                this.rememberDraftBody?.(nextHtml);
+                this.extractArticleLinks?.(nextHtml);
             }
 
-            const key = this.pressReleaseAssetKey(asset);
-            if (key) {
-                if (!this.pressRelease.selected_photo_keys || typeof this.pressRelease.selected_photo_keys !== "object") {
-                    this.pressRelease.selected_photo_keys = {};
-                }
-                this.pressRelease.selected_photo_keys[key] = true;
-            }
-
-            this.showNotification("success", "Press release photo inserted into the article.");
+            this.showNotification("success", "Selected press release photos were refreshed in the article body.");
+            this.syncDeferredEnrichmentState?.('press_release_asset_inserted');
+            this.savePipelineState();
             this.queueAutoSaveDraft(300);
         },
     };

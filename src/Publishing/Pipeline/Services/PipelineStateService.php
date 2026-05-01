@@ -9,6 +9,7 @@ class PipelineStateService
 {
     private const NON_CANONICAL_PAYLOAD_KEYS = [
         'resolvedPrompt',
+        '_saved_at',
     ];
 
     public function __construct(
@@ -28,8 +29,13 @@ class PipelineStateService
     public function payload(PublishArticle $article): array
     {
         $state = $this->load($article);
+        $payload = $this->normalizePayload($state?->payload ?? []);
 
-        return $this->normalizePayload($state?->payload ?? []);
+        if ($state?->updated_at) {
+            $payload['_saved_at'] = $state->updated_at->toIso8601String();
+        }
+
+        return $payload;
     }
 
     public function save(PublishArticle $article, array $payload, ?string $workflowType = null): PublishPipelineState
