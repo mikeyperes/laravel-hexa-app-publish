@@ -24,16 +24,16 @@
     $clearInlineAction = $clearInlineAction ?? '';
 @endphp
 
-<div x-show="{!! $assetsShowExpression !!}" x-cloak>
+<div x-show='{!! $assetsShowExpression !!}' x-cloak>
     <div class="flex flex-col gap-2 mb-3 md:flex-row md:items-end md:justify-between">
         <div>
             <h5 class="text-sm font-semibold text-gray-700">{{ $title }}</h5>
             <p class="text-xs text-gray-500">{{ $description }}</p>
         </div>
         <div class="flex flex-wrap items-center gap-2 text-xs">
-            <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600" x-text="{!! $countBadgeExpression !!}"></span>
-            <span class="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-700" x-text="{!! $featuredBadgeExpression !!}"></span>
-            <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700" x-text="{!! $inlineBadgeExpression !!}"></span>
+            <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600" x-text='{!! $countBadgeExpression !!}'></span>
+            <span class="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-700" x-text='{!! $featuredBadgeExpression !!}'></span>
+            <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700" x-text='{!! $inlineBadgeExpression !!}'></span>
             @if($showSelectAll)
                 <button @click.prevent="{!! $selectAllAction !!}" type="button" class="text-indigo-600 hover:text-indigo-800 font-medium">Select all inline</button>
                 <button @click.prevent="{!! $clearInlineAction !!}" type="button" class="text-gray-500 hover:text-gray-700 font-medium">Select none</button>
@@ -42,35 +42,47 @@
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        <template x-for="(asset, assetIdx) in {!! $assetsExpression !!}" :key="{!! $assetKeyExpression !!}">
+        <template x-for='(asset, assetIdx) in {!! $assetsExpression !!}' :key='{!! $assetKeyExpression !!}'>
             <div class="rounded-xl overflow-hidden border-2 bg-white transition-all"
-                :class="{!! '(' . $featuredSelectedExpression . ' ? \"border-indigo-500 ring-2 ring-indigo-200\" : (' . $inlineSelectedExpression . ' ? \"border-emerald-500 ring-2 ring-emerald-200\" : \"border-gray-200 hover:border-gray-300\"))' !!}">
+                :class='{!! '(' . $featuredSelectedExpression . ' ? "border-indigo-500 ring-2 ring-indigo-200" : (' . $inlineSelectedExpression . ' ? "border-emerald-500 ring-2 ring-emerald-200" : "border-gray-200 hover:border-gray-300"))' !!}'>
                 <div class="relative select-none">
                     <div class="absolute inset-0 hidden items-center justify-center px-3 text-center text-[11px] font-medium text-gray-500 bg-gray-50 js-shared-photo-fallback">Image blocked by source</div>
-                    <img :src="{!! $thumbUrlExpression !!}" :alt="{!! $labelExpression !!}" class="w-full h-56 object-cover" loading="lazy" onerror="this.style.display='none'; this.parentElement.querySelector('.js-shared-photo-fallback')?.classList.remove('hidden'); this.parentElement.querySelector('.js-shared-photo-fallback')?.classList.add('flex');">
+                    <img :src='{!! $thumbUrlExpression !!}' :alt='{!! $labelExpression !!}' class="w-full h-56 object-cover" loading="lazy" onerror="this.style.display='none'; this.parentElement.querySelector('.js-shared-photo-fallback')?.classList.remove('hidden'); this.parentElement.querySelector('.js-shared-photo-fallback')?.classList.add('flex');">
                     <div class="absolute left-2 top-2 flex flex-wrap gap-1">
-                        <span x-show="{!! $featuredSelectedExpression !!}" x-cloak class="inline-flex items-center rounded-full bg-indigo-500 px-2 py-1 text-[10px] font-semibold text-white shadow-sm">Featured</span>
-                        <span x-show="{!! $inlineSelectedExpression !!}" x-cloak class="inline-flex items-center rounded-full bg-emerald-500 px-2 py-1 text-[10px] font-semibold text-white shadow-sm">Inline</span>
+                        <span x-show='{!! $featuredSelectedExpression !!}' x-cloak class="inline-flex items-center rounded-full bg-indigo-500 px-2 py-1 text-[10px] font-semibold text-white shadow-sm">Featured</span>
+                        <span x-show='{!! $inlineSelectedExpression !!}' x-cloak class="inline-flex items-center rounded-full bg-emerald-500 px-2 py-1 text-[10px] font-semibold text-white shadow-sm">Inline</span>
                     </div>
                 </div>
                 <div class="p-3">
-                    <p class="text-sm font-medium text-gray-800 break-words" x-text="{!! $labelExpression !!}"></p>
-                    <p class="text-xs text-gray-400 mt-0.5 break-words" x-text="{!! $sourceLabelExpression !!}"></p>
+                    <p class="text-sm font-medium text-gray-800 break-words" x-text='{!! $labelExpression !!}'></p>
+                    <p class="text-xs text-gray-400 mt-0.5 break-words" x-text='{!! $sourceLabelExpression !!}'></p>
+                    <div class="flex items-center gap-2 mt-1 text-[11px] flex-wrap">
+                        <span x-show='asset.width && asset.height' x-cloak class="text-gray-400" x-text='(asset.width || "") + "x" + (asset.height || "")'></span>
+                        <template x-if='asset.width && asset.height'>
+                            <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                                :class='(() => { const r = asset.width / asset.height; if (r >= 1.3 && r <= 2.0) return "bg-green-100 text-green-700"; if (r >= 1.0 && r < 1.3) return "bg-yellow-100 text-yellow-700"; if (r < 1.0) return "bg-red-100 text-red-700"; return "bg-red-100 text-red-700"; })()'
+                                x-text='(() => { const r = asset.width / asset.height; const label = r.toFixed(2) + ":1"; if (r >= 1.3 && r <= 2.0) return label + " Landscape"; if (r >= 1.0 && r < 1.3) return label + " Square"; if (r < 1.0) return label + " Portrait"; return label + " Ultra-wide"; })()'>
+                            </span>
+                        </template>
+                        <template x-if='asset.width && asset.height && (asset.width / asset.height) < 1.3'>
+                            <span class="text-[10px] text-red-500">Bad for featured</span>
+                        </template>
+                    </div>
                     <div class="grid grid-cols-2 gap-2 mt-3">
                         <button @click.prevent="{!! $setFeaturedAction !!}" type="button" class="inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold transition-colors"
-                            :class="{!! '(' . $featuredSelectedExpression . ' ? \"bg-indigo-600 text-white\" : \"bg-indigo-50 text-indigo-700 hover:bg-indigo-100\")' !!}"
-                            x-text="{!! $featuredButtonTextExpression !!}"></button>
+                            :class='{!! '(' . $featuredSelectedExpression . ' ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100")' !!}'
+                            x-text='{!! $featuredButtonTextExpression !!}'></button>
                         <button @click.prevent="{!! $toggleInlineAction !!}" type="button" class="inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            :disabled="{!! $inlineButtonDisabledExpression !!}"
-                            :class="{!! '(' . $inlineSelectedExpression . ' ? \"bg-emerald-600 text-white\" : \"bg-emerald-50 text-emerald-700 hover:bg-emerald-100\")' !!}"
-                            x-text="{!! $inlineButtonTextExpression !!}"></button>
+                            :disabled='{!! $inlineButtonDisabledExpression !!}'
+                            :class='{!! '(' . $inlineSelectedExpression . ' ? "bg-emerald-600 text-white" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100")' !!}'
+                            x-text='{!! $inlineButtonTextExpression !!}'></button>
                     </div>
                     <div class="flex items-center gap-2 mt-3">
-                        <a :href="{!! $downloadUrlExpression !!}" target="_blank" @click.stop class="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                        <a :href='{!! $downloadUrlExpression !!}' target="_blank" @click.stop class="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                             Download
                         </a>
-                        <a :href="{!! $viewUrlExpression !!}" target="_blank" @click.stop class="inline-flex items-center gap-1 text-xs text-gray-500 hover:underline">
+                        <a :href='{!! $viewUrlExpression !!}' target="_blank" @click.stop class="inline-flex items-center gap-1 text-xs text-gray-500 hover:underline">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                             Open
                         </a>
