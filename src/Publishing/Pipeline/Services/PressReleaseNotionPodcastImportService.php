@@ -405,7 +405,9 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
 "
             . "- Podcast: The Michael Peres Podcast
 "
-            . "- Dateline format: {$details['location']} (Hexa PR Wire - {$details['date']}) - opening announcement paragraph. If date is blank, infer it from the episode schedule if possible.
+            . "- Use this exact dateline verbatim at the start of the first paragraph: {$details['location']} (Hexa PR Wire - {$details['date']}) -
+"
+            . "- Never substitute another city, state, or date. Ignore any other dateline, city, state, or publication date found in transcripts, notes, source material, or prior examples.
 "
             . "- Structure the opening so the guest's background, credentials, company, and relevance come before the episode recap.
 "

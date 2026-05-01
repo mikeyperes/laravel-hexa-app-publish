@@ -321,6 +321,14 @@ function pressReleaseWorkflowMixin(config) {
             if (details.contact_url) detailLines.push('Contact URL: ' + details.contact_url);
             if (detailLines.length) {
                 blocks.push("=== Validated Details ===\n" + detailLines.join("\n"));
+                if (details.date && details.location) {
+                    blocks.push([
+                        '=== Required Dateline ===',
+                        'Use this exact dateline verbatim at the start of the first paragraph: ' + details.location + ' (Hexa PR Wire - ' + details.date + ') -',
+                        'Never substitute another city, state, or date.',
+                        'Ignore any other dateline, city, state, or publication date found in transcript, source material, or prior examples.'
+                    ].join("\n"));
+                }
             }
 
             if (this.currentArticleType === 'press-release' && this.pressRelease.submit_method === 'notion-podcast') {

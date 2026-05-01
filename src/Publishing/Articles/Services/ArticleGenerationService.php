@@ -942,38 +942,37 @@ class ArticleGenerationService
             return $content;
         }
 
-        $lead = htmlspecialchars($location . ' (Hexa PR Wire - ' . $date . ')', ENT_QUOTES, 'UTF-8');
-        $content = preg_replace('/^\s*FOR IMMEDIATE RELEASE\s*/iu', '', $content, 1) ?? $content;
-        $pattern = '/^\s*(?:Location:\s*)?(?:<strong>)?[^<\n]*?(?:\(\s*Hexa PR Wire(?:\s*[-–]\s*[^)]*)?\)|[–-]\s*(?:Date:\s*)?(?:\[[^\]]+\]|[A-Za-z]+\s+\d{1,2},\s+\d{4}))\s*(?:<\/strong>)?\s*[–-]\s*/u';
+        $leadText = $location . ' (Hexa PR Wire - ' . $date . ')';
+        $leadHtml = '<strong>' . htmlspecialchars($leadText, ENT_QUOTES, 'UTF-8') . '</strong> - ';
+        $content = preg_replace('/^\s*FOR IMMEDIATE RELEASE(?:\s*[:\-–—]\s*)?/iu', '', $content, 1) ?? $content;
 
-        if (preg_match('/<p\b[^>]*>(.*?)<\/p>/is', $content, $match)) {
-            $firstParagraph = $match[1];
-            $updated = preg_replace(
-                $pattern,
-                '<strong>' . $lead . '</strong> - ',
-                $firstParagraph,
-                1,
-                $count
-            );
+        $stripDateline = function (string $text) use ($leadText): string {
+            $patterns = [
+                '/^\s*(?:<strong>|<b>)?\s*' . preg_quote($leadText, '/') . '\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/iu',
+                '/^\s*(?:<strong>|<b>)?\s*(?:Location:\s*)?[^<\n]{0,180}?\(\s*Hexa PR Wire(?:\s*[-–—]\s*[^)]*)?\)\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/u',
+                '/^\s*(?:<strong>|<b>)?\s*(?:Location:\s*)?(?:[A-Z][A-Za-z. ]+,\s*){1,3}(?:Date:\s*)?(?:\[[^\]]+\]|[A-Za-z]+\s+\d{1,2},\s+\d{4})\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/u',
+                '/^\s*(?:<strong>|<b>)?\s*FOR IMMEDIATE RELEASE(?:\s*[:\-–—]\s*)?/iu',
+            ];
 
-            if ($count && $updated !== null) {
-                return preg_replace('/<p\b[^>]*>.*?<\/p>/is', '<p>' . $updated . '</p>', $content, 1) ?? $content;
+            $updated = $text;
+            foreach ($patterns as $pattern) {
+                $updated = preg_replace($pattern, '', $updated, 1) ?? $updated;
             }
+
+            return ltrim($updated);
+        };
+
+        if (preg_match('/<p\b[^>]*>(.*?)<\/p>/is', $content, $match, PREG_OFFSET_CAPTURE)) {
+            $firstParagraph = $match[1][0];
+            $paragraphOffset = $match[1][1];
+            $normalizedParagraph = $leadHtml . $stripDateline($firstParagraph);
+
+            return substr($content, 0, $paragraphOffset)
+                . $normalizedParagraph
+                . substr($content, $paragraphOffset + strlen($firstParagraph));
         }
 
-        $updatedContent = preg_replace(
-            $pattern,
-            '<strong>' . $lead . '</strong> - ',
-            $content,
-            1,
-            $fallbackCount
-        );
-
-        if ($fallbackCount && $updatedContent !== null) {
-            return $updatedContent;
-        }
-
-        return $content;
+        return $leadHtml . $stripDateline($content);
     }
 
     /**
