@@ -1939,7 +1939,7 @@ function publishPipeline() {
         },
 
         get pipelineStateKey() {
-            return 'publishPipelineState:' + String(this.draftId || 'new') + ':' + String(this._tabInstanceId || 'tab');
+            return 'publishPipelineState:v2:' + String(this.draftId || 'new') + ':' + String(this._tabInstanceId || 'tab');
         },
 
         get legacyPipelineStateKey() {

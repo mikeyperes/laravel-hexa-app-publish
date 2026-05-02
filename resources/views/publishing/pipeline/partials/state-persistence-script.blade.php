@@ -494,9 +494,10 @@
             const serverState = this.pipelinePayload && Object.keys(this.pipelinePayload).length > 0
                 ? { ...this.pipelinePayload, draftId: this.draftId, _v: this.pipelinePayload._v || this._stateVersion }
                 : null;
-            const saved = localStorage.getItem(this.pipelineStateKey)
-                || localStorage.getItem(this.legacyPipelineStateKey);
-            const legacySaved = !saved && !draftState.body ? localStorage.getItem('publishPipelineState') : null;
+            const saved = localStorage.getItem(this.pipelineStateKey);
+            const legacySaved = (!saved && !serverState)
+                ? (localStorage.getItem(this.legacyPipelineStateKey) || (!draftState.body ? localStorage.getItem('publishPipelineState') : null))
+                : null;
             const savedState = saved || legacySaved;
             let state = null;
             let restoredFromLocalState = false;
