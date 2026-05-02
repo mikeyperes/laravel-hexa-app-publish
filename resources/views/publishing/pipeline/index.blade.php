@@ -1566,7 +1566,9 @@
 
 @include('app-publish::publishing.pipeline.partials.review-publish-step')
 
+<div x-show="openSteps.includes(7)" x-cloak>
 @include('app-publish::publishing.pipeline.partials.master-activity-log')
+</div>
 
 @include('app-publish::publishing.pipeline.partials.overlays')
 
