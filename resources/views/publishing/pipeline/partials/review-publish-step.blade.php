@@ -391,11 +391,6 @@
                     </div>
                 </template>
             </div>
-        </div>
-    </div>
-</div>
-
-
         {{-- ═══ Review Section (row layout) ═══ --}}
         <div class="bg-white border border-gray-200 rounded-xl p-5 mb-4 space-y-3">
             <h5 class="text-base font-semibold text-gray-800 mb-2">Review</h5>
@@ -528,3 +523,5 @@
             <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Twitter Card</span><p class="text-sm text-gray-600">summary_large_image</p></div>
             <div x-show="featuredPhoto" class="flex items-start gap-3 py-1"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">OG Image</span><p class="text-sm text-gray-600 break-all" x-text="featuredPhoto?.url_large || featuredPhoto?.url_thumb || ''"></p></div>
         </div>
+    </div>
+</div>

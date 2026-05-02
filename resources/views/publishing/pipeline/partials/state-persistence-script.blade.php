@@ -767,7 +767,7 @@
             }
             if ((this.spunContent || draftState.body) && !state?.currentStep) {
                 this.currentStep = 6;
-                this.openSteps = [6];
+                this.openSteps = this.normalizeNestedOpenSteps(this.normalizedOpenSteps(6), 6);
                 this.completedSteps = Array.from(new Set([...(this.completedSteps || []), 1, 2, 3, 4, 5]));
             }
 
@@ -805,7 +805,7 @@
                     if (!this.completedSteps.includes(5)) this.completedSteps.push(5);
                     if (this.currentStep <= 5) {
                         this.currentStep = 6;
-                        this.openSteps = [6];
+                        this.openSteps = this.normalizeNestedOpenSteps(this.normalizedOpenSteps(6), 6);
                     }
                 }
                 // Restore step from URL query string (overrides saved state)
@@ -814,7 +814,7 @@
                     const s = parseInt(urlStep);
                     if (s >= 1 && s <= 7 && this.isStepAccessible(s)) {
                         this.currentStep = s;
-                        this.openSteps = [s];
+                        this.openSteps = this.normalizeNestedOpenSteps(this.normalizedOpenSteps(s), s);
                     }
                 }
 
