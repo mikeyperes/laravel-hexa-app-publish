@@ -73,6 +73,12 @@
 
     .v2-tab-lock { background: #b91c1c; color: #fff; padding: .75rem 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 
+    /* Legacy step-card CSS for embedded inline-step partials (Step 3/4/5) */
+    .pipeline-step-card { background: #fff; border: 1px solid #e5e7eb; border-radius: .75rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .pipeline-step-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 1rem; text-align: left; border-radius: .75rem; transition: background-color 150ms ease, color 150ms ease; }
+    .pipeline-step-toggle:hover { background: #f9fafb; }
+    .pipeline-step-panel { padding: 0 1rem 1rem; }
+
     [x-cloak] { display: none !important; }
 </style>
 @endonce
@@ -462,15 +468,8 @@
                             <span x-show="completedSteps.includes(3)" x-cloak class="v2-pill v2-pill-green">Completed</span>
                         </div>
                         <div class="v2-section-body">
-                            {{-- Press-release submit form (the partial's own x-show='currentArticleType=press-release' handles type-gating) --}}
-                            @include('app-publish::publishing.pipeline.partials.press-release-submit-step')
-
-                            {{-- Spin pipeline source-gathering: legacy fallback (inline UI lives in the original page) --}}
-                            <div x-show="currentArticleType !== 'press-release'" x-cloak class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                                <p class="font-medium mb-1">Source gathering for spin pipelines is in flight</p>
-                                <p class="mb-3">Press releases are fully wired in v2. The spin-pipeline source flow (URL paste, news search, AI search, bookmarks) is being ported next.</p>
-                                <a :href="'{{ route('publish.pipeline') }}?id={{ $draftId }}&step=3'" class="v2-btn v2-btn-primary">Continue this step in legacy view</a>
-                            </div>
+                            {{-- Full Step 3 inline body extracted verbatim from the original index.blade.php (lines 284..1168). Includes both press-release submit content and spin-pipeline source-gathering UI, type-gated internally. --}}
+                            @include('app-publish::publishing.pipeline-v2._legacy-step-3')
 
                             <div class="v2-action-bar">
                                 <button type="button" @click="goToStep(2)" class="v2-btn v2-btn-secondary">Back</button>
@@ -501,14 +500,8 @@
                             <span x-show="completedSteps.includes(4)" x-cloak class="v2-pill v2-pill-green">Completed</span>
                         </div>
                         <div class="v2-section-body">
-                            {{-- Press-release validate body --}}
-                            @include('app-publish::publishing.pipeline.partials.press-release-validate-step')
-
-                            {{-- Spin pipeline fetch: legacy fallback --}}
-                            <div x-show="currentArticleType !== 'press-release'" x-cloak class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                                <p class="font-medium mb-1">Fetch sources for spin pipelines is in flight</p>
-                                <a :href="'{{ route('publish.pipeline') }}?id={{ $draftId }}&step=4'" class="v2-btn v2-btn-primary mt-2">Continue this step in legacy view</a>
-                            </div>
+                            {{-- Full Step 4 inline body extracted verbatim from the original (lines 1169..1393). Press-release type runs press-release-validate-step internally; spin-pipeline type runs the inline fetch-articles-from-source UI. --}}
+                            @include('app-publish::publishing.pipeline-v2._legacy-step-4')
 
                             <div class="v2-action-bar">
                                 <button type="button" @click="goToStep(3)" class="v2-btn v2-btn-secondary">Back</button>
@@ -541,11 +534,9 @@
                             <span x-show="completedSteps.includes(5)" x-cloak class="v2-pill v2-pill-green">Completed</span>
                         </div>
                         <div class="v2-section-body">
-                            <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-4 text-sm text-amber-900">
-                                <p class="font-medium mb-1">AI Spin panel rebuild in flight</p>
-                                <p class="mb-3">The Spin controls (model picker, custom prompt, web research toggle, real-time generation log) are being ported into the v2 shell next. All Spin logic, autosave, and AJAX endpoints work identically — just from the legacy view for now.</p>
-                                <a :href="'{{ route('publish.pipeline') }}?id={{ $draftId }}&step=5'" class="v2-btn v2-btn-primary">Continue Spin in legacy view</a>
-                            </div>
+                            {{-- Full Step 5 inline body extracted verbatim from the original (lines 1394..1711). AI Spin model picker, custom prompt, web research, and real-time generation. --}}
+                            @include('app-publish::publishing.pipeline-v2._legacy-step-5')
+
                             <div class="v2-action-bar">
                                 <button type="button" @click="goToStep(4)" class="v2-btn v2-btn-secondary">Back</button>
                                 <button type="button"
