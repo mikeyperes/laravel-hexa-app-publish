@@ -20,6 +20,7 @@ Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role']
         require __DIR__ . '/publishing/campaigns.php';
         require __DIR__ . '/publishing/articles.php';
         require __DIR__ . '/publishing/pipeline.php';
+        require __DIR__ . '/publishing/pipeline-v2.php';
         require __DIR__ . '/publishing/presets.php';
         require __DIR__ . '/publishing/prompts.php';
         require __DIR__ . '/publishing/settings.php';
