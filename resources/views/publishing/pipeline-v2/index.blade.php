@@ -445,34 +445,149 @@
                 </div>
             </template>
 
-            {{-- ─── PHASES 2 / 3 / 4 — TRANSITIONAL ─── --}}
-            {{-- These phases include the existing functional partials inside the new shell.
-                 Subsequent commits will rebuild each phase's UI to match Setup's quality. --}}
+            {{-- ─── PHASE 2 — SOURCE ─── --}}
 
-            <template x-if="currentStep === 3 || currentStep === 4 || currentStep === 5 || currentStep === 6 || currentStep === 7">
+            {{-- Step 3: Submit press release (press-release types) OR gather sources (spin) --}}
+            <template x-if="currentStep === 3">
                 <div>
                     <div class="v2-section">
                         <div class="v2-section-head">
                             <div class="v2-section-title">
-                                <span class="v2-pill v2-pill-blue" x-text="'Step ' + currentStep + ' of 7'"></span>
-                                <span x-text="(stepLabels && stepLabels[currentStep - 1]) || 'Working step'"></span>
+                                <span class="v2-pill v2-pill-blue">Step 3 of 7</span>
+                                <span x-text="currentArticleType === 'press-release' ? 'Submit your press release' : 'Gather source articles'"></span>
+                                <x-hexa-tooltip mode="hover" title="What to do here" label="?" position="right">
+                                    Press release: pick a subject and supply your raw content (paste, upload, Notion, or Google Docs). Other types: collect 1-N source articles for the AI to spin.
+                                </x-hexa-tooltip>
                             </div>
-                            <span class="v2-pill v2-pill-amber">Transitional view</span>
+                            <span x-show="completedSteps.includes(3)" x-cloak class="v2-pill v2-pill-green">Completed</span>
                         </div>
                         <div class="v2-section-body">
-                            <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-4 text-sm text-amber-900">
-                                <p class="font-medium mb-1">Phase rebuild in progress</p>
-                                <p>This step's panel still uses the legacy markup while the v2 redesign rolls out phase by phase. All underlying logic, autosave, and AJAX work normally. To finish your draft right now, jump back to the legacy view and you'll land on this exact step.</p>
+                            {{-- Press-release submit form (the partial's own x-show='currentArticleType=press-release' handles type-gating) --}}
+                            @include('app-publish::publishing.pipeline.partials.press-release-submit-step')
+
+                            {{-- Spin pipeline source-gathering: legacy fallback (inline UI lives in the original page) --}}
+                            <div x-show="currentArticleType !== 'press-release'" x-cloak class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                <p class="font-medium mb-1">Source gathering for spin pipelines is in flight</p>
+                                <p class="mb-3">Press releases are fully wired in v2. The spin-pipeline source flow (URL paste, news search, AI search, bookmarks) is being ported next.</p>
+                                <a :href="'{{ route('publish.pipeline') }}?id={{ $draftId }}&step=3'" class="v2-btn v2-btn-primary">Continue this step in legacy view</a>
                             </div>
-                            <div class="flex items-center gap-3">
-                                <a :href="'{{ route('publish.pipeline') }}?id={{ $draftId }}&step=' + currentStep" class="v2-btn v2-btn-primary">
-                                    Continue this step in legacy view
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                                </a>
-                                <button type="button" @click="goToStep(2)" class="v2-btn v2-btn-secondary">Back to Article configuration</button>
+
+                            <div class="v2-action-bar">
+                                <button type="button" @click="goToStep(2)" class="v2-btn v2-btn-secondary">Back</button>
+                                <button type="button"
+                                        @click="completeStep(3); openStep(4); goToStep(4)"
+                                        class="v2-btn v2-btn-primary">
+                                    Continue
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                                </button>
                             </div>
                         </div>
                     </div>
+                </div>
+            </template>
+
+            {{-- Step 4: Validate (press release) / Fetch sources (spin) --}}
+            <template x-if="currentStep === 4">
+                <div>
+                    <div class="v2-section">
+                        <div class="v2-section-head">
+                            <div class="v2-section-title">
+                                <span class="v2-pill v2-pill-blue">Step 4 of 7</span>
+                                <span x-text="currentArticleType === 'press-release' ? 'Validate press release details' : 'Fetch source articles'"></span>
+                                <x-hexa-tooltip mode="hover" title="What to do here" label="?" position="right">
+                                    Confirm and clean up the auto-detected fields before AI generation runs against them.
+                                </x-hexa-tooltip>
+                            </div>
+                            <span x-show="completedSteps.includes(4)" x-cloak class="v2-pill v2-pill-green">Completed</span>
+                        </div>
+                        <div class="v2-section-body">
+                            {{-- Press-release validate body --}}
+                            @include('app-publish::publishing.pipeline.partials.press-release-validate-step')
+
+                            {{-- Spin pipeline fetch: legacy fallback --}}
+                            <div x-show="currentArticleType !== 'press-release'" x-cloak class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                <p class="font-medium mb-1">Fetch sources for spin pipelines is in flight</p>
+                                <a :href="'{{ route('publish.pipeline') }}?id={{ $draftId }}&step=4'" class="v2-btn v2-btn-primary mt-2">Continue this step in legacy view</a>
+                            </div>
+
+                            <div class="v2-action-bar">
+                                <button type="button" @click="goToStep(3)" class="v2-btn v2-btn-secondary">Back</button>
+                                <button type="button"
+                                        @click="completeStep(4); openStep(5); goToStep(5)"
+                                        class="v2-btn v2-btn-primary">
+                                    Continue to AI Spin
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            {{-- ─── PHASE 3 — GENERATE ─── --}}
+
+            {{-- Step 5: AI Spin (inline UI in original — legacy fallback for now) --}}
+            <template x-if="currentStep === 5">
+                <div>
+                    <div class="v2-section">
+                        <div class="v2-section-head">
+                            <div class="v2-section-title">
+                                <span class="v2-pill v2-pill-blue">Step 5 of 7</span>
+                                AI spin
+                                <x-hexa-tooltip mode="hover" title="AI spin" label="?" position="right">
+                                    Choose the AI model, optional custom prompt, and generation options. Spin will produce the article body and metadata.
+                                </x-hexa-tooltip>
+                            </div>
+                            <span x-show="completedSteps.includes(5)" x-cloak class="v2-pill v2-pill-green">Completed</span>
+                        </div>
+                        <div class="v2-section-body">
+                            <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-4 text-sm text-amber-900">
+                                <p class="font-medium mb-1">AI Spin panel rebuild in flight</p>
+                                <p class="mb-3">The Spin controls (model picker, custom prompt, web research toggle, real-time generation log) are being ported into the v2 shell next. All Spin logic, autosave, and AJAX endpoints work identically — just from the legacy view for now.</p>
+                                <a :href="'{{ route('publish.pipeline') }}?id={{ $draftId }}&step=5'" class="v2-btn v2-btn-primary">Continue Spin in legacy view</a>
+                            </div>
+                            <div class="v2-action-bar">
+                                <button type="button" @click="goToStep(4)" class="v2-btn v2-btn-secondary">Back</button>
+                                <button type="button"
+                                        @click="completeStep(5); openStep(6); goToStep(6)"
+                                        class="v2-btn v2-btn-primary">
+                                    Continue to Create Article
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            {{-- Step 6: Create Article (full partial — TinyMCE editor + metadata + photos) --}}
+            <template x-if="currentStep === 6">
+                <div>
+                    <div class="mb-4 flex items-center gap-3">
+                        <span class="v2-pill v2-pill-blue">Step 6 of 7</span>
+                        <h2 class="font-bold text-lg text-gray-900">Create the article</h2>
+                        <x-hexa-tooltip mode="hover" title="Create article" label="?" position="right">
+                            Edit the AI-generated body in TinyMCE, fine-tune metadata (title, categories, tags, slug), and review inline photo placements.
+                        </x-hexa-tooltip>
+                    </div>
+                    {{-- Existing partial renders its full step card with its own header + body --}}
+                    @include('app-publish::publishing.pipeline.partials.create-article-step')
+                </div>
+            </template>
+
+            {{-- ─── PHASE 4 — PUBLISH ─── --}}
+
+            {{-- Step 7: Review & Publish (full partial — SEO preview + publish actions) --}}
+            <template x-if="currentStep === 7">
+                <div>
+                    <div class="mb-4 flex items-center gap-3">
+                        <span class="v2-pill v2-pill-blue">Step 7 of 7</span>
+                        <h2 class="font-bold text-lg text-gray-900">Review &amp; publish</h2>
+                        <x-hexa-tooltip mode="hover" title="Review and publish" label="?" position="right">
+                            Final SEO check, scheduling, and the WordPress send. Choose Draft, Schedule, or Publish — every option has its own loader.
+                        </x-hexa-tooltip>
+                    </div>
+                    @include('app-publish::publishing.pipeline.partials.review-publish-step')
                 </div>
             </template>
 
