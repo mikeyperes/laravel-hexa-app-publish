@@ -164,9 +164,6 @@
                 <div class="v2-phase-label">
                     <span class="v2-phase-num">1</span>
                     <span>Setup</span>
-                    <x-hexa-tooltip mode="emoji" emoji="?" title="Setup phase" position="right">
-                        Pick the user this draft belongs to and configure the article type, site, and template.
-                    </x-hexa-tooltip>
                 </div>
                 <button type="button" @click="goToStep(1)"
                         class="v2-substep"
@@ -204,9 +201,6 @@
                 <div class="v2-phase-label">
                     <span class="v2-phase-num">2</span>
                     <span>Source</span>
-                    <x-hexa-tooltip mode="emoji" emoji="?" title="Source phase" position="right">
-                        Press releases: submit your subject, content, and Notion context. Other types: gather source articles to spin from.
-                    </x-hexa-tooltip>
                 </div>
                 <button type="button" @click="goToStep(3)"
                         :disabled="!isStepAccessible(3)"
@@ -242,9 +236,6 @@
                 <div class="v2-phase-label">
                     <span class="v2-phase-num">3</span>
                     <span>Generate</span>
-                    <x-hexa-tooltip mode="emoji" emoji="?" title="Generate phase" position="right">
-                        AI spin and final article assembly. Choose your AI model, write a prompt, generate the body and metadata.
-                    </x-hexa-tooltip>
                 </div>
                 <button type="button" @click="goToStep(5)"
                         :disabled="!isStepAccessible(5)"
@@ -278,9 +269,6 @@
                 <div class="v2-phase-label">
                     <span class="v2-phase-num">4</span>
                     <span>Publish</span>
-                    <x-hexa-tooltip mode="emoji" emoji="?" title="Publish phase" position="right">
-                        Final review, SEO check, and push to WordPress as draft, scheduled, or live.
-                    </x-hexa-tooltip>
                 </div>
                 <button type="button" @click="goToStep(7)"
                         :disabled="!isStepAccessible(7)"
@@ -318,136 +306,31 @@
 
             {{-- ─── PHASE 1 — SETUP ─── --}}
 
-            {{-- Step 1: Select user --}}
+            {{-- Step 1: Select user — legacy partial extracted verbatim from original lines 121..159 --}}
             <template x-if="currentStep === 1">
                 <div>
-                    <div class="v2-section">
-                        <div class="v2-section-head">
-                            <div class="v2-section-title">
-                                <span class="v2-pill v2-pill-blue">Step 1 of 7</span>
-                                Select the user this article is for
-                                <x-hexa-tooltip mode="hover" title="Why pick a user?" label="?" position="right">
-                                    The selected user determines which article presets and WordPress templates are available, and is recorded as the article's author for reporting.
-                                </x-hexa-tooltip>
-                            </div>
-                        </div>
-                        <div class="v2-section-body space-y-4">
-                            <div class="v2-field">
-                                <label class="v2-field-label">
-                                    User
-                                    <x-hexa-tooltip mode="emoji" emoji="?" title="User picker" position="right">
-                                        Type a name or email. Search hits live users in your account.
-                                    </x-hexa-tooltip>
-                                </label>
-                                <x-hexa-smart-search
-                                    :url="route('publish.users.search')"
-                                    placeholder="Search by name or email…"
-                                    @hexa-search-selected="selectedUser = { id: $event.detail.item.id, name: $event.detail.item.name, email: $event.detail.item.email }; if (typeof saveDraft === 'function') saveDraft(true); if (typeof savePipelineState === 'function') savePipelineState();"
-                                />
-                                <p class="v2-field-help" x-show="selectedUser?.name" x-cloak>Selected: <strong x-text="selectedUser?.name"></strong></p>
-                            </div>
-
-                            <div class="v2-action-bar">
-                                <span class="text-xs text-gray-500" x-show="!selectedUser" x-cloak>Pick a user to continue.</span>
-                                <span></span>
-                                <button type="button"
-                                        :disabled="!selectedUser"
-                                        @click="completeStep(1); openStep(2); goToStep(2)"
-                                        class="v2-btn v2-btn-primary">
-                                    Continue
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-                                </button>
-                            </div>
-                        </div>
+                    <div class="mb-4 flex items-center gap-3">
+                        <span class="v2-pill v2-pill-blue">Step 1 of 7</span>
+                        <h2 class="font-bold text-lg text-gray-900">Select user</h2>
+                        <x-hexa-tooltip mode="hover" title="Why pick a user?" label="?" widthClass="w-80" position="bottom">
+                            The selected user determines which article presets and WordPress templates are available, and is recorded as the article's author for reporting.
+                        </x-hexa-tooltip>
                     </div>
+                    @include('app-publish::publishing.pipeline-v2._legacy-step-1')
                 </div>
             </template>
 
-            {{-- Step 2: Article configuration --}}
+            {{-- Step 2: Article configuration — legacy partial extracted verbatim from original lines 160..280 (preserves article-type select, preset edit, template edit, etc) --}}
             <template x-if="currentStep === 2">
                 <div>
-                    <div class="v2-section">
-                        <div class="v2-section-head">
-                            <div class="v2-section-title">
-                                <span class="v2-pill v2-pill-blue">Step 2 of 7</span>
-                                Article configuration
-                                <x-hexa-tooltip mode="hover" title="What is article configuration?" label="?" position="right">
-                                    Choose which type of article you're producing, where it'll be published, and which preset/template controls the AI generation.
-                                </x-hexa-tooltip>
-                            </div>
-                        </div>
-                        <div class="v2-section-body space-y-5">
-
-                            <div class="v2-field">
-                                <label class="v2-field-label">
-                                    Article preset
-                                    <x-hexa-tooltip mode="emoji" emoji="?" title="Article presets" position="right">
-                                        A preset bundles your article-type, prompt template, AI model defaults, and writing style. Pick one to drive the rest of the configuration.
-                                    </x-hexa-tooltip>
-                                </label>
-                                <select x-model="selectedPresetId"
-                                        @change="onPresetChange ? onPresetChange() : null"
-                                        class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                    <option value="">— Select a preset —</option>
-                                    <template x-for="p in (presets || [])" :key="p.id">
-                                        <option :value="p.id" x-text="p.name"></option>
-                                    </template>
-                                </select>
-                                <p class="v2-field-help" x-show="selectedPreset?.article_type" x-cloak>
-                                    Article type: <strong x-text="selectedPreset?.article_type"></strong>
-                                </p>
-                            </div>
-
-                            <div class="v2-field">
-                                <label class="v2-field-label">
-                                    Publish destination
-                                    <x-hexa-tooltip mode="emoji" emoji="?" title="WordPress destination" position="right">
-                                        Choose which connected WordPress site this article will be sent to. Connection status appears below the picker.
-                                    </x-hexa-tooltip>
-                                </label>
-                                <select x-model="selectedSiteId"
-                                        @change="onSiteChange ? onSiteChange() : null"
-                                        class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                    <option value="">— Select a site —</option>
-                                    <template x-for="s in (sites || [])" :key="s.id">
-                                        <option :value="s.id" x-text="s.name + (s.url ? ' · ' + s.url : '')"></option>
-                                    </template>
-                                </select>
-                                @include('app-publish::publishing.pipeline.partials.site-connection-status')
-                            </div>
-
-                            <div class="v2-field">
-                                <label class="v2-field-label">
-                                    WordPress template
-                                    <x-hexa-tooltip mode="emoji" emoji="?" title="WordPress templates" position="right">
-                                        A template defines author, default categories, and other WordPress-side defaults applied at publish time.
-                                    </x-hexa-tooltip>
-                                </label>
-                                <select x-model="selectedTemplateId"
-                                        @change="onTemplateChange ? onTemplateChange() : null"
-                                        class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                    <option value="">— Select a template —</option>
-                                    <template x-for="t in (templates || [])" :key="t.id">
-                                        <option :value="t.id" x-text="t.name"></option>
-                                    </template>
-                                </select>
-                            </div>
-
-                            <div class="v2-action-bar">
-                                <button type="button" @click="goToStep(1)" class="v2-btn v2-btn-secondary">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-                                    Back
-                                </button>
-                                <button type="button"
-                                        :disabled="!selectedPresetId || !selectedSiteId"
-                                        @click="completeStep(2); openStep(3); goToStep(3)"
-                                        class="v2-btn v2-btn-primary">
-                                    Continue
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-                                </button>
-                            </div>
-                        </div>
+                    <div class="mb-4 flex items-center gap-3">
+                        <span class="v2-pill v2-pill-blue">Step 2 of 7</span>
+                        <h2 class="font-bold text-lg text-gray-900">Article configuration</h2>
+                        <x-hexa-tooltip mode="hover" title="What is article configuration?" label="?" widthClass="w-80" position="bottom">
+                            Choose your article type, the WordPress destination, the AI preset, and the publish template. The article-type dropdown drives whether the rest of the wizard runs the press-release flow or the spin pipeline.
+                        </x-hexa-tooltip>
                     </div>
+                    @include('app-publish::publishing.pipeline-v2._legacy-step-2')
                 </div>
             </template>
 
@@ -461,7 +344,7 @@
                             <div class="v2-section-title">
                                 <span class="v2-pill v2-pill-blue">Step 3 of 7</span>
                                 <span x-text="currentArticleType === 'press-release' ? 'Submit your press release' : 'Gather source articles'"></span>
-                                <x-hexa-tooltip mode="hover" title="What to do here" label="?" position="right">
+                                <x-hexa-tooltip mode="hover" title="What to do here" label="?" widthClass="w-80" position="bottom">
                                     Press release: pick a subject and supply your raw content (paste, upload, Notion, or Google Docs). Other types: collect 1-N source articles for the AI to spin.
                                 </x-hexa-tooltip>
                             </div>
@@ -493,7 +376,7 @@
                             <div class="v2-section-title">
                                 <span class="v2-pill v2-pill-blue">Step 4 of 7</span>
                                 <span x-text="currentArticleType === 'press-release' ? 'Validate press release details' : 'Fetch source articles'"></span>
-                                <x-hexa-tooltip mode="hover" title="What to do here" label="?" position="right">
+                                <x-hexa-tooltip mode="hover" title="What to do here" label="?" widthClass="w-80" position="bottom">
                                     Confirm and clean up the auto-detected fields before AI generation runs against them.
                                 </x-hexa-tooltip>
                             </div>
@@ -527,7 +410,7 @@
                             <div class="v2-section-title">
                                 <span class="v2-pill v2-pill-blue">Step 5 of 7</span>
                                 AI spin
-                                <x-hexa-tooltip mode="hover" title="AI spin" label="?" position="right">
+                                <x-hexa-tooltip mode="hover" title="AI spin" label="?" widthClass="w-80" position="bottom">
                                     Choose the AI model, optional custom prompt, and generation options. Spin will produce the article body and metadata.
                                 </x-hexa-tooltip>
                             </div>
@@ -557,7 +440,7 @@
                     <div class="mb-4 flex items-center gap-3">
                         <span class="v2-pill v2-pill-blue">Step 6 of 7</span>
                         <h2 class="font-bold text-lg text-gray-900">Create the article</h2>
-                        <x-hexa-tooltip mode="hover" title="Create article" label="?" position="right">
+                        <x-hexa-tooltip mode="hover" title="Create article" label="?" widthClass="w-80" position="bottom">
                             Edit the AI-generated body in TinyMCE, fine-tune metadata (title, categories, tags, slug), and review inline photo placements.
                         </x-hexa-tooltip>
                     </div>
@@ -574,7 +457,7 @@
                     <div class="mb-4 flex items-center gap-3">
                         <span class="v2-pill v2-pill-blue">Step 7 of 7</span>
                         <h2 class="font-bold text-lg text-gray-900">Review &amp; publish</h2>
-                        <x-hexa-tooltip mode="hover" title="Review and publish" label="?" position="right">
+                        <x-hexa-tooltip mode="hover" title="Review and publish" label="?" widthClass="w-80" position="bottom">
                             Final SEO check, scheduling, and the WordPress send. Choose Draft, Schedule, or Publish — every option has its own loader.
                         </x-hexa-tooltip>
                     </div>
