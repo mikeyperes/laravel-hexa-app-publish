@@ -211,9 +211,13 @@
                 return;
             }
 
+            let timeoutId = null;
             try {
+                const controller = new AbortController();
+                timeoutId = setTimeout(() => controller.abort(new Error('Spin timed out after 180 seconds.')), 180000);
                 const resp = await fetch('{{ route('publish.pipeline.spin') }}', {
                     method: 'POST',
+                    signal: controller.signal,
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         draft_id: this.draftId || null,
@@ -229,6 +233,8 @@
                         web_research: this.spinWebResearch,
                     })
                 });
+                clearTimeout(timeoutId);
+                timeoutId = null;
                 const data = await resp.json();
 
                 if (data.success) {
@@ -333,8 +339,13 @@
                     this._logSpin('error', 'Spin failed: ' + data.message);
                 }
             } catch (e) {
-                this.spinError = 'Network error during spinning.';
-                this._logSpin('error', 'Network error: ' + (e.message || 'Request failed'));
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+                this.spinError = e?.name === 'AbortError'
+                    ? 'Spin timed out before the model returned a response.'
+                    : 'Network error during spinning.';
+                this._logSpin('error', (e?.name === 'AbortError' ? 'Spin timeout: ' : 'Network error: ') + (e.message || 'Request failed'));
             }
             this.spinning = false;
         },

@@ -27,12 +27,21 @@ function publishPipeline() {
         openSteps: [1],
         completedSteps: [],
         get persistedArticleType() {
-            return this.template_overrides?.article_type
+            const explicitType = this.template_overrides?.article_type
                 ?? this.selectedTemplate?.article_type
                 ?? this.draftState?.article_type
                 ?? this.draftState?.publish_template?.article_type
                 ?? this.pressRelease?.article_type
                 ?? null;
+
+            if (typeof this.resolvePrArticleTypeFromState === 'function') {
+                const resolvedType = this.resolvePrArticleTypeFromState(explicitType);
+                if (resolvedType) {
+                    return resolvedType;
+                }
+            }
+
+            return explicitType ?? null;
         },
         get isGenerateMode() {
             const genTypes = ['press-release', 'listicle', 'expert-article', 'pr-full-feature'];
@@ -299,6 +308,20 @@ function publishPipeline() {
 
         // Notification
         notification: { show: false, type: 'success', message: '' },
+        publicationNotificationTemplates: @json($publicationNotificationTemplates ?? []),
+        publicationNotificationDefaults: @json($publicationNotificationDefaults ?? []),
+        publicationNotificationShortcodes: @json(config('hws-publish.shortcodes', [])),
+        publicationNotificationTemplateId: @json(($publicationNotificationDefaults['template_id'] ?? '')),
+        publicationNotificationFromName: @json(($publicationNotificationDefaults['from_name'] ?? '')),
+        publicationNotificationFromEmail: @json(($publicationNotificationDefaults['from_email'] ?? '')),
+        publicationNotificationReplyTo: @json(($publicationNotificationDefaults['reply_to'] ?? '')),
+        publicationNotificationCc: @json(($publicationNotificationDefaults['cc'] ?? '')),
+        publicationNotificationTo: '',
+        publicationNotificationSubject: @json(($publicationNotificationDefaults['subject'] ?? '')),
+        publicationNotificationBody: @json(($publicationNotificationDefaults['body'] ?? '')),
+        publicationNotificationSending: false,
+        publicationNotificationStatus: '',
+        publicationNotificationResult: null,
         pipelineDebugEnabled: new URLSearchParams(window.location.search).get('debug') === '1'
             || localStorage.getItem('publishPipelineDebug') === 'true',
         masterActivityLog: [],

@@ -278,6 +278,8 @@
                     this.selectedSyndicationCats = preserved.length > 0 && !force
                         ? preserved
                         : normalized.map((cat) => Number(cat.id));
+                    this._syndicationAutoRequested = true;
+                    this._syndicationAutoSiteId = String(this.selectedSite?.id || "");
                     this.savePipelineState?.();
                 } else {
                     this.showNotification("error", data.message || "Failed to load publication taxonomy");
@@ -288,7 +290,30 @@
             this.loadingSyndicationCats = false;
         },
 
+        maybeAutoLoadSyndicationCategories() {
+            const siteId = String(this.selectedSite?.id || "");
+            const stepSixActive = Number(this.currentStep || 0) === 6
+                || (Array.isArray(this.openSteps) && this.openSteps.includes(6));
+
+            if (this.currentArticleType !== 'press-release' || !this.selectedSite?.is_press_release_source || !siteId || !stepSixActive) {
+                return false;
+            }
+
+            if (this._syndicationAutoSiteId !== siteId) {
+                this._syndicationAutoSiteId = siteId;
+                this._syndicationAutoRequested = false;
+            }
+
+            if (this.loadingSyndicationCats || (Array.isArray(this.syndicationCategories) && this.syndicationCategories.length > 0) || this._syndicationAutoRequested) {
+                return false;
+            }
+
+            this._syndicationAutoRequested = true;
+            return this.loadSyndicationCategories(false);
+        },
+
         resyncSyndicationCategories() {
+            this._syndicationAutoRequested = true;
             return this.loadSyndicationCategories(true);
         },
 
@@ -302,11 +327,73 @@
             this.savePipelineState?.();
         },
 
+        syndicationCategoryTree() {
+            const categories = Array.isArray(this.syndicationCategories) ? this.syndicationCategories : [];
+            const byParent = new Map();
+            categories.forEach((cat) => {
+                const parentId = Number(cat.parent || 0);
+                if (!byParent.has(parentId)) byParent.set(parentId, []);
+                byParent.get(parentId).push(cat);
+            });
+            const build = (parentId = 0) => {
+                return (byParent.get(Number(parentId)) || []).map((cat) => ({
+                    ...cat,
+                    children: build(Number(cat.id)),
+                }));
+            };
+            return build(0);
+        },
+
+        syndicationDescendantIds(parentId) {
+            const categories = Array.isArray(this.syndicationCategories) ? this.syndicationCategories : [];
+            const out = [];
+            const walk = (id) => {
+                categories
+                    .filter((cat) => Number(cat.parent || 0) === Number(id))
+                    .forEach((child) => {
+                        out.push(Number(child.id));
+                        walk(Number(child.id));
+                    });
+            };
+            walk(Number(parentId));
+            return out;
+        },
+
+        syndicationNodeState(cat) {
+            if (!cat) return 'none';
+            const ids = [Number(cat.id), ...this.syndicationDescendantIds(Number(cat.id))];
+            const selected = ids.filter((id) => this.selectedSyndicationCats.includes(Number(id))).length;
+            if (selected === 0) return 'none';
+            if (selected === ids.length) return 'all';
+            return 'some';
+        },
+
+        isSyndicationSelected(id) {
+            return this.selectedSyndicationCats.includes(Number(id));
+        },
+
         toggleSyndicationCat(id) {
             const normalizedId = Number(id);
             const idx = this.selectedSyndicationCats.indexOf(normalizedId);
             if (idx > -1) this.selectedSyndicationCats.splice(idx, 1);
             else this.selectedSyndicationCats.push(normalizedId);
+            this.selectedSyndicationCats = Array.from(new Set(this.selectedSyndicationCats.map((value) => Number(value))));
+            this.savePipelineState?.();
+        },
+
+        toggleSyndicationTreeNode(cat) {
+            if (!cat) return;
+            const ids = [Number(cat.id), ...this.syndicationDescendantIds(Number(cat.id))];
+            const shouldSelect = ids.some((id) => !this.selectedSyndicationCats.includes(Number(id)));
+            if (shouldSelect) {
+                this.selectedSyndicationCats = Array.from(new Set([
+                    ...this.selectedSyndicationCats.map((value) => Number(value)),
+                    ...ids,
+                ]));
+            } else {
+                const remove = new Set(ids.map((id) => Number(id)));
+                this.selectedSyndicationCats = this.selectedSyndicationCats.filter((id) => !remove.has(Number(id)));
+            }
             this.savePipelineState?.();
         },
 
@@ -482,7 +569,7 @@
             if (!this.insertingPhoto) return;
             const photo = this.insertingPhoto;
             const caption = this.photoCaption || '';
-            const imgUrl = photo.url_full || photo.url_large || photo.url_thumb;
+            const imgUrl = this.resolvePhotoLargeUrl(photo) || this.resolvePhotoThumbUrl(photo);
             const figureHtml = '<figure class="wp-block-image"><img src="' + imgUrl + '" alt="' + caption.replace(/"/g, '&quot;') + '" style="max-width:100%;height:auto"><figcaption>' + caption + '</figcaption></figure>';
             const editor = tinymce.get('spin-preview-editor');
             if (editor) {
@@ -899,7 +986,7 @@
             const photo = ps.autoPhoto;
             const altText = (ps.alt_text || '').replace(/"/g, '&quot;');
             const caption = ps.caption || '';
-            const imgUrl = photo.url_full || photo.url_large || photo.url_thumb;
+            const imgUrl = this.resolvePhotoLargeUrl(photo) || this.resolvePhotoThumbUrl(photo);
             const figureHtml = '<figure class="wp-block-image"><img src="' + imgUrl + '" alt="' + altText + '" style="max-width:100%;height:auto">' + (caption ? '<figcaption>' + this._escHtml(caption) + '</figcaption>' : '') + '</figure>';
             editor.dom.setOuterHTML(placeholder, figureHtml);
             this.photoSuggestions[idx].confirmed = true;

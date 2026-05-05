@@ -3,6 +3,7 @@
 namespace hexa_app_publish\Publishing\Articles\Http\Controllers;
 
 use hexa_core\Http\Controllers\Controller;
+use hexa_app_publish\Publishing\Access\Services\PublishAccessService;
 use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
 use hexa_app_publish\Services\ArticleDeleteService;
 use Illuminate\Http\JsonResponse;
@@ -14,18 +15,20 @@ use Illuminate\View\View;
  */
 class DraftController extends Controller
 {
-    /**
-     * List all articles with optional search.
-     *
-     * @param Request $request
-     * @return View|JsonResponse
-     */
+    public function __construct(private PublishAccessService $access)
+    {
+    }
+
     public function index(Request $request): View|JsonResponse
     {
-        $query = PublishArticle::with(['creator', 'site']);
+        $query = $this->access->articleQuery($request->user())->with(['creator', 'site']);
 
         if ($request->filled('user_id')) {
-            $query->where('created_by', $request->input('user_id'));
+            $userId = (int) $request->input('user_id');
+            $query->where(function ($qb) use ($userId) {
+                $qb->where('created_by', $userId)
+                    ->orWhere('user_id', $userId);
+            });
         }
 
         if ($request->filled('q')) {
@@ -33,7 +36,7 @@ class DraftController extends Controller
             $query->where(function ($qb) use ($q) {
                 $qb->where('title', 'like', "%{$q}%")
                     ->orWhere('article_id', 'like', "%{$q}%")
-                    ->orWhereHas('site', fn($s) => $s->where('name', 'like', "%{$q}%"));
+                    ->orWhereHas('site', fn ($s) => $s->where('name', 'like', "%{$q}%"));
             });
         }
 
@@ -52,12 +55,6 @@ class DraftController extends Controller
         ]);
     }
 
-    /**
-     * Create a new draft article.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -70,7 +67,8 @@ class DraftController extends Controller
 
         $validated['status'] = 'drafting';
         $validated['article_id'] = PublishArticle::generateArticleId();
-        $validated['created_by'] = $validated['created_by'] ?? auth()->id();
+        $validated['created_by'] = auth()->id();
+        $validated['user_id'] = auth()->id();
 
         $draft = PublishArticle::create($validated);
 
@@ -85,37 +83,23 @@ class DraftController extends Controller
         ]);
     }
 
-    /**
-     * Show a single article.
-     *
-     * @param Request $request
-     * @param int $id
-     * @return View|JsonResponse
-     */
     public function show(Request $request, int $id): View|JsonResponse
     {
-        $draft = PublishArticle::findOrFail($id);
+        $draft = $this->access->resolveArticleOrFail($request->user(), $id);
 
         if ($request->wantsJson()) {
             return response()->json(['success' => true, 'article' => $draft]);
         }
 
         return view('app-publish::publishing.articles.drafts.index', [
-            'drafts'    => PublishArticle::orderByDesc('updated_at')->paginate(100),
+            'drafts' => $this->access->articleQuery($request->user())->orderByDesc('updated_at')->paginate(100),
             'editDraft' => $draft,
         ]);
     }
 
-    /**
-     * Update an article.
-     *
-     * @param Request $request
-     * @param int $id
-     * @return JsonResponse
-     */
     public function update(Request $request, int $id): JsonResponse
     {
-        $draft = PublishArticle::findOrFail($id);
+        $draft = $this->access->resolveArticleOrFail($request->user(), $id);
 
         $validated = $request->validate([
             'title'      => 'required|string|max:500',
@@ -126,6 +110,7 @@ class DraftController extends Controller
             'status'     => 'nullable|string',
         ]);
 
+        unset($validated['created_by']);
         $draft->update($validated);
 
         hexaLog('publish', 'draft_updated', "Article updated: {$draft->title}");
@@ -137,15 +122,9 @@ class DraftController extends Controller
         ]);
     }
 
-    /**
-     * Delete an article (local + WP if published).
-     *
-     * @param int $id
-     * @return JsonResponse
-     */
-    public function destroy(int $id): JsonResponse
+    public function destroy(Request $request, int $id): JsonResponse
     {
-        $article = PublishArticle::findOrFail($id);
+        $article = $this->access->resolveArticleOrFail($request->user(), $id);
         $deleteService = app(ArticleDeleteService::class);
         $result = $deleteService->delete($article);
 
@@ -156,12 +135,6 @@ class DraftController extends Controller
         ]);
     }
 
-    /**
-     * Bulk delete articles.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function bulkDestroy(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -169,11 +142,18 @@ class DraftController extends Controller
             'ids.*' => 'integer|exists:publish_articles,id',
         ]);
 
+        $articles = $this->access->articleQuery($request->user())
+            ->whereIn('id', $validated['ids'])
+            ->get()
+            ->keyBy('id');
+
+        abort_unless($articles->count() === count($validated['ids']), 403);
+
         $deleteService = app(ArticleDeleteService::class);
         $allLogs = [];
 
         foreach ($validated['ids'] as $id) {
-            $article = PublishArticle::find($id);
+            $article = $articles->get($id);
             if ($article) {
                 $result = $deleteService->delete($article);
                 $allLogs[$id] = $result['log'];

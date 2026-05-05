@@ -346,6 +346,7 @@ class PipelineStateService
                 'autoPhoto' => $autoPhoto,
                 'confirmed' => $autoPhoto !== null && !empty($suggestion['confirmed']),
                 'removed' => !empty($suggestion['removed']),
+                'loadAttempted' => !empty($suggestion['loadAttempted']) || $autoPhoto !== null,
             ];
         }, $suggestions, array_keys($suggestions));
     }

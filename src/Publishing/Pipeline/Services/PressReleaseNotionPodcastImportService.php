@@ -96,19 +96,14 @@ class PressReleaseNotionPodcastImportService
         $episodePage = $episodeParsed['page'] ?? [];
         $episodeProperties = $episodePage['properties'] ?? [];
         $episodeTitle = (string) ($this->firstValue($episodeProperties, ['Name', 'Title']) ?: 'Untitled Podcast Episode');
-        $guestProperty = $this->guestRelationProperty();
-        $guestIds = array_values(array_filter(array_map(
-            fn ($relation) => is_array($relation) ? (string) ($relation['id'] ?? '') : '',
-            (array) (($episodeRaw['page']['properties'][$guestProperty]['relation'] ?? []) ?: [])
-        )));
+        $episodeRawProperties = (array) ($episodeRaw['page']['properties'] ?? []);
+        $guestIds = $this->relatedPageIds($episodeRawProperties, $this->guestRelationProperty());
+        $hostIds = $this->relatedPageIds($episodeRawProperties, $this->hostRelationProperty());
+        $podcastIds = $this->relatedPageIds($episodeRawProperties, $this->podcastRelationProperty());
 
-        $guestPages = [];
-        foreach ($guestIds as $guestId) {
-            $guestParsed = $this->notion->getPage($guestId);
-            if ($guestParsed['success'] ?? false) {
-                $guestPages[] = $guestParsed['page'] ?? [];
-            }
-        }
+        $guestPages = $this->loadParsedPages($guestIds);
+        $hostPages = $this->loadParsedPages($hostIds);
+        $podcastPages = $this->loadParsedPages($podcastIds);
 
         $liveLinks = $this->normalizeUrlList($this->firstValue($episodeProperties, ['Live Link/s', 'Live Links', 'Live Link', 'Episode URL', 'Website Episode URL']));
         $youtubeUrl = $this->resolveYoutubeUrl($episodeProperties, $liveLinks);
@@ -116,13 +111,22 @@ class PressReleaseNotionPodcastImportService
         $transcriptIntro = $this->youtubeTranscriptIntro($youtubeUrl, 300);
         $podcastAssets = $this->normalizeUrlList($episodeProperties['Podcast Assets'] ?? []);
         $guestName = $this->guestNames($guestPages);
+        $hostName = $this->guestNames($hostPages);
+        $podcastName = $this->podcastName($podcastPages, $episodeProperties);
         $personUrl = $this->preferredPersonUrl($guestPages);
+        $hostUrl = $this->preferredPersonUrl($hostPages);
         $companyName = $this->guestCompanyName($guestPages);
         $companyUrl = $this->preferredCompanyUrl($guestPages);
-        $driveFolderUrl = $this->firstDriveFolderUrl($podcastAssets);
-        $drivePhotos = $this->fetchDrivePhotos($driveFolderUrl, $guestName, $episodeTitle, 'Google Drive Episode Asset', 'notion-episode-drive');
-        $guestDriveFolderUrl = $this->firstGuestDriveFolderUrl($guestPages);
-        $guestDrivePhotos = $this->fetchDrivePhotos($guestDriveFolderUrl, $guestName, $episodeTitle, 'Linked Person Drive Photo', 'notion-guest-drive');
+        $guestEmail = $this->preferredEmail($guestPages);
+        $hostEmail = $this->preferredEmail($hostPages);
+        $podcastUrl = $this->preferredPodcastUrl($podcastPages, $episodeProperties, $liveLinks);
+        $episodeDriveMeta = [
+            'url' => $this->firstDriveFolderUrl($podcastAssets),
+            'field' => 'Podcast Assets',
+        ];
+        $drivePhotos = $this->fetchDrivePhotos($episodeDriveMeta, $guestName, $episodeTitle, 'Google Drive folder media', 'notion-episode-drive');
+        $guestDriveMeta = $this->firstGuestDriveFolderMeta($guestPages);
+        $guestDrivePhotos = $this->fetchDrivePhotos($guestDriveMeta, $guestName, $episodeTitle, 'Google Drive folder media', 'notion-guest-drive');
         $episodeFeaturedImage = $this->preferredEpisodeFeaturedMedia($episodeProperties, $podcastAssets, $drivePhotos, $youtubeUrl);
         $episodeFeaturedImageUrl = (string) ($episodeFeaturedImage['url'] ?? '');
         $inlineGuestImage = $this->preferredInlineGuestImage($guestPages, $guestDrivePhotos, $drivePhotos, $episodeFeaturedImageUrl);
@@ -133,12 +137,17 @@ class PressReleaseNotionPodcastImportService
             'location' => 'Miami, Florida',
             'contact' => $guestName !== '' ? $guestName : trim((string) ($this->firstValue($episodeProperties, ['Host', 'Guest']) ?: '')),
             'contact_url' => $this->preferredContactUrl($guestPages, $liveLinks),
+            'contact_email' => $guestEmail,
         ];
         $linkTargets = [
             'person_name' => $guestName,
             'person_url' => $personUrl,
+            'host_name' => $hostName,
+            'host_url' => $hostUrl,
             'company_name' => $companyName,
             'company_url' => $companyUrl,
+            'podcast_name' => $podcastName,
+            'podcast_url' => $podcastUrl,
             'episode_url' => $liveLinks[0] ?? '',
             'youtube_url' => $youtubeUrl,
             'youtube_embed_url' => $youtubeEmbedUrl,
@@ -151,6 +160,12 @@ class PressReleaseNotionPodcastImportService
         if (empty($guestIds)) {
             $missing[] = 'Guest relation missing on the selected episode.';
         }
+        if (empty($hostIds)) {
+            $missing[] = 'Host relation missing on the selected episode.';
+        }
+        if (empty($podcastIds)) {
+            $missing[] = 'Podcast relation missing on the selected episode.';
+        }
         if (empty($liveLinks)) {
             $missing[] = 'Live Link/s missing on the selected episode.';
         }
@@ -160,7 +175,7 @@ class PressReleaseNotionPodcastImportService
         if (empty($podcastAssets)) {
             $missing[] = 'Podcast Assets missing on the selected episode.';
         }
-        if ($driveFolderUrl === '') {
+        if (($episodeDriveMeta['url'] ?? '') === '') {
             $missing[] = 'Podcast Assets does not include a Google Drive folder URL.';
         }
         if ($episodeDate === '') {
@@ -171,6 +186,12 @@ class PressReleaseNotionPodcastImportService
         }
         if ($personUrl === '') {
             $missing[] = 'Guest profile link missing. Add a public personal URL in the related People record.';
+        }
+        if ($hostName === '' || $hostUrl === '') {
+            $missing[] = 'Host person name or public URL missing in the linked Host record.';
+        }
+        if ($podcastName === '' || $podcastUrl === '') {
+            $missing[] = 'Podcast name or canonical public URL missing in the linked Podcast record.';
         }
         if ($companyName === '' || $companyUrl === '') {
             $missing[] = 'Guest company name or company URL missing in the related People record.';
@@ -189,6 +210,8 @@ class PressReleaseNotionPodcastImportService
             $episodeTitle,
             $episodeProperties,
             $guestPages,
+            $hostPages,
+            $podcastPages,
             $liveLinks,
             $podcastAssets,
             $youtubeUrl,
@@ -218,6 +241,8 @@ class PressReleaseNotionPodcastImportService
             'source_fields' => $this->buildSourceFields(
                 $episodeProperties,
                 $guestPages,
+                $hostPages,
+                $podcastPages,
                 $linkTargets,
                 $episodeFeaturedImage,
                 $inlineGuestImage,
@@ -229,11 +254,17 @@ class PressReleaseNotionPodcastImportService
                 'title' => $episodeTitle,
                 'schedule' => $details['date'],
                 'guest' => $guestName,
+                'host' => $hostName,
+                'podcast' => $podcastName,
+                'guest_record_ids' => $guestIds,
+                'host_record_ids' => $hostIds,
+                'podcast_record_ids' => $podcastIds,
                 'live_links' => $liveLinks,
                 'youtube_url' => $youtubeUrl,
                 'youtube_embed_url' => $youtubeEmbedUrl,
                 'podcast_assets' => $podcastAssets,
-                'drive_folder_url' => $driveFolderUrl,
+                'drive_folder_url' => $episodeDriveMeta['url'] ?? '',
+                'drive_folder_field' => $episodeDriveMeta['field'] ?? '',
                 'featured_image_url' => $episodeFeaturedImageUrl,
                 'featured_image_source_field' => (string) ($episodeFeaturedImage['field'] ?? ''),
                 'record_url' => $episodePage['url'] ?? null,
@@ -248,11 +279,35 @@ class PressReleaseNotionPodcastImportService
                 'person_url' => $personUrl,
                 'company_name' => $companyName,
                 'company_url' => $companyUrl,
+                'email' => $guestEmail,
                 'inline_photo_url' => $inlineGuestImageUrl,
                 'inline_photo_source_field' => (string) ($inlineGuestImage['field'] ?? ''),
-                'drive_folder_url' => $guestDriveFolderUrl,
+                'drive_folder_url' => $guestDriveMeta['url'] ?? '',
+                'drive_folder_field' => $guestDriveMeta['field'] ?? '',
                 'drive_photo_count' => count($guestDrivePhotos),
                 'job_title' => $this->guestJobTitle($guestPages),
+            ],
+            'selected_host' => [
+                'name' => $hostName,
+                'record_ids' => $hostIds,
+                'record_url' => $hostPages[0]['url'] ?? null,
+                'bio' => $this->guestBio($hostPages),
+                'person_url' => $hostUrl,
+                'email' => $hostEmail,
+                'job_title' => $this->guestJobTitle($hostPages),
+                'featured_image_url' => $this->preferredProfileImageUrl($hostPages),
+            ],
+            'selected_podcast' => [
+                'name' => $podcastName,
+                'record_ids' => $podcastIds,
+                'record_url' => $podcastPages[0]['url'] ?? null,
+                'podcast_url' => $podcastUrl,
+                'description' => $this->podcastDescription($podcastPages),
+                'website_content_url' => $this->preferredUrlFromPages($podcastPages, ['Website Content']),
+                'logo_url' => $this->preferredUrlFromPages($podcastPages, ['Logo URL']),
+                'youtube_channel_url' => $this->preferredUrlFromPages($podcastPages, ['YouTube Channel URL']),
+                'apple_podcast_url' => $this->preferredUrlFromPages($podcastPages, ['Apple Podcast URL']),
+                'spotify_podcast_url' => $this->preferredUrlFromPages($podcastPages, ['Spotify Podcast URL', 'Spotify URL']),
             ],
             'missing_fields' => $missing,
         ];
@@ -266,6 +321,38 @@ class PressReleaseNotionPodcastImportService
     private function guestRelationProperty(): string
     {
         return trim((string) config('notion.profile_relations.person.podcast_interviews.target_relation_property', 'Guest')) ?: 'Guest';
+    }
+
+    private function hostRelationProperty(): string
+    {
+        return 'Host';
+    }
+
+    private function podcastRelationProperty(): string
+    {
+        return 'Podcast';
+    }
+
+    private function relatedPageIds(array $rawProperties, string $propertyName): array
+    {
+        return array_values(array_filter(array_map(
+            fn ($relation) => is_array($relation) ? (string) ($relation['id'] ?? '') : '',
+            (array) (($rawProperties[$propertyName]['relation'] ?? []) ?: [])
+        )));
+    }
+
+    private function loadParsedPages(array $pageIds): array
+    {
+        $pages = [];
+
+        foreach ($pageIds as $pageId) {
+            $parsed = $this->notion->getPage((string) $pageId);
+            if ($parsed['success'] ?? false) {
+                $pages[] = $parsed['page'] ?? [];
+            }
+        }
+
+        return $pages;
     }
 
     private function buildEpisodeSubtitle(array $properties): string
@@ -314,6 +401,8 @@ class PressReleaseNotionPodcastImportService
         string $episodeTitle,
         array $episodeProperties,
         array $guestPages,
+        array $hostPages,
+        array $podcastPages,
         array $liveLinks,
         array $podcastAssets,
         ?string $youtubeUrl,
@@ -324,7 +413,7 @@ class PressReleaseNotionPodcastImportService
     ): string {
         $parts = [];
         $parts[] = "=== Podcast Press Release Mission ===
-This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead with the guest's real background, role, company, and why the appearance matters. Use the guest biography before the episode discussion. Keep the episode summary conservative and grounded in the source material below. Do not overclaim what was discussed. If the transcript, notes, or episode summary do not explicitly support a talking point, do not invent it.";
+Write a neutral third-person podcast press release for Hexa PR Wire about a Michael Peres Podcast episode. Lead with the guest's real background, role, company, and why the appearance is relevant. Use the guest biography as pre-episode context before the episode discussion. Keep the episode summary conservative, grounded in the source material below, and never imply that biography details were discussed on-air unless the notes or transcript explicitly support that.";
 
         if (!empty($guestPages)) {
             foreach ($guestPages as $index => $guestPage) {
@@ -336,6 +425,32 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
                     'Biography (Short)', 'Biography (Full)', 'Description', 'Mission Statement', 'Occupations', 'Awards', 'Products and Services',
                     'Personal LinkedIn URL', 'Personal Twitter URL', 'Personal Instagram URL', 'Personal Facebook URL', 'Wikipedia URL',
                     'Primary Email', 'Public Email', 'Telephone', 'Location', 'Location of Birth', 'Country of Citizenship', 'Featured Image URL', 'Personal Photos'
+                ]);
+            }
+        }
+
+        if (!empty($hostPages)) {
+            foreach ($hostPages as $index => $hostPage) {
+                $hostTitle = $this->displayTitle($hostPage);
+                $hostProperties = $hostPage['properties'] ?? [];
+                $parts[] = "=== Host Profile " . ($index + 1) . ": {$hostTitle} ===
+" . $this->renderPropertyBlock($hostProperties, [
+                    'Full Name', 'Name', 'Title / Job Title', 'Biography (Short)', 'Biography (Full)', 'Description', 'Mission Statement',
+                    'Official Website', 'Podcast Profile URL', 'Personal LinkedIn URL', 'Personal Twitter URL', 'Personal Instagram URL',
+                    'Personal Facebook URL', 'Wikipedia URL', 'Featured Image URL', 'Personal Photos'
+                ]);
+            }
+        }
+
+        if (!empty($podcastPages)) {
+            foreach ($podcastPages as $index => $podcastPage) {
+                $podcastTitle = $this->podcastName([$podcastPage], $episodeProperties);
+                $podcastProperties = $podcastPage['properties'] ?? [];
+                $parts[] = "=== Podcast Record " . ($index + 1) . ": {$podcastTitle} ===
+" . $this->renderPropertyBlock($podcastProperties, [
+                    'Business/Company Name', 'Name', 'Description', 'Podcast URL', 'Website Content', 'YouTube Channel URL',
+                    'Apple Podcast URL', 'Spotify Podcast URL', 'Spotify URL', 'Amazon Podcast URL', 'Google Podcast URL',
+                    'LinkedIn URL', 'Facebook URL', 'Logo URL', 'Tunein Podcast URL', 'Listen Notes URL'
                 ]);
             }
         }
@@ -383,9 +498,17 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
 "
             . 'Person URL: ' . ($linkTargets['person_url'] ?? '') . "
 "
+            . 'Host Name: ' . ($linkTargets['host_name'] ?? '') . "
+"
+            . 'Host URL: ' . ($linkTargets['host_url'] ?? '') . "
+"
             . 'Company Name: ' . ($linkTargets['company_name'] ?? '') . "
 "
             . 'Company URL: ' . ($linkTargets['company_url'] ?? '') . "
+"
+            . 'Podcast Name: ' . ($linkTargets['podcast_name'] ?? '') . "
+"
+            . 'Podcast URL: ' . ($linkTargets['podcast_url'] ?? '') . "
 "
             . 'Episode URL: ' . ($linkTargets['episode_url'] ?? '') . "
 "
@@ -403,21 +526,33 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
 "
             . "- Publication: Hexa PR Wire
 "
-            . "- Podcast: The Michael Peres Podcast
+            . "- Podcast: " . (($linkTargets['podcast_name'] ?? '') !== '' ? $linkTargets['podcast_name'] : 'The Michael Peres Podcast') . "
+"
+            . "- Host: " . (($linkTargets['host_name'] ?? '') !== '' ? $linkTargets['host_name'] : 'Michael Peres') . "
 "
             . "- Use this exact dateline verbatim at the start of the first paragraph: {$details['location']} (Hexa PR Wire - {$details['date']}) -
 "
             . "- Never substitute another city, state, or date. Ignore any other dateline, city, state, or publication date found in transcripts, notes, source material, or prior examples.
 "
+            . "- After the main dateline, do not add a second location/date pair from the episode page, transcript, or old examples.
+"
+            . "- The first sentence after the dateline must read like a neutral wire item: [Podcast Name] features [Guest Name], [role/company context], in an episode about verified themes.
+"
+            . "- Do not make Hexa PR Wire the acting subject of the sentence. Never write that Hexa PR Wire announces, presents, or is pleased to announce anything in the lead.
+"
             . "- Structure the opening so the guest's background, credentials, company, and relevance come before the episode recap.
 "
             . "- Sections after the intro body should include: About the guest, About Michael Peres, About The Michael Peres Podcast, Contact Information.
 "
+            . "- Use the linked Host person record to ground the About Michael Peres section.
+"
+            . "- Use the linked Podcast record to ground the About The Michael Peres Podcast section.
+"
             . "- If a YouTube URL or embed URL is provided, include one responsive YouTube embed iframe in the body.
 "
-            . "- The first mention of the guest/person must be linked to the Person URL when provided.
+            . "- Link the first top-level mention of the guest/person, company, podcast, and host when canonical URLs are provided.
 "
-            . "- The first mention of the guest's company must be linked to the Company URL when provided.
+            . "- In About sections, link the first mention inside that subsection to the same canonical target.
 "
             . "- Use the Episode Featured Image URL as the featured image. Do not substitute a generic stock or search image when a real episode thumbnail is provided.
 "
@@ -427,7 +562,13 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
 "
             . "- Use the transcript intro, episode notes, questions, and summary only as grounded support. If they do not explicitly show that a topic was discussed, do not claim it was discussed.
 "
-            . "- Keep the summary factual and restrained. Avoid sensational or inflated language.
+            . "- Keep the tone factual, restrained, and publication-neutral. Do not write 'Hexa PR Wire is pleased to announce' or similar self-promotional phrasing.
+"
+            . "- Avoid inflated language such as remarkable, dynamic, groundbreaking, inspirational journey, valuable insights, accomplished, celebrated, visionary, or other promotional adjectives unless the source explicitly justifies them.
+"
+            . "- Prefer plain verbs such as features, joins, discusses, shares, explains, and outlines.
+"
+            . "- Use biography details as background context, not as claims about what was discussed on-air unless the transcript, episode notes, or summary explicitly confirms it.
 "
             . "- If supporting external URLs are clearly present above, use them. Otherwise do not invent or guess links.";
 
@@ -552,10 +693,19 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
                 'alt_text' => (string) ($photo['alt_text'] ?? $this->simpleGuestPhotoAlt($guestTitle)),
                 'caption' => (string) ($photo['caption'] ?? $this->simpleGuestPhotoCaption($guestTitle)),
                 'source' => (string) ($photo['source'] ?? 'notion-guest-drive'),
-                'source_label' => (string) ($photo['source_label'] ?? 'Linked Person Drive Photo'),
+                'source_label' => (string) ($photo['source_label'] ?? 'Google Drive folder media'),
+                'source_meta_html' => (string) ($photo['source_meta_html'] ?? ''),
                 'role' => 'inline',
+                'preview_url' => (string) ($photo['preview_url'] ?? $photo['thumbnail_url'] ?? $url),
+                'source_url' => (string) ($photo['source_url'] ?? $photo['download_url'] ?? $photo['view_url'] ?? $url),
                 'download_url' => (string) ($photo['download_url'] ?? $url),
                 'view_url' => (string) ($photo['view_url'] ?? $url),
+                'drive_field' => (string) ($photo['drive_field'] ?? ''),
+                'drive_folder_url' => (string) ($photo['drive_folder_url'] ?? ''),
+                'filename' => (string) ($photo['filename'] ?? ''),
+                'mime_type' => (string) ($photo['mime_type'] ?? ''),
+                'width' => isset($photo['width']) ? (int) $photo['width'] : null,
+                'height' => isset($photo['height']) ? (int) $photo['height'] : null,
             ];
         }
 
@@ -572,10 +722,19 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
                 'alt_text' => (string) ($photo['alt_text'] ?? ($role === 'featured' ? $episodeTitle : $this->simpleGuestPhotoAlt($guestTitle))),
                 'caption' => (string) ($photo['caption'] ?? ($role === 'featured' ? $episodeTitle : $this->simpleGuestPhotoCaption($guestTitle))),
                 'source' => (string) ($photo['source'] ?? 'google-drive'),
-                'source_label' => (string) ($photo['source_label'] ?? 'Google Drive Podcast Asset'),
+                'source_label' => (string) ($photo['source_label'] ?? 'Google Drive folder media'),
+                'source_meta_html' => (string) ($photo['source_meta_html'] ?? ''),
                 'role' => $role,
+                'preview_url' => (string) ($photo['preview_url'] ?? $photo['thumbnail_url'] ?? $url),
+                'source_url' => (string) ($photo['source_url'] ?? $photo['download_url'] ?? $photo['view_url'] ?? $url),
                 'download_url' => (string) ($photo['download_url'] ?? $url),
                 'view_url' => (string) ($photo['view_url'] ?? $url),
+                'drive_field' => (string) ($photo['drive_field'] ?? ''),
+                'drive_folder_url' => (string) ($photo['drive_folder_url'] ?? ''),
+                'filename' => (string) ($photo['filename'] ?? ''),
+                'mime_type' => (string) ($photo['mime_type'] ?? ''),
+                'width' => isset($photo['width']) ? (int) $photo['width'] : null,
+                'height' => isset($photo['height']) ? (int) $photo['height'] : null,
             ];
         }
 
@@ -801,6 +960,21 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
         return $liveLinks[0] ?? '';
     }
 
+    private function preferredEmail(array $pages): string
+    {
+        foreach ($pages as $page) {
+            $properties = $page['properties'] ?? [];
+            foreach (['Primary Email', 'Public Email', 'Email'] as $field) {
+                $value = trim((string) ($this->firstValue($properties, [$field]) ?? ''));
+                if ($value !== '' && filter_var($value, FILTER_VALIDATE_EMAIL)) {
+                    return $value;
+                }
+            }
+        }
+
+        return '';
+    }
+
     private function guestBio(array $guestPages): string
     {
         foreach ($guestPages as $guestPage) {
@@ -991,6 +1165,141 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
         return '';
     }
 
+    private function podcastName(array $podcastPages, array $episodeProperties = []): string
+    {
+        foreach ($podcastPages as $podcastPage) {
+            $title = $this->sanitizePodcastName($this->displayTitle($podcastPage));
+            if ($title !== '') {
+                return $title;
+            }
+
+            $properties = $podcastPage['properties'] ?? [];
+            $value = $this->sanitizePodcastName((string) ($this->firstValue($properties, ['Business/Company Name', 'Name', 'Podcast Name']) ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return $this->sanitizePodcastName((string) ($this->firstValue($episodeProperties, ['Podcast Name']) ?? ''));
+    }
+
+    private function podcastDescription(array $podcastPages): string
+    {
+        foreach ($podcastPages as $podcastPage) {
+            $properties = $podcastPage['properties'] ?? [];
+            $value = $this->firstValue($properties, ['Description', 'Short Summary', 'Episode Summary']);
+            if ($this->hasValue($value)) {
+                return trim((string) $value);
+            }
+        }
+
+        return '';
+    }
+
+    private function preferredPodcastUrl(array $podcastPages, array $episodeProperties = [], array $liveLinks = []): string
+    {
+        $fields = ['Podcast URL', 'Website Content', 'Apple Podcast URL', 'Spotify Podcast URL', 'Spotify URL', 'YouTube Channel URL', 'LinkedIn URL', 'Facebook URL'];
+        $url = $this->preferredUrlFromPages($podcastPages, $fields);
+        if ($url !== '') {
+            return $this->normalizeCanonicalPublicUrl($url);
+        }
+
+        $episodeUrl = $this->normalizeUrlList($this->firstValue($episodeProperties, ['Podcast URL', 'Website Episode URL']));
+        if (!empty($episodeUrl)) {
+            return $this->normalizeCanonicalPublicUrl($episodeUrl[0]);
+        }
+
+        return !empty($liveLinks) ? $this->normalizeCanonicalPublicUrl($liveLinks[0]) : '';
+    }
+
+    private function sanitizePodcastName(string $value): string
+    {
+        $value = trim(html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        if ($value === '') {
+            return '';
+        }
+
+        if (preg_match('/^https?:\/\//i', $value)) {
+            $parts = parse_url($value);
+            $path = trim((string) ($parts['path'] ?? ''), '/');
+            $value = $path !== '' ? basename($path) : trim((string) ($parts['host'] ?? ''));
+        }
+
+        $value = preg_replace('/^profile\//i', '', $value) ?? $value;
+        $value = preg_replace('/[-_]+/', ' ', $value) ?? $value;
+        $value = preg_replace('/\s+/u', ' ', $value) ?? $value;
+
+        return trim($value, " 	
+ /.,");
+    }
+
+    private function normalizeCanonicalPublicUrl(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+
+        $parts = parse_url($url);
+        if (!is_array($parts)) {
+            return $url;
+        }
+
+        $scheme = trim((string) ($parts['scheme'] ?? 'https')) ?: 'https';
+        $host = trim((string) ($parts['host'] ?? ''));
+        if ($host === '') {
+            return $url;
+        }
+
+        $path = trim((string) ($parts['path'] ?? ''));
+        if ($path === '' || $path === '/') {
+            return $scheme . '://' . $host . '/';
+        }
+
+        if (preg_match('#/(watch|embed|shorts)/#i', $path) || preg_match('/(spotify|apple|podcasts?|linkedin|facebook|youtube)/i', $host)) {
+            return $url;
+        }
+
+        if (substr_count(trim($path, '/'), '/') >= 1 || preg_match('/-[a-z0-9]+(?:-[a-z0-9]+){2,}/i', $path)) {
+            return $scheme . '://' . $host . '/';
+        }
+
+        return $scheme . '://' . $host . rtrim($path, '/') . '/';
+    }
+
+    private function preferredUrlFromPages(array $pages, array $fields): string
+    {
+        foreach ($pages as $page) {
+            $properties = $page['properties'] ?? [];
+            foreach ($fields as $field) {
+                $urls = $this->normalizeUrlList($this->firstValue($properties, [$field]));
+                if (!empty($urls)) {
+                    return $urls[0];
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function preferredProfileImageUrl(array $pages): string
+    {
+        foreach ($pages as $page) {
+            foreach (($page['properties'] ?? []) as $key => $value) {
+                if (!preg_match('/photo|image|headshot|portrait|thumbnail/i', (string) $key)) {
+                    continue;
+                }
+                foreach ($this->normalizeUrlList($value) as $url) {
+                    if ($this->looksLikeRenderableImageUrl($url)) {
+                        return $url;
+                    }
+                }
+            }
+        }
+
+        return '';
+    }
+
     private function guestCompanyName(array $guestPages): string
     {
         $fields = ['Business/Company Name', 'Company Name', 'Company', 'Current Company', 'Organization', 'Employer'];
@@ -1028,7 +1337,7 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
         return '';
     }
 
-    private function firstGuestDriveFolderUrl(array $guestPages): string
+    private function firstGuestDriveFolderMeta(array $guestPages): array
     {
         foreach ($guestPages as $guestPage) {
             foreach (($guestPage['properties'] ?? []) as $key => $value) {
@@ -1038,13 +1347,16 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
 
                 foreach ($this->normalizeUrlList($value) as $url) {
                     if ($this->looksLikeGoogleDriveFolderUrl($url)) {
-                        return $url;
+                        return [
+                            'url' => $url,
+                            'field' => (string) $key,
+                        ];
                     }
                 }
             }
         }
 
-        return '';
+        return ['url' => '', 'field' => ''];
     }
 
     private function firstDriveFolderUrl(array $urls): string
@@ -1066,9 +1378,10 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
         return '';
     }
 
-    private function fetchDrivePhotos(string $driveFolderUrl, string $guestName, string $episodeTitle, string $sourceLabel = 'Google Drive Podcast Asset', string $source = 'google-drive'): array
+    private function fetchDrivePhotos(array $driveMeta, string $guestName, string $episodeTitle, string $sourceLabel = 'Google Drive folder media', string $source = 'google-drive'): array
     {
-        $driveFolderUrl = trim($driveFolderUrl);
+        $driveFolderUrl = trim((string) ($driveMeta['url'] ?? ''));
+        $driveField = trim((string) ($driveMeta['field'] ?? ''));
         if ($driveFolderUrl === '') {
             return [];
         }
@@ -1085,30 +1398,42 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
                 return [];
             }
 
+            $cacheDirectory = 'publish/podcast-drive/' . preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) ($reference['id'] ?? 'shared'));
             $photos = [];
             foreach (($result['photos'] ?? []) as $photo) {
                 if (!is_array($photo)) {
                     continue;
                 }
-                $url = trim((string) ($photo['web_content_link'] ?? $photo['thumbnail_link'] ?? $photo['web_view_link'] ?? ''));
-                if ($url === '') {
+                $sourceDownloadUrl = trim((string) ($photo['web_content_link'] ?? $photo['thumbnail_link'] ?? $photo['web_view_link'] ?? ''));
+                if ($sourceDownloadUrl === '') {
                     continue;
                 }
 
                 $name = trim((string) ($photo['name'] ?? 'Guest photo'));
+                $cached = $drive->cacheFileToPublicDisk($photo, $cacheDirectory);
+                $publicUrl = trim((string) ($cached['url'] ?? ''));
+                $displayUrl = $publicUrl !== '' ? $publicUrl : $sourceDownloadUrl;
+                $thumbnailUrl = $publicUrl !== '' ? $publicUrl : $this->drivePhotoPreviewUrl($photo, $sourceDownloadUrl);
+                $previewUrl = $publicUrl !== '' ? $publicUrl : trim((string) ($photo['preview_url'] ?? $thumbnailUrl ?: $sourceDownloadUrl));
+                $sourceUrl = (string) ($photo['web_view_link'] ?? $photo['webViewLink'] ?? $driveFolderUrl ?: $sourceDownloadUrl);
                 $photos[] = [
-                    'url' => $url,
-                    'thumbnail_url' => (string) ($photo['thumbnail_link'] ?? $url),
+                    'url' => $displayUrl,
+                    'thumbnail_url' => $thumbnailUrl,
+                    'preview_url' => $previewUrl,
+                    'source_url' => $sourceUrl,
                     'alt_text' => $this->simpleGuestPhotoAlt($guestName, $name),
                     'caption' => $this->simpleGuestPhotoCaption($guestName, $name),
                     'source' => $source,
                     'source_label' => $sourceLabel,
-                    'download_url' => (string) ($photo['web_content_link'] ?? $url),
-                    'view_url' => (string) ($photo['web_view_link'] ?? $url),
+                    'download_url' => $displayUrl,
+                    'view_url' => $displayUrl,
+                    'drive_field' => $driveField,
+                    'drive_folder_url' => $driveFolderUrl,
                     'filename' => $name,
                     'mime_type' => (string) ($photo['mime_type'] ?? ''),
                     'width' => $photo['width'] ?? null,
                     'height' => $photo['height'] ?? null,
+                    'cached_url' => $publicUrl,
                 ];
             }
 
@@ -1116,6 +1441,32 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
         } catch (\Throwable $e) {
             return [];
         }
+    }
+
+    private function drivePhotoPreviewUrl(array $photo, string $fallbackUrl = ''): string
+    {
+        $candidates = [
+            $photo['thumbnail_url'] ?? null,
+            $photo['preview_url'] ?? null,
+            $photo['thumbnails']['1280'] ?? null,
+            $photo['thumbnails'][1280] ?? null,
+            $photo['thumbnails']['640'] ?? null,
+            $photo['thumbnails'][640] ?? null,
+            $photo['quality_urls']['thumb_1280'] ?? null,
+            $photo['quality_urls']['thumb_640'] ?? null,
+            $photo['thumbnailLink'] ?? null,
+            $photo['thumbnail_link'] ?? null,
+            $fallbackUrl,
+        ];
+
+        foreach ($candidates as $candidate) {
+            $candidate = trim((string) $candidate);
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+
+        return '';
     }
 
     private function preferredEpisodeFeaturedMedia(array $episodeProperties, array $podcastAssets, array $drivePhotos, ?string $youtubeUrl): array
@@ -1147,8 +1498,8 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
             if ($url !== '') {
                 return [
                     'url' => $url,
-                    'field' => 'Podcast Assets',
-                    'source_label' => 'Google Drive episode asset',
+                    'field' => (string) ($photo['drive_field'] ?? 'Podcast Assets'),
+                    'source_label' => 'Google Drive folder media',
                 ];
             }
         }
@@ -1172,8 +1523,8 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
             if ($url !== '' && $url !== $featuredImageUrl) {
                 return [
                     'url' => $url,
-                    'field' => 'Personal Photos',
-                    'source_label' => 'Linked Person Drive Photo',
+                    'field' => (string) ($photo['drive_field'] ?? 'Personal Photos'),
+                    'source_label' => 'Google Drive folder media',
                 ];
             }
         }
@@ -1212,12 +1563,16 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
     private function buildSourceFields(
         array $episodeProperties,
         array $guestPages,
+        array $hostPages,
+        array $podcastPages,
         array $linkTargets,
         array $episodeFeaturedImage,
         array $inlineGuestImage,
         array $transcriptIntro = []
     ): array {
         $guestProperties = $guestPages[0]['properties'] ?? [];
+        $hostProperties = $hostPages[0]['properties'] ?? [];
+        $podcastProperties = $podcastPages[0]['properties'] ?? [];
         $episodeRows = $this->extractSourceFieldEntries($episodeProperties, [
             'Name',
             'Schedule',
@@ -1260,9 +1615,33 @@ This is a Hexa PR Wire press release for a Michael Peres Podcast episode. Lead w
                 'Personal LinkedIn URL',
                 'Company Website URL',
             ], 'Person Database'),
+            'host' => $this->extractSourceFieldEntries($hostProperties, [
+                'Full Name',
+                'Title / Job Title',
+                'Biography (Short)',
+                'Biography (Full)',
+                'Official Website',
+                'Podcast Profile URL',
+                'Personal LinkedIn URL',
+                'Featured Image URL',
+            ], 'Host Person Database'),
+            'podcast' => $this->extractSourceFieldEntries($podcastProperties, [
+                'Business/Company Name',
+                'Description',
+                'Podcast URL',
+                'Website Content',
+                'YouTube Channel URL',
+                'Apple Podcast URL',
+                'Spotify Podcast URL',
+                'LinkedIn URL',
+                'Facebook URL',
+                'Logo URL',
+            ], 'Podcast Database'),
             'enforcement' => array_values(array_filter([
                 $this->sourceFieldEntry('Guest link target', $linkTargets['person_url'] ?? '', 'Person URL', 'Canonical Targets'),
+                $this->sourceFieldEntry('Host link target', $linkTargets['host_url'] ?? '', 'Person URL', 'Canonical Targets'),
                 $this->sourceFieldEntry('Company link target', $linkTargets['company_url'] ?? '', 'Company URL', 'Canonical Targets'),
+                $this->sourceFieldEntry('Podcast link target', $linkTargets['podcast_url'] ?? '', 'Podcast URL', 'Canonical Targets'),
                 $this->sourceFieldEntry('YouTube URL', $linkTargets['youtube_url'] ?? '', 'YouTube URL', 'Canonical Targets'),
                 $this->sourceFieldEntry(
                     'Episode featured image URL',

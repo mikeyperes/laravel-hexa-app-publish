@@ -97,16 +97,22 @@ class PressReleaseWorkflowController extends Controller
         $pressRelease['google_drive_url'] = '';
         $pressRelease['notion_episode'] = $result['selected_episode'] ?? [];
         $pressRelease['notion_guest'] = $result['selected_guest'] ?? [];
+        $pressRelease['notion_host'] = $result['selected_host'] ?? [];
+        $pressRelease['notion_podcast'] = $result['selected_podcast'] ?? [];
         $pressRelease['notion_missing_fields'] = $result['missing_fields'] ?? [];
         $pressRelease['notion_source_fields'] = $result['source_fields'] ?? [
             'episode' => [],
             'guest' => [],
+            'host' => [],
+            'podcast' => [],
             'enforcement' => [],
         ];
         $pressRelease = $this->workflow->appendLog($pressRelease, 'success', 'Imported podcast episode from Notion.', [
             'episode_id' => $pressRelease['notion_episode']['id'] ?? null,
             'episode_title' => $pressRelease['notion_episode']['title'] ?? null,
             'guest' => $pressRelease['notion_guest']['name'] ?? null,
+            'host' => $pressRelease['notion_host']['name'] ?? null,
+            'podcast' => $pressRelease['notion_podcast']['name'] ?? null,
         ]);
         $this->stateService->updatePressRelease($draft, $pressRelease);
 

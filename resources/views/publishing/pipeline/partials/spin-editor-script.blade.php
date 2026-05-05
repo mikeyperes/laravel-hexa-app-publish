@@ -63,8 +63,8 @@
                         return;
                     }
 
-                    const editor = tinymce.get('spin-preview-editor');
-                    if (!editor) {
+                    const textarea = document.getElementById('spin-preview-editor');
+                    if (!textarea) {
                         if (attempts > 100) {
                             clearInterval(wait);
                             self._spinEditorConfiguring = false;

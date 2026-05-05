@@ -17,12 +17,7 @@
                 <div>
                     <p x-show="{{ $sourceExpression }}" class="text-xs text-gray-400" x-text="{{ $sourceExpression }}"></p>
                     @if ($linkUrls)
-                        <template x-if="String({{ $valueExpression }} || '').startsWith('http')">
-                            <a :href="{{ $valueExpression }}" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="{{ $valueExpression }}"></a>
-                        </template>
-                        <template x-if="!String({{ $valueExpression }} || '').startsWith('http')">
-                            <p class="mt-1 text-sm text-gray-800 whitespace-pre-wrap break-words" x-text="{{ $valueExpression }}"></p>
-                        </template>
+                        <p class="mt-1 text-sm text-gray-800 whitespace-pre-wrap break-words" x-html="linkedValueHtml({{ $valueExpression }})"></p>
                     @else
                         <p class="mt-1 text-sm text-gray-800 whitespace-pre-wrap break-words" x-text="{{ $valueExpression }}"></p>
                     @endif

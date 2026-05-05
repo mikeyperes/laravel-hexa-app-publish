@@ -10,6 +10,7 @@ function pressReleaseWorkflowMixin(config) {
         pressReleaseDefaultState: clone(config.pressReleaseDefaultState || {}),
         pressRelease: clone(config.pressReleaseDefaultState || {}),
         pressReleasePhotoAssets: [],
+        pressReleaseFieldErrors: {},
         pressReleaseUploadingDocuments: false,
         pressReleaseDetectingContent: false,
         pressReleaseDetectingFields: false,
@@ -45,14 +46,18 @@ function pressReleaseWorkflowMixin(config) {
             normalized.notion_episode_query = normalized.notion_episode_query || '';
             normalized.notion_episode = normalized.notion_episode && typeof normalized.notion_episode === 'object' ? normalized.notion_episode : {};
             normalized.notion_guest = normalized.notion_guest && typeof normalized.notion_guest === 'object' ? normalized.notion_guest : {};
+            normalized.notion_host = normalized.notion_host && typeof normalized.notion_host === 'object' ? normalized.notion_host : {};
+            normalized.notion_podcast = normalized.notion_podcast && typeof normalized.notion_podcast === 'object' ? normalized.notion_podcast : {};
             normalized.notion_missing_fields = Array.isArray(normalized.notion_missing_fields) ? normalized.notion_missing_fields : [];
             normalized.notion_source_fields = normalized.notion_source_fields && typeof normalized.notion_source_fields === 'object'
                 ? {
                     episode: Array.isArray(normalized.notion_source_fields.episode) ? normalized.notion_source_fields.episode : [],
                     guest: Array.isArray(normalized.notion_source_fields.guest) ? normalized.notion_source_fields.guest : [],
+                    host: Array.isArray(normalized.notion_source_fields.host) ? normalized.notion_source_fields.host : [],
+                    podcast: Array.isArray(normalized.notion_source_fields.podcast) ? normalized.notion_source_fields.podcast : [],
                     enforcement: Array.isArray(normalized.notion_source_fields.enforcement) ? normalized.notion_source_fields.enforcement : [],
                 }
-                : { episode: [], guest: [], enforcement: [] };
+                : { episode: [], guest: [], host: [], podcast: [], enforcement: [] };
             normalized.detected_content = normalized.detected_content || '';
             normalized.detected_content_html = normalized.detected_content_html || '';
             normalized.detected_word_count = normalized.detected_word_count || 0;
@@ -72,7 +77,52 @@ function pressReleaseWorkflowMixin(config) {
             };
             normalized.polish_only = !!normalized.polish_only;
 
+            const inferredDriveField = String((normalized.detected_photos || []).find((photo) => String(photo?.drive_field || '').trim())?.drive_field || '').trim();
+            const inferredDriveFolderUrl = String((normalized.detected_photos || []).find((photo) => String(photo?.drive_folder_url || '').trim())?.drive_folder_url || normalized.google_drive_url || '').trim();
+            if (normalized.submit_method === 'notion-podcast') {
+                normalized.notion_guest.drive_folder_field = normalized.notion_guest.drive_folder_field || inferredDriveField;
+                normalized.notion_guest.drive_folder_url = normalized.notion_guest.drive_folder_url || inferredDriveFolderUrl;
+                normalized.google_drive_url = normalized.google_drive_url || normalized.notion_guest.drive_folder_url || normalized.notion_episode.drive_folder_url || inferredDriveFolderUrl;
+            }
+
             return normalized;
+        },
+
+        ensurePressReleaseFieldErrors() {
+            if (!this.pressReleaseFieldErrors || typeof this.pressReleaseFieldErrors !== 'object') {
+                this.pressReleaseFieldErrors = {};
+            }
+            return this.pressReleaseFieldErrors;
+        },
+
+        clearPressReleaseFieldError(field) {
+            const state = this.ensurePressReleaseFieldErrors();
+            if (state[field]) {
+                delete state[field];
+            }
+        },
+
+        clearAllPressReleaseFieldErrors() {
+            this.pressReleaseFieldErrors = {};
+        },
+
+        setPressReleaseFieldError(field, active = true) {
+            const state = this.ensurePressReleaseFieldErrors();
+            if (active) {
+                state[field] = true;
+                return;
+            }
+            delete state[field];
+        },
+
+        pressReleaseFieldHasError(field) {
+            return !!this.pressReleaseFieldErrors?.[field];
+        },
+
+        pressReleaseInputBorderClass(field) {
+            return this.pressReleaseFieldHasError(field)
+                ? 'border border-red-400 ring-2 ring-red-100 focus:ring-red-200 focus:border-red-400'
+                : 'border border-gray-300 focus:ring-2 focus:ring-blue-400 focus:border-blue-400';
         },
 
         currentWorkflowKey() {
@@ -124,6 +174,15 @@ function pressReleaseWorkflowMixin(config) {
             });
         },
 
+        pressReleaseEscapeHtml(value = '') {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        },
+
         rebuildPressReleasePhotoAssets() {
             const uploaded = (this.pressRelease.photo_files || []).map((file) => ({
                 key: 'upload-' + file.id,
@@ -134,27 +193,55 @@ function pressReleaseWorkflowMixin(config) {
                 alt_text: '',
                 caption: '',
                 source_label: 'Uploaded Photo',
+                source_meta_html: '',
                 source: 'uploaded',
                 role: '',
             }));
             const detected = (this.pressRelease.detected_photos || []).map((photo, index) => {
                 const stablePreview = this.pressReleaseStableDrivePreviewUrl(photo);
+                const driveLikeSource = /drive/i.test(String(photo.source || '')) || /drive/i.test(String(photo.source_label || '')) || !!String(photo.drive_folder_url || '').trim();
+                const driveField = String(
+                    photo.drive_field
+                    || this.pressRelease?.notion_guest?.drive_folder_field
+                    || this.pressRelease?.notion_episode?.drive_folder_field
+                    || ''
+                ).trim();
+                const driveFolderUrl = String(
+                    photo.drive_folder_url
+                    || this.pressRelease?.notion_guest?.drive_folder_url
+                    || this.pressRelease?.notion_episode?.drive_folder_url
+                    || this.pressRelease?.google_drive_url
+                    || ''
+                ).trim();
+                const sourceLabel = driveLikeSource
+                    ? (driveField ? `Google Drive folder • ${driveField}` : 'Google Drive folder media')
+                    : (photo.source_label || photo.source || 'Detected from public URL');
+                const previewUrl = this.toAbsoluteMediaUrl(photo.preview_url || photo.thumbnail_url || '') || stablePreview || this.toAbsoluteMediaUrl(photo.url);
                 return {
                     key: String(photo.key || '').trim() || ('detected-' + index),
                     label: photo.label || photo.alt_text || photo.caption || photo.url || 'Detected photo',
                     filename: photo.filename || ('detected-photo-' + (index + 1)),
                     url: this.toAbsoluteMediaUrl(photo.url),
-                    thumbnail_url: stablePreview || this.toAbsoluteMediaUrl(photo.thumbnail_url || photo.preview_url || photo.url),
-                    preview_url: stablePreview || this.toAbsoluteMediaUrl(photo.preview_url || photo.thumbnail_url || photo.url),
+                    thumbnail_url: previewUrl,
+                    preview_url: previewUrl,
+                    thumbnailLink: photo.thumbnailLink || photo.thumbnail_link || previewUrl,
+                    thumbnails: photo.thumbnails || {},
+                    quality_urls: photo.quality_urls || {},
+                    resourceKey: photo.resourceKey || photo.resource_key || '',
                     source_url: this.toAbsoluteMediaUrl(photo.source_url || photo.download_url || photo.view_url || photo.url),
                     alt_text: photo.alt_text || '',
                     caption: photo.caption || '',
-                    source_label: photo.source_label || photo.source || 'Detected from public URL',
+                    source_label: sourceLabel,
+                    source_meta_html: photo.source_meta_html || (driveLikeSource ? this.pressReleaseDriveSourceMetaHtml({ drive_folder_url: driveFolderUrl, drive_field: driveField }) : ''),
                     source: photo.source || 'detected',
                     origin: photo.origin || photo.source || '',
                     role: photo.role || '',
                     download_url: this.toAbsoluteMediaUrl(photo.download_url || photo.source_url || photo.url),
                     view_url: this.toAbsoluteMediaUrl(photo.view_url || photo.url),
+                    drive_folder_url: driveFolderUrl,
+                    drive_field: driveField,
+                    width: Number(photo.width || 0),
+                    height: Number(photo.height || 0),
                 };
             });
 
@@ -175,6 +262,20 @@ function pressReleaseWorkflowMixin(config) {
             }
             this.syncPressReleaseSelectedPhotoKeys();
             return this.pressReleasePhotoAssets;
+        },
+
+        pressReleaseDriveSourceMetaHtml(asset = {}) {
+            const driveUrl = String(asset?.drive_folder_url || this.pressRelease?.notion_guest?.drive_folder_url || this.pressRelease?.notion_episode?.drive_folder_url || this.pressRelease?.google_drive_url || '').trim();
+            const driveField = String(asset?.drive_field || this.pressRelease?.notion_guest?.drive_folder_field || this.pressRelease?.notion_episode?.drive_folder_field || '').trim();
+            const pieces = [];
+            if (driveField) {
+                pieces.push('<span class="inline-flex items-center gap-1"><span class="text-gray-500">Notion field:</span><span class="font-medium text-gray-700">' + this.pressReleaseEscapeHtml(driveField) + '</span></span>');
+            }
+            if (driveUrl) {
+                const safeUrl = this.pressReleaseEscapeHtml(driveUrl);
+                pieces.push('<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 underline decoration-blue-200 underline-offset-2">Open Drive folder<svg class="w-3 h-3 flex-shrink-0 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>');
+            }
+            return pieces.join('<span class="text-gray-300">•</span>');
         },
 
         pressReleaseAssetIsLegacyGuestMedia(asset = {}) {
@@ -394,25 +495,35 @@ function pressReleaseWorkflowMixin(config) {
         },
 
         continuePressReleaseStep3() {
+            this.clearAllPressReleaseFieldErrors();
             const method = this.pressRelease.submit_method;
+            const missing = [];
             if (method === 'content-dump' && !this.pressRelease.content_dump.trim()) {
-                this.showNotification('error', 'Paste the press release content before continuing.');
-                return;
+                this.setPressReleaseFieldError('content_dump');
+                missing.push('content_dump');
             }
             if (method === 'upload-documents' && this.pressRelease.document_files.length === 0) {
-                this.showNotification('error', 'Upload at least one press release document before continuing.');
-                return;
+                this.setPressReleaseFieldError('document_files');
+                missing.push('document_files');
             }
             if (method === 'public-url' && !this.pressRelease.public_url.trim()) {
-                this.showNotification('error', 'Enter a public press release URL before continuing.');
-                return;
+                this.setPressReleaseFieldError('public_url');
+                missing.push('public_url');
             }
             if (method === 'notion-podcast' && !this.pressRelease.notion_episode?.id) {
-                this.showNotification('error', 'Select a Notion podcast episode before continuing.');
-                return;
+                this.setPressReleaseFieldError('notion_episode');
+                missing.push('notion_episode');
+            }
+            if (method !== 'notion-podcast' && this.pressRelease.photo_method === 'google-drive' && !String(this.pressRelease.google_drive_url || '').trim()) {
+                this.setPressReleaseFieldError('google_drive_url');
+                missing.push('google_drive_url');
             }
             if (method === 'public-url' && !this.pressRelease.photo_public_url) {
                 this.pressRelease.photo_public_url = this.pressRelease.public_url;
+            }
+            if (missing.length > 0) {
+                this.showNotification('error', 'Complete the required press release inputs before continuing.');
+                return;
             }
 
             this.completeStep(3);
@@ -421,6 +532,30 @@ function pressReleaseWorkflowMixin(config) {
         },
 
         continuePressReleaseStep4() {
+            this.clearAllPressReleaseFieldErrors();
+            const details = this.pressRelease?.details || {};
+            const missing = [];
+            if (!String(details.date || '').trim()) {
+                this.setPressReleaseFieldError('date');
+                missing.push('date');
+            }
+            if (!String(details.location || '').trim()) {
+                this.setPressReleaseFieldError('location');
+                missing.push('location');
+            }
+            if (!String(details.contact || '').trim()) {
+                this.setPressReleaseFieldError('contact');
+                missing.push('contact');
+            }
+            if (!String(details.contact_url || '').trim()) {
+                this.setPressReleaseFieldError('contact_url');
+                missing.push('contact_url');
+            }
+            if (missing.length > 0) {
+                this.showNotification('error', 'Complete the required release details before continuing.');
+                return;
+            }
+            this.completeStep(3);
             this.completeStep(4);
             this.openStep(5);
             this.invalidatePromptPreview('press_release_step4_continue', { fetch: true });
@@ -495,7 +630,9 @@ function pressReleaseWorkflowMixin(config) {
                 const label = String(photo?.source_label || '').toLowerCase();
                 return source.includes('notion-guest-drive') || label.includes('drive photo');
             });
-            return (hasLegacyLinkedIn || hasLegacyGuestMedia) && !hasDriveGuestMedia;
+            const missingDriveField = !!String(this.pressRelease?.notion_guest?.drive_folder_url || '').trim()
+                && !String(this.pressRelease?.notion_guest?.drive_folder_field || '').trim();
+            return missingDriveField || ((hasLegacyLinkedIn || hasLegacyGuestMedia) && !hasDriveGuestMedia);
         },
 
         async maybeAutoRefreshLegacyNotionPodcastImport() {
@@ -547,6 +684,7 @@ function pressReleaseWorkflowMixin(config) {
                 this.pressReleaseEpisodeDropdownOpen = false;
                 this.pressReleaseEpisodeNoResults = false;
                 this.pressReleaseEpisodeResults = [];
+                this.clearPressReleaseFieldError('notion_episode');
                 if (!this.template_overrides) this.template_overrides = {};
                 this.template_overrides.article_type = 'press-release';
                 this.pressRelease = this.normalizePressReleaseState(data.press_release || {});
@@ -612,6 +750,7 @@ function pressReleaseWorkflowMixin(config) {
                 }
 
                 this.pressRelease.document_files = data.documents || [];
+                this.clearPressReleaseFieldError('document_files');
                 this.rebuildPressReleasePhotoAssets();
                 this.savePipelineState();
                 this.showNotification('success', data.message || 'Documents uploaded.');
@@ -748,21 +887,38 @@ function pressReleaseWorkflowMixin(config) {
                 const response = await this._rawPipelineFetch('{{ route("notion.profile.fetch-photos") }}', {
                     method: 'POST',
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
-                    body: JSON.stringify({ drive_url: this.pressRelease.google_drive_url }),
+                    body: JSON.stringify({
+                        drive_url: this.pressRelease.google_drive_url,
+                        drive_field: this.pressRelease?.notion_guest?.drive_folder_field || this.pressRelease?.notion_episode?.drive_folder_field || '',
+                    }),
                 });
                 const data = await response.json();
                 if (data.success && data.photos) {
                     log('success', 'Found ' + data.photos.length + ' photo(s) from Drive.');
+                    this.clearPressReleaseFieldError('google_drive_url');
                     const drivePhotos = data.photos.map(p => ({
-                        url: p.thumbnailLink || p.webContentLink || p.webViewLink || '',
-                        thumbnail_url: p.thumbnailLink || p.webContentLink || '',
+                        url: p.webContentLink || p.webViewLink || p.thumbnailLink || '',
+                        thumbnail_url: p.preview_url || p.thumbnail_url || p.thumbnails?.['1280'] || p.thumbnails?.['640'] || p.quality_urls?.thumb_1280 || p.quality_urls?.thumb_640 || this.pressReleaseStableDrivePreviewUrl({ thumbnailLink: p.thumbnailLink, download_url: p.webContentLink, view_url: p.webViewLink, url: p.url, resourceKey: p.resourceKey || p.resource_key }),
+                        preview_url: p.preview_url || p.thumbnail_url || p.thumbnails?.['1280'] || p.thumbnails?.['640'] || p.quality_urls?.thumb_1280 || p.quality_urls?.thumb_640 || this.pressReleaseStableDrivePreviewUrl({ thumbnailLink: p.thumbnailLink, download_url: p.webContentLink, view_url: p.webViewLink, url: p.url, resourceKey: p.resourceKey || p.resource_key }),
+                        thumbnailLink: p.thumbnailLink || p.thumbnail_link || '',
+                        thumbnails: p.thumbnails || {},
+                        quality_urls: p.quality_urls || {},
+                        resourceKey: p.resourceKey || p.resource_key || '',
                         alt_text: p.name || '',
                         caption: '',
                         source: 'google-drive',
-                        source_label: 'Google Drive Podcast Asset',
+                        source_label: 'Google Drive folder media',
+                        source_meta_html: this.pressReleaseDriveSourceMetaHtml({
+                            drive_folder_url: this.pressRelease.google_drive_url || this.pressRelease?.notion_guest?.drive_folder_url || this.pressRelease?.notion_episode?.drive_folder_url || '',
+                            drive_field: p?.drive_field || this.pressRelease?.notion_guest?.drive_folder_field || this.pressRelease?.notion_episode?.drive_folder_field || '',
+                        }),
                         role: 'inline',
-                        download_url: p.webContentLink || '',
-                        view_url: p.webViewLink || '',
+                        download_url: p.webContentLink || p.url || '',
+                        view_url: p.webViewLink || p.webContentLink || p.url || '',
+                        drive_folder_url: this.pressRelease.google_drive_url || this.pressRelease?.notion_guest?.drive_folder_url || this.pressRelease?.notion_episode?.drive_folder_url || '',
+                        drive_field: p?.drive_field || this.pressRelease?.notion_guest?.drive_folder_field || this.pressRelease?.notion_episode?.drive_folder_field || '',
+                        width: Number(p.width || 0),
+                        height: Number(p.height || 0),
                     }));
                     drivePhotos.forEach((p, i) => { log('step', (i + 1) + '. ' + p.alt_text); });
                     this.pressRelease.detected_photos = this.mergePressReleaseDetectedPhotos(drivePhotos);
@@ -972,6 +1128,21 @@ function pressReleaseWorkflowMixin(config) {
                 .map((profile) => this.normalizePrProfileForState(profile))
                 .filter((profile) => !!profile.id);
             state.prSubjectData = this.sanitizePrSubjectDataForPersistence(state.prSubjectData || {});
+            if (!state.template_overrides || typeof state.template_overrides !== 'object') {
+                state.template_overrides = {};
+            }
+            const resolvedArticleType = String(
+                this.resolvePrArticleTypeFromState?.(
+                    this.currentArticleType || state.template_overrides.article_type || state.pressRelease?.article_type || '',
+                    state
+                ) || ''
+            ).trim();
+            if (resolvedArticleType) {
+                state.template_overrides.article_type = resolvedArticleType;
+                if (state.pressRelease && typeof state.pressRelease === 'object') {
+                    state.pressRelease.article_type = resolvedArticleType;
+                }
+            }
 
             const titleLooksPlaceholder = !state.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test(String(state.articleTitle || '').trim());
             if (titleLooksPlaceholder && state.spunContent) {
@@ -1127,17 +1298,28 @@ function pressReleaseWorkflowMixin(config) {
 
         pressReleaseStableDrivePreviewUrl(asset = {}) {
             const candidates = [
+                asset.thumbnailLink,
                 asset.source_url,
                 asset.download_url,
                 asset.view_url,
                 asset.thumbnail_url,
                 asset.preview_url,
                 asset.url,
+                asset.resourceKey,
+                asset.resource_key,
             ];
             for (const candidate of candidates) {
                 const fileId = this.pressReleaseExtractGoogleDriveFileId(candidate || '');
                 if (fileId) {
-                    return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(fileId) + '&sz=w1600';
+                    let resourceKey = '';
+                    try {
+                        const parsed = new URL(String(candidate || ''), window.location.origin);
+                        resourceKey = parsed.searchParams.get('resourcekey') || parsed.searchParams.get('resourceKey') || '';
+                    } catch (error) {
+                        const match = String(candidate || '').match(/[?&]resourcekey=([^&]+)/i) || String(candidate || '').match(/[?&]resourceKey=([^&]+)/i);
+                        resourceKey = match?.[1] || '';
+                    }
+                    return 'https://lh3.googleusercontent.com/d/' + encodeURIComponent(fileId) + '=w1600' + (resourceKey ? '?resourcekey=' + encodeURIComponent(resourceKey) : '');
                 }
             }
             return '';
@@ -1149,7 +1331,7 @@ function pressReleaseWorkflowMixin(config) {
                 return stableDrivePreview;
             }
 
-            const preview = this.toAbsoluteMediaUrl(asset.thumbnail_url || asset.preview_url || asset.view_url || asset.download_url || asset.url || '');
+            const preview = this.normalizeHostedMediaUrl(this.toAbsoluteMediaUrl(asset.thumbnail_url || asset.preview_url || asset.view_url || asset.download_url || asset.url || ''));
             if (/googleusercontent\.com/i.test(preview)) {
                 return preview
                     .replace(/=s\d+(?:-[a-z0-9_]+)?$/i, '=w1600')
@@ -1247,22 +1429,22 @@ function pressReleaseWorkflowMixin(config) {
             nextHtml = nextHtml.replace(/<div\b[^>]*>\s*(<iframe\b[^>]*youtube\.com\/embed\/[^>]*><\/iframe>)\s*<\/div>/gi, '$1');
             nextHtml = nextHtml.replace(/(<iframe\b[^>]*?)\s+style="[^"]*"/gi, '$1');
 
+            const iframeMarkup = (url) => '<div class="podcast-youtube-embed" style="position:relative;width:100%;max-width:1120px;margin:1.75rem auto;padding-top:56.25%;border-radius:18px;overflow:hidden;background:#000;box-shadow:0 18px 40px rgba(15,23,42,0.12);"><iframe src="' + url + '" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0;"></iframe></div>';
+
             let foundEmbed = false;
             nextHtml = nextHtml.replace(/<iframe\b([^>]*)src="([^"]*youtube[^"]*)"([^>]*)><\/iframe>/gi, (match, before, src, after) => {
                 foundEmbed = true;
                 const decoded = String(src || '').replace(/&amp;/gi, '&');
                 const lower = decoded.toLowerCase();
-                if (decoded === embedUrl && !lower.includes('your_video_id')) {
-                    return match;
-                }
-                return '<iframe' + before + 'src="' + embedUrl + '"' + after + '></iframe>';
+                const finalUrl = decoded && !lower.includes('your_video_id') ? decoded : embedUrl;
+                return iframeMarkup(finalUrl === embedUrl ? embedUrl : finalUrl);
             });
 
             if (foundEmbed) {
                 return nextHtml;
             }
 
-            const iframe = '<div class="podcast-youtube-embed"><iframe width="560" height="315" src="' + embedUrl + '" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>';
+            const iframe = iframeMarkup(embedUrl);
 
             if (/<h[2-6]\b[^>]*>\s*About\b/i.test(nextHtml)) {
                 return nextHtml.replace(/<h[2-6]\b[^>]*>\s*About\b/i, iframe + '\n$&');

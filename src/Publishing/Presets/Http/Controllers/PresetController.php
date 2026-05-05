@@ -5,6 +5,7 @@ namespace hexa_app_publish\Publishing\Presets\Http\Controllers;
 use hexa_core\Http\Controllers\Controller;
 use hexa_core\Forms\Runtime\FormRuntimeService;
 use hexa_core\Forms\Services\FormRegistryService;
+use hexa_app_publish\Publishing\Access\Services\PublishAccessService;
 use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Publishing\Presets\Forms\WordPressPresetForm;
 use Illuminate\Http\JsonResponse;
@@ -12,36 +13,32 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
-/**
- * PublishPresetController — CRUD for WordPress publishing presets.
- * Uses the core form definition system for create, edit, store, update.
- */
 class PresetController extends Controller
 {
     private const JSON_CACHE_TTL_SECONDS = 600;
     private const JSON_CACHE_VERSION_KEY = 'publish:presets:json:version';
 
     public function __construct(
+        private PublishAccessService $access,
         private FormRegistryService $formRegistry,
         private FormRuntimeService $formRuntime
     ) {}
 
-    /**
-     * List presets, optionally filtered by user.
-     *
-     * @param Request $request
-     * @return View|JsonResponse
-     */
     public function index(Request $request): View|JsonResponse
     {
+        $user = $request->user();
+        $jsonUserId = $this->access->isAdmin($user)
+            ? ($request->integer('user_id') ?: null)
+            : ($user?->id ?: null);
+
         if ($request->wantsJson() || $request->filled('format')) {
-            return response()->json($this->jsonPresets($request->integer('user_id') ?: null));
+            return response()->json($this->jsonPresets($jsonUserId));
         }
 
-        $query = PublishPreset::with('user');
+        $query = $this->access->presetQuery($user)->with('user');
 
         if ($request->filled('user_id')) {
-            $query->where('user_id', $request->input('user_id'));
+            $query->where('user_id', (int) $request->input('user_id'));
         }
 
         $presets = $query->orderByDesc('updated_at')->get();
@@ -51,37 +48,30 @@ class PresetController extends Controller
         ]);
     }
 
-    /**
-     * Show create form — uses form-definition system.
-     *
-     * @param Request $request
-     * @return View
-     */
     public function create(Request $request): View
     {
         $form = $this->resolveForm('create');
+        $userId = $this->access->isAdmin($request->user())
+            ? $request->input('user_id')
+            : auth()->id();
 
         return view('app-publish::publishing.presets.create', [
             'form' => $form,
             'formValues' => WordPressPresetForm::values(null, [
-                'user_id' => $request->input('user_id'),
+                'user_id' => $userId,
             ]),
         ]);
     }
 
-    /**
-     * Store a new preset — uses form registry + validation + dehydration.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function store(Request $request): JsonResponse
     {
         $form = $this->resolveForm('create');
         $validated = $this->formRuntime->validate($form, $request, ['mode' => 'create', 'context' => 'create']);
         $data = $this->formRuntime->dehydrate($form, $validated, ['mode' => 'create', 'context' => 'create']);
         $data['status'] = $this->validatedStatus($request, 'draft');
-        $data['user_id'] = $data['user_id'] ?? auth()->id();
+        $data['user_id'] = $this->access->isAdmin($request->user())
+            ? ($data['user_id'] ?? auth()->id())
+            : auth()->id();
 
         if (!empty($data['is_default'])) {
             PublishPreset::where('user_id', $data['user_id'])->update(['is_default' => false]);
@@ -100,15 +90,9 @@ class PresetController extends Controller
         ]);
     }
 
-    /**
-     * Show a single preset.
-     *
-     * @param int $id
-     * @return JsonResponse
-     */
-    public function show(int $id): JsonResponse
+    public function show(Request $request, int $id): JsonResponse
     {
-        $preset = PublishPreset::with('user')->findOrFail($id);
+        $preset = $this->access->resolvePresetOrFail($request->user(), $id)->load('user');
 
         return response()->json([
             'success' => true,
@@ -116,15 +100,9 @@ class PresetController extends Controller
         ]);
     }
 
-    /**
-     * Edit form — uses form-definition system.
-     *
-     * @param int $id
-     * @return View
-     */
-    public function edit(int $id): View
+    public function edit(Request $request, int $id): View
     {
-        $preset = PublishPreset::with('user')->findOrFail($id);
+        $preset = $this->access->resolvePresetOrFail($request->user(), $id)->load('user');
         $form = $this->resolveForm('edit', $preset);
 
         return view('app-publish::publishing.presets.edit', [
@@ -134,16 +112,9 @@ class PresetController extends Controller
         ]);
     }
 
-    /**
-     * Update a preset — uses form registry + validation + dehydration.
-     *
-     * @param Request $request
-     * @param int $id
-     * @return JsonResponse
-     */
     public function update(Request $request, int $id): JsonResponse
     {
-        $preset = PublishPreset::findOrFail($id);
+        $preset = $this->access->resolvePresetOrFail($request->user(), $id);
         $form = $this->resolveForm('edit', $preset);
         $validated = $this->formRuntime->validate($form, $request, [
             'mode' => 'edit',
@@ -156,6 +127,9 @@ class PresetController extends Controller
             'record' => $preset,
         ]);
         $data['status'] = $this->validatedStatus($request, $preset->status ?? 'draft');
+        $data['user_id'] = $this->access->isAdmin($request->user())
+            ? ($data['user_id'] ?? $preset->user_id)
+            : $preset->user_id;
 
         if (!empty($data['is_default'])) {
             PublishPreset::where('user_id', $preset->user_id)
@@ -174,15 +148,9 @@ class PresetController extends Controller
         ]);
     }
 
-    /**
-     * Toggle a preset as default for its user.
-     *
-     * @param int $id
-     * @return JsonResponse
-     */
-    public function toggleDefault(int $id): JsonResponse
+    public function toggleDefault(Request $request, int $id): JsonResponse
     {
-        $preset = PublishPreset::findOrFail($id);
+        $preset = $this->access->resolvePresetOrFail($request->user(), $id);
 
         if ($preset->is_default) {
             $preset->update(['is_default' => false]);
@@ -199,15 +167,9 @@ class PresetController extends Controller
         return response()->json(['success' => true, 'message' => "'{$preset->name}' is now the default.", 'is_default' => true]);
     }
 
-    /**
-     * Delete a preset.
-     *
-     * @param int $id
-     * @return JsonResponse
-     */
-    public function destroy(int $id): JsonResponse
+    public function destroy(Request $request, int $id): JsonResponse
     {
-        $preset = PublishPreset::findOrFail($id);
+        $preset = $this->access->resolvePresetOrFail($request->user(), $id);
         $name = $preset->name;
 
         $preset->delete();
@@ -221,13 +183,6 @@ class PresetController extends Controller
         ]);
     }
 
-    /**
-     * Resolve the form definition from the registry.
-     *
-     * @param string $mode
-     * @param PublishPreset|null $preset
-     * @return \hexa_core\Forms\Definitions\FormDefinition
-     */
     protected function resolveForm(string $mode, ?PublishPreset $preset = null)
     {
         return $this->formRegistry->resolve(WordPressPresetForm::FORM_KEY, [
@@ -237,13 +192,6 @@ class PresetController extends Controller
         ]);
     }
 
-    /**
-     * Validate and return the status field.
-     *
-     * @param Request $request
-     * @param string $default
-     * @return string
-     */
     protected function validatedStatus(Request $request, string $default = 'draft'): string
     {
         $status = $request->input('status', $default);

@@ -2,7 +2,7 @@
 
 return [
 
-    'version' => '18.16.32',
+    'version' => '18.16.41',
 
     /*
     |--------------------------------------------------------------------------
@@ -279,6 +279,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Publication Notification Email Defaults
+    |--------------------------------------------------------------------------
+    */
+    'publication_notification' => [
+        'default_from_name' => 'Scale My Publication',
+        'default_from_email' => 'no-reply@scalemypublication.com',
+        'default_reply_to' => '',
+        'default_cc' => '',
+        'default_subject' => 'Your article is now live on {publication_name}',
+        'default_body' => "Hi,\n\nYour article is now live on {publication_name}.\n\nTitle: {article_title}\nPermalink: {permalink}\nPublication site: {publication_url}\n\nBest,\n{username}",
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Email Shortcodes
     |--------------------------------------------------------------------------
     */
@@ -288,5 +302,9 @@ return [
         '{site_url}' => 'WordPress site URL',
         '{article_title}' => 'Article title',
         '{campaign_name}' => 'Campaign name',
+        '{permalink}' => 'Published article permalink',
+        '{username}' => 'Selected publishing user name',
+        '{publication_name}' => 'Publication/site display name',
+        '{publication_url}' => 'Publication/site URL',
     ],
 ];

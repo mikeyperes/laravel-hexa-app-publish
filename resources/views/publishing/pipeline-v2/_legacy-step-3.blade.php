@@ -201,6 +201,7 @@
                                 </div>
 
                                 <div x-show="prContextTab === 'ai'" x-cloak class="space-y-3">
+                                    <div class="space-y-2">
                                     <div class="flex gap-2">
                                         <input type="text" x-model="aiSearchTopic" @keydown.enter="aiSearchArticles()" class="flex-1 border rounded-lg px-3 py-2 text-sm" :class="prInputBorderClass('context_article')" placeholder="Search online for one article to use as context">
                                         <button @click="aiSearchArticles()" :disabled="aiSearching || !aiSearchTopic.trim()" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-2">
@@ -208,7 +209,20 @@
                                             <span x-text="aiSearching ? 'Searching…' : 'Find Articles'"></span>
                                         </button>
                                     </div>
-                                    <div x-show="aiSearchResults.length > 0" x-cloak class="space-y-2 max-h-72 overflow-y-auto">
+                                    <div class="max-w-xl">
+                                        <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Search Agent</label>
+                                        <select x-model="aiSearchModel" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                            @foreach(($aiSearchGroups ?? $aiModelGroups ?? []) as $company => $models)
+                                            <optgroup label="{{ $company }}">
+                                                @foreach($models as $model)
+                                                    <option value="{{ $model['id'] }}">{{ $model['label'] }}</option>
+                                                @endforeach
+                                            </optgroup>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
+                                <div x-show="aiSearchResults.length > 0" x-cloak class="space-y-2 max-h-72 overflow-y-auto">
                                         <template x-for="(article, idx) in aiSearchResults" :key="'pr-ai-' + idx">
                                             <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
                                                 <div class="flex items-start gap-3">
@@ -224,6 +238,25 @@
                                                 </div>
                                             </div>
                                         </template>
+                                    </div>                                    <div x-show="aiLog.length > 0 || aiSearchError" x-cloak class="rounded-xl border border-slate-700 bg-slate-950 p-3 space-y-2">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-300">Context Search Activity</p>
+                                            <span x-show="aiSearching" x-cloak class="text-[11px] text-amber-300">Request in progress…</span>
+                                        </div>
+                                        <div x-show="aiSearchError" x-cloak class="rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-200" x-text="aiSearchError"></div>
+                                        <div x-show="aiLog.length > 0" x-cloak class="max-h-52 overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-2">
+                                            <template x-for="(entry, idx) in aiLog" :key="'pr-context-log-' + idx">
+                                                <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-slate-800' : ''">
+                                                    <span class="flex-shrink-0 text-slate-500" x-text="entry.time"></span>
+                                                    <span class="break-words" :class="{
+                                                        'text-emerald-300': entry.type === 'success',
+                                                        'text-red-300': entry.type === 'error',
+                                                        'text-sky-300': entry.type === 'info',
+                                                        'text-slate-300': entry.type === 'step'
+                                                    }" x-text="entry.message"></span>
+                                                </div>
+                                            </template>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -436,7 +469,7 @@
                                             'assetKeyExpression' => 'asset.id',
                                             'featuredSelectedExpression' => 'isPrFeaturedPhotoSelected(profile.id, asset.id)',
                                             'inlineSelectedExpression' => 'isPrInlinePhotoSelected(profile.id, asset.id)',
-                                            'thumbUrlExpression' => 'asset.thumbnailLink || asset.preview_url || asset.thumbnail_url || asset.webContentLink || asset.webViewLink',
+                                            'thumbUrlExpression' => 'asset.preview_url || asset.thumbnailLink || asset.thumbnail_url || asset.webContentLink || asset.webViewLink',
                                             'labelExpression' => 'prFriendlyPhotoLabel(profile, asset, assetIdx + 1)',
                                             'sourceLabelExpression' => 'prPhotoOriginAuditLabel(profile, asset, prSubjectData[profile.id]?.driveUrl || "")',
                                             'sourceMetaHtmlExpression' => 'prPhotoSourceMetaHtml(profile, asset, prSubjectData[profile.id])',

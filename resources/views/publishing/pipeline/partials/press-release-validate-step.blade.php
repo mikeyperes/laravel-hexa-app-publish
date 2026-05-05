@@ -14,7 +14,7 @@
         <div x-show="pressRelease.resolved_source_preview" x-cloak class="rounded-lg border border-purple-100 bg-white p-4">
             <div class="flex items-center justify-between gap-2 mb-2">
                 <p class="text-xs font-semibold uppercase tracking-wide text-purple-700" x-text="pressRelease.resolved_source_label || 'Resolved Source'"></p>
-                <span class="text-[11px] text-gray-400" x-text="pressRelease.submit_method.replace('-', ' ')"></span>
+                <span class="text-[11px] text-gray-400" x-text="((pressRelease.submit_method || '').replace(/-/g, ' ') || 'source import')"></span>
             </div>
             <pre class="text-xs text-gray-600 whitespace-pre-wrap break-words max-h-52 overflow-y-auto" x-text="pressRelease.resolved_source_preview"></pre>
         </div>

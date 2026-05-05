@@ -5,11 +5,10 @@ namespace hexa_app_publish\Publishing\Templates\Http\Controllers;
 use hexa_core\Http\Controllers\Controller;
 use hexa_core\Forms\Runtime\FormRuntimeService;
 use hexa_core\Forms\Services\FormRegistryService;
-use hexa_core\Services\GenericService;
+use hexa_app_publish\Publishing\Access\Services\PublishAccessService;
 use hexa_app_publish\Publishing\Accounts\Models\PublishAccount;
 use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
 use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
-use hexa_app_publish\Services\PublishService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -20,46 +19,26 @@ class TemplateController extends Controller
     private const JSON_CACHE_TTL_SECONDS = 600;
     private const JSON_CACHE_VERSION_KEY = 'publish:templates:json:version';
 
-    protected GenericService $generic;
-    protected PublishService $publishService;
-    protected FormRegistryService $formRegistry;
-    protected FormRuntimeService $formRuntime;
-
-    /**
-     */
     public function __construct(
-        GenericService $generic,
-        PublishService $publishService,
-        FormRegistryService $formRegistry,
-        FormRuntimeService $formRuntime
-    )
-    {
-        $this->generic = $generic;
-        $this->publishService = $publishService;
-        $this->formRegistry = $formRegistry;
-        $this->formRuntime = $formRuntime;
-    }
+        private PublishAccessService $access,
+        private FormRegistryService $formRegistry,
+        private FormRuntimeService $formRuntime
+    ) {}
 
-    /**
-     * List all templates, optionally filtered by account.
-     *
-     * @param Request $request
-     * @return View
-     */
     public function index(Request $request): View|JsonResponse
     {
         if ($request->wantsJson() || $request->filled('format')) {
             return response()->json($this->jsonTemplates(
-                $request->integer('user_id') ?: null,
+                $request->user(),
                 $request->integer('account_id') ?: null,
                 $request->string('article_type')->trim()->value() ?: null,
             ));
         }
 
-        $query = PublishTemplate::with(['account', 'campaigns']);
+        $query = $this->access->templateQuery($request->user())->with(['account', 'campaigns']);
 
         if ($request->filled('account_id')) {
-            $query->where('publish_account_id', $request->input('account_id'));
+            $query->where('publish_account_id', (int) $request->input('account_id'));
         }
 
         if ($request->filled('article_type')) {
@@ -67,8 +46,7 @@ class TemplateController extends Controller
         }
 
         $templates = $query->orderByDesc('created_at')->get();
-
-        $accounts = PublishAccount::orderBy('name')->get();
+        $accounts = $this->access->accountQuery($request->user())->orderBy('name')->get();
 
         return view('app-publish::publishing.templates.index', [
             'templates' => $templates,
@@ -77,12 +55,6 @@ class TemplateController extends Controller
         ]);
     }
 
-    /**
-     * Show create template form.
-     *
-     * @param Request $request
-     * @return View
-     */
     public function create(Request $request): View
     {
         $form = $this->resolveArticlePresetForm('create');
@@ -90,17 +62,11 @@ class TemplateController extends Controller
         return view('app-publish::publishing.templates.create', [
             'form' => $form,
             'formValues' => ArticlePresetForm::values(null, [
-                'publish_account_id' => $request->input('account_id'),
+                'publish_account_id' => $this->resolveRequestedAccountId($request, $request->integer('account_id') ?: null),
             ]),
         ]);
     }
 
-    /**
-     * Store a new template.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function store(Request $request): JsonResponse
     {
         $form = $this->resolveArticlePresetForm('create');
@@ -113,8 +79,12 @@ class TemplateController extends Controller
             (int) ($data['inline_photo_max'] ?? 3)
         );
         $data['photo_sources'] = array_values((array) ($data['photo_sources'] ?? config('hws-publish.photo_sources', [])));
+        $data['publish_account_id'] = $this->resolveRequestedAccountId($request, isset($data['publish_account_id']) ? (int) $data['publish_account_id'] : null);
+        if (!$this->access->isAdmin($request->user())) {
+            $data['user_id'] = $request->user()->id;
+        }
 
-        if (!empty($data['is_default'])) {
+        if (!empty($data['is_default']) && !empty($data['publish_account_id'])) {
             PublishTemplate::where('publish_account_id', $data['publish_account_id'])->update(['is_default' => false]);
         }
 
@@ -131,30 +101,18 @@ class TemplateController extends Controller
         ]);
     }
 
-    /**
-     * Show a single template.
-     *
-     * @param int $id
-     * @return View
-     */
-    public function show(int $id): View
+    public function show(Request $request, int $id): View
     {
-        $template = PublishTemplate::with(['account', 'campaigns.site'])->findOrFail($id);
+        $template = $this->access->resolveTemplateOrFail($request->user(), $id)->load(['account', 'campaigns.site']);
 
         return view('app-publish::publishing.templates.show', [
             'template' => $template,
         ]);
     }
 
-    /**
-     * Show edit form for a template.
-     *
-     * @param int $id
-     * @return View
-     */
-    public function edit(int $id): View
+    public function edit(Request $request, int $id): View
     {
-        $template = PublishTemplate::with('account')->findOrFail($id);
+        $template = $this->access->resolveTemplateOrFail($request->user(), $id)->load('account');
         $form = $this->resolveArticlePresetForm('edit', $template);
 
         return view('app-publish::publishing.templates.edit', [
@@ -164,16 +122,9 @@ class TemplateController extends Controller
         ]);
     }
 
-    /**
-     * Update a template.
-     *
-     * @param Request $request
-     * @param int $id
-     * @return JsonResponse
-     */
     public function update(Request $request, int $id): JsonResponse
     {
-        $template = PublishTemplate::findOrFail($id);
+        $template = $this->access->resolveTemplateOrFail($request->user(), $id);
         $form = $this->resolveArticlePresetForm('edit', $template);
         $validated = $this->formRuntime->validate($form, $request, [
             'mode' => 'edit',
@@ -192,10 +143,13 @@ class TemplateController extends Controller
             (int) ($data['inline_photo_max'] ?? $template->inline_photo_max ?? 3)
         );
         $data['photo_sources'] = array_values((array) ($data['photo_sources'] ?? $template->photo_sources ?? config('hws-publish.photo_sources', [])));
+        $data['publish_account_id'] = $this->resolveRequestedAccountId($request, isset($data['publish_account_id']) ? (int) $data['publish_account_id'] : (int) $template->publish_account_id);
+        if (!$this->access->isAdmin($request->user())) {
+            $data['user_id'] = $template->user_id ?: $request->user()->id;
+        }
 
-        if (!empty($data['is_default'])) {
-            $accountId = $data['publish_account_id'] ?? $template->publish_account_id;
-            PublishTemplate::where('publish_account_id', $accountId)
+        if (!empty($data['is_default']) && !empty($data['publish_account_id'])) {
+            PublishTemplate::where('publish_account_id', $data['publish_account_id'])
                 ->where('id', '!=', $template->id)
                 ->update(['is_default' => false]);
         }
@@ -211,15 +165,9 @@ class TemplateController extends Controller
         ]);
     }
 
-    /**
-     * Delete a template.
-     *
-     * @param int $id
-     * @return JsonResponse
-     */
-    public function destroy(int $id): JsonResponse
+    public function destroy(Request $request, int $id): JsonResponse
     {
-        $template = PublishTemplate::findOrFail($id);
+        $template = $this->access->resolveTemplateOrFail($request->user(), $id);
         $name = $template->name;
 
         $template->delete();
@@ -249,25 +197,27 @@ class TemplateController extends Controller
         return in_array($status, ['draft', 'active'], true) ? $status : $default;
     }
 
-    private function jsonTemplates(?int $userId = null, ?int $accountId = null, ?string $articleType = null): array
+    private function jsonTemplates($user, ?int $accountId = null, ?string $articleType = null): array
     {
+        $userId = $user?->id ?: 0;
         $cacheKey = implode(':', [
             'publish',
             'templates',
             'json',
             'v' . $this->jsonCacheVersion(),
             'user',
-            $userId ?: 'all',
+            $userId ?: 'guest',
             'account',
             $accountId ?: 'all',
             'type',
             $articleType ?: 'all',
         ]);
 
-        return Cache::remember($cacheKey, now()->addSeconds(self::JSON_CACHE_TTL_SECONDS), function () use ($userId, $accountId, $articleType) {
-            $query = PublishTemplate::query()
+        return Cache::remember($cacheKey, now()->addSeconds(self::JSON_CACHE_TTL_SECONDS), function () use ($user, $accountId, $articleType) {
+            $query = $this->access->templateQuery($user)
                 ->select([
                     'id',
+                    'user_id',
                     'publish_account_id',
                     'name',
                     'status',
@@ -311,16 +261,6 @@ class TemplateController extends Controller
                 $query->where('article_type', $articleType);
             }
 
-            if ($userId) {
-                $query->where(function ($accountScope) use ($userId) {
-                    $accountScope->whereNull('publish_account_id')
-                        ->orWhereHas('account', function ($query) use ($userId) {
-                            $query->where('owner_user_id', $userId)
-                                ->orWhereHas('users', fn ($users) => $users->where('user_id', $userId));
-                        });
-                });
-            }
-
             return $query->get()->map(fn (PublishTemplate $template) => $template->toArray())->all();
         });
     }
@@ -338,5 +278,22 @@ class TemplateController extends Controller
         }
 
         Cache::increment(self::JSON_CACHE_VERSION_KEY);
+    }
+
+    private function resolveRequestedAccountId(Request $request, ?int $requestedAccountId): ?int
+    {
+        if ($this->access->isAdmin($request->user())) {
+            return $requestedAccountId;
+        }
+
+        $accountIds = $this->access->accessibleAccountIds($request->user());
+        abort_unless($accountIds !== [], 403, 'No publish account is assigned to this user.');
+
+        if ($requestedAccountId !== null) {
+            abort_unless(in_array($requestedAccountId, $accountIds, true), 403);
+            return $requestedAccountId;
+        }
+
+        return $accountIds[0];
     }
 }

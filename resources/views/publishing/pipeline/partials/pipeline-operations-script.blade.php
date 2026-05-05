@@ -263,8 +263,8 @@
                 status: 'pending',
                 detail: '',
                 type: 'photo',
-                source: (p.autoPhoto?.source || '') + ' — ' + (() => { try { return new URL(p.autoPhoto?.url_large || '').hostname; } catch(e) { return ''; } })(),
-                url: p.autoPhoto?.url_large || '',
+                source: (p.autoPhoto?.source || '') + ' — ' + (() => { try { return new URL(this.resolvePhotoLargeUrl(p.autoPhoto) || this.resolvePhotoThumbUrl(p.autoPhoto) || '').hostname; } catch(e) { return ''; } })(),
+                url: this.resolvePhotoLargeUrl(p.autoPhoto) || this.resolvePhotoThumbUrl(p.autoPhoto) || '',
                 filename: p.suggestedFilename || this.buildFilename(p.search_term, i + 1),
                 attempts: [],
             }));
@@ -273,8 +273,8 @@
                 status: this.featuredPhoto ? 'pending' : 'skipped',
                 detail: this.featuredPhoto ? '' : 'none selected',
                 type: 'featured',
-                source: this.featuredPhoto ? ((this.featuredPhoto?.source || '') + ' — ' + (() => { try { return new URL(this.featuredPhoto?.url_large || '').hostname; } catch(e) { return ''; } })()) : '',
-                url: this.featuredPhoto?.url_large || '',
+                source: this.featuredPhoto ? ((this.featuredPhoto?.source || '') + ' — ' + (() => { try { return new URL(this.resolvePhotoLargeUrl(this.featuredPhoto) || this.resolvePhotoThumbUrl(this.featuredPhoto) || '').hostname; } catch(e) { return ''; } })()) : '',
+                url: this.resolvePhotoLargeUrl(this.featuredPhoto) || this.resolvePhotoThumbUrl(this.featuredPhoto) || '',
                 filename: this.featuredFilename || '',
                 attempts: [],
             };
@@ -313,7 +313,6 @@
             this.prepareComplete = false;
             this.prepareIntegrityIssues = [];
             this._startPrepareWatchdog();
-            this.masterActivityLogOpen = true;
             if (Object.keys(this.uploadedImages).length > 0) {
                 this._previousUploadedImages = { ...this.uploadedImages };
             }
@@ -679,6 +678,8 @@
                 this.existingWpPostUrl = result.post_url;
             }
             this.completeStep(7);
+            this.initializePublicationNotificationState?.();
+            this.hydratePublicationNotificationFields?.({ force: !this.publicationNotificationResult });
             if (notify && result.message) this.showNotification('success', result.message);
         },
 
@@ -687,6 +688,230 @@
             const message = operation?.error_message || operation?.result_payload?.message || this.publishError || 'Publish failed';
             this.publishError = message;
             if (notify && message) this.showNotification('error', message);
+        },
+
+        openInlineMasterActivityLog({ focusReview = true, scroll = true, behavior = 'smooth' } = {}) {
+            if (focusReview && this.isStepAccessible?.(7)) {
+                this.currentStep = 7;
+                this.openStep?.(7);
+                this._syncStepToUrl?.();
+            }
+            this.masterActivityLogOpen = true;
+            this.$nextTick(() => {
+                const target = this.$refs.inlineMasterActivityLog || document.querySelector('[data-inline-master-activity-log]');
+                if (scroll && target?.scrollIntoView) {
+                    target.scrollIntoView({ behavior, block: 'start' });
+                }
+            });
+        },
+
+        publicationNotificationTokenMap(extra = {}) {
+            const permalink = String(this.publishResult?.post_url || this.existingWpPostUrl || '').trim();
+            const publicationUrl = String(this.selectedSite?.url || '').trim();
+            const publicationName = String(this.selectedSite?.name || '').trim();
+            const username = String(this.selectedUser?.name || '').trim();
+            return {
+                '{permalink}': permalink,
+                '{username}': username,
+                '{publication_name}': publicationName,
+                '{publication_url}': publicationUrl,
+                '{article_title}': String(this.articleTitle || '').trim(),
+                '{site_name}': publicationName,
+                '{site_url}': publicationUrl,
+                '{account_name}': username,
+                '{campaign_name}': '',
+                ...extra,
+            };
+        },
+
+        renderPublicationNotificationText(template = '', tokens = null) {
+            let output = String(template || '');
+            const replacements = tokens || this.publicationNotificationTokenMap();
+            Object.entries(replacements || {}).forEach(([code, value]) => {
+                output = output.split(code).join(String(value || ''));
+            });
+            return output;
+        },
+
+        getPublicationNotificationTemplateById(templateId = null) {
+            const target = String(templateId || this.publicationNotificationTemplateId || '').trim();
+            if (!target) return null;
+            return (Array.isArray(this.publicationNotificationTemplates) ? this.publicationNotificationTemplates : [])
+                .find((template) => String(template.id) === target) || null;
+        },
+
+        defaultPublicationNotificationTemplate() {
+            const templates = Array.isArray(this.publicationNotificationTemplates) ? this.publicationNotificationTemplates : [];
+            return templates.find((template) => !!template.is_primary) || templates[0] || null;
+        },
+
+        extractPublicationNotificationProfileEmail(profileId = null) {
+            const resolvedProfileId = Number(profileId || this.prArticle?.main_subject_id || this.selectedPrProfiles?.[0]?.id || 0);
+            if (!resolvedProfileId) return '';
+            const fields = Array.isArray(this.prSubjectData?.[resolvedProfileId]?.fields) ? this.prSubjectData[resolvedProfileId].fields : [];
+            const candidates = ['primary email', 'public email', 'email'];
+            for (const field of fields) {
+                const label = String(field?.notion_field || field?.key || '').trim().toLowerCase();
+                if (!candidates.includes(label)) continue;
+                const value = String(field?.display_value || field?.value || '').trim();
+                if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+                    return value;
+                }
+            }
+            return '';
+        },
+
+        derivePublicationNotificationRecipient() {
+            const directCandidates = [
+                this.pressRelease?.notion_guest?.email,
+                this.pressRelease?.details?.contact_email,
+                this.pressRelease?.contact_email,
+            ];
+            for (const candidate of directCandidates) {
+                const value = String(candidate || '').trim();
+                if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+                    return value;
+                }
+            }
+            return this.extractPublicationNotificationProfileEmail();
+        },
+
+        initializePublicationNotificationState() {
+            if (!this.publicationNotificationTemplateId) {
+                const template = this.getPublicationNotificationTemplateById(this.publicationNotificationDefaults?.template_id)
+                    || this.defaultPublicationNotificationTemplate();
+                if (template?.id) {
+                    this.publicationNotificationTemplateId = String(template.id);
+                }
+            }
+
+            if (!this.publicationNotificationFromName) {
+                this.publicationNotificationFromName = String(this.publicationNotificationDefaults?.from_name || 'Scale My Publication');
+            }
+            if (!this.publicationNotificationFromEmail) {
+                this.publicationNotificationFromEmail = String(this.publicationNotificationDefaults?.from_email || 'no-reply@scalemypublication.com');
+            }
+            if (!this.publicationNotificationReplyTo) {
+                this.publicationNotificationReplyTo = String(this.publicationNotificationDefaults?.reply_to || '');
+            }
+            if (!this.publicationNotificationCc) {
+                this.publicationNotificationCc = String(this.publicationNotificationDefaults?.cc || '');
+            }
+            if (!this.publicationNotificationSubject) {
+                this.publicationNotificationSubject = String(this.publicationNotificationDefaults?.subject || '');
+            }
+            if (!this.publicationNotificationBody) {
+                this.publicationNotificationBody = String(this.publicationNotificationDefaults?.body || '');
+            }
+            this.hydratePublicationNotificationFields({ force: false });
+        },
+
+        hydratePublicationNotificationFields({ force = false } = {}) {
+            const template = this.getPublicationNotificationTemplateById()
+                || this.getPublicationNotificationTemplateById(this.publicationNotificationDefaults?.template_id)
+                || this.defaultPublicationNotificationTemplate();
+            if (template?.id && (!this.publicationNotificationTemplateId || force)) {
+                this.publicationNotificationTemplateId = String(template.id);
+            }
+
+            const defaults = this.publicationNotificationDefaults || {};
+            const tokens = this.publicationNotificationTokenMap();
+            const recipient = this.derivePublicationNotificationRecipient();
+            const fromName = String(template?.from_name || defaults.from_name || 'Scale My Publication');
+            const fromEmail = String(template?.from_email || defaults.from_email || 'no-reply@scalemypublication.com');
+            const replyTo = String(template?.reply_to || defaults.reply_to || '');
+            const cc = String(template?.cc || defaults.cc || '');
+            const subject = String(template?.subject || defaults.subject || 'Your article is now live on {publication_name}');
+            const body = String(template?.body || defaults.body || '');
+
+            if (force || !this.publicationNotificationFromName) {
+                this.publicationNotificationFromName = this.renderPublicationNotificationText(fromName, tokens);
+            }
+            if (force || !this.publicationNotificationFromEmail) {
+                this.publicationNotificationFromEmail = this.renderPublicationNotificationText(fromEmail, tokens);
+            }
+            if (force || !this.publicationNotificationReplyTo) {
+                this.publicationNotificationReplyTo = this.renderPublicationNotificationText(replyTo, tokens);
+            }
+            if (force || !this.publicationNotificationCc) {
+                this.publicationNotificationCc = this.renderPublicationNotificationText(cc, tokens);
+            }
+            if (force || !this.publicationNotificationTo) {
+                this.publicationNotificationTo = recipient;
+            }
+            if (force || !this.publicationNotificationSubject) {
+                this.publicationNotificationSubject = this.renderPublicationNotificationText(subject, tokens);
+            }
+            if (force || !this.publicationNotificationBody) {
+                this.publicationNotificationBody = this.renderPublicationNotificationText(body, tokens);
+            }
+        },
+
+        applyPublicationNotificationTemplate(templateId = null, { force = true } = {}) {
+            if (templateId !== null) {
+                this.publicationNotificationTemplateId = String(templateId || '');
+            }
+            this.hydratePublicationNotificationFields({ force });
+            this.publicationNotificationStatus = '';
+            this.publicationNotificationResult = null;
+        },
+
+        async sendPublicationNotification() {
+            if (this.publicationNotificationSending) return;
+            this.hydratePublicationNotificationFields({ force: false });
+
+            if (!this.publicationNotificationTo) {
+                this.showNotification('error', 'Notification recipient email is required.');
+                return;
+            }
+            if (!this.publicationNotificationFromEmail) {
+                this.showNotification('error', 'Notification from email is required.');
+                return;
+            }
+            if (!this.publicationNotificationSubject || !this.publicationNotificationBody) {
+                this.showNotification('error', 'Notification subject and body are required.');
+                return;
+            }
+
+            this.publicationNotificationSending = true;
+            this.publicationNotificationStatus = '';
+            this.publicationNotificationResult = null;
+
+            const payload = {
+                draft_id: this.draftId,
+                template_id: this.publicationNotificationTemplateId || null,
+                to: this.publicationNotificationTo || '',
+                from_name: this.publicationNotificationFromName || '',
+                from_email: this.publicationNotificationFromEmail || '',
+                reply_to: this.publicationNotificationReplyTo || '',
+                cc: this.publicationNotificationCc || '',
+                subject: this.publicationNotificationSubject || '',
+                body: this.publicationNotificationBody || '',
+            };
+
+            try {
+                const resp = await fetch('{{ route('publish.pipeline.send-publication-notification') }}', {
+                    method: 'POST',
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(payload),
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data.success) {
+                    this.publicationNotificationStatus = 'success';
+                    this.publicationNotificationResult = data;
+                    this.showNotification('success', data.message || 'Publication notification sent.');
+                } else {
+                    this.publicationNotificationStatus = 'error';
+                    this.publicationNotificationResult = data;
+                    this.showNotification('error', data.message || 'Publication notification failed.');
+                }
+            } catch (error) {
+                this.publicationNotificationStatus = 'error';
+                this.publicationNotificationResult = { message: error.message || 'Publication notification failed.' };
+                this.showNotification('error', error.message || 'Publication notification failed.');
+            }
+
+            this.publicationNotificationSending = false;
         },
 
         _applyPipelineOperationSnapshot(type, operation = {}) {
@@ -983,7 +1208,7 @@
                     caption: p.caption || '',
                     filename: (p.search_term || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 60),
                 })),
-                featured_url: this.featuredPhoto?.url_large || this.featuredPhoto?.url || null,
+                featured_url: this.resolvePhotoLargeUrl(this.featuredPhoto) || this.resolvePhotoThumbUrl(this.featuredPhoto) || this.featuredPhoto?.url || null,
                 existing_featured_media_id: this.preparedFeaturedMediaId || null,
                 featured_meta: this.featuredPhoto ? {
                     alt_text: this.featuredAlt || '',
@@ -1243,6 +1468,8 @@
             this.publishResult = null;
             this.publishError = '';
             this.publishTraceId = '';
+            this.publicationNotificationStatus = '';
+            this.publicationNotificationResult = null;
             this._logActivity('publish', 'info', 'Publish requested', {
                 stage: 'publish',
                 substage: 'start',

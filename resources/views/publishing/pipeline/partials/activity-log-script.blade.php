@@ -792,6 +792,14 @@
         _installActivityFetchTracker() {
             window.__publishPipelineActivityTarget = this;
 
+            if (!window.__publishPipelinePageLifecycleInstalled) {
+                window.__publishPipelinePageLifecycleInstalled = true;
+                window.__publishPipelinePageUnloading = false;
+                window.addEventListener('pageshow', () => { window.__publishPipelinePageUnloading = false; }, { capture: true });
+                window.addEventListener('pagehide', () => { window.__publishPipelinePageUnloading = true; }, { capture: true });
+                window.addEventListener('beforeunload', () => { window.__publishPipelinePageUnloading = true; }, { capture: true });
+            }
+
             if (window.__publishPipelineTrackedFetchInstalled) {
                 return;
             }
@@ -893,7 +901,9 @@
                 return response;
             } catch (error) {
                 const durationMs = Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt));
-                const aborted = error?.name === 'AbortError' || error?.code === 20;
+                const failedToFetch = /failed to fetch/i.test(String(error?.message || ''));
+                const likelyNavigationAbort = failedToFetch && (window.__publishPipelinePageUnloading || document.visibilityState === 'hidden');
+                const aborted = error?.name === 'AbortError' || error?.code === 20 || likelyNavigationAbort;
 
                 this._logActivity('network', aborted ? 'step' : 'error', method + ' ' + normalizedUrl + (aborted ? ' cancelled' : ' failed: ' + (error.message || 'Request failed')), {
                     trace_id: traceId,

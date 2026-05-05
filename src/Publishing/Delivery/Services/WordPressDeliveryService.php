@@ -30,6 +30,8 @@ class WordPressDeliveryService
 
     public function createPost(PublishSite $site, string $title, string $html, string $status = 'draft', array $options = []): array
     {
+        $options = $this->normalizeSyndicationOptions($site, $options);
+
         if ($this->usesWpToolkit($site)) {
             return $this->createViaSsh($site, $title, $html, $status, $options);
         }
@@ -39,6 +41,8 @@ class WordPressDeliveryService
 
     public function updatePost(PublishSite $site, int $postId, string $title, string $html, string $status = 'draft', array $options = []): array
     {
+        $options = $this->normalizeSyndicationOptions($site, $options);
+
         if ($this->usesWpToolkit($site)) {
             return $this->updateViaSsh($site, $postId, $title, $html, $status, $options);
         }
@@ -62,6 +66,7 @@ class WordPressDeliveryService
             return $this->failure("Site '{$site->name}' is missing WP Toolkit configuration.", self::MODE_WPTOOLKIT);
         }
         $transportMode = $this->wptoolkit->connectionMode($resolved['server']);
+        $publicationTaxonomy = (string) ($options['publication_taxonomy'] ?? 'publication');
 
         $date = ($status === 'future' && !empty($options['date'])) ? $options['date'] : null;
 
@@ -84,16 +89,16 @@ class WordPressDeliveryService
 
         $postId = $result['data']['post_id'] ?? null;
 
-        if ($postId && !empty($options['publication_term_ids'])) {
+        if ($postId && !empty($options['publication_term_ids']) && $publicationTaxonomy !== 'category') {
             $taxonomyResult = $this->wptoolkit->wpCliSetPostTerms(
                 $resolved['server'],
                 $site->wordpress_install_id,
                 (int) $postId,
-                'publication',
+                $publicationTaxonomy,
                 (array) $options['publication_term_ids']
             );
             if (!($taxonomyResult['success'] ?? false)) {
-                $result['message'] = trim(($result['message'] ?? 'Post created.') . ' Warning: ' . ($taxonomyResult['message'] ?? 'Failed to set publication terms.'));
+                $result['message'] = trim(($result['message'] ?? 'Post created.') . ' Warning: ' . ($taxonomyResult['message'] ?? 'Failed to set syndication terms.'));
             }
         }
 
@@ -115,6 +120,7 @@ class WordPressDeliveryService
             return $this->failure("Site '{$site->name}' is missing WP Toolkit configuration.", self::MODE_WPTOOLKIT);
         }
         $transportMode = $this->wptoolkit->connectionMode($resolved['server']);
+        $publicationTaxonomy = (string) ($options['publication_taxonomy'] ?? 'publication');
 
         $postData = $this->buildPostData($title, $html, $status, $options);
         $result = $this->wptoolkit->wpCliUpdatePost(
@@ -128,16 +134,16 @@ class WordPressDeliveryService
             return $this->failure($result['message'] ?? 'WP Toolkit update failed.', $transportMode);
         }
 
-        if (!empty($options['publication_term_ids'])) {
+        if (!empty($options['publication_term_ids']) && $publicationTaxonomy !== 'category') {
             $taxonomyResult = $this->wptoolkit->wpCliSetPostTerms(
                 $resolved['server'],
                 $site->wordpress_install_id,
                 $postId,
-                'publication',
+                $publicationTaxonomy,
                 (array) $options['publication_term_ids']
             );
             if (!($taxonomyResult['success'] ?? false)) {
-                $result['message'] = trim(($result['message'] ?? 'Post updated.') . ' Warning: ' . ($taxonomyResult['message'] ?? 'Failed to set publication terms.'));
+                $result['message'] = trim(($result['message'] ?? 'Post updated.') . ' Warning: ' . ($taxonomyResult['message'] ?? 'Failed to set syndication terms.'));
             }
         }
 
@@ -250,6 +256,59 @@ class WordPressDeliveryService
         return ($site->connection_type ?? 'wptoolkit') === 'wptoolkit';
     }
 
+    private function normalizeSyndicationOptions(PublishSite $site, array $options): array
+    {
+        if (empty($options['publication_term_ids'])) {
+            return $options;
+        }
+
+        $taxonomyInfo = $this->resolveSyndicationTaxonomy($site);
+        $taxonomy = (string) ($taxonomyInfo['taxonomy'] ?? 'publication');
+        $options['publication_taxonomy'] = $taxonomy;
+
+        if ($taxonomy === 'category') {
+            $existing = array_values(array_filter(array_map('intval', (array) ($options['category_ids'] ?? []))));
+            $syndication = array_values(array_filter(array_map('intval', (array) ($options['publication_term_ids'] ?? []))));
+            $options['category_ids'] = array_values(array_unique(array_merge($existing, $syndication)));
+        }
+
+        return $options;
+    }
+
+    private function resolveSyndicationTaxonomy(PublishSite $site): array
+    {
+        $fallback = [
+            'taxonomy' => 'publication',
+            'label' => 'Publications',
+            'hierarchical' => true,
+        ];
+
+        if (!$this->usesWpToolkit($site)) {
+            return $fallback;
+        }
+
+        $resolved = $this->resolveServer($site);
+        if (!$resolved['server'] || !$site->wordpress_install_id) {
+            return $fallback;
+        }
+
+        $result = $this->wptoolkit->wpCliResolvePreferredTaxonomy(
+            $resolved['server'],
+            (int) $site->wordpress_install_id,
+            ['publication', 'category']
+        );
+
+        if (!($result['success'] ?? false)) {
+            return $fallback;
+        }
+
+        return [
+            'taxonomy' => (string) ($result['taxonomy'] ?? 'publication'),
+            'label' => (string) ($result['label'] ?? 'Publications'),
+            'hierarchical' => (bool) ($result['hierarchical'] ?? true),
+        ];
+    }
+
     private function buildPostData(string $title, string $html, string $status, array $options): array
     {
         $postData = [
@@ -270,8 +329,9 @@ class WordPressDeliveryService
             $postData['tags'] = array_values($options['tag_ids']);
         }
 
-        if (!empty($options['publication_term_ids'])) {
-            $postData['publication'] = array_values($options['publication_term_ids']);
+        $publicationTaxonomy = (string) ($options['publication_taxonomy'] ?? 'publication');
+        if (!empty($options['publication_term_ids']) && $publicationTaxonomy !== 'category') {
+            $postData[$publicationTaxonomy] = array_values($options['publication_term_ids']);
         }
 
         if (!empty($options['date'])) {

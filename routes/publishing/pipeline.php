@@ -15,6 +15,7 @@ Route::post('/article/publish/spin', [PipelineController::class, 'spin'])->name(
 Route::post('/article/publish/generate-metadata', [PipelineController::class, 'generateMetadata'])->name('publish.pipeline.metadata');
 Route::post('/article/publish/prepare', [PipelineController::class, 'prepareForWordpress'])->name('publish.pipeline.prepare');
 Route::post('/article/publish/publish', [PipelineController::class, 'publishToWordpress'])->name('publish.pipeline.publish');
+Route::post('/article/publish/send-publication-notification', [PipelineController::class, 'sendPublicationNotification'])->name('publish.pipeline.send-publication-notification');
 Route::post('/article/publish/save-draft', [PipelineController::class, 'saveDraft'])->name('publish.pipeline.save-draft');
 Route::post('/article/publish/detect-ai', [PipelineController::class, 'detectAi'])->name('publish.pipeline.detect-ai');
 Route::post('/article/publish/preview-prompt', [PipelineController::class, 'previewPrompt'])->name('publish.pipeline.preview-prompt');

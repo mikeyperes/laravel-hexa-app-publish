@@ -154,6 +154,7 @@ class ArticleGenerationService
         // Clean and parse the AI response
         $content = $this->cleanHtml($content);
         $content = $this->convertMarkdownFallback($content);
+        $content = $this->normalizeGeneratedPunctuation($content);
         $photoSuggestions = $this->extractPhotoSuggestions($content);
         $content = $photoSuggestions['html'];
         $featuredImage = $this->extractFeaturedImage($content);
@@ -162,8 +163,10 @@ class ArticleGenerationService
         $metadata['data'] = $this->normalizeMetadataForArticleType($metadata['data'], $articleType, $sourceTexts);
         $content = $metadata['html'];
         [$content, $metadata['data']] = $this->postProcessGeneratedOutput($content, $metadata['data'], $articleType, $sourceTexts);
+        $content = $this->normalizeGeneratedPunctuation($content);
         $content = $this->stripLeadingTitleHeading($content, (string) ($metadata['data']['titles'][0] ?? ''));
         $content = $this->stripLeadingSectionHeading($content);
+        $metadata['data'] = $this->ensureMinimumTitleOptions($metadata['data'], $content, $articleType, $sourceTexts, $provider, $model);
 
         $content = trim($content);
         $plainText = strip_tags($content);
@@ -411,10 +414,12 @@ class ArticleGenerationService
         }
         $result .= "\n\n" . $this->h2NotationInstruction($template?->h2_notation ?? null)
             . "\n\n" . $this->hardLinkSafetyRules()
-            . "\n\n" . $this->hardStockPhotoRules();
+            . "\n\n" . $this->hardStockPhotoRules()
+            . "\n\n" . $this->hardTitleAndVoiceRules($resolvedArticleType, $titleCount);
 
         $log[] = ['shortcode' => '(link safety)', 'source' => 'Hardcoded safeguard', 'value' => 'Require live canonical supporting URLs only.'];
         $log[] = ['shortcode' => '(stock photo safety)', 'source' => 'Hardcoded safeguard', 'value' => 'Never use article-specific names for generic stock photos.'];
+        $log[] = ['shortcode' => '(title + voice safety)', 'source' => 'Hardcoded safeguard', 'value' => 'Ban first-person headlines, ban em dashes, require multiple headline options.'];
 
         if ($withLog) {
             return ['prompt' => $result, 'log' => $log];
@@ -472,6 +477,18 @@ class ArticleGenerationService
         return "STOCK PHOTO RULES: FEATURED IMAGE must always be suitable for Google image search. INLINE PHOTOS may be generic stock or Google image results. For PHOTO and FEATURED metadata, describe only what a generic stock photo visibly shows. Do not use article-specific names or identities unless the image source itself clearly identifies that exact real person.";
     }
 
+    private function hardTitleAndVoiceRules(?string $articleType, int $titleCount): string
+    {
+        $voiceRule = match ($articleType) {
+            'editorial', 'opinion', 'expert-article', 'pr-full-feature', 'press-release' => 'VOICE RULES: Write in third person only. Do not use first-person pronouns in the headline or narrative body unless they appear inside a direct quote copied from the source material.',
+            default => 'VOICE RULES: Do not use first-person pronouns in headline options unless the workflow explicitly requests a first-person essay. Prefer third person in narrative copy.',
+        };
+
+        return "TITLE AND METADATA RULES: Return at least {$titleCount} distinct headline options in the METADATA block. Do not return a single headline. Every headline must avoid em dashes and en dashes. Use commas, periods, colons, or a standard hyphen instead. Headline options must not use first-person phrasing such as I, I'm, I've, my, we, our, or us."
+            . "\n"
+            . $voiceRule;
+    }
+
     private function h2NotationInstruction(?string $notation): string
     {
         return match ($notation) {
@@ -495,14 +512,21 @@ class ArticleGenerationService
         };
     }
 
-    private function callProvider(string $provider, string $model, string $systemPrompt, bool $webResearch): array
+    private function callProvider(
+        string $provider,
+        string $model,
+        string $systemPrompt,
+        bool $webResearch,
+        string $userPrompt = 'Generate the article now.',
+        int $maxTokens = 8192
+    ): array
     {
         if ($provider === 'grok') {
             if (!class_exists(\hexa_package_grok\Services\GrokService::class)) {
                 return ['success' => false, 'message' => 'Grok package not available'];
             }
 
-            return app(\hexa_package_grok\Services\GrokService::class)->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
+            return app(\hexa_package_grok\Services\GrokService::class)->chat($systemPrompt, $userPrompt, $model, 0.7, $maxTokens);
         }
 
         if ($provider === 'openai') {
@@ -510,7 +534,7 @@ class ArticleGenerationService
                 return ['success' => false, 'message' => 'ChatGPT package not available'];
             }
 
-            return app(\hexa_package_chatgpt\Services\ChatGptService::class)->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
+            return app(\hexa_package_chatgpt\Services\ChatGptService::class)->chat($systemPrompt, $userPrompt, $model, 0.7, $maxTokens);
         }
 
         if ($provider === 'gemini') {
@@ -521,11 +545,11 @@ class ArticleGenerationService
             $gemini = app(\hexa_package_gemini\Services\GeminiService::class);
 
             return $webResearch
-                ? $gemini->chatWithGoogleSearch($systemPrompt, 'Generate the article now.', $model, 0.7, 8192)
-                : $gemini->chat($systemPrompt, 'Generate the article now.', $model, 0.7, 8192);
+                ? $gemini->chatWithGoogleSearch($systemPrompt, $userPrompt, $model, 0.7, $maxTokens)
+                : $gemini->chat($systemPrompt, $userPrompt, $model, 0.7, $maxTokens);
         }
 
-        return $this->anthropic->chat($systemPrompt, 'Generate the article now.', $model, 8192);
+        return $this->anthropic->chat($systemPrompt, $userPrompt, $model, $maxTokens);
     }
 
     /**
@@ -657,11 +681,14 @@ class ArticleGenerationService
         $targets = $this->extractPodcastPressReleaseTargets($sourceTexts);
         $content = $this->normalizePressReleaseYoutubeEmbed($content, $targets);
         $content = $this->ensurePodcastPressReleaseYoutubeEmbed($content, $targets);
+        $content = $this->normalizePressReleaseDateline($content, $details);
+        $content = $this->normalizePodcastPressReleaseLeadTone($content, $targets);
+        $content = $this->normalizePodcastPressReleaseEntityLinkCollisions($content, $targets);
         $content = $this->ensurePodcastPressReleaseFirstMentionLinks($content, $targets);
         if (!$this->hasSelectedPressReleaseInlineMedia($sourceTexts)) {
             $content = $this->ensurePodcastPressReleaseInlineGuestImage($content, $targets);
         }
-        $content = $this->normalizePressReleaseDateline($content, $details);
+        $content = $this->normalizePodcastPressReleaseInlineFigures($content);
 
         return [$content, $metadata];
     }
@@ -705,25 +732,16 @@ class ArticleGenerationService
 
     private function normalizePressReleaseYoutubeEmbed(string $content, array $targets = []): string
     {
-        $content = preg_replace('/<div\b[^>]*>\s*(<iframe\b[^>]*youtube\.com\/embed\/[^>]*><\/iframe>)\s*<\/div>/is', '$1', $content) ?? $content;
-        $content = preg_replace('/(<iframe\b[^>]*?)\s+style="[^"]*"/i', '$1', $content) ?? $content;
-
         $embedUrl = trim((string) ($targets['youtube_embed_url'] ?? ''));
-        if ($embedUrl === '') {
-            return $content;
-        }
 
-        $content = preg_replace_callback('/<iframe\b[^>]*src="([^"]*youtube[^\"]*)"[^>]*><\/iframe>/i', function (array $match) use ($embedUrl) {
-            $src = html_entity_decode((string) ($match[1] ?? ''), ENT_QUOTES, 'UTF-8');
-            $needsReplacement = $src === ''
-                || str_contains(Str::lower($src), 'your_video_id')
-                || !str_contains($src, $embedUrl);
-
-            if (!$needsReplacement) {
-                return $match[0];
+        $content = preg_replace_callback('/(?:<div\b[^>]*>\s*)?(<iframe\b[^>]*src="([^"]*youtube[^\"]*)"[^>]*><\/iframe>)(?:\s*<\/div>)?/is', function (array $match) use ($embedUrl) {
+            $src = html_entity_decode((string) ($match[2] ?? ''), ENT_QUOTES, 'UTF-8');
+            $finalEmbedUrl = $embedUrl !== '' ? $embedUrl : $src;
+            if ($finalEmbedUrl === '') {
+                return $match[0] ?? '';
             }
 
-            return preg_replace('/src="[^"]*"/i', 'src="' . e($embedUrl) . '"', $match[0], 1) ?? $match[0];
+            return $this->podcastYoutubeEmbedMarkup($finalEmbedUrl);
         }, $content, 1) ?? $content;
 
         return $content;
@@ -747,12 +765,27 @@ class ArticleGenerationService
                 : '';
         };
 
+        $episodeUrl = $extract('Episode URL');
+        $podcastUrl = $extract('Podcast URL');
+        if ($podcastUrl === '' && $episodeUrl !== '') {
+            $parts = parse_url($episodeUrl);
+            $scheme = trim((string) ($parts['scheme'] ?? 'https')) ?: 'https';
+            $host = trim((string) ($parts['host'] ?? ''));
+            if ($host !== '') {
+                $podcastUrl = $scheme . '://' . $host . '/';
+            }
+        }
+
         return [
-            'person_name' => $extract('Person Name'),
+            'person_name' => $this->normalizePressReleaseTargetLabel($extract('Person Name')),
             'person_url' => $extract('Person URL'),
-            'company_name' => $extract('Company Name'),
+            'company_name' => $this->normalizePressReleaseTargetLabel($extract('Company Name')),
             'company_url' => $extract('Company URL'),
-            'episode_url' => $extract('Episode URL'),
+            'host_name' => $this->normalizePressReleaseTargetLabel($extract('Host Name')) ?: 'Michael Peres',
+            'host_url' => $this->normalizePressReleaseCanonicalUrl($extract('Host URL')) ?: 'https://michaelperes.com/',
+            'podcast_name' => $this->normalizePressReleaseTargetLabel($extract('Podcast Name')) ?: 'The Michael Peres Podcast',
+            'podcast_url' => $this->normalizePressReleaseCanonicalUrl($podcastUrl ?: 'https://podcast.michaelperes.com/'),
+            'episode_url' => $episodeUrl,
             'youtube_url' => $extract('YouTube URL'),
             'youtube_embed_url' => $extract('YouTube Embed URL'),
             'featured_image_url' => $extract('Featured Image URL'),
@@ -780,15 +813,14 @@ class ArticleGenerationService
         return preg_match('/^Inline Photo \d+ URL:\s*(.+)$/mi', $block) === 1;
     }
 
-    private function ensurePodcastPressReleaseYoutubeEmbed(string $content, array $targets): string    {
+    private function ensurePodcastPressReleaseYoutubeEmbed(string $content, array $targets): string
+    {
         $embedUrl = trim((string) ($targets['youtube_embed_url'] ?? ''));
         if ($embedUrl === '' || preg_match('/youtube\.com\/embed\//i', $content)) {
             return $content;
         }
 
-        $iframe = '<div class="podcast-youtube-embed"><iframe width="560" height="315" src="'
-            . e($embedUrl)
-            . '" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>';
+        $iframe = $this->podcastYoutubeEmbedMarkup($embedUrl);
 
         if (preg_match('/<h[2-6]\b[^>]*>\s*About\b/i', $content)) {
             return preg_replace('/<h[2-6]\b[^>]*>\s*About\b/i', $iframe . '$0', $content, 1) ?? ($content . $iframe);
@@ -805,19 +837,83 @@ class ArticleGenerationService
         return $content . $iframe;
     }
 
+    private function podcastYoutubeEmbedMarkup(string $embedUrl): string
+    {
+        $embedUrl = trim($embedUrl);
+        if ($embedUrl === '') {
+            return '';
+        }
+
+        return '<div class="podcast-youtube-embed" style="position:relative;width:100%;max-width:1120px;margin:1.75rem auto;padding-top:56.25%;border-radius:18px;overflow:hidden;background:#000;box-shadow:0 18px 40px rgba(15,23,42,0.12);">'
+            . '<iframe src="' . e($embedUrl) . '" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0;"></iframe>'
+            . '</div>';
+    }
+
     private function ensurePodcastPressReleaseFirstMentionLinks(string $content, array $targets): string
     {
-        $content = $this->linkFirstPlainTextOccurrence(
-            $content,
-            trim((string) ($targets['person_name'] ?? '')),
-            trim((string) ($targets['person_url'] ?? ''))
-        );
+        $entities = [
+            [
+                'label' => trim((string) ($targets['person_name'] ?? '')),
+                'url' => trim((string) ($targets['person_url'] ?? '')),
+                'section_patterns' => [
+                    '/^About\s+(?:the\s+)?guest$/iu',
+                    '/^About\s+' . preg_quote(trim((string) ($targets['person_name'] ?? '')), '/') . '$/iu',
+                ],
+            ],
+            [
+                'label' => trim((string) ($targets['company_name'] ?? '')),
+                'url' => trim((string) ($targets['company_url'] ?? '')),
+                'section_patterns' => [
+                    '/^About\s+(?:the\s+)?company$/iu',
+                    '/^About\s+' . preg_quote(trim((string) ($targets['company_name'] ?? '')), '/') . '$/iu',
+                ],
+            ],
+            [
+                'label' => trim((string) ($targets['podcast_name'] ?? '')),
+                'url' => trim((string) ($targets['podcast_url'] ?? '')),
+                'section_patterns' => [
+                    '/^About\s+(?:the\s+)?podcast$/iu',
+                    '/^About\s+' . preg_quote(trim((string) ($targets['podcast_name'] ?? '')), '/') . '$/iu',
+                ],
+            ],
+            [
+                'label' => trim((string) ($targets['host_name'] ?? '')),
+                'url' => trim((string) ($targets['host_url'] ?? '')),
+                'section_patterns' => [
+                    '/^About\s+(?:the\s+)?host$/iu',
+                    '/^About\s+' . preg_quote(trim((string) ($targets['host_name'] ?? '')), '/') . '$/iu',
+                ],
+                'disallowed_phrases' => array_values(array_filter([
+                    trim((string) ($targets['podcast_name'] ?? '')),
+                ])),
+            ],
+        ];
 
-        return $this->linkFirstPlainTextOccurrence(
-            $content,
-            trim((string) ($targets['company_name'] ?? '')),
-            trim((string) ($targets['company_url'] ?? ''))
-        );
+        usort($entities, static fn (array $a, array $b): int => mb_strlen((string) ($b['label'] ?? '')) <=> mb_strlen((string) ($a['label'] ?? '')));
+
+        foreach ($entities as $entity) {
+            $label = trim((string) ($entity['label'] ?? ''));
+            $url = trim((string) ($entity['url'] ?? ''));
+            if ($label === '' || $url === '') {
+                continue;
+            }
+
+            $content = $this->linkFirstPlainTextOccurrence(
+                $content,
+                $label,
+                $url,
+                (array) ($entity['disallowed_phrases'] ?? [])
+            );
+            $content = $this->linkFirstOccurrenceWithinSections(
+                $content,
+                $label,
+                $url,
+                (array) ($entity['section_patterns'] ?? []),
+                (array) ($entity['disallowed_phrases'] ?? [])
+            );
+        }
+
+        return $content;
     }
 
     private function ensurePodcastPressReleaseInlineGuestImage(string $content, array $targets): string
@@ -857,13 +953,42 @@ class ArticleGenerationService
         return $content . $figure;
     }
 
-    private function linkFirstPlainTextOccurrence(string $content, string $label, string $url): string
+    private function normalizePodcastPressReleaseInlineFigures(string $content): string
     {
-        if ($content === '' || $label === '' || $url === '' || !class_exists(\DOMDocument::class)) {
+        if ($content === '') {
             return $content;
         }
 
-        if (preg_match('/<a\b[^>]*>\s*' . preg_quote($label, '/') . '\s*<\/a>/iu', $content)) {
+        $seen = [];
+        $content = preg_replace_callback('/<figure\b[^>]*class="[^"]*(?:podcast-inline-guest-photo|press-release-inline-photo)[^"]*"[^>]*>.*?<\/figure>/is', function (array $match) use (&$seen) {
+            $html = (string) ($match[0] ?? '');
+            if ($html === '') {
+                return $html;
+            }
+            if (!preg_match('/<img\b[^>]*src="([^"]+)"/i', $html, $srcMatch)) {
+                return $html;
+            }
+
+            $src = html_entity_decode((string) ($srcMatch[1] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $src = preg_replace('/\s+/', '', $src) ?? $src;
+            if ($src === '') {
+                return $html;
+            }
+            if (isset($seen[$src])) {
+                return '';
+            }
+            $seen[$src] = true;
+            return $html;
+        }, $content) ?? $content;
+
+        $content = preg_replace('/<p>\s*<\/p>\s*(<div class="podcast-youtube-embed")/i', '$1', $content) ?? $content;
+        $content = preg_replace('/(?:\s*<p>\s*<\/p>\s*){2,}/i', '', $content) ?? $content;
+
+        return $content;
+    }
+    private function linkFirstPlainTextOccurrence(string $content, string $label, string $url, array $disallowedPhrases = []): string
+    {
+        if ($content === '' || $label === '' || $url === '' || !class_exists(\DOMDocument::class)) {
             return $content;
         }
 
@@ -877,46 +1002,132 @@ class ArticleGenerationService
         }
 
         $xpath = new \DOMXPath($dom);
-        $nodes = $xpath->query('//text()[normalize-space() != "" and not(ancestor::a) and not(ancestor::script) and not(ancestor::style) and not(ancestor::h1) and not(ancestor::h2) and not(ancestor::h3) and not(ancestor::h4) and not(ancestor::h5) and not(ancestor::h6)]');
+        $nodes = $xpath->query('//text()[normalize-space() != "" and not(ancestor::script) and not(ancestor::style) and not(ancestor::h1) and not(ancestor::h2) and not(ancestor::h3) and not(ancestor::h4) and not(ancestor::h5) and not(ancestor::h6)]');
         if (!$nodes) {
             libxml_clear_errors();
             libxml_use_internal_errors($previous);
             return $content;
         }
 
+        $labelLength = mb_strlen($label);
         foreach ($nodes as $textNode) {
-            $text = $textNode->nodeValue ?? '';
-            $offset = mb_stripos($text, $label);
-            if ($offset === false) {
+            if ($xpath->evaluate('boolean(ancestor::a)', $textNode)) {
                 continue;
             }
 
-            $before = mb_substr($text, 0, $offset);
-            $match = mb_substr($text, $offset, mb_strlen($label));
-            $after = mb_substr($text, $offset + mb_strlen($label));
-            $fragment = $dom->createDocumentFragment();
+            $text = $textNode->nodeValue ?? '';
+            $searchOffset = 0;
+            while (($offset = mb_stripos($text, $label, $searchOffset)) !== false) {
+                $blocked = false;
+                foreach ($disallowedPhrases as $phrase) {
+                    $phrase = trim((string) $phrase);
+                    if ($phrase === '') {
+                        continue;
+                    }
+                    $phraseOffset = 0;
+                    $phraseLength = mb_strlen($phrase);
+                    while (($phrasePos = mb_stripos($text, $phrase, $phraseOffset)) !== false) {
+                        if ($offset >= $phrasePos && ($offset + $labelLength) <= ($phrasePos + $phraseLength)) {
+                            $blocked = true;
+                            break 2;
+                        }
+                        $phraseOffset = $phrasePos + 1;
+                    }
+                }
+                if ($blocked) {
+                    $searchOffset = $offset + $labelLength;
+                    continue;
+                }
 
-            if ($before !== '') {
-                $fragment->appendChild($dom->createTextNode($before));
+                $before = mb_substr($text, 0, $offset);
+                $match = mb_substr($text, $offset, $labelLength);
+                $after = mb_substr($text, $offset + $labelLength);
+                $fragment = $dom->createDocumentFragment();
+
+                if ($before !== '') {
+                    $fragment->appendChild($dom->createTextNode($before));
+                }
+
+                $anchor = $dom->createElement('a');
+                $anchor->setAttribute('href', $url);
+                $anchor->setAttribute('target', '_blank');
+                $anchor->setAttribute('rel', 'noopener noreferrer');
+                $anchor->appendChild($dom->createTextNode($match));
+                $fragment->appendChild($anchor);
+
+                if ($after !== '') {
+                    $fragment->appendChild($dom->createTextNode($after));
+                }
+
+                $textNode->parentNode?->replaceChild($fragment, $textNode);
+                $root = $dom->getElementById('hexa-link-root');
+                $result = $root ? $this->innerHtml($root) : $content;
+                libxml_clear_errors();
+                libxml_use_internal_errors($previous);
+                return $result;
             }
+        }
 
-            $anchor = $dom->createElement('a');
-            $anchor->setAttribute('href', $url);
-            $anchor->setAttribute('target', '_blank');
-            $anchor->setAttribute('rel', 'noopener noreferrer');
-            $anchor->appendChild($dom->createTextNode($match));
-            $fragment->appendChild($anchor);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        return $content;
+    }
+    private function linkFirstOccurrenceWithinSections(string $content, string $label, string $url, array $sectionPatterns = [], array $disallowedPhrases = []): string
+    {
+        if ($content === '' || $label === '' || $url === '' || empty($sectionPatterns) || !class_exists(\DOMDocument::class)) {
+            return $content;
+        }
 
-            if ($after !== '') {
-                $fragment->appendChild($dom->createTextNode($after));
-            }
-
-            $textNode->parentNode?->replaceChild($fragment, $textNode);
-            $root = $dom->getElementById('hexa-link-root');
-            $result = $root ? $this->innerHtml($root) : $content;
+        $previous = libxml_use_internal_errors(true);
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+        $html = '<?xml encoding="utf-8" ?><div id="hexa-link-root">' . $content . '</div>';
+        if (!$dom->loadHTML($html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD)) {
             libxml_clear_errors();
             libxml_use_internal_errors($previous);
-            return $result;
+            return $content;
+        }
+
+        $xpath = new \DOMXPath($dom);
+        $headings = $xpath->query('//*[@id="hexa-link-root"]/*[self::h1 or self::h2 or self::h3 or self::h4 or self::h5 or self::h6]');
+        if (!$headings) {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+            return $content;
+        }
+
+        foreach ($headings as $heading) {
+            $headingText = trim((string) $heading->textContent);
+            if ($headingText === '') {
+                continue;
+            }
+
+            $matchesSection = false;
+            foreach ($sectionPatterns as $pattern) {
+                if ($pattern !== '' && @preg_match($pattern, $headingText)) {
+                    if (preg_match($pattern, $headingText) === 1) {
+                        $matchesSection = true;
+                        break;
+                    }
+                }
+            }
+            if (!$matchesSection) {
+                continue;
+            }
+
+            $sibling = $heading->nextSibling;
+            while ($sibling) {
+                if ($sibling->nodeType === XML_ELEMENT_NODE && in_array(strtolower($sibling->nodeName), ['h1','h2','h3','h4','h5','h6'], true)) {
+                    break;
+                }
+                if ($this->replaceFirstTextOccurrenceInNode($sibling, $label, $url, $disallowedPhrases)) {
+                    $root = $dom->getElementById('hexa-link-root');
+                    $result = $root ? $this->innerHtml($root) : $content;
+                    libxml_clear_errors();
+                    libxml_use_internal_errors($previous);
+                    return $result;
+                }
+                $sibling = $sibling->nextSibling;
+            }
         }
 
         libxml_clear_errors();
@@ -924,6 +1135,72 @@ class ArticleGenerationService
         return $content;
     }
 
+    private function replaceFirstTextOccurrenceInNode(\DOMNode $contextNode, string $label, string $url, array $disallowedPhrases = []): bool
+    {
+        $document = $contextNode->ownerDocument;
+        if (!$document) {
+            return false;
+        }
+
+        $xpath = new \DOMXPath($document);
+        $nodes = $xpath->query('.//text()[normalize-space() != "" and not(ancestor::a) and not(ancestor::script) and not(ancestor::style)] | self::text()[normalize-space() != "" and not(ancestor::a) and not(ancestor::script) and not(ancestor::style)]', $contextNode);
+        if (!$nodes) {
+            return false;
+        }
+
+        $labelLength = mb_strlen($label);
+        foreach ($nodes as $textNode) {
+            $text = $textNode->nodeValue ?? '';
+            $searchOffset = 0;
+            while (($offset = mb_stripos($text, $label, $searchOffset)) !== false) {
+                $blocked = false;
+                foreach ($disallowedPhrases as $phrase) {
+                    $phrase = trim((string) $phrase);
+                    if ($phrase === '') {
+                        continue;
+                    }
+                    $phraseOffset = 0;
+                    $phraseLength = mb_strlen($phrase);
+                    while (($phrasePos = mb_stripos($text, $phrase, $phraseOffset)) !== false) {
+                        if ($offset >= $phrasePos && ($offset + $labelLength) <= ($phrasePos + $phraseLength)) {
+                            $blocked = true;
+                            break 2;
+                        }
+                        $phraseOffset = $phrasePos + 1;
+                    }
+                }
+                if ($blocked) {
+                    $searchOffset = $offset + $labelLength;
+                    continue;
+                }
+
+                $before = mb_substr($text, 0, $offset);
+                $match = mb_substr($text, $offset, $labelLength);
+                $after = mb_substr($text, $offset + $labelLength);
+                $fragment = $document->createDocumentFragment();
+
+                if ($before !== '') {
+                    $fragment->appendChild($document->createTextNode($before));
+                }
+
+                $anchor = $document->createElement('a');
+                $anchor->setAttribute('href', $url);
+                $anchor->setAttribute('target', '_blank');
+                $anchor->setAttribute('rel', 'noopener noreferrer');
+                $anchor->appendChild($document->createTextNode($match));
+                $fragment->appendChild($anchor);
+
+                if ($after !== '') {
+                    $fragment->appendChild($document->createTextNode($after));
+                }
+
+                $textNode->parentNode?->replaceChild($fragment, $textNode);
+                return true;
+            }
+        }
+
+        return false;
+    }
     private function innerHtml(\DOMNode $node): string
     {
         $html = '';
@@ -938,11 +1215,16 @@ class ArticleGenerationService
     {
         $date = trim((string) ($details['date'] ?? ''));
         $location = trim((string) ($details['location'] ?? ''));
-        if ($date === '' || $location === '') {
-            return $content;
+        $leadText = '';
+        if ($date !== '' && $location !== '') {
+            $leadText = $location . ' (Hexa PR Wire - ' . $date . ')';
+        } elseif (preg_match('/<strong>\s*([^<]*Hexa PR Wire[^<]*)<\/strong>\s*-\s*/u', $content, $leadMatch)) {
+            $leadText = trim(html_entity_decode((string) ($leadMatch[1] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
         }
 
-        $leadText = $location . ' (Hexa PR Wire - ' . $date . ')';
+        if ($leadText === '') {
+            return $content;
+        }
         $leadHtml = '<strong>' . htmlspecialchars($leadText, ENT_QUOTES, 'UTF-8') . '</strong> - ';
         $content = preg_replace('/^\s*FOR IMMEDIATE RELEASE(?:\s*[:\-–—]\s*)?/iu', '', $content, 1) ?? $content;
 
@@ -950,7 +1232,9 @@ class ArticleGenerationService
             $patterns = [
                 '/^\s*(?:<strong>|<b>)?\s*' . preg_quote($leadText, '/') . '\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/iu',
                 '/^\s*(?:<strong>|<b>)?\s*(?:Location:\s*)?[^<\n]{0,180}?\(\s*Hexa PR Wire(?:\s*[-–—]\s*[^)]*)?\)\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/u',
+                '/^\s*(?:<strong>|<b>)?\s*(?:Location:\s*)?[^<\n]{2,140}?\s*[–-]\s*(?:Date:\s*)?(?:\[[^\]]+\]|[A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{4}-\d{2}-\d{2})\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/u',
                 '/^\s*(?:<strong>|<b>)?\s*(?:Location:\s*)?(?:[A-Z][A-Za-z. ]+,\s*){1,3}(?:Date:\s*)?(?:\[[^\]]+\]|[A-Za-z]+\s+\d{1,2},\s+\d{4})\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/u',
+                '/^\s*(?:<strong>|<b>)?\s*[^<\n]{2,120}?\s*[-–—]\s*(?:[A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{4}-\d{2}-\d{2})\s*[-–—]\s*/u',
                 '/^\s*(?:<strong>|<b>)?\s*FOR IMMEDIATE RELEASE(?:\s*[:\-–—]\s*)?/iu',
             ];
 
@@ -966,6 +1250,12 @@ class ArticleGenerationService
             $firstParagraph = $match[1][0];
             $paragraphOffset = $match[1][1];
             $normalizedParagraph = $leadHtml . $stripDateline($firstParagraph);
+            $normalizedParagraph = preg_replace(
+                '/(<strong>[^<]*Hexa PR Wire[^<]*<\/strong>\s*-\s*)(?:<strong>|<b>).*?(?:<\/strong>|<\/b>)\s*[-–—]\s*/u',
+                '$1',
+                $normalizedParagraph,
+                1
+            ) ?? $normalizedParagraph;
 
             return substr($content, 0, $paragraphOffset)
                 . $normalizedParagraph
@@ -973,6 +1263,115 @@ class ArticleGenerationService
         }
 
         return $leadHtml . $stripDateline($content);
+    }
+    private function normalizePodcastPressReleaseEntityLinkCollisions(string $content, array $targets): string
+    {
+        $hostName = trim((string) ($targets['host_name'] ?? ''));
+        $podcastName = trim((string) ($targets['podcast_name'] ?? ''));
+        $podcastUrl = trim((string) ($targets['podcast_url'] ?? ''));
+
+        if ($content === '' || $hostName === '' || $podcastName === '' || $podcastUrl === '') {
+            return $content;
+        }
+
+        $escapedHost = preg_quote($hostName, '/');
+        $escapedPodcast = preg_quote($podcastName, '/');
+
+        $patterns = [
+            '/\bThe\s+<a\b[^>]*>\s*' . $escapedHost . '\s*<\/a>\s+Podcast\b/iu' => $podcastName,
+            '/<a\b[^>]*>\s*' . $escapedPodcast . '\s*<\/a>/iu' => $podcastName,
+        ];
+
+        foreach ($patterns as $pattern => $replacement) {
+            $content = preg_replace($pattern, $replacement, $content) ?? $content;
+        }
+
+        return $content;
+    }
+
+    private function normalizePodcastPressReleaseLeadTone(string $content, array $targets): string
+    {
+        $replacements = [
+            '/\bHexa PR Wire is pleased to announce(?: the latest episode of)?\s+/i' => '',
+            '/\bthe latest episode of\s+the latest episode of\b/i' => 'the latest episode of',
+            '/\bremarkable career\b/i' => 'career',
+            '/\bdynamic businesswoman\b/i' => 'business leader',
+            '/\bvaluable insights\b/i' => 'insights',
+            '/\baccomplished\b/i' => '',
+            '/\brecently welcomed\b/i' => 'features',
+            '/\binspiring others to do the same\b/i' => 'encouraging others to pursue similar paths',
+        ];
+
+        foreach ($replacements as $pattern => $replacement) {
+            $content = preg_replace($pattern, $replacement, $content) ?? $content;
+        }
+
+        $podcastName = trim((string) ($targets['podcast_name'] ?? ''));
+        if ($podcastName !== '') {
+            $content = preg_replace('/\bthe\s+' . preg_quote($podcastName, '/') . '\b/iu', $podcastName, $content, 1) ?? $content;
+            $podcastLeadPattern = '/(<a\b[^>]*>\s*' . preg_quote($podcastName, '/') . '\s*<\/a>|' . preg_quote($podcastName, '/') . ')\s*,\s*featuring\b/iu';
+            $content = preg_replace($podcastLeadPattern, '$1 features', $content, 1) ?? $content;
+        }
+
+        $content = preg_replace('/\s{2,}/u', ' ', $content) ?? $content;
+        $content = preg_replace('/\s+([,.;:!?])/u', '$1', $content) ?? $content;
+
+        return $content;
+    }
+
+    private function normalizePressReleaseTargetLabel(string $value): string
+    {
+        $value = trim(html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        if ($value === '') {
+            return '';
+        }
+
+        if (preg_match('/^https?:\/\//i', $value)) {
+            $parts = parse_url($value);
+            $path = trim((string) ($parts['path'] ?? ''), '/');
+            $value = $path !== '' ? basename($path) : trim((string) ($parts['host'] ?? ''));
+        }
+
+        $value = preg_replace('/^profile\//i', '', $value) ?? $value;
+        $value = preg_replace('/[-_]+/', ' ', $value) ?? $value;
+        $value = preg_replace('/\s+/u', ' ', $value) ?? $value;
+
+        return trim($value, " 	
+ /.,");
+    }
+
+    private function normalizePressReleaseCanonicalUrl(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        $parts = parse_url($value);
+        if (!is_array($parts)) {
+            return $value;
+        }
+
+        $scheme = trim((string) ($parts['scheme'] ?? 'https')) ?: 'https';
+        $host = trim((string) ($parts['host'] ?? ''));
+        if ($host === '') {
+            return $value;
+        }
+
+        $path = trim((string) ($parts['path'] ?? ''));
+        if ($path == '' || $path == '/') {
+            return $scheme . '://' . $host . '/';
+        }
+
+        if (preg_match('#/(watch|embed|shorts)/#i', $path)) {
+            return $value;
+        }
+
+        if (substr_count(trim($path, '/'), '/') >= 1 || preg_match('/-[a-z0-9]+(?:-[a-z0-9]+){2,}/i', $path)) {
+            return $scheme . '://' . $host . '/';
+        }
+
+        return $scheme . '://' . $host . rtrim($path, '/') . '/';
     }
 
     /**
@@ -994,17 +1393,34 @@ class ArticleGenerationService
 
     private function normalizeMetadataForArticleType(array $metadata, ?string $articleType, array $sourceTexts): array
     {
-        $titles = collect((array) ($metadata['titles'] ?? []))
+        $metadata['titles'] = $this->filterValidTitles((array) ($metadata['titles'] ?? []), $articleType, $sourceTexts);
+        $metadata['categories'] = collect((array) ($metadata['categories'] ?? []))
+            ->map(fn ($value) => $this->normalizeListText((string) $value))
+            ->filter()
+            ->unique()
+            ->values()
+            ->take(10)
+            ->all();
+        $metadata['tags'] = collect((array) ($metadata['tags'] ?? []))
+            ->map(fn ($value) => $this->normalizeListText((string) $value))
+            ->filter()
+            ->unique()
+            ->values()
+            ->take(10)
+            ->all();
+        $metadata['description'] = $this->normalizeDescriptionText((string) ($metadata['description'] ?? ''));
+
+        return $metadata;
+    }
+
+    private function filterValidTitles(array $titles, ?string $articleType, array $sourceTexts): array
+    {
+        $normalizedTitles = collect($titles)
             ->map(fn ($title) => $this->normalizeTitleText((string) $title))
             ->filter()
             ->unique()
             ->values()
             ->all();
-
-        if ($titles === []) {
-            $metadata['titles'] = [];
-            return $metadata;
-        }
 
         $sourceTitles = collect($sourceTexts)
             ->map(fn ($src) => is_array($src) ? $this->normalizeTitleText((string) ($src['title'] ?? '')) : '')
@@ -1012,37 +1428,35 @@ class ArticleGenerationService
             ->values()
             ->all();
 
-        $selectedIndex = 0;
-        foreach ($titles as $index => $candidate) {
+        $validTitles = [];
+        foreach ($normalizedTitles as $candidate) {
             if ($this->titleMatchesArticleType($candidate, $articleType, $sourceTitles)) {
-                $selectedIndex = $index;
-                break;
+                $validTitles[] = $candidate;
             }
         }
 
-        if ($selectedIndex !== 0) {
-            $selected = $titles[$selectedIndex];
-            unset($titles[$selectedIndex]);
-            array_unshift($titles, $selected);
-            $titles = array_values($titles);
-        }
-
-        $metadata['titles'] = $titles;
-        $metadata['description'] = $this->normalizeDescriptionText((string) ($metadata['description'] ?? ''));
-
-        return $metadata;
+        return array_values(array_unique($validTitles));
     }
 
     private function normalizeTitleText(string $title): string
     {
-        $title = html_entity_decode(strip_tags($title), ENT_QUOTES, 'UTF-8');
+        $title = $this->normalizeListText($title);
         $title = preg_replace('/\s+/', ' ', $title);
         return trim((string) $title);
+    }
+
+    private function normalizeListText(string $value): string
+    {
+        $value = html_entity_decode(strip_tags($value), ENT_QUOTES, 'UTF-8');
+        $value = $this->normalizeGeneratedPunctuation($value);
+
+        return trim((string) preg_replace('/\s+/', ' ', $value));
     }
 
     private function normalizeDescriptionText(string $description): string
     {
         $description = html_entity_decode(strip_tags($description), ENT_QUOTES, 'UTF-8');
+        $description = $this->normalizeGeneratedPunctuation($description);
         $description = preg_replace('/\bseo meta description\b[:\s-]*/i', '', $description);
         $description = preg_replace('/\(\s*under\s*\d+\s*characters?\s*\)/i', '', $description);
         $description = preg_replace('/\(\s*max(?:imum)?\s*\d+\s*characters?\s*\)/i', '', $description);
@@ -1086,6 +1500,10 @@ class ArticleGenerationService
             return false;
         }
 
+        if ($this->titleUsesFirstPerson($title)) {
+            return false;
+        }
+
         foreach ($sourceTitles as $sourceTitle) {
             if ($this->titlesAreTooSimilar($title, $sourceTitle)) {
                 return false;
@@ -1111,6 +1529,76 @@ class ArticleGenerationService
         }
 
         return true;
+    }
+
+    private function titleUsesFirstPerson(string $title): bool
+    {
+        return preg_match("/\\b(i|i'm|i’m|i've|i’ve|i'd|i’d|me|my|mine|myself|we|we're|we’re|we've|we’ve|our|ours|us)\\b/i", $title) === 1;
+    }
+
+    private function normalizeGeneratedPunctuation(string $text): string
+    {
+        return str_replace(['—', '–', '―'], '-', $text);
+    }
+
+    private function ensureMinimumTitleOptions(
+        array $metadata,
+        string $content,
+        ?string $articleType,
+        array $sourceTexts,
+        string $provider,
+        string $model
+    ): array
+    {
+        $titles = $this->filterValidTitles((array) ($metadata['titles'] ?? []), $articleType, $sourceTexts);
+        if (count($titles) >= 5) {
+            $metadata['titles'] = array_slice($titles, 0, 10);
+            return $metadata;
+        }
+
+        $systemPrompt = 'You are an expert headline editor. Output ONLY valid JSON in the form {"titles":["title1","title2",...]} with no markdown or extra text.';
+        $userPrompt = $this->buildSupplementalTitlePrompt($content, $articleType, $sourceTexts);
+        $result = $this->callProvider($provider, $model, $systemPrompt, false, $userPrompt, 1024);
+
+        if (($result['success'] ?? false) === true) {
+            $raw = (string) ($result['data']['content'] ?? '');
+            $raw = preg_replace('/^```json\s*/i', '', $raw);
+            $raw = preg_replace('/\s*```$/', '', (string) $raw);
+            $parsed = json_decode(trim((string) $raw), true);
+            $supplemental = is_array($parsed) ? (array) ($parsed['titles'] ?? []) : [];
+            $titles = array_values(array_unique(array_merge(
+                $titles,
+                $this->filterValidTitles($supplemental, $articleType, $sourceTexts)
+            )));
+        }
+
+        $metadata['titles'] = array_slice($titles, 0, 10);
+
+        return $metadata;
+    }
+
+    private function buildSupplementalTitlePrompt(string $content, ?string $articleType, array $sourceTexts): string
+    {
+        $sourceTitles = collect($sourceTexts)
+            ->map(fn ($src) => is_array($src) ? $this->normalizeTitleText((string) ($src['title'] ?? '')) : '')
+            ->filter()
+            ->values()
+            ->all();
+
+        $rules = [
+            'Generate exactly 10 distinct headline options.',
+            'Do not use em dashes or en dashes. Use commas, periods, colons, or a standard hyphen only.',
+            'Do not use first-person phrasing such as I, I\'m, I\'ve, my, we, our, or us.',
+            'Keep every headline in third person unless the workflow explicitly requests a first-person essay.',
+            'Do not copy or lightly paraphrase the source headlines.',
+            'Keep the headlines specific, publication-ready, and SEO-friendly.',
+            'Return JSON only in the form {"titles":["title1","title2",...]}',
+        ];
+
+        return "Article type: " . ($articleType ?: 'general') . "\n\n"
+            . "Rules:\n- " . implode("\n- ", $rules) . "\n\n"
+            . ($sourceTitles !== [] ? "Source headlines to avoid:\n- " . implode("\n- ", $sourceTitles) . "\n\n" : '')
+            . "Article body:\n" . mb_substr(strip_tags($content), 0, 5000);
     }
 
     private function titlesAreTooSimilar(string $left, string $right): bool

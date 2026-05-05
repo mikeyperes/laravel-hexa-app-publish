@@ -1,8 +1,8 @@
 {{-- ══════════════════════════════════════════════════════════════
      Step 6: Create Article
      ══════════════════════════════════════════════════════════════ --}}
-<div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 6, 'opacity-50': !isStepAccessible(6) }">
-    <button @click="toggleStep(6)" :disabled="!isStepAccessible(6)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+<div class="pipeline-step-card" :class="{ 'ring-2 ring-blue-400': currentStep === 6, 'opacity-50': !isStepAccessible(6) }">
+    <button @click="toggleStep(6)" :disabled="!isStepAccessible(6)" class="pipeline-step-toggle disabled:cursor-not-allowed">
         <div class="flex items-center gap-3">
             <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                   :class="completedSteps.includes(6) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
@@ -14,7 +14,7 @@
         </div>
         <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(6) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
     </button>
-    <div x-show="openSteps.includes(6)" x-cloak x-collapse class="px-4 pb-4">
+    <div x-show="openSteps.includes(6)" x-cloak x-collapse class="pipeline-step-panel">
 
         {{-- Spun content in TinyMCE editor --}}
         <div x-show="spunContent || editorContent || isStepAccessible(6)" x-cloak>
@@ -100,7 +100,7 @@
                 </div>
             </div>
             {{-- Press Release Publication Taxonomy (hexaprwire only) --}}
-            <div x-show="currentArticleType === 'press-release' && selectedSite?.is_press_release_source" x-cloak class="mt-3">
+            <div x-show="currentArticleType === 'press-release' && selectedSite?.is_press_release_source" x-cloak class="mt-3" x-effect="maybeAutoLoadSyndicationCategories && maybeAutoLoadSyndicationCategories()">
                 <div class="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-4">
                     <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div>
@@ -109,14 +109,14 @@
                         </div>
                         <div class="flex flex-wrap items-center gap-2 text-xs">
                             <span x-show="syndicationCategoriesCacheMeta?.age_human && syndicationCategories.length > 0" x-cloak class="inline-flex items-center gap-1 rounded-full bg-white border border-purple-200 px-2.5 py-1 text-purple-700">
-                                <span>Cached</span>
+                                <span>Synced</span>
                                 <span x-text="syndicationCategoriesCacheMeta?.age_human || 'just now'"></span>
                             </span>
                             <button x-show="syndicationCategories.length > 0 && !loadingSyndicationCats" x-cloak @click="selectAllSyndicationCats()" type="button" class="rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-purple-700 hover:bg-purple-100">Select all</button>
                             <button x-show="syndicationCategories.length > 0 && !loadingSyndicationCats" x-cloak @click="clearSyndicationCats()" type="button" class="rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-purple-700 hover:bg-purple-100">Select none</button>
-                            <button @click="syndicationCategories.length ? resyncSyndicationCategories() : loadSyndicationCategories()" :disabled="loadingSyndicationCats" type="button" class="rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-purple-700 hover:bg-purple-100 disabled:opacity-50 inline-flex items-center gap-1">
+                            <button @click="resyncSyndicationCategories()" :disabled="loadingSyndicationCats" type="button" class="rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-purple-700 hover:bg-purple-100 disabled:opacity-50 inline-flex items-center gap-1">
                                 <svg x-show="loadingSyndicationCats" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                <span x-text="loadingSyndicationCats ? 'Syncing…' : (syndicationCategories.length ? 'Resync Source' : 'Load Taxonomy')"></span>
+                                <span x-text="loadingSyndicationCats ? 'Syncing…' : 'Sync with source'"></span>
                             </button>
                         </div>
                     </div>
@@ -125,21 +125,35 @@
                         <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         Loading publication taxonomy…
                     </div>
-                    <div x-show="syndicationCategories.length > 0 && !loadingSyndicationCats" x-cloak class="space-y-1">
-                        <template x-for="cat in syndicationCategories" :key="cat.id">
-                            <label class="flex items-start gap-2 cursor-pointer rounded-lg px-3 py-2 text-sm transition-colors" :class="selectedSyndicationCats.includes(cat.id) ? 'border border-purple-200 bg-white text-gray-900' : 'text-gray-700 hover:bg-white/70'">
-                                <input type="checkbox" :value="cat.id" :checked="selectedSyndicationCats.includes(cat.id)" @click="toggleSyndicationCat(cat.id)" class="mt-0.5 rounded border-gray-300 text-purple-600">
-                                <div class="min-w-0 flex-1">
-                                    <div class="flex items-center gap-2">
-                                        <span :class="cat.is_parent ? 'font-semibold text-gray-900' : 'text-gray-700'" x-text="cat.label || cat.name"></span>
-                                        <span x-show="cat.is_parent" x-cloak class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700">Parent</span>
+                    <div x-show="syndicationCategories.length > 0 && !loadingSyndicationCats" x-cloak class="space-y-3">
+                        <template x-for="parent in syndicationCategoryTree()" :key="parent.id">
+                            <div class="rounded-xl border border-purple-200 bg-white overflow-hidden">
+                                <label class="flex items-start gap-3 cursor-pointer px-4 py-3" :class="syndicationNodeState(parent) !== 'none' ? 'bg-purple-50/60' : ''">
+                                    <input type="checkbox" :checked="syndicationNodeState(parent) === 'all'" @click.prevent="toggleSyndicationTreeNode(parent)" class="mt-1 rounded border-gray-300 text-purple-600" x-init="$nextTick(() => { $el.indeterminate = syndicationNodeState(parent) === 'some'; })" x-effect="$el.indeterminate = syndicationNodeState(parent) === 'some'">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="font-semibold text-gray-900" x-text="parent.label || parent.name"></span>
+                                            <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700">Parent</span>
+                                            <span x-show="parent.children && parent.children.length" x-cloak class="text-[11px] text-purple-700" x-text="parent.children.length + ' publication' + (parent.children.length === 1 ? '' : 's')"></span>
+                                        </div>
+                                        <p class="text-[11px] text-gray-400 mt-0.5" x-text="parent.slug || ''"></p>
                                     </div>
-                                    <p class="text-[11px] text-gray-400 mt-0.5" x-text="cat.slug || ''"></p>
+                                </label>
+                                <div x-show="parent.children && parent.children.length" x-cloak class="border-t border-purple-100 bg-purple-50/30 px-4 py-3 space-y-2">
+                                    <template x-for="child in parent.children" :key="child.id">
+                                        <label class="flex items-start gap-3 cursor-pointer rounded-lg border px-3 py-2 transition-colors" :class="isSyndicationSelected(child.id) ? 'border-purple-200 bg-white text-gray-900' : 'border-transparent text-gray-700 hover:border-purple-100 hover:bg-white/80'">
+                                            <input type="checkbox" :checked="isSyndicationSelected(child.id)" @click.prevent="toggleSyndicationTreeNode(child)" class="mt-0.5 rounded border-gray-300 text-purple-600">
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-sm font-medium" x-text="child.label || child.name"></p>
+                                                <p class="text-[11px] text-gray-400 mt-0.5" x-text="child.slug || ''"></p>
+                                            </div>
+                                        </label>
+                                    </template>
                                 </div>
-                            </label>
+                            </div>
                         </template>
                     </div>
-                    <p x-show="!syndicationCategories.length && !loadingSyndicationCats" x-cloak class="text-xs text-gray-500">Load the live publication taxonomy from WordPress, then confirm or trim the default all-publication selection.</p>
+                    <p x-show="!syndicationCategories.length && !loadingSyndicationCats" x-cloak class="text-xs text-gray-500">Fetching the cached publication taxonomy automatically. Use sync with source only when you want a fresh pull from WordPress.</p>
                 </div>
             </div>
 
@@ -190,7 +204,7 @@
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <template x-for="asset in pressReleasePhotoAssets" :key="asset.key">
                         <div class="rounded-lg overflow-hidden border border-blue-100 bg-white">
-                            <img :src="asset.thumbnail_url || asset.url" class="w-full h-36 object-cover" loading="lazy">
+                            <img :src="pressReleaseEditorPreviewUrl(asset) || asset.preview_url || asset.thumbnail_url || asset.url" class="w-full h-36 object-cover" loading="lazy">
                             <div class="p-3 space-y-2">
                                 <div>
                                     <p class="text-xs font-medium text-gray-800 break-words" x-text="asset.label"></p>
@@ -199,7 +213,7 @@
                                 <div class="flex flex-wrap gap-2">
                                     <button @click="setPressReleaseFeaturedPhoto(asset)" type="button" class="text-[11px] text-blue-700 hover:text-blue-900">Set Featured</button>
                                     <button @click="insertPressReleaseAssetIntoEditor(asset)" type="button" class="text-[11px] text-green-700 hover:text-green-900">Insert</button>
-                                    <a :href="asset.url" target="_blank" class="text-[11px] text-gray-500 hover:text-gray-700">Open</a>
+                                    <a :href="asset.view_url || asset.source_url || asset.url" target="_blank" class="text-[11px] text-gray-500 hover:text-gray-700">Open</a>
                                 </div>
                             </div>
                         </div>
@@ -305,8 +319,8 @@
                                         <span x-show="featuredPhoto?.source === 'pixabay'" class="text-yellow-600 font-medium">Pixabay</span>
                                         <span x-show="featuredPhoto?.source === 'url-import'" class="text-orange-600 font-medium">Import URL</span>
                                         <span x-show="featuredPhoto?.source === 'upload'" class="text-purple-600 font-medium">Upload</span>
-                                        <a :href="featuredPhoto?.url_large" target="_blank" class="text-blue-500 hover:underline truncate max-w-xs inline-flex items-center gap-0.5" :title="featuredPhoto?.url_large">
-                                            <strong class="text-blue-700" x-text="(() => { try { return new URL(featuredPhoto?.url_large || '').hostname; } catch(e) { return ''; } })()"></strong><span class="truncate" x-text="(() => { try { const u = new URL(featuredPhoto?.url_large || ''); const p = u.pathname; return p.length > 40 ? p.substring(0, 20) + '...' + p.substring(p.length - 18) : p; } catch(e) { return ''; } })()"></span>
+                                        <a :href="resolvePhotoLargeUrl(featuredPhoto) || resolvePhotoThumbUrl(featuredPhoto)" target="_blank" class="text-blue-500 hover:underline truncate max-w-xs inline-flex items-center gap-0.5" :title="resolvePhotoLargeUrl(featuredPhoto) || resolvePhotoThumbUrl(featuredPhoto)">
+                                            <strong class="text-blue-700" x-text="(() => { try { return new URL(resolvePhotoLargeUrl(featuredPhoto) || resolvePhotoThumbUrl(featuredPhoto) || '').hostname; } catch(e) { return ''; } })()"></strong><span class="truncate" x-text="(() => { try { const u = new URL(resolvePhotoLargeUrl(featuredPhoto) || resolvePhotoThumbUrl(featuredPhoto) || ''); const p = u.pathname; return p.length > 40 ? p.substring(0, 20) + '...' + p.substring(p.length - 18) : p; } catch(e) { return ''; } })()"></span>
                                             <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                                         </a>
                                     </div>
@@ -435,8 +449,8 @@
                                                 <span x-show="ps.autoPhoto?.source === 'pixabay'" class="text-yellow-600 font-medium">Pixabay</span>
                                                 <span x-show="ps.autoPhoto?.source === 'url-import'" class="text-orange-600 font-medium">Import URL</span>
                                                 <span x-show="ps.autoPhoto?.source === 'upload'" class="text-purple-600 font-medium">Upload</span>
-                                                <a :href="ps.autoPhoto?.url_large" target="_blank" class="text-blue-500 hover:underline truncate max-w-xs inline-flex items-center gap-0.5" :title="ps.autoPhoto?.url_large">
-                                                    <strong class="text-blue-700" x-text="(() => { try { return new URL(ps.autoPhoto?.url_large || '').hostname; } catch(e) { return ''; } })()"></strong><span class="truncate" x-text="(() => { try { const u = new URL(ps.autoPhoto?.url_large || ''); const p = u.pathname; return p.length > 40 ? p.substring(0, 20) + '...' + p.substring(p.length - 18) : p; } catch(e) { return ''; } })()"></span>
+                                                <a :href="resolvePhotoLargeUrl(ps.autoPhoto) || resolvePhotoThumbUrl(ps.autoPhoto)" target="_blank" class="text-blue-500 hover:underline truncate max-w-xs inline-flex items-center gap-0.5" :title="resolvePhotoLargeUrl(ps.autoPhoto) || resolvePhotoThumbUrl(ps.autoPhoto)">
+                                                    <strong class="text-blue-700" x-text="(() => { try { return new URL(resolvePhotoLargeUrl(ps.autoPhoto) || resolvePhotoThumbUrl(ps.autoPhoto) || '').hostname; } catch(e) { return ''; } })()"></strong><span class="truncate" x-text="(() => { try { const u = new URL(resolvePhotoLargeUrl(ps.autoPhoto) || resolvePhotoThumbUrl(ps.autoPhoto) || ''); const p = u.pathname; return p.length > 40 ? p.substring(0, 20) + '...' + p.substring(p.length - 18) : p; } catch(e) { return ''; } })()"></span>
                                                     <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                                                 </a>
                                             </div>
@@ -561,7 +575,7 @@
                         </div>
                         <div x-show="insertingPhoto" x-cloak class="mt-3 bg-white border border-blue-200 rounded-lg p-3">
                             <div class="flex items-start gap-3">
-                                <img :src="insertingPhoto?.url_thumb || insertingPhoto?.url_large" class="w-20 h-16 object-cover rounded border">
+                                <img :src="resolvePhotoThumbUrl(insertingPhoto) || resolvePhotoLargeUrl(insertingPhoto)" class="w-20 h-16 object-cover rounded border">
                                 <div class="flex-1">
                                     <label class="block text-xs text-gray-500 mb-1">Caption</label>
                                     <input type="text" x-model="photoCaption" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" placeholder="Photo caption...">
@@ -603,7 +617,7 @@
                     <template x-if="viewingPhotoIdx !== null && photoSuggestions[viewingPhotoIdx]">
                         <div>
                             <div class="flex items-start gap-5">
-                                <img :src="photoSuggestions[viewingPhotoIdx]?.autoPhoto?.url_large || photoSuggestions[viewingPhotoIdx]?.autoPhoto?.url_thumb" class="w-64 h-auto rounded-lg border border-gray-200 flex-shrink-0">
+                                <img :src="resolvePhotoLargeUrl(photoSuggestions[viewingPhotoIdx]?.autoPhoto) || resolvePhotoThumbUrl(photoSuggestions[viewingPhotoIdx]?.autoPhoto)" class="w-64 h-auto rounded-lg border border-gray-200 flex-shrink-0">
                                 <div class="flex-1 space-y-3">
                                     <div>
                                         <p class="text-xs text-gray-400">Search Term</p>

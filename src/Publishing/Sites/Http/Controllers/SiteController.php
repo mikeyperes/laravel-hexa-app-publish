@@ -382,7 +382,65 @@ class SiteController extends Controller
             );
         }
 
-        $cacheKey = sprintf('publish:site:%d:taxonomy:%s:v1', $site->id, $taxonomy);
+        // Direct-DB recovery for the publication taxonomy when WP-CLI cant see
+        // it (e.g. CPT/taxonomy slug collision on Hexa PR Wire). Queries
+        // wp_term_taxonomy directly via wpCliEval so the controller can return
+        // the real hierarchical Publications list rather than falling back to
+        // the WP `category` taxonomy.
+        if ($taxonomy === 'publication') {
+            $dbCacheKey = sprintf('publish:site:%d:taxonomy:publication:db:v1', $site->id);
+            if (!$force && ($cachedDb = Cache::get($dbCacheKey)) && is_array($cachedDb)) {
+                return response()->json([
+                    ...$cachedDb,
+                    'cache' => [
+                        'cached' => true,
+                        'cached_at' => $cachedDb['fetched_at'] ?? null,
+                        'age_seconds' => $this->cacheAgeSeconds($cachedDb['fetched_at'] ?? null),
+                        'age_human' => $this->cacheAgeHuman($cachedDb['fetched_at'] ?? null),
+                    ],
+                ]);
+            }
+
+            $dbTerms = $this->fetchPublicationTermsViaDb($resolved['server'], (int) $site->wordpress_install_id);
+            if (!empty($dbTerms)) {
+                $payload = [
+                    'success' => true,
+                    'categories' => $this->flattenPublicationTerms($dbTerms),
+                    'taxonomy' => 'publication',
+                    'taxonomy_requested' => 'publication',
+                    'taxonomy_label' => 'Publications',
+                    'hierarchical' => true,
+                    'message' => count($dbTerms) . ' publication terms loaded (db-fallback).',
+                    'fetched_at' => now()->toIso8601String(),
+                ];
+                Cache::put($dbCacheKey, $payload, now()->addHours(6));
+                return response()->json([
+                    ...$payload,
+                    'cache' => [
+                        'cached' => false,
+                        'cached_at' => $payload['fetched_at'],
+                        'age_seconds' => 0,
+                        'age_human' => 'just now',
+                    ],
+                ]);
+            }
+        }
+
+        $taxonomyInfo = $this->wptoolkit->wpCliResolvePreferredTaxonomy(
+            $resolved['server'],
+            (int) $site->wordpress_install_id,
+            [$taxonomy, 'category']
+        );
+        if (!($taxonomyInfo['success'] ?? false)) {
+            return response()->json([
+                'success' => false,
+                'categories' => [],
+                'message' => $taxonomyInfo['message'] ?? 'Failed to resolve syndication taxonomy.',
+            ], 500);
+        }
+
+        $resolvedTaxonomy = (string) ($taxonomyInfo['taxonomy'] ?? $taxonomy);
+        $cacheKey = sprintf('publish:site:%d:taxonomy:%s:v2', $site->id, $resolvedTaxonomy);
         if (!$force && ($cached = Cache::get($cacheKey))) {
             return response()->json([
                 ...$cached,
@@ -395,18 +453,23 @@ class SiteController extends Controller
             ]);
         }
 
-        $result = $this->wptoolkit->wpCliListTaxonomyTerms($resolved['server'], (int) $site->wordpress_install_id, $taxonomy);
+        $result = $this->wptoolkit->wpCliListTaxonomyTerms($resolved['server'], (int) $site->wordpress_install_id, $resolvedTaxonomy);
         if (!($result['success'] ?? false)) {
-            return response()->json($result);
+            return response()->json([
+                'success' => false,
+                'categories' => [],
+                'message' => $result['message'] ?? 'Failed to load syndication taxonomy terms.',
+            ], 500);
         }
 
         $payload = [
             'success' => true,
             'categories' => $this->flattenPublicationTerms($result['terms'] ?? []),
-            'taxonomy' => $taxonomy,
-            'taxonomy_label' => 'Publications',
-            'hierarchical' => true,
-            'message' => $result['message'] ?? 'Publication terms loaded.',
+            'taxonomy' => $resolvedTaxonomy,
+            'taxonomy_requested' => $taxonomy,
+            'taxonomy_label' => (string) ($taxonomyInfo['label'] ?? ucfirst(str_replace(['-', '_'], ' ', $resolvedTaxonomy))),
+            'hierarchical' => (bool) ($taxonomyInfo['hierarchical'] ?? true),
+            'message' => $result['message'] ?? 'Syndication taxonomy loaded.',
             'fetched_at' => now()->toIso8601String(),
         ];
 
@@ -513,5 +576,44 @@ class SiteController extends Controller
         $account = HostingAccount::find($site->hosting_account_id);
         $server = $account ? WhmServer::find($account->whm_server_id) : null;
         return ['server' => $server, 'account' => $account];
+    }
+
+    /**
+     * Direct DB recovery: pull publication taxonomy terms from
+     * wp_term_taxonomy via wpCliEval. Bypasses the WP-CLI
+     * taxonomy_exists/get_terms path which fails when the publication slug
+     * collides with a custom post type that shadows the taxonomy in CLI
+     * bootstrap.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchPublicationTermsViaDb($server, int $installId): array
+    {
+        if (!$server || $installId <= 0) {
+            return [];
+        }
+
+        $php = 'global $wpdb; $tax = "publication"; '
+            . '$rows = $wpdb->get_results($wpdb->prepare("SELECT t.term_id, t.name, t.slug, tt.parent, tt.count FROM {$wpdb->terms} t JOIN {$wpdb->term_taxonomy} tt ON t.term_id = tt.term_id WHERE tt.taxonomy = %s ORDER BY tt.parent ASC, t.name ASC LIMIT 500", $tax)); '
+            . '$payload = array_map(static function ($t) { return ["id" => (int) $t->term_id, "term_id" => (int) $t->term_id, "parent" => (int) $t->parent, "count" => (int) $t->count, "name" => (string) $t->name, "slug" => (string) $t->slug]; }, is_array($rows) ? $rows : []); '
+            . 'echo wp_json_encode($payload);';
+
+        try {
+            $res = $this->wptoolkit->wpCliEval($server, $installId, $php);
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        if (!($res['success'] ?? false)) {
+            return [];
+        }
+
+        $stdout = trim((string) ($res['stdout'] ?? $res['output'] ?? ''));
+        if ($stdout === '') {
+            return [];
+        }
+
+        $decoded = json_decode($stdout, true);
+        return is_array($decoded) ? $decoded : [];
     }
 }

@@ -1,5 +1,5 @@
-<div class="bg-white rounded-xl shadow-sm border border-gray-200">
-    <button @click.prevent="masterActivityLogOpen = !masterActivityLogOpen" type="button" data-master-activity-toggle class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors">
+<div class="pipeline-step-card">
+    <button @click.prevent="masterActivityLogOpen = !masterActivityLogOpen" type="button" data-master-activity-toggle class="pipeline-step-toggle">
         <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
                 <span class="font-semibold text-gray-800">Master Activity Log</span>
@@ -16,7 +16,7 @@
         </svg>
     </button>
 
-    <div x-show="masterActivityLogOpen" x-cloak x-collapse class="px-4 pb-4">
+    <div x-show="masterActivityLogOpen" x-cloak x-collapse class="pipeline-step-panel">
         <div class="flex flex-wrap items-center gap-2 mb-3">
             <button @click.stop.prevent="togglePipelineDebug()"
                     type="button"

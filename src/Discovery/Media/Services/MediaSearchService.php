@@ -90,6 +90,12 @@ class MediaSearchService
             ->values()
             ->all();
 
+        if (in_array('google', $normalizedSources, true)) {
+            $normalizedSources = array_values(array_filter($normalizedSources, fn ($source) => !in_array($source, ['google-cse', 'serpapi', 'serper'], true)));
+            array_unshift($normalizedSources, 'google');
+            $normalizedSources = array_values(array_unique($normalizedSources));
+        }
+
         $normalizedQueries = collect($queries)
             ->map(function ($item, $index) {
                 return [
@@ -116,6 +122,19 @@ class MediaSearchService
             ];
         }
 
+        $dedupedQueries = [];
+        $queryAliases = [];
+        foreach ($normalizedQueries as $item) {
+            $signature = md5(mb_strtolower(preg_replace('/\s+/', ' ', trim($item['query']))) . '|' . $item['per_page'] . '|' . $item['page']);
+            if (!isset($queryAliases[$signature])) {
+                $queryAliases[$signature] = $item['key'];
+                $dedupedQueries[] = $item;
+                continue;
+            }
+
+            $results[$item['key']]['alias_of'] = $queryAliases[$signature];
+        }
+
         if (empty($normalizedQueries) || empty($normalizedSources)) {
             return [
                 'success' => false,
@@ -126,7 +145,7 @@ class MediaSearchService
 
         $requestDefinitions = [];
         $serviceDefinitions = [];
-        foreach ($normalizedQueries as $item) {
+        foreach ($dedupedQueries as $item) {
             foreach ($normalizedSources as $source) {
                 if ($this->usesHttpPool($source)) {
                     $definition = $this->requestDefinition($source, $item['query'], $item['per_page'], $item['page']);
@@ -236,7 +255,13 @@ class MediaSearchService
             unset($bucket);
         }
 
-        foreach ($results as &$bucket) {
+        foreach ($results as $key => &$bucket) {
+            if (!empty($bucket['alias_of']) && isset($results[$bucket['alias_of']])) {
+                $aliasedQuery = $bucket['query'];
+                $bucket = $results[$bucket['alias_of']];
+                $bucket['query'] = $aliasedQuery;
+            }
+
             $bucket['photos'] = $this->rankPhotos($bucket['photos'], $qualityContext, $probeQuality);
             $bucket['success'] = count($bucket['photos']) > 0;
             $bucket['message'] = count($bucket['photos']) . ' photos found across ' . count($bucket['totals']) . ' source(s).';

@@ -68,8 +68,8 @@
          x-transition:leave="transition ease-in duration-150"
          x-transition:leave-start="opacity-100 translate-y-0"
          x-transition:leave-end="opacity-0 translate-y-2"
-         class="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg shadow-lg p-4 flex items-center gap-3"
-         :class="notification.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'">
+         class="fixed bottom-4 right-4 z-50 max-w-sm rounded-xl shadow-2xl p-4 flex items-center gap-3 bg-white opacity-100"
+         :class="notification.type === 'success' ? 'border border-green-200 ring-1 ring-green-100' : 'border border-red-200 ring-1 ring-red-100'">
         <template x-if="notification.type === 'success'">
             <svg class="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
         </template>

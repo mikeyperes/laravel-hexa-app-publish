@@ -24,10 +24,14 @@ class PressReleaseWorkflowService
             'notion_episode_query' => '',
             'notion_episode' => [],
             'notion_guest' => [],
+            'notion_host' => [],
+            'notion_podcast' => [],
             'notion_missing_fields' => [],
             'notion_source_fields' => [
                 'episode' => [],
                 'guest' => [],
+                'host' => [],
+                'podcast' => [],
                 'enforcement' => [],
             ],
             'details' => [
@@ -54,19 +58,30 @@ class PressReleaseWorkflowService
         $normalized['photo_files'] = $this->normalizeFiles($normalized['photo_files'] ?? []);
         $normalized['notion_episode'] = is_array($normalized['notion_episode'] ?? null) ? $normalized['notion_episode'] : [];
         $normalized['notion_guest'] = is_array($normalized['notion_guest'] ?? null) ? $normalized['notion_guest'] : [];
+        $normalized['notion_host'] = is_array($normalized['notion_host'] ?? null) ? $normalized['notion_host'] : [];
+        $normalized['notion_podcast'] = is_array($normalized['notion_podcast'] ?? null) ? $normalized['notion_podcast'] : [];
         $normalized['notion_missing_fields'] = array_values(array_filter(array_map('strval', (array) ($normalized['notion_missing_fields'] ?? [])), fn ($value) => trim($value) !== ''));
         $normalized['notion_source_fields'] = $this->normalizeSourceFields($normalized['notion_source_fields'] ?? []);
         $normalized['detected_photos'] = array_values(array_map(function (array $photo) {
             return [
                 'url' => (string) ($photo['url'] ?? ''),
                 'thumbnail_url' => (string) ($photo['thumbnail_url'] ?? ($photo['url'] ?? '')),
+                'preview_url' => (string) ($photo['preview_url'] ?? ($photo['thumbnail_url'] ?? ($photo['url'] ?? ''))),
+                'source_url' => (string) ($photo['source_url'] ?? ($photo['download_url'] ?? ($photo['view_url'] ?? ($photo['url'] ?? '')))),
                 'alt_text' => (string) ($photo['alt_text'] ?? ''),
                 'caption' => (string) ($photo['caption'] ?? ''),
                 'source' => (string) ($photo['source'] ?? ''),
                 'source_label' => (string) ($photo['source_label'] ?? ($photo['source'] ?? '')),
+                'source_meta_html' => (string) ($photo['source_meta_html'] ?? ''),
                 'role' => (string) ($photo['role'] ?? ''),
                 'download_url' => (string) ($photo['download_url'] ?? ($photo['url'] ?? '')),
                 'view_url' => (string) ($photo['view_url'] ?? ($photo['url'] ?? '')),
+                'drive_field' => (string) ($photo['drive_field'] ?? ''),
+                'drive_folder_url' => (string) ($photo['drive_folder_url'] ?? ''),
+                'filename' => (string) ($photo['filename'] ?? ''),
+                'mime_type' => (string) ($photo['mime_type'] ?? ''),
+                'width' => isset($photo['width']) ? (int) $photo['width'] : null,
+                'height' => isset($photo['height']) ? (int) $photo['height'] : null,
             ];
         }, array_filter((array) ($normalized['detected_photos'] ?? []), fn ($photo) => is_array($photo) && !empty($photo['url']))));
 
@@ -166,6 +181,8 @@ class PressReleaseWorkflowService
         $normalized = [
             'episode' => [],
             'guest' => [],
+            'host' => [],
+            'podcast' => [],
             'enforcement' => [],
         ];
 
@@ -175,6 +192,7 @@ class PressReleaseWorkflowService
                     'field' => (string) ($entry['field'] ?? ''),
                     'value' => (string) ($entry['value'] ?? ''),
                     'source_field' => (string) ($entry['source_field'] ?? ''),
+                    'source_table' => (string) ($entry['source_table'] ?? ''),
                 ];
             }, array_filter((array) ($sections[$section] ?? []), function ($entry) {
                 return is_array($entry) && filled($entry['value'] ?? null);

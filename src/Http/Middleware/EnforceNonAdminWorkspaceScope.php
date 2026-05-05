@@ -21,41 +21,16 @@ class EnforceNonAdminWorkspaceScope
             return $next($request);
         }
 
+        if (!$this->access->isRestrictedWorkspaceUser($user)) {
+            return $next($request);
+        }
+
         $routeName = $request->route()?->getName();
 
-        if (!$routeName || $this->isAllowed($routeName)) {
+        if (!$routeName || $this->access->canAccessRestrictedRoute($routeName)) {
             return $next($request);
         }
 
         abort(403, 'You do not have permission to access this page.');
-    }
-
-    private function isAllowed(string $routeName): bool
-    {
-        $patterns = [
-            'dashboard',
-            'profile.*',
-            'settings.security',
-            'settings.two-factor*',
-            'publish.sites.index',
-            'publish.sites.show',
-            'logout',
-        ];
-
-        foreach ($patterns as $pattern) {
-            if ($pattern === $routeName) {
-                return true;
-            }
-
-            if (str_ends_with($pattern, '.*') && str_starts_with($routeName, substr($pattern, 0, -1))) {
-                return true;
-            }
-
-            if (str_ends_with($pattern, '*') && str_starts_with($routeName, substr($pattern, 0, -1))) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

@@ -12,7 +12,7 @@
             suggestion.loadError = '';
             suggestion.searchResults = [];
             suggestion.suggestedFilename = suggestion.suggestedFilename || this.buildFilename(suggestion.search_term, idx + 1);
-            suggestion.loadAttempted = !!suggestion.autoPhoto;
+            suggestion.loadAttempted = !!suggestion.loadAttempted || !!suggestion.autoPhoto;
             suggestion.thumbLoading = false;
             suggestion.thumbError = '';
 
@@ -212,10 +212,10 @@
                 id: photo.id ?? null,
                 source: photo.source || '',
                 source_url: photo.source_url || photo.pexels_url || photo.unsplash_url || photo.pixabay_url || photo.url || '',
-                url: photo.url || photo.url_large || photo.url_full || photo.url_thumb || '',
-                url_thumb: photo.url_thumb || photo.url_large || photo.url_full || photo.url || '',
-                url_large: photo.url_large || photo.url_full || photo.url_thumb || photo.url || '',
-                url_full: photo.url_full || photo.url_large || photo.url_thumb || photo.url || '',
+                url: this.normalizeHostedMediaUrl(photo.url || photo.url_large || photo.url_full || photo.url_thumb || ''),
+                url_thumb: this.normalizeHostedMediaUrl(photo.preview_url || photo.url_thumb || photo.url_large || photo.url_full || photo.url || ''),
+                url_large: this.normalizeHostedMediaUrl(photo.url_large || photo.url_full || photo.preview_url || photo.url_thumb || photo.url || ''),
+                url_full: this.normalizeHostedMediaUrl(photo.url_full || photo.url_large || photo.preview_url || photo.url_thumb || photo.url || ''),
                 alt: photo.alt || '',
                 photographer: photo.photographer || '',
                 photographer_url: photo.photographer_url || '',
@@ -271,12 +271,36 @@
                 || 'Prefer supporting URLs that match the article’s actual content category and editorial style.';
         },
 
+        normalizeHostedMediaUrl(url = '') {
+            const value = String(url || '').trim();
+            if (!value) return '';
+            const origin = String(window.location.origin || '').replace(/\/$/, '');
+            if (/drive\.google\.com\/uc/i.test(value)) {
+                const previewUrl = typeof this.stableGoogleDrivePreviewUrl === 'function'
+                    ? this.stableGoogleDrivePreviewUrl(value)
+                    : '';
+                if (previewUrl) {
+                    return previewUrl;
+                }
+            }
+
+            return value
+                .replace(origin + '/storage/publish/', origin + '/publish/')
+                .replace('/storage/publish/', '/publish/');
+        },
+
+        normalizeHostedMediaHtml(html = '') {
+            return String(html || '')
+                .replace(/https?:\/\/[^\s"']+\/storage\/publish\//gi, (match) => this.normalizeHostedMediaUrl(match))
+                .replace(/(["'(])\/storage\/publish\//gi, '$1/publish/');
+        },
+
         resolvePhotoThumbUrl(photo) {
-            return photo?.url_thumb || photo?.url_large || photo?.url_full || photo?.url || '';
+            return this.normalizeHostedMediaUrl(photo?.preview_url || photo?.url_thumb || photo?.url_large || photo?.url_full || photo?.url || '');
         },
 
         resolvePhotoLargeUrl(photo) {
-            return photo?.url_large || photo?.url_full || photo?.url_thumb || photo?.url || '';
+            return this.normalizeHostedMediaUrl(photo?.url_large || photo?.url_full || photo?.preview_url || photo?.url_thumb || photo?.url || '');
         },
 
         hasUnresolvedPhotoSuggestions() {
@@ -352,6 +376,7 @@
                 && !this.featuredSearching
                 && !!(this.featuredImageSearch || '').trim()
                 && !this.featuredPhoto
+                && !this.featuredSearchAttempted
                 && (this.currentStep === 6 || this.openSteps.includes(6));
         },
 
@@ -571,6 +596,18 @@
 
                 const restoredPressReleaseState = this.normalizePressReleaseState(this.pressRelease || {});
                 const restoredPrSubjectCount = Array.isArray(this.selectedPrProfiles) ? this.selectedPrProfiles.length : 0;
+                const explicitRestoredArticleType = String(
+                    this.template_overrides.article_type
+                    || state?.template_overrides?.article_type
+                    || ''
+                ).trim();
+                const resolvedRestoredArticleType = String(
+                    this.resolvePrArticleTypeFromState?.(explicitRestoredArticleType, {
+                        selectedPrProfiles: this.selectedPrProfiles,
+                        prArticle: this.prArticle,
+                        prSubjectData: this.prSubjectData,
+                    }) || ''
+                ).trim();
                 const hasRestoredPressReleaseContent = !!(
                     restoredPressReleaseState.submit_method
                     || restoredPressReleaseState.content_dump
@@ -581,11 +618,15 @@
                     || (Array.isArray(restoredPressReleaseState.detected_photos) && restoredPressReleaseState.detected_photos.length > 0)
                 );
 
-                if (hasRestoredPressReleaseContent && restoredPrSubjectCount === 0) {
+                if (!resolvedRestoredArticleType && hasRestoredPressReleaseContent && restoredPrSubjectCount === 0) {
                     this.template_overrides.article_type = 'press-release';
                     this.pressRelease.article_type = 'press-release';
-                } else if (restoredPrSubjectCount > 0 && !this.template_overrides.article_type) {
+                } else if (resolvedRestoredArticleType) {
+                    this.template_overrides.article_type = resolvedRestoredArticleType;
+                    this.pressRelease.article_type = resolvedRestoredArticleType;
+                } else if (restoredPrSubjectCount > 0) {
                     this.template_overrides.article_type = 'pr-full-feature';
+                    this.pressRelease.article_type = 'pr-full-feature';
                 }
 
                 // Site connection (nested object)
@@ -610,7 +651,7 @@
 
                 // Editor content needs TinyMCE sync
                 if (state.spunContent || state.editorContent) {
-                    const restoredEditorHtml = state.editorContent || state.spunContent;
+                    const restoredEditorHtml = this.normalizeHostedMediaHtml(state.editorContent || state.spunContent);
                     this.spunContent = restoredEditorHtml;
                     this.editorContent = restoredEditorHtml;
                     this.spunWordCount = state.spunWordCount || this.countWordsFromHtml(restoredEditorHtml);
@@ -739,17 +780,19 @@
                 }
             }
             if (!this.spunContent && draftState.body) {
-                this.spunContent = draftState.body;
-                this.editorContent = draftState.body;
-                this.spunWordCount = draftState.wordCount || this.countWordsFromHtml(draftState.body);
-                this.rememberDraftBody(draftState.body);
-                this.extractArticleLinks(draftState.body);
-                this.$nextTick(() => this.setSpinEditor(draftState.body));
+                const restoredDraftHtml = this.normalizeHostedMediaHtml(draftState.body);
+                this.spunContent = restoredDraftHtml;
+                this.editorContent = restoredDraftHtml;
+                this.spunWordCount = draftState.wordCount || this.countWordsFromHtml(restoredDraftHtml);
+                this.rememberDraftBody(restoredDraftHtml);
+                this.extractArticleLinks(restoredDraftHtml);
+                this.$nextTick(() => this.setSpinEditor(restoredDraftHtml));
             }
             if (!this.spunContent && !this.editorContent && this.latestCompletedPrepareHtml) {
-                this.spunContent = this.latestCompletedPrepareHtml;
-                this.editorContent = this.latestCompletedPrepareHtml;
-                this.preparedHtml = this.latestCompletedPrepareHtml;
+                const restoredPreparedHtml = this.normalizeHostedMediaHtml(this.latestCompletedPrepareHtml);
+                this.spunContent = restoredPreparedHtml;
+                this.editorContent = restoredPreparedHtml;
+                this.preparedHtml = restoredPreparedHtml;
                 this.spunWordCount = this.countWordsFromHtml(this.latestCompletedPrepareHtml);
                 this.rememberDraftBody(this.latestCompletedPrepareHtml);
                 this.extractArticleLinks(this.latestCompletedPrepareHtml);
@@ -766,6 +809,7 @@
             if (!this.featuredImageSearch && draftState.featuredImageSearch) {
                 this.featuredImageSearch = draftState.featuredImageSearch;
             }
+            this._lastFeaturedImageSearchValue = String(this.featuredImageSearch || '').trim().toLowerCase();
             if ((this.spunContent || draftState.body) && !state?.currentStep) {
                 this.currentStep = 6;
                 this.openSteps = this.normalizeNestedOpenSteps(this.normalizedOpenSteps(6), 6);
@@ -813,7 +857,8 @@
                 const urlStep = new URLSearchParams(window.location.search).get('step');
                 if (urlStep) {
                     const s = parseInt(urlStep);
-                    if (s >= 1 && s <= 7 && this.isStepAccessible(s)) {
+                    const allowLockedPreviewStep = [5, 6].includes(s);
+                    if (s >= 1 && s <= 7 && (this.isStepAccessible(s) || allowLockedPreviewStep)) {
                         this.currentStep = s;
                         this.openSteps = this.normalizeNestedOpenSteps(this.normalizedOpenSteps(s), s);
                     }
@@ -859,9 +904,16 @@
                         await this.maybeAutoRefreshLegacyNotionPodcastImport?.();
                     });
                 }
+                if (this.currentStep === 6 || (Array.isArray(this.openSteps) && this.openSteps.includes(6))) {
+                    this._ensureCreateArticleStepReady?.('restore_complete');
+                } else {
+                    this.$nextTick(() => this.maybeAutoLoadSyndicationCategories?.());
+                }
                 if (this.shouldAutoLoadPromptPreview()) {
                     this._queuePromptRefresh('restore_complete');
                 }
+
+                this.initializePublicationNotificationState?.();
 
                 this._logActivity('restore', 'info', 'Pipeline restore complete', {
                     trace_id: this._clientSessionTraceId,
@@ -1022,6 +1074,23 @@
             this.$watch('photoSuggestions', invalidatePrepare);
             this.$watch('selectedTemplateId', () => { if (!this._restoring) this.invalidatePromptPreview('template_changed'); });
             this.$watch('selectedPresetId', () => { if (!this._restoring) this.invalidatePromptPreview('preset_changed'); });
+            this.$watch('featuredImageSearch', value => {
+                const signature = String(value || '').trim().toLowerCase();
+                if (this._restoring) {
+                    this._lastFeaturedImageSearchValue = signature;
+                    return;
+                }
+                if (signature === this._lastFeaturedImageSearchValue) {
+                    return;
+                }
+                this._lastFeaturedImageSearchValue = signature;
+                this.featuredSearchAttempted = false;
+                if (!signature) {
+                    this.featuredResults = [];
+                    this.featuredSearchPending = false;
+                }
+                this.syncDeferredEnrichmentState('featured_query_changed', { log: false });
+            });
             this.$watch('template_overrides.article_type', () => {
                 if (this._restoring) return;
                 this.syncPrArticleForCurrentArticleType({ force: false });
@@ -1083,7 +1152,7 @@
                 'selectedTitleIdx', 'tokenUsage',
                 // Step 6 — Create Article
                 'articleTitle', 'articleDescription', 'editorContent',
-                'photoSuggestions', 'featuredImageSearch', 'featuredPhoto',
+                'photoSuggestions', 'featuredImageSearch', 'featuredPhoto', 'featuredSearchAttempted',
                 'featuredAlt', 'featuredCaption', 'featuredFilename',
                 // Step 7 — Publish + uploaded media tracking
                 'publishAction', 'publishAuthor', 'publishAuthorSource', 'scheduleDate',
@@ -1099,6 +1168,15 @@
                 'prSubjectData',
                 // Press Release syndication selection
                 'selectedSyndicationCats',
+                // Post-publish client notification
+                'publicationNotificationTemplateId',
+                'publicationNotificationFromName',
+                'publicationNotificationFromEmail',
+                'publicationNotificationReplyTo',
+                'publicationNotificationCc',
+                'publicationNotificationTo',
+                'publicationNotificationSubject',
+                'publicationNotificationBody',
             ];
         },
 
@@ -1304,6 +1382,17 @@
             this.prArticle = this.normalizePrArticleState({});
             this.prSubjectData = {};
             this.prArticleContextImporting = false;
+            this.publicationNotificationTemplateId = this.publicationNotificationDefaults?.template_id || '';
+            this.publicationNotificationFromName = this.publicationNotificationDefaults?.from_name || '';
+            this.publicationNotificationFromEmail = this.publicationNotificationDefaults?.from_email || '';
+            this.publicationNotificationReplyTo = this.publicationNotificationDefaults?.reply_to || '';
+            this.publicationNotificationCc = this.publicationNotificationDefaults?.cc || '';
+            this.publicationNotificationTo = '';
+            this.publicationNotificationSubject = this.publicationNotificationDefaults?.subject || '';
+            this.publicationNotificationBody = this.publicationNotificationDefaults?.body || '';
+            this.publicationNotificationSending = false;
+            this.publicationNotificationStatus = '';
+            this.publicationNotificationResult = null;
             this._previousSiteId = null;
             this.editingPreset = false;
             this.editingTemplate = false;

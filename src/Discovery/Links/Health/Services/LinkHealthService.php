@@ -40,6 +40,7 @@ class LinkHealthService
             'status_code' => $result['status_code'] ?? null,
             'status_text' => $result['status_text'] ?? 'Unknown',
             'status_tone' => $result['status_tone'] ?? 'amber',
+            'semantic_status' => $result['semantic_status'] ?? null,
             'checked_via' => $result['checked_via'] ?? 'GET',
             'final_url' => (string) ($result['final_url'] ?? $normalized),
             'is_broken' => (bool) ($result['is_broken'] ?? false),
@@ -96,7 +97,12 @@ class LinkHealthService
 
             $checked++;
             $probe = $this->probe($candidate['url'], $cacheNamespace);
-            if ($probe['probe_failed'] || $probe['is_broken']) {
+            $semanticStatus = (string) ($probe['semantic_status'] ?? '');
+            if (
+                $probe['probe_failed']
+                || $probe['is_broken']
+                || in_array($semanticStatus, ['blocked', 'rate_limited', 'unreachable', 'server_error'], true)
+            ) {
                 $discarded++;
                 continue;
             }

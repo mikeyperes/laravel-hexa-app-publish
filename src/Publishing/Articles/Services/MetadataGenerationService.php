@@ -34,7 +34,7 @@ class MetadataGenerationService
     public function generate(string $articleHtml, string $model = 'claude-haiku-4-5-20251001', ?int $articleId = null): array
     {
         $articleText = strip_tags($articleHtml);
-        $prompt = "Based on this article, generate exactly:\n\n1. 10 unique title options (compelling, SEO-friendly)\n2. 10 category suggestions (broad topics)\n3. 10 tag suggestions (specific keywords)\n\nArticle:\n" . mb_substr($articleText, 0, 3000) . "\n\nRespond ONLY in this exact JSON format, no other text:\n{\"titles\":[\"title1\",...],\"categories\":[\"cat1\",...],\"tags\":[\"tag1\",...]}";
+        $prompt = "Based on this article, generate exactly:\n\n1. 10 unique title options (compelling, SEO-friendly)\n2. 10 category suggestions (broad topics)\n3. 10 tag suggestions (specific keywords)\n\nHeadline rules:\n- Never use em dashes or en dashes in any title.\n- Never use first-person phrasing such as I, I'm, I've, my, we, our, or us.\n- Keep the titles in third person unless the article explicitly requires a first-person essay.\n- Return all 10 title options. Do not return a single title.\n\nArticle:\n" . mb_substr($articleText, 0, 3000) . "\n\nRespond ONLY in this exact JSON format, no other text:\n{\"titles\":[\"title1\",...],\"categories\":[\"cat1\",...],\"tags\":[\"tag1\",...]}";
 
         $result = $this->anthropic->chat(
             'You are a content metadata expert. Output ONLY valid JSON. No markdown, no explanation.',
@@ -71,6 +71,30 @@ class MetadataGenerationService
             return ['success' => false, 'message' => 'Failed to parse AI response.', 'raw' => $content, 'titles' => [], 'categories' => [], 'tags' => [], 'urls' => []];
         }
 
+        $titles = collect((array) ($parsed['titles'] ?? []))
+            ->map(fn ($title) => $this->normalizeListText((string) $title))
+            ->filter(fn ($title) => !$this->titleUsesFirstPerson($title))
+            ->unique()
+            ->values()
+            ->take(10)
+            ->all();
+
+        $categories = collect((array) ($parsed['categories'] ?? []))
+            ->map(fn ($value) => $this->normalizeListText((string) $value))
+            ->filter()
+            ->unique()
+            ->values()
+            ->take(10)
+            ->all();
+
+        $tags = collect((array) ($parsed['tags'] ?? []))
+            ->map(fn ($value) => $this->normalizeListText((string) $value))
+            ->filter()
+            ->unique()
+            ->values()
+            ->take(10)
+            ->all();
+
         // Log the API call
         $usage = $result['data']['usage'] ?? [];
         $apiKey = \hexa_core\Models\Setting::getValue('anthropic_api_key', '');
@@ -101,9 +125,9 @@ class MetadataGenerationService
             'message' => 'Metadata generated.',
             'request_payload' => ['prompt' => $prompt],
             'response_payload' => [
-                'titles' => array_slice($parsed['titles'] ?? [], 0, 10),
-                'categories' => array_slice($parsed['categories'] ?? [], 0, 10),
-                'tags' => array_slice($parsed['tags'] ?? [], 0, 10),
+                'titles' => $titles,
+                'categories' => $categories,
+                'tags' => $tags,
                 'raw' => $content,
                 'usage' => $usage,
             ],
@@ -112,10 +136,23 @@ class MetadataGenerationService
         return [
             'success'    => true,
             'message'    => 'Metadata generated.',
-            'titles'     => array_slice($parsed['titles'] ?? [], 0, 10),
-            'categories' => array_slice($parsed['categories'] ?? [], 0, 10),
-            'tags'       => array_slice($parsed['tags'] ?? [], 0, 10),
+            'titles'     => $titles,
+            'categories' => $categories,
+            'tags'       => $tags,
             'urls'       => array_slice($parsed['urls'] ?? [], 0, 10),
         ];
+    }
+
+    private function normalizeListText(string $value): string
+    {
+        $value = html_entity_decode(strip_tags($value), ENT_QUOTES, 'UTF-8');
+        $value = str_replace(['—', '–', '―'], '-', $value);
+
+        return trim((string) preg_replace('/\s+/', ' ', $value));
+    }
+
+    private function titleUsesFirstPerson(string $title): bool
+    {
+        return preg_match("/\\b(i|i'm|i’m|i've|i’ve|i'd|i’d|me|my|mine|myself|we|we're|we’re|we've|we’ve|our|ours|us)\\b/i", $title) === 1;
     }
 }

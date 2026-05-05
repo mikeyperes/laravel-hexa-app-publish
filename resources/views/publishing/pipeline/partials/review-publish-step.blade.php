@@ -1,8 +1,8 @@
 {{-- ══════════════════════════════════════════════════════════════
      Step 7: Review & Publish
      ══════════════════════════════════════════════════════════════ --}}
-<div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 7, 'opacity-50': !isStepAccessible(7) }">
-    <button @click="toggleStep(7)" :disabled="!isStepAccessible(7)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+<div class="pipeline-step-card" :class="{ 'ring-2 ring-blue-400': currentStep === 7, 'opacity-50': !isStepAccessible(7) }">
+    <button @click="toggleStep(7)" :disabled="!isStepAccessible(7)" class="pipeline-step-toggle disabled:cursor-not-allowed">
         <div class="flex items-center gap-3">
             <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                   :class="completedSteps.includes(7) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
@@ -13,7 +13,7 @@
         </div>
         <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(7) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
     </button>
-    <div x-show="openSteps.includes(7)" x-cloak x-collapse class="px-4 pb-4">
+    <div x-show="openSteps.includes(7)" x-cloak x-collapse class="pipeline-step-panel">
 
         {{-- ═══ Action Dock ═══ --}}
         <div x-ref="publishActionBox" x-init="$nextTick(() => _focusPublishActionBox({ behavior: 'auto' }))" class="border border-gray-200 rounded-xl p-5 mb-4 bg-white">
@@ -289,6 +289,12 @@
 
         </div>
 
+        @if(request()->routeIs('publish.pipeline.v2'))
+        <div class="mt-4" x-ref="inlineMasterActivityLog" data-inline-master-activity-log>
+            @include('app-publish::publishing.pipeline.partials.master-activity-log')
+        </div>
+        @endif
+
         {{-- ═══ Publish Result — full post + photo report ═══ --}}
         <div x-show="publishResult" x-cloak class="bg-green-50 border border-green-200 rounded-xl p-5">
             <div class="flex items-center gap-2 mb-4">
@@ -354,6 +360,91 @@
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     Open in WP Admin
                 </a>
+            </div>
+
+            <div x-show="(publishResult?.post_url || existingWpPostUrl) && publishAction !== 'draft_local'" x-cloak class="mt-6 bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+                <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                        <h6 class="text-sm font-semibold text-gray-800">Client Notification Email</h6>
+                        <p class="mt-1 text-xs text-gray-500">Choose a template, confirm the recipient fields, and send the live article notification after publication.</p>
+                    </div>
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700" x-text="(publishResult?.post_url || existingWpPostUrl) ? 'Permalink ready' : 'Awaiting permalink'"></span>
+                </div>
+
+                <div class="grid gap-4 lg:grid-cols-2">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Template</label>
+                            <select x-model="publicationNotificationTemplateId" @change="applyPublicationNotificationTemplate(publicationNotificationTemplateId, { force: true })" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                                <option value="">Default publication notification</option>
+                                <template x-for="template in publicationNotificationTemplates" :key="template.id">
+                                    <option :value="String(template.id)" x-text="template.name + (template.is_primary ? ' (Default)' : '')"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">From name</label>
+                                <input type="text" x-model="publicationNotificationFromName" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">From email</label>
+                                <input type="email" x-model="publicationNotificationFromEmail" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Reply-to</label>
+                                <input type="email" x-model="publicationNotificationReplyTo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">CC</label>
+                                <input type="text" x-model="publicationNotificationCc" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="name@example.com, team@example.com">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">To</label>
+                            <input type="email" x-model="publicationNotificationTo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="client@example.com">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Subject</label>
+                            <input type="text" x-model="publicationNotificationSubject" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Body</label>
+                            <textarea x-model="publicationNotificationBody" rows="10" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"></textarea>
+                        </div>
+
+                        <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Available shortcodes</p>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="(description, code) in publicationNotificationShortcodes" :key="code">
+                                    <span class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-700">
+                                        <span class="font-mono" x-text="code"></span>
+                                        <span class="text-gray-400">•</span>
+                                        <span x-text="description"></span>
+                                    </span>
+                                </template>
+                            </div>
+                            <p class="mt-3 text-xs text-gray-500">The permalink and publication values are resolved from the live post that was just published.</p>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-3">
+                            <button type="button" @click="hydratePublicationNotificationFields({ force: true })" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                Refresh Autofill
+                            </button>
+                            <button type="button" @click="sendPublicationNotification()" :disabled="publicationNotificationSending" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                                <svg x-show="publicationNotificationSending" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                <span x-text="publicationNotificationSending ? 'Sending email…' : 'Send Client Email'"></span>
+                            </button>
+                            <span x-show="publicationNotificationStatus" x-cloak class="text-xs" :class="publicationNotificationStatus === 'success' ? 'text-green-600' : 'text-red-600'" x-text="publicationNotificationResult?.message || publicationNotificationStatus"></span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {{-- Uploaded photos full report --}}

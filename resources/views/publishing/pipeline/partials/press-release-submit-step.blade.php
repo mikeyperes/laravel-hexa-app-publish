@@ -1,7 +1,7 @@
 <div x-show="currentArticleType === 'press-release'" x-cloak class="space-y-4">
 
     {{-- ═══ Sub-card 1: Press Release Content ═══ --}}
-    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div class="bg-white border rounded-xl overflow-hidden" :class="Object.keys(pressReleaseFieldErrors || {}).length ? 'border-red-300 ring-1 ring-red-100 bg-red-50/20' : 'border-gray-200'">
         <div class="flex items-center gap-3 px-5 py-4 bg-purple-50 border-b border-purple-100">
             <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
                 <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
@@ -13,6 +13,10 @@
         </div>
         <div class="px-5 py-5 space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <button @click="setPressReleaseSubmitMethod('notion-podcast')" type="button" class="rounded-xl border p-4 text-left transition-colors" :class="pressRelease.submit_method === 'notion-podcast' ? 'border-purple-400 bg-purple-50 ring-1 ring-purple-300' : 'border-gray-200 hover:border-purple-300'">
+                    <p class="text-sm font-semibold text-gray-800">Import Notion Podcast</p>
+                    <p class="mt-1 text-xs text-gray-500">Select a podcast episode. The linked guest is imported automatically.</p>
+                </button>
                 <button @click="setPressReleaseSubmitMethod('content-dump')" type="button" class="rounded-xl border p-4 text-left transition-colors" :class="pressRelease.submit_method === 'content-dump' ? 'border-purple-400 bg-purple-50 ring-1 ring-purple-300' : 'border-gray-200 hover:border-purple-300'">
                     <p class="text-sm font-semibold text-gray-800">Content Dump</p>
                     <p class="mt-1 text-xs text-gray-500">Paste the raw press release text or notes directly.</p>
@@ -25,21 +29,18 @@
                     <p class="text-sm font-semibold text-gray-800">Submit Public URL</p>
                     <p class="mt-1 text-xs text-gray-500">Pull the release from a public page.</p>
                 </button>
-                <button @click="setPressReleaseSubmitMethod('notion-podcast')" type="button" class="rounded-xl border p-4 text-left transition-colors" :class="pressRelease.submit_method === 'notion-podcast' ? 'border-purple-400 bg-purple-50 ring-1 ring-purple-300' : 'border-gray-200 hover:border-purple-300'">
-                    <p class="text-sm font-semibold text-gray-800">Import Notion Podcast</p>
-                    <p class="mt-1 text-xs text-gray-500">Select a podcast episode. The linked guest is imported automatically.</p>
-                </button>
             </div>
 
             {{-- Content dump --}}
             <div x-show="pressRelease.submit_method === 'content-dump'" x-cloak>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Content Dump</label>
-                <textarea x-model="pressRelease.content_dump" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm leading-relaxed" rows="10" placeholder="Paste the full press release, raw notes, quotes, or the exact submitted content here."></textarea>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Content Dump <span class="text-red-500">*</span></label>
+                <textarea x-model="pressRelease.content_dump" @input.debounce.400ms="clearPressReleaseFieldError('content_dump'); savePipelineState()" class="w-full border rounded-lg px-4 py-3 text-sm leading-relaxed" :class="pressReleaseInputBorderClass('content_dump')" rows="10" placeholder="Paste the full press release, raw notes, quotes, or the exact submitted content here."></textarea>
+                <p x-show="pressReleaseFieldHasError('content_dump')" x-cloak class="mt-1 text-xs font-medium text-red-600">Paste the full press release content before continuing.</p>
             </div>
 
             {{-- Upload documents --}}
             <div x-show="pressRelease.submit_method === 'upload-documents'" x-cloak class="space-y-3">
-                <div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-5">
+                <div class="rounded-xl border border-dashed bg-gray-50 p-5" :class="pressReleaseFieldHasError('document_files') ? 'border-red-400 ring-2 ring-red-100' : 'border-gray-300'">
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <p class="text-sm font-semibold text-gray-800">Upload Press Release Files</p>
@@ -63,6 +64,7 @@
                         </div>
                     </template>
                 </div>
+                <p x-show="pressReleaseFieldHasError('document_files')" x-cloak class="mt-1 text-xs font-medium text-red-600">Upload at least one press release document before continuing.</p>
             </div>
 
 
@@ -73,7 +75,7 @@
                     <span class="font-semibold">💡 Good to know:</span> select a podcast episode from Notion and the linked guest record, guest/company links, YouTube embed, episode thumbnail, and inline guest image are all enforced automatically.
                 </div>
 
-                <div class="space-y-3">
+                <div class="space-y-3 rounded-xl p-3" :class="pressReleaseFieldHasError('notion_episode') ? 'border border-red-300 bg-red-50/40 ring-1 ring-red-100' : ''">
                     <x-hexa-smart-search
                         url="{{ route('publish.pipeline.press-release.search-notion-episodes.live', ['draft_id' => $draftId]) }}"
                         label="Episode Search"
@@ -92,6 +94,7 @@
                             <span x-text="pressReleaseEpisodeSearching ? 'Loading…' : 'Load Recent Episodes'"></span>
                         </button>
                     </div>
+                    <p x-show="pressReleaseFieldHasError('notion_episode')" x-cloak class="text-xs font-medium text-red-600">Select a Notion podcast episode before continuing.</p>
                 </div>
 
                 <div x-show="pressReleaseEpisodeDropdownOpen" x-cloak class="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -122,7 +125,7 @@
                     <div class="px-4 py-3 border-b border-purple-100 bg-purple-50 flex items-start justify-between gap-3">
                         <div>
                             <p class="text-sm font-semibold text-gray-900" x-text="pressRelease.notion_episode.title || 'Selected episode'"></p>
-                            <p class="text-xs text-gray-500 mt-1">Guest is auto-derived from the linked Notion People record.</p>
+                            <p class="text-xs text-gray-500 mt-1">Guest, host, and podcast are auto-derived from the linked Notion relations on the selected episode.</p>
                         </div>
                         <div class="flex items-center gap-3">
                             <button @click="importPressReleaseNotionEpisode(pressRelease.notion_episode)" :disabled="pressReleaseImportingEpisodeId === pressRelease.notion_episode.id" type="button" class="inline-flex items-center gap-2 text-xs text-purple-600 hover:text-purple-800 font-medium disabled:opacity-50">
@@ -138,10 +141,18 @@
                         </div>
                     </div>
                     <div class="px-4 py-4 space-y-3 text-sm text-gray-700">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                             <div>
                                 <p class="text-xs uppercase tracking-wide text-gray-400">Guest</p>
                                 <p class="mt-1 font-medium text-gray-900" x-text="pressRelease.notion_guest?.name || pressRelease.notion_episode?.guest || 'No linked guest found'"></p>
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase tracking-wide text-gray-400">Host</p>
+                                <p class="mt-1 font-medium text-gray-900" x-text="pressRelease.notion_host?.name || pressRelease.notion_episode?.host || 'No linked host found'"></p>
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase tracking-wide text-gray-400">Podcast</p>
+                                <p class="mt-1 font-medium text-gray-900" x-text="pressRelease.notion_podcast?.name || pressRelease.notion_episode?.podcast || 'No linked podcast found'"></p>
                             </div>
                             <div>
                                 <p class="text-xs uppercase tracking-wide text-gray-400">Episode Date</p>
@@ -152,7 +163,10 @@
                             <p class="text-xs uppercase tracking-wide text-gray-400">Live Links</p>
                             <div class="mt-2 space-y-1">
                                 <template x-for="link in (pressRelease.notion_episode?.live_links || [])" :key="link">
-                                    <a :href="link" target="_blank" rel="noopener noreferrer" class="block text-blue-600 hover:text-blue-800 break-all" x-text="link"></a>
+                                    <a :href="link" target="_blank" rel="noopener noreferrer" class="inline-flex items-start gap-1 text-blue-600 hover:text-blue-800 break-all underline decoration-blue-200 underline-offset-2">
+                                        <span class="break-all" x-text="link"></span>
+                                        <svg class="mt-0.5 h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                    </a>
                                 </template>
                             </div>
                         </div>
@@ -169,7 +183,7 @@
                                     'labelExpression' => "notionAuditFieldLabel(row) || 'Field'",
                                     'sourceExpression' => 'notionAuditSourceLabel(row, "Podcast Episode Database")',
                                     'valueExpression' => "row.value || ''",
-                                    'linkUrls' => false,
+                                    'linkUrls' => true,
                                     'panelClass' => 'rounded-lg border border-white/70 bg-white/80 p-3',
                                 ])
                                 @include('app-publish::publishing.pipeline.partials.notion-field-panel', [
@@ -179,7 +193,27 @@
                                     'labelExpression' => "notionAuditFieldLabel(row) || 'Field'",
                                     'sourceExpression' => 'notionAuditSourceLabel(row, "Person Database")',
                                     'valueExpression' => "row.value || ''",
-                                    'linkUrls' => false,
+                                    'linkUrls' => true,
+                                    'panelClass' => 'rounded-lg border border-white/70 bg-white/80 p-3',
+                                ])
+                                @include('app-publish::publishing.pipeline.partials.notion-field-panel', [
+                                    'heading' => 'Host / Person Fields Pulled From Notion',
+                                    'rowsExpression' => 'pressRelease.notion_source_fields?.host || []',
+                                    'rowKey' => "'host-' + (row.field || row.source_field || rowIdx)",
+                                    'labelExpression' => "notionAuditFieldLabel(row) || 'Field'",
+                                    'sourceExpression' => 'notionAuditSourceLabel(row, "Host Person Database")',
+                                    'valueExpression' => "row.value || ''",
+                                    'linkUrls' => true,
+                                    'panelClass' => 'rounded-lg border border-white/70 bg-white/80 p-3',
+                                ])
+                                @include('app-publish::publishing.pipeline.partials.notion-field-panel', [
+                                    'heading' => 'Podcast Fields Pulled From Notion',
+                                    'rowsExpression' => 'pressRelease.notion_source_fields?.podcast || []',
+                                    'rowKey' => "'podcast-' + (row.field || row.source_field || rowIdx)",
+                                    'labelExpression' => "notionAuditFieldLabel(row) || 'Field'",
+                                    'sourceExpression' => 'notionAuditSourceLabel(row, "Podcast Database")',
+                                    'valueExpression' => "row.value || ''",
+                                    'linkUrls' => true,
                                     'panelClass' => 'rounded-lg border border-white/70 bg-white/80 p-3',
                                 ])
                             </div>
@@ -199,45 +233,68 @@
                                     'panelClass' => 'rounded-lg border border-white/70 bg-white/80 p-3',
                                 ])
                             </div>
-                            <div x-show="pressRelease.notion_guest?.record_url" x-cloak class="flex justify-end">
-                                <a :href="pressRelease.notion_guest.record_url" target="_blank" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700" title="Open guest in Notion">
+                            <div class="flex flex-wrap justify-end gap-3">
+                                <a x-show="pressRelease.notion_guest?.record_url" x-cloak :href="pressRelease.notion_guest.record_url" target="_blank" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700" title="Open guest in Notion">
                                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L18.39 2.33c-.42-.326-.98-.7-2.055-.607L3.01 2.87c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.84-.046.933-.56.933-1.167V6.354c0-.606-.233-.933-.746-.886l-15.177.887c-.56.046-.747.326-.747.933zm14.337.745c.093.42 0 .84-.42.886l-.7.14v10.264c-.607.327-1.167.514-1.634.514-.746 0-.933-.234-1.493-.933l-4.572-7.186v6.952l1.446.327s0 .84-1.167.84l-3.22.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.326 9.76c-.094-.42.14-1.026.793-1.073l3.453-.233 4.759 7.278v-6.44l-1.213-.14c-.094-.513.28-.886.746-.933zM2.778 1.474l13.728-1.027c1.68-.14 2.1.094 2.8.607l3.874 2.753c.467.374.607.7.607 1.167v16.843c0 1.027-.374 1.634-1.68 1.727L6.937 24.22c-.98.047-1.447-.093-1.96-.747l-3.08-4.012c-.56-.747-.793-1.307-.793-1.96V3.107c0-.84.373-1.54 1.68-1.633z"/></svg>
                                     View Guest in Notion
+                                </a>
+                                <a x-show="pressRelease.notion_host?.record_url" x-cloak :href="pressRelease.notion_host.record_url" target="_blank" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700" title="Open host in Notion">
+                                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L18.39 2.33c-.42-.326-.98-.7-2.055-.607L3.01 2.87c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.84-.046.933-.56.933-1.167V6.354c0-.606-.233-.933-.746-.886l-15.177.887c-.56.046-.747.326-.747.933zm14.337.745c.093.42 0 .84-.42.886l-.7.14v10.264c-.607.327-1.167.514-1.634.514-.746 0-.933-.234-1.493-.933l-4.572-7.186v6.952l1.446.327s0 .84-1.167.84l-3.22.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.326 9.76c-.094-.42.14-1.026.793-1.073l3.453-.233 4.759 7.278v-6.44l-1.213-.14c-.094-.513.28-.886.746-.933zM2.778 1.474l13.728-1.027c1.68-.14 2.1.094 2.8.607l3.874 2.753c.467.374.607.7.607 1.167v16.843c0 1.027-.374 1.634-1.68 1.727L6.937 24.22c-.98.047-1.447-.093-1.96-.747l-3.08-4.012c-.56-.747-.793-1.307-.793-1.96V3.107c0-.84.373-1.54 1.68-1.633z"/></svg>
+                                    View Host in Notion
+                                </a>
+                                <a x-show="pressRelease.notion_podcast?.record_url" x-cloak :href="pressRelease.notion_podcast.record_url" target="_blank" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700" title="Open podcast in Notion">
+                                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L18.39 2.33c-.42-.326-.98-.7-2.055-.607L3.01 2.87c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.84-.046.933-.56.933-1.167V6.354c0-.606-.233-.933-.746-.886l-15.177.887c-.56.046-.747.326-.747.933zm14.337.745c.093.42 0 .84-.42.886l-.7.14v10.264c-.607.327-1.167.514-1.634.514-.746 0-.933-.234-1.493-.933l-4.572-7.186v6.952l1.446.327s0 .84-1.167.84l-3.22.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.326 9.76c-.094-.42.14-1.026.793-1.073l3.453-.233 4.759 7.278v-6.44l-1.213-.14c-.094-.513.28-.886.746-.933zM2.778 1.474l13.728-1.027c1.68-.14 2.1.094 2.8.607l3.874 2.753c.467.374.607.7.607 1.167v16.843c0 1.027-.374 1.634-1.68 1.727L6.937 24.22c-.98.047-1.447-.093-1.96-.747l-3.08-4.012c-.56-.747-.793-1.307-.793-1.96V3.107c0-.84.373-1.54 1.68-1.633z"/></svg>
+                                    View Podcast in Notion
                                 </a>
                             </div>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-gray-500">Guest link target</p>
                                     <template x-if="pressRelease.notion_guest?.person_url">
-                                        <a :href="pressRelease.notion_guest.person_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_guest.person_url"></a>
+                                        <a :href="pressRelease.notion_guest.person_url" target="_blank" rel="noopener noreferrer" class="mt-1 inline-flex items-start gap-1 text-blue-600 hover:text-blue-800 break-all underline decoration-blue-200 underline-offset-2">
+                                            <span class="break-all" x-text="pressRelease.notion_guest.person_url"></span>
+                                            <svg class="mt-0.5 h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                        </a>
                                     </template>
                                     <p x-show="!pressRelease.notion_guest?.person_url" x-cloak class="mt-1 text-amber-700">Missing person URL</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-gray-500">Company link target</p>
                                     <template x-if="pressRelease.notion_guest?.company_url">
-                                        <a :href="pressRelease.notion_guest.company_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_guest.company_url"></a>
+                                        <a :href="pressRelease.notion_guest.company_url" target="_blank" rel="noopener noreferrer" class="mt-1 inline-flex items-start gap-1 text-blue-600 hover:text-blue-800 break-all underline decoration-blue-200 underline-offset-2">
+                                            <span class="break-all" x-text="pressRelease.notion_guest.company_url"></span>
+                                            <svg class="mt-0.5 h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                        </a>
                                     </template>
                                     <p x-show="!pressRelease.notion_guest?.company_url" x-cloak class="mt-1 text-amber-700">Missing company URL</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-gray-500">YouTube embed source</p>
                                     <template x-if="pressRelease.notion_episode?.youtube_url">
-                                        <a :href="pressRelease.notion_episode.youtube_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_episode.youtube_url"></a>
+                                        <a :href="pressRelease.notion_episode.youtube_url" target="_blank" rel="noopener noreferrer" class="mt-1 inline-flex items-start gap-1 text-blue-600 hover:text-blue-800 break-all underline decoration-blue-200 underline-offset-2">
+                                            <span class="break-all" x-text="pressRelease.notion_episode.youtube_url"></span>
+                                            <svg class="mt-0.5 h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                        </a>
                                     </template>
                                     <p x-show="!pressRelease.notion_episode?.youtube_url" x-cloak class="mt-1 text-amber-700">Missing YouTube URL</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-gray-500">Episode featured image</p>
                                     <template x-if="pressRelease.notion_episode?.featured_image_url">
-                                        <a :href="pressRelease.notion_episode.featured_image_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_episode.featured_image_url"></a>
+                                        <a :href="pressRelease.notion_episode.featured_image_url" target="_blank" rel="noopener noreferrer" class="mt-1 inline-flex items-start gap-1 text-blue-600 hover:text-blue-800 break-all underline decoration-blue-200 underline-offset-2">
+                                            <span class="break-all" x-text="pressRelease.notion_episode.featured_image_url"></span>
+                                            <svg class="mt-0.5 h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                        </a>
                                     </template>
                                     <p x-show="!pressRelease.notion_episode?.featured_image_url" x-cloak class="mt-1 text-amber-700">Missing featured image URL</p>
                                 </div>
                                 <div class="md:col-span-2">
                                     <p class="text-[11px] uppercase tracking-wide text-gray-500">Inline guest image</p>
                                     <template x-if="pressRelease.notion_guest?.inline_photo_url">
-                                        <a :href="pressRelease.notion_guest.inline_photo_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_guest.inline_photo_url"></a>
+                                        <a :href="pressRelease.notion_guest.inline_photo_url" target="_blank" rel="noopener noreferrer" class="mt-1 inline-flex items-start gap-1 text-blue-600 hover:text-blue-800 break-all underline decoration-blue-200 underline-offset-2">
+                                            <span class="break-all" x-text="pressRelease.notion_guest.inline_photo_url"></span>
+                                            <svg class="mt-0.5 h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                        </a>
                                     </template>
                                     <p x-show="!pressRelease.notion_guest?.inline_photo_url" x-cloak class="mt-1 text-amber-700">Missing guest/client image for inline use</p>
                                 </div>
@@ -258,8 +315,9 @@
             {{-- Public URL --}}
             <div x-show="pressRelease.submit_method === 'public-url'" x-cloak class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Public Press Release URL</label>
-                    <input type="url" x-model="pressRelease.public_url" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://example.com/public-press-release">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Public Press Release URL <span class="text-red-500">*</span></label>
+                    <input type="url" x-model="pressRelease.public_url" @input.debounce.400ms="clearPressReleaseFieldError('public_url'); savePipelineState()" class="w-full border rounded-lg px-3 py-2 text-sm" :class="pressReleaseInputBorderClass('public_url')" placeholder="https://example.com/public-press-release">
+                    <p x-show="pressReleaseFieldHasError('public_url')" x-cloak class="mt-1 text-xs font-medium text-red-600">Enter a public press release URL before continuing.</p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Pull / Scrape Method</label>
@@ -349,8 +407,9 @@
 
             <div x-show="pressRelease.photo_method === 'google-drive' && pressRelease.submit_method !== 'notion-podcast'" x-cloak class="space-y-3">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Google Drive URL</label>
-                    <input type="url" x-model="pressRelease.google_drive_url" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Public Google Drive URL (must have public permissions)">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Google Drive URL <span class="text-red-500">*</span></label>
+                    <input type="url" x-model="pressRelease.google_drive_url" @input.debounce.400ms="clearPressReleaseFieldError('google_drive_url'); savePipelineState()" class="w-full border rounded-lg px-3 py-2 text-sm" :class="pressReleaseInputBorderClass('google_drive_url')" placeholder="Public Google Drive URL (must have public permissions)">
+                    <p x-show="pressReleaseFieldHasError('google_drive_url')" x-cloak class="mt-1 text-xs font-medium text-red-600">Enter a public Google Drive folder URL before continuing.</p>
                 </div>
                 <div x-show="pressRelease.google_drive_url" x-cloak class="flex justify-end">
                     <button @click="fetchPressReleaseDrivePhotos()" :disabled="pressReleaseFetchingDrivePhotos" type="button" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-2">
@@ -374,7 +433,7 @@
 
             <div x-show="pressRelease.photo_method === 'detect-from-public-url'" x-cloak class="space-y-3">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Public Press Release URL</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Public Press Release URL <span class="text-red-500">*</span></label>
                     <input type="url" x-model="pressRelease.photo_public_url" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Leave blank to reuse the submit URL">
                 </div>
                 <div class="flex justify-end">
@@ -409,9 +468,10 @@
                     'assetKeyExpression' => 'asset.key',
                     'featuredSelectedExpression' => 'pressReleaseAssetIsFeatured(asset)',
                     'inlineSelectedExpression' => 'pressReleaseAssetIsInline(asset)',
-                    'thumbUrlExpression' => 'asset.thumbnail_url || asset.url',
+                    'thumbUrlExpression' => 'pressReleaseEditorPreviewUrl(asset) || asset.preview_url || asset.thumbnailLink || asset.thumbnail_url || asset.url',
                     'labelExpression' => 'asset.label',
                     'sourceLabelExpression' => 'asset.source_label || asset.source || "detected"',
+                    'sourceMetaHtmlExpression' => 'asset.source_meta_html || ""',
                     'downloadUrlExpression' => 'asset.download_url || asset.url',
                     'viewUrlExpression' => 'asset.view_url || asset.url',
                     'setFeaturedAction' => 'setPressReleaseFeaturedPhoto(asset)',
@@ -427,6 +487,8 @@
                     'clearInlineAction' => 'clearPressReleaseInlinePhotos()',
                 ])
             </div>
+        </div>
+    </div>
 
     {{-- ═══ Sub-card 2: Validate Release Details ═══ --}}
     <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -444,22 +506,22 @@
             </button>
         </div>
         <div class="px-5 py-5 space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Press Release Date</label>
-                    <input type="text" x-model="pressRelease.details.date" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. April 11, 2026">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Press Release Date <span class="text-red-500">*</span></label>
+                    <input type="text" x-model="pressRelease.details.date" @input.debounce.400ms="clearPressReleaseFieldError('date'); savePipelineState()" class="w-full border rounded-lg px-3 py-2 text-sm" :class="pressReleaseInputBorderClass('date')" placeholder="e.g. April 11, 2026">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                    <input type="text" x-model="pressRelease.details.location" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Miami, Florida">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Location <span class="text-red-500">*</span></label>
+                    <input type="text" x-model="pressRelease.details.location" @input.debounce.400ms="clearPressReleaseFieldError('location'); savePipelineState()" class="w-full border rounded-lg px-3 py-2 text-sm" :class="pressReleaseInputBorderClass('location')" placeholder="e.g. Miami, Florida">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Contact</label>
-                    <input type="text" x-model="pressRelease.details.contact" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Sarah Smith, media contact">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Contact <span class="text-red-500">*</span></label>
+                    <input type="text" x-model="pressRelease.details.contact" @input.debounce.400ms="clearPressReleaseFieldError('contact'); savePipelineState()" class="w-full border rounded-lg px-3 py-2 text-sm" :class="pressReleaseInputBorderClass('contact')" placeholder="e.g. Sarah Smith, media contact">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Contact URL</label>
-                    <input type="url" x-model="pressRelease.details.contact_url" @input.debounce.400ms="savePipelineState()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://example.com/contact">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Contact URL <span class="text-red-500">*</span></label>
+                    <input type="url" x-model="pressRelease.details.contact_url" @input.debounce.400ms="clearPressReleaseFieldError('contact_url'); savePipelineState()" class="w-full border rounded-lg px-3 py-2 text-sm" :class="pressReleaseInputBorderClass('contact_url')" placeholder="https://example.com/contact">
                 </div>
             </div>
 
@@ -492,6 +554,6 @@
 
     {{-- Continue button --}}
     <div class="flex items-center justify-end">
-        <button @click="continuePressReleaseStep3(); completeStep(4); openStep(5)" type="button" class="bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-blue-700 font-medium" x-text="pressRelease.polish_only ? 'Continue to Polish →' : 'Continue to AI & Spin →'"></button>
+        <button @click="continuePressReleaseStep4()" type="button" class="bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-blue-700 font-medium" x-text="pressRelease.polish_only ? 'Continue to Polish →' : 'Continue to AI & Spin →'"></button>
     </div>
 </div>

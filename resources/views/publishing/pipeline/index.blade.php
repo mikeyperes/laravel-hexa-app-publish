@@ -8,6 +8,35 @@
      @hexa-form-changed.window="
         if ($event.detail.component_id === 'article-preset-form') { $data.template_overrides[$event.detail.field] = $event.detail.value; $data.template_dirty[$event.detail.field] = true; $data.savePipelineState(); }
      ">
+    @once
+        <style>
+            .pipeline-step-card {
+                background: #fff;
+                border: 1px solid rgb(229 231 235 / 1);
+                border-radius: 0.75rem;
+                box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            }
+
+            .pipeline-step-toggle {
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 1rem;
+                text-align: left;
+                border-radius: 0.75rem;
+                transition: background-color 150ms ease, color 150ms ease;
+            }
+
+            .pipeline-step-toggle:hover {
+                background: rgb(249 250 251 / 1);
+            }
+
+            .pipeline-step-panel {
+                padding: 0 1rem 1rem;
+            }
+        </style>
+    @endonce
 
     {{-- Session ID + Clear button --}}
     <div class="flex flex-wrap items-center justify-between gap-2">
@@ -89,8 +118,8 @@
     {{-- ══════════════════════════════════════════════════════════════
          Step 1: Select User
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="currentStep === 1 ? 'ring-2 ring-blue-400' : ''">
-        <button @click="toggleStep(1)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors">
+    <div class="pipeline-step-card" :class="currentStep === 1 ? 'ring-2 ring-blue-400' : ''">
+        <button @click="toggleStep(1)" class="pipeline-step-toggle">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                       :class="completedSteps.includes(1) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
@@ -102,7 +131,7 @@
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(1) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(1)" x-cloak x-collapse class="px-4 pb-4">
+        <div x-show="openSteps.includes(1)" x-cloak x-collapse class="pipeline-step-panel">
             <div class="max-w-md"
                  @hexa-search-selected.window="if ($event.detail.component_id === 'pipeline-user' && !_restoring) selectUser($event.detail.item)"
                  @hexa-search-cleared.window="if ($event.detail.component_id === 'pipeline-user') clearUser()">
@@ -128,8 +157,8 @@
     {{-- ══════════════════════════════════════════════════════════════
          Step 2: Article Configuration
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 2, 'opacity-50': !isStepAccessible(2) }">
-        <button @click="toggleStep(2)" :disabled="!isStepAccessible(2)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="pipeline-step-card" :class="{ 'ring-2 ring-blue-400': currentStep === 2, 'opacity-50': !isStepAccessible(2) }">
+        <button @click="toggleStep(2)" :disabled="!isStepAccessible(2)" class="pipeline-step-toggle disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                       :class="completedSteps.includes(2) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
@@ -141,7 +170,7 @@
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(2) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(2)" x-cloak x-collapse class="px-4 pb-4 space-y-4">
+        <div x-show="openSteps.includes(2)" x-cloak x-collapse class="pipeline-step-panel space-y-4">
 
             {{-- Article Type --}}
             <div>
@@ -252,8 +281,8 @@
     {{-- ══════════════════════════════════════════════════════════════
          Step 3: Find Articles / Generate Content
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 3, 'opacity-50': !isStepAccessible(3) }">
-        <button @click="toggleStep(3)" :disabled="!isStepAccessible(3)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="pipeline-step-card" :class="{ 'ring-2 ring-blue-400': currentStep === 3, 'opacity-50': !isStepAccessible(3) }">
+        <button @click="toggleStep(3)" :disabled="!isStepAccessible(3)" class="pipeline-step-toggle disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                       :class="completedSteps.includes(3) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
@@ -265,7 +294,7 @@
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(3) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(3)" x-cloak x-collapse class="px-4 pb-4">
+        <div x-show="openSteps.includes(3)" x-cloak x-collapse class="pipeline-step-panel">
 
             {{-- ═══ Generate Content mode ═══ --}}
             <div x-show="isGenerateMode" x-cloak>
@@ -307,7 +336,7 @@
                         </div>
                     </div>
 
-                    <div class="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-4" style="order: 2;">
+                    <div class="rounded-xl border p-4 space-y-4" :class="prFieldHasError('main_subject') || prFieldHasError('focus_instructions') ? 'border-red-300 bg-red-50/40 ring-1 ring-red-100' : 'border-blue-200 bg-blue-50/60'" style="order: 2;">
                         <div class="flex items-start justify-between gap-4">
                             <div>
                                 <h5 class="text-sm font-semibold text-gray-900">Article Direction</h5>
@@ -329,13 +358,14 @@
 
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Main Subject</label>
-                                <select x-model="prArticle.main_subject_id" @change="savePipelineState()" :disabled="selectedPrProfiles.length === 0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed">
+                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Main Subject <span class="text-red-500">*</span></label>
+                                <select x-model="prArticle.main_subject_id" @change="clearPrValidationError('main_subject'); savePipelineState()" :disabled="selectedPrProfiles.length === 0" class="w-full border rounded-lg px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed" :class="prInputBorderClass('main_subject')">
                                     <option value="">Choose main subject…</option>
                                     <template x-for="profile in selectedPrProfiles" :key="'subject-' + profile.id">
                                         <option :value="profile.id" x-text="profile.name"></option>
                                     </template>
                                 </select>
+                                <p x-show="prFieldHasError('main_subject')" x-cloak class="mt-1 text-xs font-medium text-red-600">Choose the subject who should anchor the article.</p>
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Promotional Level</label>
@@ -377,8 +407,9 @@
 
                         <div class="space-y-3">
                             <div>
-                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Article Focus Instructions</label>
-                                <textarea x-model="prArticle.focus_instructions" @change="savePipelineState()" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 resize-y" placeholder="Explain the main angle, what the writer should emphasize, what to mention or avoid, which subject matters most, and how the article should frame the story."></textarea>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Article Focus Instructions <span class="text-red-500">*</span></label>
+                                <textarea x-model="prArticle.focus_instructions" @input="clearPrValidationError('focus_instructions'); savePipelineState()" rows="4" class="w-full border rounded-lg px-3 py-2 text-sm resize-y" :class="prInputBorderClass('focus_instructions')" placeholder="Explain the main angle, what the writer should emphasize, what to mention or avoid, which subject matters most, and how the article should frame the story."></textarea>
+                                <p x-show="prFieldHasError('focus_instructions')" x-cloak class="mt-1 text-xs font-medium text-red-600">Tell the writer how to use the chosen context article in the feature.</p>
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Quote Guidance</label>
@@ -411,49 +442,189 @@
                                 </div>
                             </div>
 
-                            <div class="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
-                                <div class="flex items-center justify-between gap-3">
+                            <div class="rounded-xl border p-4 space-y-4" :class="prCardBorderClass('context_article')">
+                                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                     <div>
-                                        <h6 class="text-sm font-semibold text-gray-800" x-text="currentArticleType === 'pr-full-feature' ? 'Editorial Context' : 'Topic Context'"></h6>
-                                        <p class="text-xs text-gray-500" x-text="currentArticleType === 'pr-full-feature' ? 'Import a real article or enter editorial search terms, then tell the writer how to use that context in Article Focus Instructions above.' : 'You can import a specific live article for context, or provide topic keywords if you want the AI to build the expert article around a broader issue.'"></p>
+                                        <h6 class="text-sm font-semibold text-gray-800"><span x-text="currentArticleType === 'pr-full-feature' ? 'Editorial Context Article' : 'Topic Context Article'"></span> <span class="text-red-500">*</span></h6>
+                                        <p class="text-xs text-gray-500">Choose one real context article. It can come from selected Notion related content below or from the same editorial search/import tools used elsewhere in the pipeline.</p>
                                     </div>
-                                    <select x-model="prArticle.expert_source_mode" @change="savePipelineState()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                                        <option value="keywords">Keywords / topic</option>
-                                        <option value="url">Specific article URL</option>
-                                        <option value="none">No external topic source</option>
-                                    </select>
+                                    <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700" x-text="currentPrContextStatusLabel()"></span>
                                 </div>
 
-                                <div x-show="prArticle.expert_source_mode === 'keywords'" x-cloak>
-                                    <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Topic Keywords</label>
-                                    <textarea x-model="prArticle.expert_keywords" @change="savePipelineState()" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 resize-y" placeholder="Add the keywords, issue, or thesis the article should focus on. Example: AI chip export controls, Nvidia, semiconductor supply chain, geopolitical risk"></textarea>
+                                <div class="flex flex-wrap gap-2">
+                                    <button type="button" @click="prContextTab = 'notion'" class="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors" :class="prContextTab === 'notion' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Selected Notion</button>
+                                    <button type="button" @click="prContextTab = 'ai'" class="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors" :class="prContextTab === 'ai' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Search Online</button>
+                                    <button type="button" @click="prContextTab = 'search'" class="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors" :class="prContextTab === 'search' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Search News</button>
+                                    <button type="button" @click="prContextTab = 'bookmarks'; loadBookmarks()" class="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors" :class="prContextTab === 'bookmarks' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Bookmarks</button>
+                                    <button type="button" @click="prContextTab = 'url'" class="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors" :class="prContextTab === 'url' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">Paste Link</button>
                                 </div>
 
-                                <div x-show="prArticle.expert_source_mode === 'url'" x-cloak class="space-y-3">
+                                <div x-show="prContextTab === 'notion'" x-cloak class="space-y-3">
+                                    <div x-show="hasSelectedPrContextEntries()" x-cloak class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 space-y-2">
+                                        <p class="text-sm font-semibold text-emerald-800">Selected Notion context article(s)</p>
+                                        <div class="space-y-2">
+                                            <template x-for="item in prSelectedContextEntries()" :key="'pr-context-' + item.profile.id + '-' + item.entry.id">
+                                                <div class="rounded-lg border border-emerald-100 bg-white px-3 py-2">
+                                                    <div class="flex flex-wrap items-center gap-2">
+                                                        <p class="text-sm font-medium text-gray-900 break-words" x-text="item.entry.title"></p>
+                                                        <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700" x-text="item.relation.label || 'Related Content'"></span>
+                                                    </div>
+                                                    <p class="mt-1 text-xs text-gray-500" x-text="'Selected under ' + (item.profile.name || 'subject')"></p>
+                                                    <a x-show="prContextUrlFromEntry(item.entry)" x-cloak :href="prContextUrlFromEntry(item.entry)" target="_blank" rel="noopener noreferrer" class="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 underline decoration-blue-200 underline-offset-2">
+                                                        <span x-text="prContextUrlFromEntry(item.entry)"></span>
+                                                        <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                                    </a>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                    <div x-show="!hasSelectedPrContextEntries()" x-cloak class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-sm text-gray-500">
+                                        Select one of the related Notion articles below and it will count as context automatically.
+                                    </div>
+                                </div>
+
+                                <div x-show="prContextTab === 'ai'" x-cloak class="space-y-3">
+                                    <div class="space-y-2">
+                                    <div class="flex gap-2">
+                                        <input type="text" x-model="aiSearchTopic" @keydown.enter="aiSearchArticles()" class="flex-1 border rounded-lg px-3 py-2 text-sm" :class="prInputBorderClass('context_article')" placeholder="Search online for one article to use as context">
+                                        <button @click="aiSearchArticles()" :disabled="aiSearching || !aiSearchTopic.trim()" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-2">
+                                            <svg x-show="aiSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                            <span x-text="aiSearching ? 'Searching…' : 'Find Articles'"></span>
+                                        </button>
+                                    </div>
+                                    <div class="max-w-xl">
+                                        <label class="block text-[10px] text-gray-400 uppercase tracking-wide mb-1">Search Agent</label>
+                                        <select x-model="aiSearchModel" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                            @foreach(($aiSearchGroups ?? $aiModelGroups ?? []) as $company => $models)
+                                            <optgroup label="{{ $company }}">
+                                                @foreach($models as $model)
+                                                    <option value="{{ $model['id'] }}">{{ $model['label'] }}</option>
+                                                @endforeach
+                                            </optgroup>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
+                                <div x-show="aiSearchResults.length > 0" x-cloak class="space-y-2 max-h-72 overflow-y-auto">
+                                        <template x-for="(article, idx) in aiSearchResults" :key="'pr-ai-' + idx">
+                                            <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                                <div class="flex items-start gap-3">
+                                                    <div class="flex-1 min-w-0">
+                                                        <p class="text-sm font-semibold text-gray-900 break-words" x-text="article.title"></p>
+                                                        <a :href="article.url" target="_blank" rel="noopener noreferrer" class="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 break-all underline decoration-blue-200 underline-offset-2">
+                                                            <span x-text="article.url"></span>
+                                                            <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                                        </a>
+                                                        <p x-show="article.description" x-cloak class="mt-1 text-xs text-gray-500 break-words" x-text="article.description"></p>
+                                                    </div>
+                                                    <button type="button" @click="usePrContextArticle(article)" class="flex-shrink-0 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">Use as Context</button>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <div x-show="aiLog.length > 0 || aiSearchError" x-cloak class="rounded-xl border border-slate-700 bg-slate-950 p-3 space-y-2">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-300">Context Search Activity</p>
+                                            <span x-show="aiSearching" x-cloak class="text-[11px] text-amber-300">Request in progress…</span>
+                                        </div>
+                                        <div x-show="aiSearchError" x-cloak class="rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-200" x-text="aiSearchError"></div>
+                                        <div x-show="aiLog.length > 0" x-cloak class="max-h-52 overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-2">
+                                            <template x-for="(entry, idx) in aiLog" :key="'pr-context-log-' + idx">
+                                                <div class="flex items-start gap-2 py-1 text-xs font-mono" :class="idx > 0 ? 'border-t border-slate-800' : ''">
+                                                    <span class="flex-shrink-0 text-slate-500" x-text="entry.time"></span>
+                                                    <span class="break-words" :class="{
+                                                        'text-emerald-300': entry.type === 'success',
+                                                        'text-red-300': entry.type === 'error',
+                                                        'text-sky-300': entry.type === 'info',
+                                                        'text-slate-300': entry.type === 'step'
+                                                    }" x-text="entry.message"></span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div x-show="prContextTab === 'search'" x-cloak class="space-y-3">
+                                    <div class="flex gap-2">
+                                        <input type="text" x-model="newsSearch" @keydown.enter="searchNews()" class="flex-1 border rounded-lg px-3 py-2 text-sm" :class="prInputBorderClass('context_article')" placeholder="Search news for one context article">
+                                        <button @click="searchNews()" :disabled="newsSearching" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+                                            <svg x-show="newsSearching" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                            <span x-text="newsSearching ? 'Searching…' : 'Search News'"></span>
+                                        </button>
+                                    </div>
+                                    <div x-show="newsResults.length > 0 && !newsSearching" x-cloak class="space-y-2 max-h-72 overflow-y-auto">
+                                        <template x-for="(article, idx) in newsResults" :key="'pr-news-' + idx">
+                                            <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                                <div class="flex items-start gap-3">
+                                                    <div class="flex-1 min-w-0">
+                                                        <p class="text-sm font-semibold text-gray-900 break-words" x-text="article.title"></p>
+                                                        <a :href="article.url" target="_blank" rel="noopener noreferrer" class="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 break-all underline decoration-blue-200 underline-offset-2">
+                                                            <span x-text="article.url"></span>
+                                                            <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                                        </a>
+                                                        <p x-show="article.description" x-cloak class="mt-1 text-xs text-gray-500 break-words" x-text="article.description"></p>
+                                                    </div>
+                                                    <button type="button" @click="usePrContextArticle(article)" class="flex-shrink-0 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">Use as Context</button>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <div x-show="prContextTab === 'bookmarks'" x-cloak class="space-y-2">
+                                    <div x-show="bookmarksLoading" x-cloak class="text-sm text-gray-500">Loading bookmarks...</div>
+                                    <div x-show="!bookmarksLoading && bookmarks.length === 0" x-cloak class="text-sm text-gray-500">No bookmarks found for this user.</div>
+                                    <div x-show="bookmarks.length > 0" x-cloak class="space-y-2 max-h-72 overflow-y-auto">
+                                        <template x-for="bm in bookmarks" :key="'pr-bookmark-' + bm.id">
+                                            <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                                <div class="flex items-start gap-3">
+                                                    <div class="flex-1 min-w-0">
+                                                        <p class="text-sm font-semibold text-gray-900 break-words" x-text="bm.title || bm.url"></p>
+                                                        <a :href="bm.url" target="_blank" rel="noopener noreferrer" class="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 break-all underline decoration-blue-200 underline-offset-2">
+                                                            <span x-text="bm.url"></span>
+                                                            <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                                        </a>
+                                                    </div>
+                                                    <button type="button" @click="usePrContextArticle({ url: bm.url, title: bm.title })" class="flex-shrink-0 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">Use as Context</button>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <div x-show="prContextTab === 'url'" x-cloak class="space-y-3">
                                     <div class="flex flex-col lg:flex-row gap-3">
-                                        <input type="url" x-model="prArticle.expert_context_url" @change="savePipelineState()" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400" placeholder="Paste a live article URL to import as the issue context">
-                                        <button @click="importPrArticleContextUrl()" type="button" class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50" :disabled="prArticleContextImporting || !prArticle.expert_context_url">
+                                        <input type="url" x-model="prArticle.expert_context_url" @input="clearPrValidationError('context_article'); savePipelineState()" class="flex-1 border rounded-lg px-3 py-2 text-sm" :class="prInputBorderClass('context_article')" placeholder="Paste a live article URL to import as context">
+                                        <button @click="usePrContextArticle({ url: prArticle.expert_context_url })" type="button" class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50" :disabled="prArticleContextImporting || !prArticle.expert_context_url">
                                             <svg x-show="prArticleContextImporting" x-cloak class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                                             <span x-text="prArticleContextImporting ? 'Importing…' : 'Import Article Context'"></span>
                                         </button>
                                     </div>
-                                    <div x-show="prArticle.expert_context_extracted?.title || prArticle.expert_context_extracted?.text" x-cloak class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3">
-                                        <p class="text-sm font-semibold text-gray-900" x-text="prArticle.expert_context_extracted?.title || 'Imported topic context'"></p>
-                                        <p class="text-xs text-gray-500 mt-1" x-text="(prArticle.expert_context_extracted?.word_count || 0) + ' words imported from the context article'"></p>
-                                        <p x-show="prArticle.expert_context_extracted?.excerpt" x-cloak class="text-sm text-gray-700 mt-2" x-text="prArticle.expert_context_extracted?.excerpt"></p>
-                                    </div>
                                 </div>
+
+                                <div x-show="prArticle.expert_context_extracted?.title || prArticle.expert_context_extracted?.text" x-cloak class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p class="text-sm font-semibold text-gray-900" x-text="prArticle.expert_context_extracted?.title || 'Imported context article'"></p>
+                                            <p class="text-xs text-gray-500 mt-1" x-text="(prArticle.expert_context_extracted?.word_count || 0) + ' words imported from the context article'"></p>
+                                        </div>
+                                        <button type="button" @click="prArticle.expert_context_url = ''; prArticle.expert_context_extracted = {}; savePipelineState()" class="text-xs font-medium text-gray-500 hover:text-red-600">Clear</button>
+                                    </div>
+                                    <p x-show="prArticle.expert_context_extracted?.excerpt" x-cloak class="text-sm text-gray-700 mt-2" x-text="prArticle.expert_context_extracted?.excerpt"></p>
+                                </div>
+
+                                <p x-show="prFieldHasError('context_article')" x-cloak class="text-xs font-medium text-red-600">Select a Notion article below or import one from the editorial search tools before continuing.</p>
                             </div>
                         </div>
                     </div>
 
                     {{-- PR Subject Picker --}}
-                    <div class="space-y-3" style="order: 1;">
-                        <label class="text-sm font-medium text-gray-700">Select PR Subjects</label>
+                    <div class="space-y-3 rounded-xl p-3" :class="prFieldHasError('subjects') ? 'border border-red-300 bg-red-50/30 ring-1 ring-red-100' : ''" style="order: 1;">
+                        <label class="text-sm font-medium text-gray-700">Select PR Subjects <span class="text-red-500">*</span></label>
                         <div class="relative">
-                            <input type="text" x-model="prProfileSearch" @input.debounce.300ms="searchPrProfiles()" @focus="searchPrProfiles()"
+                            <input type="text" x-model="prProfileSearch" @input.debounce.300ms="clearPrValidationError('subjects'); searchPrProfiles()" @focus="searchPrProfiles()"
                                 placeholder="Search Notion people and companies..."
-                                class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                                class="w-full border rounded-lg px-4 py-2.5 text-sm" :class="prInputBorderClass('subjects')">
                             <svg x-show="prProfileSearching" x-cloak class="absolute right-3 top-2.5 w-5 h-5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
 
                             {{-- Search results dropdown --}}
@@ -540,7 +711,10 @@
                                                 <div class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
                                                     <div class="flex items-center justify-between gap-3">
                                                         <p class="text-xs font-semibold text-gray-900" x-text="doc.title || 'Google Doc'"></p>
-                                                        <a :href="doc.url" target="_blank" class="text-[11px] text-blue-600 hover:text-blue-700">Open</a>
+                                                        <a :href="doc.url" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 underline decoration-blue-200 underline-offset-2">
+                                                            Open
+                                                            <svg class="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                                        </a>
                                                     </div>
                                                     <p class="mt-1 text-xs text-gray-600 whitespace-pre-wrap" x-text="doc.preview"></p>
                                                 </div>
@@ -555,7 +729,11 @@
                                                 <div class="space-y-1.5">
                                                     <p class="font-semibold text-gray-900">Photo source audit</p>
                                                     <p>Direct subject photo fields: <span class="font-medium" x-text="prPhotoAudit(profile.id).directFields.length ? prPhotoAudit(profile.id).directFields.join(', ') : 'None detected'"></span></p>
-                                                    <p>Google Drive gallery: <span class="font-medium" x-text="prPhotoAudit(profile.id).driveAvailable ? (prPhotoAudit(profile.id).driveLoaded ? 'Loaded and selectable' : 'Available but not loaded yet') : 'Not configured'"></span></p>
+                                                    <p>Google Drive folder media: <span class="font-medium" x-text="prPhotoAudit(profile.id).driveAvailable ? ((prPhotoAudit(profile.id).driveField ? prPhotoAudit(profile.id).driveField + ' • ' : '') + (prPhotoAudit(profile.id).driveLoaded ? 'Loaded and selectable' : 'Available but not loaded yet')) : 'Not configured'"></span></p>
+                                                    <a x-show="prPhotoAudit(profile.id).driveUrl" x-cloak :href="prPhotoAudit(profile.id).driveUrl" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 underline decoration-blue-200 underline-offset-2">
+                                                        Open Drive folder
+                                                        <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                                    </a>
                                                     <p x-show="prPhotoAudit(profile.id).featuredLabel" x-cloak>Featured image selected: <span class="font-medium" x-text="prPhotoAudit(profile.id).featuredLabel"></span></p>
                                                     <p x-show="prPhotoAudit(profile.id).featuredSourceLabel" x-cloak>Featured image source: <span class="font-medium" x-text="prPhotoAudit(profile.id).featuredSourceLabel"></span></p>
                                                     <p>Inline photos selected: <span class="font-medium" x-text="prPhotoAudit(profile.id).inlineSelectedCount"></span></p>
@@ -575,11 +753,12 @@
                                             'assetKeyExpression' => 'asset.id',
                                             'featuredSelectedExpression' => 'isPrFeaturedPhotoSelected(profile.id, asset.id)',
                                             'inlineSelectedExpression' => 'isPrInlinePhotoSelected(profile.id, asset.id)',
-                                            'thumbUrlExpression' => 'asset.thumbnailLink || asset.webContentLink || asset.webViewLink',
+                                            'thumbUrlExpression' => 'asset.preview_url || asset.thumbnailLink || asset.thumbnail_url || asset.webContentLink || asset.webViewLink',
                                             'labelExpression' => 'prFriendlyPhotoLabel(profile, asset, assetIdx + 1)',
                                             'sourceLabelExpression' => 'prPhotoOriginAuditLabel(profile, asset, prSubjectData[profile.id]?.driveUrl || "")',
-                                            'downloadUrlExpression' => 'asset.webContentLink || asset.webViewLink || asset.thumbnailLink',
-                                            'viewUrlExpression' => 'asset.source_url || asset.webViewLink || asset.webContentLink',
+                                            'sourceMetaHtmlExpression' => 'prPhotoSourceMetaHtml(profile, asset, prSubjectData[profile.id])',
+                                            'downloadUrlExpression' => 'asset.download_url || asset.webContentLink || asset.webViewLink || asset.thumbnailLink',
+                                            'viewUrlExpression' => 'asset.view_url || asset.source_url || asset.webViewLink || asset.webContentLink',
                                             'setFeaturedAction' => 'setPrFeaturedPhoto(profile.id, asset.id)',
                                             'toggleInlineAction' => 'togglePrInlinePhotoSelect(profile.id, asset.id)',
                                             'featuredButtonTextExpression' => 'isPrFeaturedPhotoSelected(profile.id, asset.id) ? "Featured Image" : "Set Featured"',
@@ -632,7 +811,7 @@
                                                                             <template x-for="[k,v] in Object.entries(entry.detail.properties || {})" :key="k">
                                                                                 <div class="flex gap-2">
                                                                                     <span class="text-gray-500 w-28 flex-shrink-0" x-text="k"></span>
-                                                                                    <span class="text-gray-800 break-words" x-text="typeof v === 'object' ? JSON.stringify(v) : v"></span>
+                                                                                    <span class="text-gray-800 break-words" x-html="linkedValueHtml(typeof v === 'object' ? JSON.stringify(v) : v)"></span>
                                                                                 </div>
                                                                             </template>
                                                                             <div x-show="entry.google_docs?.length > 0" x-cloak class="pt-2 space-y-2">
@@ -640,7 +819,10 @@
                                                                                     <div class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
                                                                                         <div class="flex items-center justify-between gap-3">
                                                                                             <p class="text-xs font-semibold text-gray-900" x-text="doc.title || 'Google Doc'"></p>
-                                                                                            <a :href="doc.url" target="_blank" class="text-[11px] text-blue-600 hover:text-blue-700">Open</a>
+                                                                                            <a :href="doc.url" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 underline decoration-blue-200 underline-offset-2">
+                                                                                                Open
+                                                                                                <svg class="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                                                                            </a>
                                                                                         </div>
                                                                                         <p class="mt-1 text-xs text-gray-600 whitespace-pre-wrap" x-text="doc.preview"></p>
                                                                                     </div>
@@ -680,8 +862,8 @@
                         <p x-show="selectedPrProfiles.length === 0" class="text-sm text-gray-400">No subjects selected. Search and add profiles above.</p>
                     </div>
 
-                    <button @click="continuePrArticleStep3()" :disabled="selectedPrProfiles.length === 0"
-                        class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    <button @click="continuePrArticleStep3()"
+                        class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
                         style="order: 3;">
                         Continue to AI & Spin &rarr;
                     </button>
@@ -1023,8 +1205,8 @@
          Step 4: Fetch Articles from Source
          ══════════════════════════════════════════════════════════════ --}}
     <template x-if="currentArticleType !== 'press-release'">
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 4, 'opacity-50': !isStepAccessible(4) }">
-        <button @click="toggleStep(4)" :disabled="!isStepAccessible(4)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="pipeline-step-card" :class="{ 'ring-2 ring-blue-400': currentStep === 4, 'opacity-50': !isStepAccessible(4) }">
+        <button @click="toggleStep(4)" :disabled="!isStepAccessible(4)" class="pipeline-step-toggle disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                       :class="completedSteps.includes(4) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
@@ -1037,7 +1219,7 @@
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(4) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(4)" x-cloak x-collapse class="px-4 pb-4">
+        <div x-show="openSteps.includes(4)" x-cloak x-collapse class="pipeline-step-panel">
             @include('app-publish::publishing.pipeline.partials.press-release-validate-step')
             <div x-show="currentArticleType !== 'press-release'" x-cloak>
             {{-- Extraction Options --}}
@@ -1243,8 +1425,8 @@
     {{-- ══════════════════════════════════════════════════════════════
          Step 5: AI & Spin
          ══════════════════════════════════════════════════════════════ --}}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200" :class="{ 'ring-2 ring-blue-400': currentStep === 5, 'opacity-50': !isStepAccessible(5) }">
-        <button @click="toggleStep(5)" :disabled="!isStepAccessible(5)" class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed">
+    <div class="pipeline-step-card" :class="{ 'ring-2 ring-blue-400': currentStep === 5, 'opacity-50': !isStepAccessible(5) }">
+        <button @click="toggleStep(5)" :disabled="!isStepAccessible(5)" class="pipeline-step-toggle disabled:cursor-not-allowed">
             <div class="flex items-center gap-3">
                 <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
                       :class="completedSteps.includes(5) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'">
@@ -1257,7 +1439,7 @@
             </div>
             <svg class="w-5 h-5 text-gray-400 transition-transform" :class="openSteps.includes(5) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div x-show="openSteps.includes(5)" x-cloak x-collapse class="px-4 pb-4">
+        <div x-show="openSteps.includes(5)" x-cloak x-collapse class="pipeline-step-panel">
 
             {{-- Article Preset moved to Step 2 --}}
             <div class="flex flex-wrap items-end gap-3 mb-4">
@@ -1286,7 +1468,7 @@
             {{-- Custom prompt input — live-updates resolved prompt --}}
             <div class="mb-4">
                 <label class="block text-xs text-gray-500 mb-1">Custom Instructions <span class="text-gray-400">(takes precedence over template/preset)</span></label>
-                <textarea x-model.debounce.300ms="customPrompt" @input.debounce.300ms="invalidatePromptPreview('custom_prompt', { fetch: true })" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Write in first person, focus on the financial impact, include expert quotes..."></textarea>
+                <textarea x-model.debounce.300ms="customPrompt" @input.debounce.300ms="invalidatePromptPreview('custom_prompt', { fetch: true })" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Keep the tone analytical, focus on the financial impact, include expert quotes..."></textarea>
             </div>
 
             {{-- Web research toggle --}}
@@ -1641,6 +1823,8 @@ function publishPipeline() {
         prSubmitCard: 'content',
         prArticle: @json($prArticleDefaultState ?? []),
         prArticleContextImporting: false,
+        prContextTab: 'notion',
+        prValidationErrors: {},
         selectedPrProfiles: [],
         prSubjectData: {},
 
@@ -1761,6 +1945,8 @@ function publishPipeline() {
         syndicationCategoriesCacheMeta: null,
         selectedSyndicationCats: [],
         loadingSyndicationCats: false,
+        _syndicationAutoRequested: false,
+        _syndicationAutoSiteId: '',
         _previousSiteId: null,
         articleTitle: '',
         editorContent: '',
@@ -1871,6 +2057,20 @@ function publishPipeline() {
 
         // Notification
         notification: { show: false, type: 'success', message: '' },
+        publicationNotificationTemplates: @json($publicationNotificationTemplates ?? []),
+        publicationNotificationDefaults: @json($publicationNotificationDefaults ?? []),
+        publicationNotificationShortcodes: @json(config('hws-publish.shortcodes', [])),
+        publicationNotificationTemplateId: @json(($publicationNotificationDefaults['template_id'] ?? '')),
+        publicationNotificationFromName: @json(($publicationNotificationDefaults['from_name'] ?? '')),
+        publicationNotificationFromEmail: @json(($publicationNotificationDefaults['from_email'] ?? '')),
+        publicationNotificationReplyTo: @json(($publicationNotificationDefaults['reply_to'] ?? '')),
+        publicationNotificationCc: @json(($publicationNotificationDefaults['cc'] ?? '')),
+        publicationNotificationTo: '',
+        publicationNotificationSubject: @json(($publicationNotificationDefaults['subject'] ?? '')),
+        publicationNotificationBody: @json(($publicationNotificationDefaults['body'] ?? '')),
+        publicationNotificationSending: false,
+        publicationNotificationStatus: '',
+        publicationNotificationResult: null,
         pipelineDebugEnabled: new URLSearchParams(window.location.search).get('debug') === '1'
             || localStorage.getItem('publishPipelineDebug') === 'true',
         masterActivityLog: [],
