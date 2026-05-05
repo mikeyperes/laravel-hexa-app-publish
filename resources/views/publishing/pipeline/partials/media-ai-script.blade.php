@@ -435,9 +435,9 @@
                         query: this.photoSearch,
                         draft_id: this.draftId || null,
                         per_page: 15,
-                        sources: ['google', 'serper', 'pexels', 'pixabay'],
+                        sources: ['google', 'pexels', 'pixabay'],
                         quality_context: 'inline',
-                        probe_quality: true,
+                        probe_quality: false,
                     })
                 });
                 const data = await resp.json();
@@ -449,6 +449,7 @@
         async searchFeaturedImage() {
             if (!this.featuredImageSearch.trim()) return;
             this.featuredSearching = true;
+            this.featuredSearchAttempted = true;
             this.featuredSearchPending = true;
             this.featuredLoadError = '';
             this.featuredThumbError = '';
@@ -462,7 +463,7 @@
                         draft_id: this.draftId || null,
                         per_page: 8,
                         quality_context: 'featured',
-                        probe_quality: true,
+                        probe_quality: false,
                     })
                 });
                 const data = await resp.json();
@@ -482,6 +483,7 @@
             }
             this.featuredSearching = false;
             this.syncDeferredEnrichmentState('featured_search');
+            this.queueAutoSaveDraft(300);
         },
 
         importFeaturedFromUrl() {
@@ -653,9 +655,9 @@
                             query: this.photoSuggestions[idx]?.search_term || '',
                             per_page: 12,
                         })),
-                        sources: ['google', 'serper', 'pexels', 'pixabay'],
+                        sources: ['google', 'pexels', 'pixabay'],
                         quality_context: 'inline',
-                        probe_quality: true,
+                        probe_quality: false,
                     }),
                 });
                 const data = await resp.json();

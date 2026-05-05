@@ -11,7 +11,7 @@ class LinkHealthService
     /**
      * @return array{url: string, status_code: int|null, status_text: string, status_tone: string, checked_via: string, final_url: string, is_broken: bool, probe_failed: bool}
      */
-    public function probe(string $url, string $cacheNamespace = 'default'): array
+    public function probe(string $url, string $cacheNamespace = 'default', array $options = []): array
     {
         $normalized = $this->normalizeUrl($url);
         if (!$normalized) {
@@ -31,9 +31,9 @@ class LinkHealthService
             return $this->probeUncached($normalized);
         }
 
-        $result = app(\hexa_package_content_extractor\Probe\Services\UrlProbeService::class)->probe($normalized, [
+        $result = app(\hexa_package_content_extractor\Probe\Services\UrlProbeService::class)->probe($normalized, array_merge($options, [
             'cache_namespace' => 'publish:' . trim($cacheNamespace),
-        ]);
+        ]));
 
         return [
             'url' => $normalized,
@@ -96,7 +96,7 @@ class LinkHealthService
             }
 
             $checked++;
-            $probe = $this->probe($candidate['url'], $cacheNamespace);
+            $probe = $this->probe($candidate['url'], $cacheNamespace, ['timeout' => 4]);
             $semanticStatus = (string) ($probe['semantic_status'] ?? '');
             if (
                 $probe['probe_failed']
