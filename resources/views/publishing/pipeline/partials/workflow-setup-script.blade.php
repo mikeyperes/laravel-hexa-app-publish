@@ -562,13 +562,19 @@
                 : [];
             const isPrContextSearch = this.isPrArticleMode() && this.prContextTab === 'ai';
             const defaultSearchModel = @json(($pipelineDefaults['search_model'] ?? null));
-            const defaultPrContextSearchModel = this.aiSearchOptionLabels?.['gpt-4o-mini']
-                ? 'gpt-4o-mini'
-                : (this.aiSearchOptionLabels?.['gemini-2.5-flash-lite']
-                    ? 'gemini-2.5-flash-lite'
-                    : (defaultSearchModel || this.aiSearchModel));
+            const defaultPrContextSearchModel = this.aiSearchOptionLabels?.['optimized:gemini']
+                ? 'optimized:gemini'
+                : (this.aiSearchOptionLabels?.['optimized:openai']
+                    ? 'optimized:openai'
+                    : (this.aiSearchOptionLabels?.['optimized:grok']
+                        ? 'optimized:grok'
+                        : (this.aiSearchOptionLabels?.['gpt-4o-mini']
+                            ? 'gpt-4o-mini'
+                            : (this.aiSearchOptionLabels?.['gemini-2.5-flash-lite']
+                                ? 'gemini-2.5-flash-lite'
+                                : (defaultSearchModel || this.aiSearchModel)))));
 
-            if (isPrContextSearch && (!this.aiSearchModel || this.aiSearchModel === defaultSearchModel || this.aiSearchModel === 'optimized:gemini')) {
+            if (isPrContextSearch && (!this.aiSearchModel || this.aiSearchModel === defaultSearchModel)) {
                 this.aiSearchModel = defaultPrContextSearchModel;
             }
 
@@ -589,7 +595,9 @@
 
             const searchAgentLabel = this.aiSearchOptionLabels?.[this.aiSearchModel] || this.aiSearchModel;
             this._logAi('info', 'Starting AI article search for: ' + this.aiSearchTopic);
-            this._logAi('info', 'Requesting top ' + requestedCount + ' articles via ' + searchAgentLabel + ' with web search...');
+            this._logAi('info', isPrContextSearch
+                ? ('Requesting top ' + requestedCount + ' context article(s) via reliable live article search...')
+                : ('Requesting top ' + requestedCount + ' articles via ' + searchAgentLabel + ' with web search...'));
 
             try {
                 // Collect URLs from current results + already-added sources to exclude duplicates on re-search

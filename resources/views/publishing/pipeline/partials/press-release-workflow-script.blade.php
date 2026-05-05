@@ -21,10 +21,17 @@ function pressReleaseWorkflowMixin(config) {
         pressReleaseEpisodeDropdownOpen: false,
         pressReleaseEpisodeNoResults: false,
         pressReleaseImportingEpisodeId: null,
+        pressReleasePersonSearching: false,
+        pressReleasePersonResults: [],
+        pressReleasePersonDropdownOpen: false,
+        pressReleasePersonNoResults: false,
+        pressReleaseLoadingPersonBooks: false,
+        pressReleaseImportingBookId: null,
         _serverPipelineStateTimer: null,
         _savingPipelineStateServer: false,
         _pressReleaseLegacyRefreshEpisodeId: null,
         _pressReleaseEpisodeSearchToken: 0,
+        _pressReleasePersonSearchToken: 0,
 
         normalizePressReleaseState(state = {}) {
             const defaults = clone(this.pressReleaseDefaultState || {});
@@ -43,6 +50,10 @@ function pressReleaseWorkflowMixin(config) {
             normalized.activity_log = Array.isArray(normalized.activity_log) ? normalized.activity_log : [];
             normalized.content_detect_log = Array.isArray(normalized.content_detect_log) ? normalized.content_detect_log : [];
             normalized.photo_detect_log = Array.isArray(normalized.photo_detect_log) ? normalized.photo_detect_log : [];
+            normalized.notion_person_query = normalized.notion_person_query || '';
+            normalized.notion_person = normalized.notion_person && typeof normalized.notion_person === 'object' ? normalized.notion_person : {};
+            normalized.notion_book = normalized.notion_book && typeof normalized.notion_book === 'object' ? normalized.notion_book : {};
+            normalized.notion_book_options = Array.isArray(normalized.notion_book_options) ? normalized.notion_book_options : [];
             normalized.notion_episode_query = normalized.notion_episode_query || '';
             normalized.notion_episode = normalized.notion_episode && typeof normalized.notion_episode === 'object' ? normalized.notion_episode : {};
             normalized.notion_guest = normalized.notion_guest && typeof normalized.notion_guest === 'object' ? normalized.notion_guest : {};
@@ -51,13 +62,15 @@ function pressReleaseWorkflowMixin(config) {
             normalized.notion_missing_fields = Array.isArray(normalized.notion_missing_fields) ? normalized.notion_missing_fields : [];
             normalized.notion_source_fields = normalized.notion_source_fields && typeof normalized.notion_source_fields === 'object'
                 ? {
+                    person: Array.isArray(normalized.notion_source_fields.person) ? normalized.notion_source_fields.person : [],
+                    book: Array.isArray(normalized.notion_source_fields.book) ? normalized.notion_source_fields.book : [],
                     episode: Array.isArray(normalized.notion_source_fields.episode) ? normalized.notion_source_fields.episode : [],
                     guest: Array.isArray(normalized.notion_source_fields.guest) ? normalized.notion_source_fields.guest : [],
                     host: Array.isArray(normalized.notion_source_fields.host) ? normalized.notion_source_fields.host : [],
                     podcast: Array.isArray(normalized.notion_source_fields.podcast) ? normalized.notion_source_fields.podcast : [],
                     enforcement: Array.isArray(normalized.notion_source_fields.enforcement) ? normalized.notion_source_fields.enforcement : [],
                 }
-                : { episode: [], guest: [], host: [], podcast: [], enforcement: [] };
+                : { person: [], book: [], episode: [], guest: [], host: [], podcast: [], enforcement: [] };
             normalized.detected_content = normalized.detected_content || '';
             normalized.detected_content_html = normalized.detected_content_html || '';
             normalized.detected_word_count = normalized.detected_word_count || 0;
@@ -83,6 +96,9 @@ function pressReleaseWorkflowMixin(config) {
                 normalized.notion_guest.drive_folder_field = normalized.notion_guest.drive_folder_field || inferredDriveField;
                 normalized.notion_guest.drive_folder_url = normalized.notion_guest.drive_folder_url || inferredDriveFolderUrl;
                 normalized.google_drive_url = normalized.google_drive_url || normalized.notion_guest.drive_folder_url || normalized.notion_episode.drive_folder_url || inferredDriveFolderUrl;
+            } else if (normalized.submit_method === 'notion-book') {
+                normalized.notion_person.drive_folder_url = normalized.notion_person.drive_folder_url || inferredDriveFolderUrl;
+                normalized.google_drive_url = normalized.google_drive_url || normalized.notion_person.drive_folder_url || normalized.notion_book.drive_folder_url || inferredDriveFolderUrl;
             }
 
             return normalized;
@@ -149,12 +165,44 @@ function pressReleaseWorkflowMixin(config) {
                 return null;
             }
 
-            const isPodcastImport = this.pressRelease.submit_method === 'notion-podcast';
+            const isPodcastImport = this.isPressReleaseNotionPodcastImport();
+            const isBookImport = this.isPressReleaseNotionBookImport();
             if (this.pressRelease.polish_only) {
-                return isPodcastImport ? 'press-release-podcast-polish' : 'press-release-polish';
+                if (isPodcastImport) return 'press-release-podcast-polish';
+                return isBookImport ? 'press-release-book-polish' : 'press-release-polish';
             }
 
-            return isPodcastImport ? 'press-release-podcast-spin' : 'press-release-spin';
+            if (isPodcastImport) return 'press-release-podcast-spin';
+            return isBookImport ? 'press-release-book-spin' : 'press-release-spin';
+        },
+
+        isPressReleaseNotionImport(method = null) {
+            const currentMethod = method || this.pressRelease?.submit_method || '';
+            return currentMethod === 'notion-podcast' || currentMethod === 'notion-book';
+        },
+
+        isPressReleaseNotionPodcastImport() {
+            return this.pressRelease?.submit_method === 'notion-podcast';
+        },
+
+        isPressReleaseNotionBookImport() {
+            return this.pressRelease?.submit_method === 'notion-book';
+        },
+
+        pressReleaseLinkedPersonRecord() {
+            if (this.isPressReleaseNotionBookImport()) {
+                return this.pressRelease?.notion_person || {};
+            }
+
+            return this.pressRelease?.notion_guest || {};
+        },
+
+        pressReleaseImportedPrimaryRecord() {
+            if (this.isPressReleaseNotionBookImport()) {
+                return this.pressRelease?.notion_book || {};
+            }
+
+            return this.pressRelease?.notion_episode || {};
         },
 
         restorePressReleaseStateFromLegacy(state = {}) {
@@ -290,10 +338,13 @@ function pressReleaseWorkflowMixin(config) {
         },
 
         pressReleaseShouldFilterLegacyGuestMedia(assets = []) {
-            if (this.currentArticleType !== 'press-release' || this.pressRelease?.submit_method !== 'notion-podcast') {
+            if (this.currentArticleType !== 'press-release' || !this.isPressReleaseNotionImport()) {
                 return false;
             }
-            return (assets || []).some((asset) => String(asset?.source || '').toLowerCase() === 'notion-guest-drive');
+            return (assets || []).some((asset) => {
+                const source = String(asset?.source || '').toLowerCase();
+                return source === 'notion-guest-drive' || source === 'notion-person-drive';
+            });
         },
 
         pressReleaseAssetKey(asset = {}, fallbackKey = '') {
@@ -402,7 +453,7 @@ function pressReleaseWorkflowMixin(config) {
         buildPressReleaseSourceText(usePlaceholder = false) {
             const blocks = [];
             let sourceText = (this.pressRelease.resolved_source_text || this.pressRelease.content_dump || '').trim();
-            if (this.currentArticleType === 'press-release' && this.pressRelease.submit_method === 'notion-podcast' && sourceText) {
+            if (this.currentArticleType === 'press-release' && this.isPressReleaseNotionPodcastImport() && sourceText) {
                 sourceText = sourceText.replace(
                     /- Include exactly one inline guest\/client image in the body when a preferred inline guest image URL is provided\./i,
                     '- Use the selected inline subject photos listed below in the body. Do not use generic stock images in place of the selected subject photos.'
@@ -432,7 +483,7 @@ function pressReleaseWorkflowMixin(config) {
                 }
             }
 
-            if (this.currentArticleType === 'press-release' && this.pressRelease.submit_method === 'notion-podcast') {
+            if (this.currentArticleType === 'press-release' && this.isPressReleaseNotionImport()) {
                 const featuredAsset = this.preferredPressReleaseFeaturedAsset();
                 const inlineAssets = this.selectedPressReleaseInlineAssets();
                 const mediaLines = ['=== Selected Press Release Media ==='];
@@ -440,7 +491,7 @@ function pressReleaseWorkflowMixin(config) {
                     mediaLines.push('Featured image URL: ' + this.pressReleaseSourceUploadUrl(featuredAsset));
                     mediaLines.push('Featured image label: ' + (featuredAsset.label || featuredAsset.alt_text || 'Featured press release image'));
                 } else if (usePlaceholder) {
-                    mediaLines.push('Featured image URL: [Episode featured image URL will be inserted here]');
+                    mediaLines.push('Featured image URL: [Imported featured image URL will be inserted here]');
                 }
 
                 mediaLines.push('Inline photo count: ' + inlineAssets.length);
@@ -456,7 +507,7 @@ function pressReleaseWorkflowMixin(config) {
                 blocks.push(mediaLines.join("\n"));
             }
 
-            if (this.pressRelease.google_drive_url && this.pressRelease.submit_method !== 'notion-podcast') {
+            if (this.pressRelease.google_drive_url && !this.isPressReleaseNotionImport()) {
                 blocks.push("=== Photo Source Reference ===\nGoogle Drive URL: " + this.pressRelease.google_drive_url);
             }
 
@@ -468,7 +519,8 @@ function pressReleaseWorkflowMixin(config) {
                 (this.pressRelease.content_dump || '').trim() ||
                 (this.pressRelease.public_url || '').trim() ||
                 (this.pressRelease.document_files || []).length ||
-                this.pressRelease.notion_episode?.id
+                this.pressRelease.notion_episode?.id ||
+                this.pressRelease.notion_book?.id
             );
         },
 
@@ -514,7 +566,11 @@ function pressReleaseWorkflowMixin(config) {
                 this.setPressReleaseFieldError('notion_episode');
                 missing.push('notion_episode');
             }
-            if (method !== 'notion-podcast' && this.pressRelease.photo_method === 'google-drive' && !String(this.pressRelease.google_drive_url || '').trim()) {
+            if (method === 'notion-book' && !this.pressRelease.notion_book?.id) {
+                this.setPressReleaseFieldError('notion_book');
+                missing.push('notion_book');
+            }
+            if (!this.isPressReleaseNotionImport(method) && this.pressRelease.photo_method === 'google-drive' && !String(this.pressRelease.google_drive_url || '').trim()) {
                 this.setPressReleaseFieldError('google_drive_url');
                 missing.push('google_drive_url');
             }
@@ -603,6 +659,106 @@ function pressReleaseWorkflowMixin(config) {
                 if (token === this._pressReleaseEpisodeSearchToken) {
                     this.pressReleaseEpisodeSearching = false;
                 }
+            }
+        },
+
+        async searchPressReleaseNotionPeople(loadRecent = false, options = {}) {
+            const notifyEmpty = options.notifyEmpty === true;
+            const query = loadRecent ? '' : String(this.pressRelease.notion_person_query || '').trim();
+
+            const token = ++this._pressReleasePersonSearchToken;
+            this.pressReleasePersonSearching = true;
+            this.pressReleasePersonDropdownOpen = !!loadRecent;
+            this.pressReleasePersonNoResults = false;
+
+            try {
+                const searchUrl = new URL('{{ route("publish.pipeline.press-release.search-notion-people.live") }}', window.location.origin);
+                searchUrl.searchParams.set('draft_id', this.draftId);
+                searchUrl.searchParams.set('limit', '10');
+                if (query) {
+                    searchUrl.searchParams.set('q', query);
+                }
+                const response = await fetch(searchUrl.toString(), {
+                    headers: { Accept: 'application/json' },
+                });
+                const data = await response.json();
+                if (token !== this._pressReleasePersonSearchToken) {
+                    return;
+                }
+                this.pressReleasePersonResults = Array.isArray(data) ? data : [];
+                this.pressReleasePersonNoResults = this.pressReleasePersonResults.length === 0;
+                this.pressReleasePersonDropdownOpen = loadRecent && (this.pressReleasePersonResults.length > 0 || this.pressReleasePersonNoResults);
+                if (!this.pressReleasePersonResults.length && notifyEmpty) {
+                    this.showNotification('error', 'No Notion people matched that search.');
+                }
+            } catch (error) {
+                if (token !== this._pressReleasePersonSearchToken) {
+                    return;
+                }
+                this.pressReleasePersonResults = [];
+                this.pressReleasePersonNoResults = false;
+                this.pressReleasePersonDropdownOpen = false;
+                this.showNotification('error', error.message || 'Failed to search Notion people.');
+            } finally {
+                if (token === this._pressReleasePersonSearchToken) {
+                    this.pressReleasePersonSearching = false;
+                }
+            }
+        },
+
+        async loadPressReleaseNotionPersonBooks(record, options = {}) {
+            if (!record?.id) {
+                this.showNotification('error', 'Invalid Notion person selection.');
+                return;
+            }
+
+            const notify = options.notify !== false;
+            this.pressReleaseLoadingPersonBooks = true;
+
+            try {
+                const response = await this._rawPipelineFetch('{{ route("publish.pipeline.press-release.list-notion-person-books") }}', {
+                    method: 'POST',
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({
+                        draft_id: this.draftId,
+                        person_id: record.id,
+                    }),
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success || !data.press_release) {
+                    throw new Error(data.message || 'Failed to load related books for the selected person.');
+                }
+
+                this.pressReleasePersonDropdownOpen = false;
+                this.pressReleasePersonNoResults = false;
+                this.pressReleasePersonResults = [];
+                if (!this.template_overrides) this.template_overrides = {};
+                this.template_overrides.article_type = 'press-release';
+                this.pressRelease = this.normalizePressReleaseState(data.press_release || {});
+                this.pressReleasePhotoAssets = [];
+                this.featuredPhoto = null;
+                this.featuredResults = [];
+                this.featuredImageSearch = '';
+                this.featuredSearchPending = false;
+                this.featuredAlt = '';
+                this.featuredCaption = '';
+                this.featuredFilename = '';
+                this.photoSuggestions = [];
+                this.photoSuggestionsPending = false;
+                this.clearPressReleaseFieldError('notion_book');
+                this.savePipelineState();
+                this.invalidatePromptPreview('press_release_notion_person_selected', { fetch: this.currentStep === 5 || this.openSteps.includes(5) });
+                if (notify) {
+                    this.showNotification('success', data.message || 'Related books loaded.');
+                }
+                return data;
+            } catch (error) {
+                if (notify) {
+                    this.showNotification('error', error.message || 'Failed to load related books for the selected person.');
+                }
+                throw error;
+            } finally {
+                this.pressReleaseLoadingPersonBooks = false;
             }
         },
         pressReleaseNeedsLegacyNotionRefresh() {
@@ -711,7 +867,7 @@ function pressReleaseWorkflowMixin(config) {
                     this.pressRelease.inline_photo_keys[asset.key] = true;
                 });
                 this.syncPressReleaseSelectedPhotoKeys();
-                this.applyPodcastPressReleaseMediaDefaults({ injectInline: false, notify: false });
+                this.applyNotionPressReleaseMediaDefaults({ injectInline: false, notify: false });
                 this.savePipelineState();
                 this.invalidatePromptPreview('press_release_notion_episode_import', { fetch: this.currentStep === 5 || this.openSteps.includes(5) });
                 if (notify) {
@@ -727,6 +883,75 @@ function pressReleaseWorkflowMixin(config) {
                 throw error;
             } finally {
                 this.pressReleaseImportingEpisodeId = null;
+            }
+        },
+
+        async importPressReleaseNotionBook(record, options = {}) {
+            if (!record?.id || !this.pressRelease?.notion_person?.id) {
+                this.showNotification('error', 'Select a Notion person and one of their books first.');
+                return;
+            }
+
+            const notify = options.notify !== false;
+            const preservedInlineCount = Math.max(1, Number(options.inlineCount || Object.keys(this.normalizePressReleaseSelectionMap(this.pressRelease?.inline_photo_keys || {})).length || 1));
+            this.pressReleaseImportingBookId = record.id;
+
+            try {
+                const response = await this._rawPipelineFetch('{{ route("publish.pipeline.press-release.import-notion-book") }}', {
+                    method: 'POST',
+                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({
+                        draft_id: this.draftId,
+                        person_id: this.pressRelease.notion_person.id,
+                        book_id: record.id,
+                    }),
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success || !data.press_release) {
+                    throw new Error(data.message || 'Failed to import the selected book.');
+                }
+
+                if (!this.template_overrides) this.template_overrides = {};
+                this.template_overrides.article_type = 'press-release';
+                this.pressRelease = this.normalizePressReleaseState(data.press_release || {});
+                this.clearPressReleaseFieldError('notion_book');
+                const importedAssets = this.rebuildPressReleasePhotoAssets();
+                const importedFeaturedUrl = this.toAbsoluteMediaUrl(this.pressRelease?.notion_book?.featured_image_url || '');
+                const importedFeaturedAsset = importedAssets.find((asset) => importedFeaturedUrl && asset.url === importedFeaturedUrl)
+                    || importedAssets.find((asset) => asset.role === 'featured')
+                    || importedAssets.find((asset) => asset.source === 'notion-book-cover')
+                    || importedAssets[0]
+                    || null;
+                if (importedFeaturedAsset) {
+                    this.setPressReleaseFeaturedPhoto({ ...importedFeaturedAsset }, { notify: false });
+                    this.featuredImageSearch = '';
+                    this.featuredSearchPending = false;
+                }
+                const importedInlineAssets = importedAssets.filter((asset) => {
+                    if (!asset?.key) return false;
+                    if (importedFeaturedAsset?.key && asset.key === importedFeaturedAsset.key) return false;
+                    if (importedFeaturedUrl && asset.url === importedFeaturedUrl) return false;
+                    return true;
+                });
+                this.pressRelease.inline_photo_keys = {};
+                importedInlineAssets.slice(0, preservedInlineCount).forEach((asset) => {
+                    this.pressRelease.inline_photo_keys[asset.key] = true;
+                });
+                this.syncPressReleaseSelectedPhotoKeys();
+                this.applyNotionPressReleaseMediaDefaults({ injectInline: false, notify: false });
+                this.savePipelineState();
+                this.invalidatePromptPreview('press_release_notion_book_import', { fetch: this.currentStep === 5 || this.openSteps.includes(5) });
+                if (notify) {
+                    this.showNotification('success', data.message || 'Book imported from Notion.');
+                }
+                return data;
+            } catch (error) {
+                if (notify) {
+                    this.showNotification('error', error.message || 'Failed to import the selected book.');
+                }
+                throw error;
+            } finally {
+                this.pressReleaseImportingBookId = null;
             }
         },
 
@@ -1211,11 +1436,14 @@ function pressReleaseWorkflowMixin(config) {
         },
 
         preferredPressReleaseFeaturedAsset() {
-            const featuredUrl = this.pressRelease?.notion_episode?.featured_image_url || '';
+            const featuredUrl = this.isPressReleaseNotionBookImport()
+                ? (this.pressRelease?.notion_book?.featured_image_url || '')
+                : (this.pressRelease?.notion_episode?.featured_image_url || '');
             const assets = ((this.pressReleasePhotoAssets || []).length ? this.pressReleasePhotoAssets : this.rebuildPressReleasePhotoAssets())
                 .map((asset) => ({ ...asset }));
             const match = assets.find((asset) => featuredUrl && asset.url === this.toAbsoluteMediaUrl(featuredUrl))
                 || assets.find((asset) => asset.role === 'featured')
+                || assets.find((asset) => asset.source === 'notion-book-cover')
                 || assets.find((asset) => asset.source === 'notion-episode-media')
                 || null;
             return match ? { ...match } : null;
@@ -1228,7 +1456,11 @@ function pressReleaseWorkflowMixin(config) {
 
         selectedPressReleaseInlineAssets(limit = null) {
             const rawSelectionCount = Object.keys(this.pressRelease?.inline_photo_keys || {}).filter((key) => this.pressRelease?.inline_photo_keys?.[key]).length;
-            const featuredUrl = this.toAbsoluteMediaUrl(this.pressRelease?.notion_episode?.featured_image_url || '');
+            const featuredUrl = this.toAbsoluteMediaUrl(
+                this.isPressReleaseNotionBookImport()
+                    ? (this.pressRelease?.notion_book?.featured_image_url || '')
+                    : (this.pressRelease?.notion_episode?.featured_image_url || '')
+            );
             const selectedInlineKeys = Object.keys(this.normalizePressReleaseSelectionMap(this.pressRelease?.inline_photo_keys || {}));
             const selectedInlineKeySet = new Set(selectedInlineKeys);
             let assets = ((this.pressReleasePhotoAssets || []).length ? this.pressReleasePhotoAssets : this.rebuildPressReleasePhotoAssets())
@@ -1260,9 +1492,11 @@ function pressReleaseWorkflowMixin(config) {
             }
 
             if (!selected.length) {
-                const inlineUrl = this.pressRelease?.notion_guest?.inline_photo_url || '';
+                const inlineUrl = this.pressReleaseLinkedPersonRecord()?.inline_photo_url || '';
                 const match = assets.find((asset) => inlineUrl && asset.url === this.toAbsoluteMediaUrl(inlineUrl))
+                    || assets.find((asset) => asset.source === 'notion-person-drive')
                     || assets.find((asset) => asset.source === 'notion-guest-drive')
+                    || assets.find((asset) => asset.source === 'notion-person-media')
                     || assets.find((asset) => asset.source === 'google-drive')
                     || assets.find((asset) => asset.role === 'inline' && !this.pressReleaseAssetIsLegacyGuestMedia(asset))
                     || assets.find((asset) => asset.role === 'inline')
@@ -1375,7 +1609,7 @@ function pressReleaseWorkflowMixin(config) {
                     cleaned = cleaned.replace(new RegExp('<p\\b[^>]*>\\s*<img[^>]+(?:src|data-source-url)\\s*=\\s*["\\\']' + quoted + '["\\\'][^>]*>\\s*<\\/p>', 'gi'), '');
                 });
             });
-            if (this.currentArticleType === 'press-release' && this.pressRelease?.submit_method === 'notion-podcast') {
+            if (this.currentArticleType === 'press-release' && this.isPressReleaseNotionPodcastImport()) {
                 cleaned = cleaned.replace(/<figure\b[^>]*>[\s\S]*?(?:media\.licdn\.com|drive-storage)[\s\S]*?<\/figure>/gi, '');
                 cleaned = cleaned.replace(/<p\b[^>]*>[\s\S]*?(?:media\.licdn\.com|drive-storage)[\s\S]*?<\/p>/gi, '');
                 cleaned = cleaned.replace(/<img[^>]+(?:media\.licdn\.com|drive-storage)[^>]*>\s*/gi, '');
@@ -1474,11 +1708,13 @@ function pressReleaseWorkflowMixin(config) {
 
         normalizePodcastPressReleaseHtml(html, options = {}) {
             let nextHtml = String(html || '').trim();
-            if (this.currentArticleType !== 'press-release' || this.pressRelease.submit_method !== 'notion-podcast' || !nextHtml) {
+            if (this.currentArticleType !== 'press-release' || !this.isPressReleaseNotionImport() || !nextHtml) {
                 return nextHtml;
             }
 
-            nextHtml = this.normalizePodcastPressReleaseYoutubeHtml(nextHtml);
+            if (this.isPressReleaseNotionPodcastImport()) {
+                nextHtml = this.normalizePodcastPressReleaseYoutubeHtml(nextHtml);
+            }
             const inlineAssets = Array.isArray(options.inlineAssets) ? options.inlineAssets : this.selectedPressReleaseInlineAssets();
             nextHtml = this.injectSelectedPressReleaseInlineAssetsIntoHtml(nextHtml, inlineAssets);
             return nextHtml.trim();
@@ -1494,7 +1730,7 @@ function pressReleaseWorkflowMixin(config) {
                 suggestedFilename: this.filenameBaseFromAsset(asset),
                 autoPhoto: {
                     id: this.pressReleaseAssetKey(asset) || null,
-                    source: asset.source || 'notion-guest-drive',
+                    source: asset.source || 'notion-import',
                     source_url: this.pressReleaseSourceUploadUrl(asset),
                     url: this.pressReleaseEditorPreviewUrl(asset) || this.pressReleaseSourceUploadUrl(asset),
                     url_thumb: this.pressReleaseEditorPreviewUrl(asset) || this.pressReleaseSourceUploadUrl(asset),
@@ -1513,7 +1749,7 @@ function pressReleaseWorkflowMixin(config) {
         },
 
         applyPodcastPressReleaseMediaDefaults(options = {}) {
-            if (this.currentArticleType !== 'press-release' || this.pressRelease.submit_method !== 'notion-podcast') {
+            if (this.currentArticleType !== 'press-release' || !this.isPressReleaseNotionImport()) {
                 return;
             }
 
@@ -1570,10 +1806,14 @@ function pressReleaseWorkflowMixin(config) {
             this.savePipelineState();
         },
 
+        applyNotionPressReleaseMediaDefaults(options = {}) {
+            return this.applyPodcastPressReleaseMediaDefaults(options);
+        },
+
         setPressReleaseFeaturedPhoto(asset, options = {}) {
             const notify = options.notify !== false;
-            const url = this.toAbsoluteMediaUrl(asset.url);
-            const thumb = this.toAbsoluteMediaUrl(asset.thumbnail_url || asset.url);
+            const url = this.pressReleaseSourceUploadUrl(asset) || this.toAbsoluteMediaUrl(asset.url);
+            const thumb = this.pressReleaseEditorPreviewUrl(asset) || this.toAbsoluteMediaUrl(asset.thumbnail_url || asset.url);
             this.featuredPhoto = {
                 url,
                 url_large: url,

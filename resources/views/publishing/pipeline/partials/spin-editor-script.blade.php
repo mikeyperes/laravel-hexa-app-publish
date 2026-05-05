@@ -32,6 +32,19 @@
             }
         },
 
+        _spinEditorHasMountedUi() {
+            const editor = this._getSpinEditorInstance();
+            const container = editor?.getContainer?.();
+            return !!(
+                editor
+                && container
+                && container.classList
+                && container.classList.contains('tox-tinymce')
+                && container.isConnected
+                && document.contains(container)
+            );
+        },
+
         _ensureSpinEditorConfigured(initialHtml = '') {
             const self = this;
             const content = initialHtml || this._pendingSpinEditorContent || '';
@@ -39,10 +52,13 @@
             this._setSpinEditorTextareaValue(content);
 
             if (this._spinEditorConfigured) {
-                const editor = this._getSpinEditorInstance();
-                if (editor) {
-                    this._safeSetSpinEditorContent(editor, content);
-                    return;
+                if (this._spinEditorHasMountedUi()) {
+                    const editor = this._getSpinEditorInstance();
+                    if (editor) {
+                        this._spinEditorRecoveryAttempts = 0;
+                        this._safeSetSpinEditorContent(editor, content);
+                        return;
+                    }
                 }
                 this._spinEditorConfigured = false;
             }
@@ -74,7 +90,10 @@
 
                     clearInterval(wait);
 
-                    hexaReinitTinyMCE('spin-preview-editor', {
+                    const triggerMount = () => {
+                        try {
+                            self._setSpinEditorTextareaValue(self._pendingSpinEditorContent || '');
+                            hexaReinitTinyMCE('spin-preview-editor', {
                         plugins: 'lists link image media table fullscreen wordcount code searchreplace autolink autoresize',
                         toolbar: 'undo redo | blocks | bold italic underline strikethrough | bullist numlist | link image media | addPhotoBtn uploadPhotoBtn | table | alignleft aligncenter alignright | outdent indent | fullscreen code searchreplace',
                         menubar: true,
@@ -105,8 +124,20 @@
                             });
 
                             ed.on('init', function() {
+                                if (!self._spinEditorHasMountedUi()) {
+                                    self._spinEditorConfigured = false;
+                                    self._spinEditorConfiguring = false;
+                                    self._spinEditorRecoveryAttempts = (self._spinEditorRecoveryAttempts || 0) + 1;
+                                    try { ed.remove(); } catch (error) {}
+                                    if ((self._spinEditorRecoveryAttempts || 0) <= 4) {
+                                        self._logSpin('warn', 'Retrying TinyMCE mount after detached Create Article init');
+                                        setTimeout(() => self._ensureSpinEditorConfigured(self._pendingSpinEditorContent || ''), 150);
+                                    }
+                                    return;
+                                }
                                 self._spinEditorConfigured = true;
                                 self._spinEditorConfiguring = false;
+                                self._spinEditorRecoveryAttempts = 0;
                                 self._safeSetSpinEditorContent(ed, self._pendingSpinEditorContent, { syncState: false });
                                 self.syncDeferredEnrichmentState('editor_init', { log: false });
                                 self.hydrateResolvedPhotoPlaceholders('editor_init');
@@ -159,6 +190,28 @@
                                 }
                             });
                         }
+                            });
+                        } catch (error) {
+                            self._spinEditorConfigured = false;
+                            self._spinEditorConfiguring = false;
+                            self._logSpin('warn', 'Editor init failed: ' + (error?.message || 'hexaReinitTinyMCE failed'));
+                        }
+                    };
+
+                    requestAnimationFrame(() => {
+                        triggerMount();
+                        setTimeout(() => {
+                            if (self._spinEditorHasMountedUi()) {
+                                return;
+                            }
+                            self._spinEditorConfigured = false;
+                            self._spinEditorConfiguring = false;
+                            self._spinEditorRecoveryAttempts = (self._spinEditorRecoveryAttempts || 0) + 1;
+                            if ((self._spinEditorRecoveryAttempts || 0) <= 4) {
+                                self._logSpin('warn', 'Retrying TinyMCE mount after delayed Create Article transition');
+                                self._ensureSpinEditorConfigured(self._pendingSpinEditorContent || '');
+                            }
+                        }, 1200);
                     });
                 }, 100);
             });

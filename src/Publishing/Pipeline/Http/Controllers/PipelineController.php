@@ -730,12 +730,17 @@ class PipelineController extends Controller
         $searchMode = (string) $request->input('search_mode', 'source_discovery');
         $provider = $resolvedSelection['provider'] ?? null;
         $strictPrContextSearch = $searchMode === 'pr_context';
+        $searchTopic = $strictPrContextSearch ? $this->normalizePrContextSearchTopic($topic) : $topic;
+        $searchCount = $strictPrContextSearch ? max($count + 3, 8) : $count;
 
-        if ($strictPrContextSearch && (($resolvedSelection['mode'] ?? 'model') === 'optimized') && $model !== '') {
-            $selection = $model;
-            $resolvedSelection = $catalog->resolveSearchSelection($selection);
-            $provider = $resolvedSelection['provider'] ?? $provider;
-            $model = (string) ($resolvedSelection['model'] ?? $model);
+        if ($strictPrContextSearch) {
+            $optimizedSelection = $this->optimizedSearchSelectionForProvider($catalog, $provider);
+            if ($optimizedSelection) {
+                $selection = $optimizedSelection;
+                $resolvedSelection = $catalog->resolveSearchSelection($selection);
+                $provider = $resolvedSelection['provider'] ?? $provider;
+                $model = (string) ($resolvedSelection['model'] ?? $model);
+            }
         }
 
         $allowAiFallback = $allowFallback && !$strictPrContextSearch;
@@ -762,8 +767,96 @@ Do NOT include any of these URLs or articles from the same pages — they were a
         }
 
         try {
+            if ($strictPrContextSearch) {
+                $fastResult = $this->fallbackArticleSearch($searchTopic, (int) max(2, min(10, $count ?: 5)), 'Reliable context article search was used for PR article context.');
+                $verifiedFast = ['articles' => [], 'stats' => ['checked' => 0, 'kept' => 0, 'discarded' => 0]];
+
+                if (($fastResult['success'] ?? false) && !empty((array) data_get($fastResult, 'data.articles', []))) {
+                    $verifiedFast = $this->verifyArticleCandidates(
+                        (array) data_get($fastResult, 'data.articles', []),
+                        (int) max(2, min(10, $count ?: 5)),
+                        array_values($excludeUrls),
+                        $searchTopic,
+                        $searchMode
+                    );
+
+                    $articles = $verifiedFast['articles'];
+                    if (!empty($articles)) {
+                        $backendLabel = data_get($fastResult, 'data.search_backend_label') ?: 'Reliable news search';
+                        $backend = data_get($fastResult, 'data.search_backend') ?: 'deterministic_news_fallback';
+
+                        $this->articleActivity->record($draft, [
+                            'activity_group' => 'search:' . md5($topic),
+                            'activity_type' => 'search',
+                            'stage' => 'discovery',
+                            'substage' => 'complete_pr_context_fast_path',
+                            'status' => 'success',
+                            'provider' => 'reliable_context_search',
+                            'model' => $selection,
+                            'agent' => 'pipeline-search',
+                            'method' => 'ai_search_articles',
+                            'success' => true,
+                            'message' => count($articles) . ' live context article(s) verified.',
+                            'request_payload' => [
+                                'topic' => $topic,
+                                'count' => $count,
+                                'exclude_urls' => array_values($excludeUrls),
+                                'search_mode' => $searchMode,
+                            ],
+                            'response_payload' => [
+                                'articles' => array_slice($articles, 0, $count),
+                                'search_backend' => $backend,
+                                'search_backend_label' => $backendLabel,
+                                'verification' => [
+                                    'primary' => $verifiedFast['stats'],
+                                    'fallback' => ['checked' => 0, 'kept' => 0, 'discarded' => 0],
+                                ],
+                                'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
+                            ],
+                        ]);
+
+                        return response()->json([
+                            'success' => true,
+                            'message' => count($articles) . ' live context article(s) verified.',
+                            'data' => [
+                                'articles' => array_slice($articles, 0, $count),
+                                'model' => $selection,
+                                'usage' => [],
+                                'cost' => null,
+                                'search_backend' => $backend,
+                                'search_backend_label' => $backendLabel,
+                                'fallback_reason' => data_get($fastResult, 'data.fallback_reason'),
+                                'ai_fallback_used' => false,
+                                'ai_fallback_from' => $requestedSelection,
+                                'verification' => [
+                                    'primary' => $verifiedFast['stats'],
+                                    'fallback' => ['checked' => 0, 'kept' => 0, 'discarded' => 0],
+                                ],
+                                'fallback_enabled' => true,
+                                'search_mode' => $searchMode,
+                                'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
+                            ],
+                        ]);
+                    }
+                }
+
+                return response()->json([
+                    'success' => false,
+                    'message' => (string) (($fastResult['message'] ?? null) ?: 'No live context articles were found.'),
+                    'data' => [
+                        'verification' => [
+                            'primary' => $verifiedFast['stats'],
+                            'fallback' => ['checked' => 0, 'kept' => 0, 'discarded' => 0],
+                        ],
+                        'fallback_enabled' => true,
+                        'search_mode' => $searchMode,
+                        'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
+                    ],
+                ]);
+            }
+
             $searchService = app(\hexa_app_publish\Discovery\Sources\Services\AiOptimizedArticleSearchService::class);
-            $result = $searchService->search($topic, $count, $selection);
+            $result = $searchService->search($searchTopic, $searchCount, $selection);
             $aiFallbackUsed = false;
             $aiFallbackFrom = null;
 
@@ -773,7 +866,7 @@ Do NOT include any of these URLs or articles from the same pages — they were a
                         continue;
                     }
 
-                    $candidateResult = $searchService->search($topic, $count, $fallbackSelection);
+                    $candidateResult = $searchService->search($searchTopic, $searchCount, $fallbackSelection);
                     if ((bool) ($candidateResult['success'] ?? false) && !empty((array) data_get($candidateResult, 'data.articles', []))) {
                         $aiFallbackUsed = true;
                         $aiFallbackFrom = $selection;
@@ -794,7 +887,7 @@ Do NOT include any of these URLs or articles from the same pages — they were a
                 }
             }
 
-            $verifiedPrimary = $this->verifyArticleCandidates((array) data_get($result, 'data.articles', []), $count, [], $topic, $searchMode);
+            $verifiedPrimary = $this->verifyArticleCandidates((array) data_get($result, 'data.articles', []), $count, [], $searchTopic, $searchMode);
             $articles = $verifiedPrimary['articles'];
 
             if ($allowAiFallback && empty($articles) && !$aiFallbackUsed) {
@@ -803,12 +896,12 @@ Do NOT include any of these URLs or articles from the same pages — they were a
                         continue;
                     }
 
-                    $candidateResult = $searchService->search($topic, $count, $fallbackSelection);
+                    $candidateResult = $searchService->search($searchTopic, $searchCount, $fallbackSelection);
                     if (!(bool) ($candidateResult['success'] ?? false) || empty((array) data_get($candidateResult, 'data.articles', []))) {
                         continue;
                     }
 
-                    $candidateVerified = $this->verifyArticleCandidates((array) data_get($candidateResult, 'data.articles', []), $count, [], $topic, $searchMode);
+                    $candidateVerified = $this->verifyArticleCandidates((array) data_get($candidateResult, 'data.articles', []), $count, [], $searchTopic, $searchMode);
                     if (empty($candidateVerified['articles'])) {
                         continue;
                     }
@@ -843,14 +936,14 @@ Do NOT include any of these URLs or articles from the same pages — they were a
                     ? (string) ($result['message'] ?? 'AI article search failed.')
                     : 'AI article search returned dead, duplicate, or non-canonical URLs.';
 
-                $fallbackResult = $this->fallbackArticleSearch($topic, (int) $count, $fallbackReason);
+                $fallbackResult = $this->fallbackArticleSearch($searchTopic, (int) $count, $fallbackReason);
 
                 if ($fallbackResult['success']) {
                     $verifiedFallback = $this->verifyArticleCandidates(
                         (array) data_get($fallbackResult, 'data.articles', []),
                         $count - count($articles),
                         array_column($articles, 'url'),
-                        $topic,
+                        $searchTopic,
                         $searchMode
                     );
 
@@ -997,13 +1090,13 @@ Do NOT include any of these URLs or articles from the same pages — they were a
 
             if ($allowFallback) {
                 try {
-                    $fallbackResult = $this->fallbackArticleSearch($topic, (int) max(2, min(10, $count ?: 5)), $fallbackMessage);
+                    $fallbackResult = $this->fallbackArticleSearch($searchTopic, (int) max(2, min(10, $count ?: 5)), $fallbackMessage);
                     if (($fallbackResult['success'] ?? false) && !empty((array) data_get($fallbackResult, 'data.articles', []))) {
                         $verifiedFallback = $this->verifyArticleCandidates(
                             (array) data_get($fallbackResult, 'data.articles', []),
                             (int) max(2, min(10, $count ?: 5)),
                             array_values($excludeUrls),
-                            $topic,
+                            $searchTopic,
                             $searchMode
                         );
                         $fallbackStats = $verifiedFallback['stats'];
@@ -1164,6 +1257,56 @@ Do NOT include any of these URLs or articles from the same pages — they were a
                 'fallback_from_model' => null,
             ],
         ];
+    }
+
+    private function optimizedSearchSelectionForProvider(AiModelCatalog $catalog, ?string $provider): ?string
+    {
+        $provider = trim((string) ($provider ?? ''));
+        if ($provider === '') {
+            return null;
+        }
+
+        $selection = 'optimized:' . $provider;
+        $resolved = $catalog->resolveSearchSelection($selection);
+
+        return (($resolved['provider'] ?? null) === $provider && !empty($resolved['model']))
+            ? $selection
+            : null;
+    }
+
+    private function normalizePrContextSearchTopic(string $topic): string
+    {
+        $clean = trim(preg_replace('/\s+/', ' ', $topic));
+        if ($clean === '') {
+            return '';
+        }
+
+        $genericTerms = [
+            'news',
+            'article',
+            'articles',
+            'story',
+            'stories',
+            'context',
+            'latest',
+            'recent',
+            'online',
+        ];
+
+        $parts = preg_split('/\s+/', $clean, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $filtered = [];
+
+        foreach ($parts as $part) {
+            $normalized = $this->normalizeSearchToken($part);
+            if ($normalized === '' || in_array($normalized, $genericTerms, true)) {
+                continue;
+            }
+            $filtered[] = $part;
+        }
+
+        $rebuilt = trim(implode(' ', $filtered));
+
+        return $rebuilt !== '' ? $rebuilt : $clean;
     }
 
     /**

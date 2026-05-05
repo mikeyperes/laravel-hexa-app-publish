@@ -27,21 +27,12 @@ function publishPipeline() {
         openSteps: [1],
         completedSteps: [],
         get persistedArticleType() {
-            const explicitType = this.template_overrides?.article_type
+            return this.template_overrides?.article_type
                 ?? this.selectedTemplate?.article_type
                 ?? this.draftState?.article_type
                 ?? this.draftState?.publish_template?.article_type
                 ?? this.pressRelease?.article_type
                 ?? null;
-
-            if (typeof this.resolvePrArticleTypeFromState === 'function') {
-                const resolvedType = this.resolvePrArticleTypeFromState(explicitType);
-                if (resolvedType) {
-                    return resolvedType;
-                }
-            }
-
-            return explicitType ?? null;
         },
         get isGenerateMode() {
             const genTypes = ['press-release', 'listicle', 'expert-article', 'pr-full-feature'];
@@ -308,6 +299,7 @@ function publishPipeline() {
 
         // Notification
         notification: { show: false, type: 'success', message: '' },
+        saveError: '',
         publicationNotificationTemplates: @json($publicationNotificationTemplates ?? []),
         publicationNotificationDefaults: @json($publicationNotificationDefaults ?? []),
         publicationNotificationShortcodes: @json(config('hws-publish.shortcodes', [])),
@@ -332,6 +324,9 @@ function publishPipeline() {
         selectedActivityRunTrace: '',
         activityRunPreviewEntries: [],
         crossDraftActivityRuns: [],
+        draftApiActivityEntries: [],
+        draftApiActivityLoading: false,
+        expandedApiCalls: {},
         publishTraceId: '',
         _masterActivitySeq: 0,
         _clientSessionTraceId: '',
@@ -353,6 +348,7 @@ function publishPipeline() {
         _serverActivityLogRestored: false,
         _activityRunHistoryRestored: false,
         _crossDraftActivityRunsRestored: false,
+        _draftApiActivityRestored: false,
         _thumbReconcileTimers: [],
         _bootstrappedPresetUserId: '',
         _bootstrappedTemplateUserId: '',
@@ -370,6 +366,14 @@ function publishPipeline() {
 
         // Flag to suppress step auto-navigation during state restore
         _restoring: false,
+
+        formatLabel(value) {
+            return String(value || '')
+                .replace(/[_-]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .replace(/\w/g, (c) => c.toUpperCase());
+        },
 
         // CSRF token
         get csrfToken() {

@@ -21,6 +21,10 @@ class PressReleaseWorkflowService
             'resolved_source_text' => '',
             'resolved_source_preview' => '',
             'resolved_source_label' => '',
+            'notion_person_query' => '',
+            'notion_person' => [],
+            'notion_book' => [],
+            'notion_book_options' => [],
             'notion_episode_query' => '',
             'notion_episode' => [],
             'notion_guest' => [],
@@ -28,6 +32,8 @@ class PressReleaseWorkflowService
             'notion_podcast' => [],
             'notion_missing_fields' => [],
             'notion_source_fields' => [
+                'person' => [],
+                'book' => [],
                 'episode' => [],
                 'guest' => [],
                 'host' => [],
@@ -56,6 +62,9 @@ class PressReleaseWorkflowService
 
         $normalized['document_files'] = $this->normalizeFiles($normalized['document_files'] ?? []);
         $normalized['photo_files'] = $this->normalizeFiles($normalized['photo_files'] ?? []);
+        $normalized['notion_person'] = is_array($normalized['notion_person'] ?? null) ? $normalized['notion_person'] : [];
+        $normalized['notion_book'] = is_array($normalized['notion_book'] ?? null) ? $normalized['notion_book'] : [];
+        $normalized['notion_book_options'] = array_values(array_filter((array) ($normalized['notion_book_options'] ?? []), 'is_array'));
         $normalized['notion_episode'] = is_array($normalized['notion_episode'] ?? null) ? $normalized['notion_episode'] : [];
         $normalized['notion_guest'] = is_array($normalized['notion_guest'] ?? null) ? $normalized['notion_guest'] : [];
         $normalized['notion_host'] = is_array($normalized['notion_host'] ?? null) ? $normalized['notion_host'] : [];
@@ -140,7 +149,7 @@ class PressReleaseWorkflowService
             $parts[] = "=== Validated Details ===\n" . implode("\n", $detailLines);
         }
 
-        if (!empty($state['google_drive_url']) && ($state['submit_method'] ?? '') !== 'notion-podcast') {
+        if (!empty($state['google_drive_url']) && !in_array(($state['submit_method'] ?? ''), ['notion-podcast', 'notion-book'], true)) {
             $parts[] = "=== Photo Source Reference ===\nGoogle Drive URL: " . $state['google_drive_url'];
         }
 
@@ -151,13 +160,23 @@ class PressReleaseWorkflowService
     {
         $state = $this->normalizeState($state);
 
-        $isPodcastImport = ($state['submit_method'] ?? '') === 'notion-podcast';
+        $submitMethod = (string) ($state['submit_method'] ?? '');
+        $isPodcastImport = $submitMethod === 'notion-podcast';
+        $isBookImport = $submitMethod === 'notion-book';
 
         if (!empty($state['polish_only'])) {
-            return $isPodcastImport ? 'press-release-podcast-polish' : 'press-release-polish';
+            if ($isPodcastImport) {
+                return 'press-release-podcast-polish';
+            }
+
+            return $isBookImport ? 'press-release-book-polish' : 'press-release-polish';
         }
 
-        return $isPodcastImport ? 'press-release-podcast-spin' : 'press-release-spin';
+        if ($isPodcastImport) {
+            return 'press-release-podcast-spin';
+        }
+
+        return $isBookImport ? 'press-release-book-spin' : 'press-release-spin';
     }
 
     private function normalizeFiles(array $files): array
@@ -179,6 +198,8 @@ class PressReleaseWorkflowService
     {
         $sections = is_array($raw) ? $raw : [];
         $normalized = [
+            'person' => [],
+            'book' => [],
             'episode' => [],
             'guest' => [],
             'host' => [],

@@ -5,8 +5,8 @@
      right pane, and slide-in drawers. The original /article/publish URL
      is left untouched. --}}
 @extends('layouts.app')
-@section('title', 'Publish Article — #' . $draftId)
-@section('header', 'Publish Article — #' . $draftId)
+@section('title', 'Publish Article v2 — #' . $draftId)
+@section('header', 'Publish Article v2 — #' . $draftId)
 
 @section('content')
 
@@ -68,6 +68,8 @@
     .v2-pill-red { background: #fee2e2; color: #991b1b; }
     .v2-pill-gray { background: #f3f4f6; color: #4b5563; }
 
+    .v2-drawer { position: fixed; right: 0; top: 0; bottom: 0; width: min(560px, 90vw); background: #fff; box-shadow: -8px 0 24px rgba(0,0,0,.08); z-index: 60; display: flex; flex-direction: column; }
+    .v2-drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 55; }
 
     .v2-tab-lock { background: #b91c1c; color: #fff; padding: .75rem 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 
@@ -81,13 +83,21 @@
 </style>
 @endonce
 
+<script>
+    window.featuredSearchAttempted = window.featuredSearchAttempted || false;
+    window.featuredImageSearch = window.featuredImageSearch || '';
+</script>
+
 <div class="v2-shell"
      x-data="publishPipeline()"
      data-publish-draft-id="{{ $draftId }}"
      x-init="
+        if (typeof $data.featuredSearchAttempted === 'undefined') { $data.featuredSearchAttempted = false; }
+        if (typeof $data.featuredImageSearch === 'undefined') { $data.featuredImageSearch = ''; }
         $watch('savingDraft', (v) => { window.dispatchEvent(new CustomEvent('hexa-save-status:publish-pipeline-v2', { detail: { type: v ? 'saving' : 'saved' } })); });
+        $watch('saveError', (msg) => { if (msg) window.dispatchEvent(new CustomEvent('hexa-save-status:publish-pipeline-v2', { detail: { type: 'error', message: msg } })); });
         $watch('notification', (note) => { if (note && note.show && note.type === 'error' && note.message) window.dispatchEvent(new CustomEvent('hexa-save-status:publish-pipeline-v2', { detail: { type: 'error', message: note.message } })); });
-        $watch('featuredPhoto', (v) => { if (v && (!featuredImageSearch || !String(featuredImageSearch).trim())) { featuredImageSearch = String(v.alt || v.name || v.filename || v.title || 'featured'); } });
+        $watch('featuredPhoto', (v) => { if (v && (!$data.featuredImageSearch || !String($data.featuredImageSearch).trim())) { $data.featuredImageSearch = String(v.alt || v.name || v.filename || v.title || 'featured'); } });
      "
      @hexa-form-changed.window="
         if ($event.detail.component_id === 'article-preset-form') {
@@ -122,7 +132,7 @@
                 </a>
                 <span class="font-mono text-xs text-gray-400 flex-shrink-0">#{{ $draftId }}</span>
                 <span class="font-semibold text-gray-900 truncate" x-text="(articleTitle || draftState?.articleTitle || 'Untitled')"></span>
-                <span x-show="currentArticleType" x-cloak class="v2-pill v2-pill-blue flex-shrink-0" x-text="(currentArticleType || '').split('-').filter(Boolean).map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')"></span>
+                <span x-show="currentArticleType" x-cloak class="v2-pill v2-pill-blue flex-shrink-0" x-text="formatLabel ? formatLabel(currentArticleType) : currentArticleType"></span>
                 <span x-show="selectedSite?.name" x-cloak class="text-xs text-gray-500 flex-shrink-0">→ <span x-text="selectedSite?.name"></span></span>
             </div>
             <div class="flex items-center gap-3 flex-shrink-0">
@@ -149,19 +159,6 @@
             </div>
         </div>
     </header>
-
-    <div class="bg-red-600 border-b border-red-700 text-white">
-        <div class="px-6 py-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-                <p class="text-sm font-semibold">Legacy builder is still available</p>
-                <p class="text-xs text-red-100">Publish2 is now the primary builder. Use legacy only for comparison or fallback while we finish parity.</p>
-            </div>
-            <a href="{{ route('publish.pipeline', ['id' => $draftId]) }}" class="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/20">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                Open legacy /article/publish
-            </a>
-        </div>
-    </div>
 
     {{-- ═══════════════════ TWO-COLUMN BODY ═══════════════════ --}}
     <div class="v2-body">
@@ -297,7 +294,7 @@
 
             {{-- Rail footer: drawers --}}
             <div class="v2-rail-footer">
-                <button type="button" @click="openInlineMasterActivityLog()">
+                <button type="button" data-master-activity-toggle @click="masterActivityLogOpen = !masterActivityLogOpen">
                     <span class="flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                         Activity Log
@@ -348,9 +345,9 @@
 
             {{-- ─── PHASE 2 — SOURCE ─── --}}
 
-            {{-- Step 3: legacy body has own per-type Continue; v2 outer action bar removed (was wrong for press-release/pr-full-feature/expert-article). --}}
+            {{-- Step 3: Submit press release (press-release types) OR gather sources (spin) --}}
             <template x-if="currentStep === 3">
-                <div class="relative">
+                <div>
                     <div class="v2-section">
                         <div class="v2-section-head">
                             <div class="v2-section-title">
@@ -363,15 +360,18 @@
                             <span x-show="completedSteps.includes(3)" x-cloak class="v2-pill v2-pill-green">Completed</span>
                         </div>
                         <div class="v2-section-body">
+                            {{-- Full Step 3 inline body extracted verbatim from the original index.blade.php (lines 284..1168). Includes both press-release submit content and spin-pipeline source-gathering UI, type-gated internally. --}}
                             @include('app-publish::publishing.pipeline-v2._legacy-step-3')
-                        </div>
-                    </div>
 
-                    <div x-show="pressReleaseImportingEpisodeId" x-cloak class="absolute inset-0 z-30 flex items-center justify-center bg-white/85 rounded-xl">
-                        <div class="flex flex-col items-center gap-3 px-6 py-5 rounded-xl border border-purple-200 bg-white shadow-lg">
-                            <svg class="w-8 h-8 animate-spin text-purple-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                            <p class="text-sm font-semibold text-purple-900">Importing podcast episode from Notion…</p>
-                            <p class="text-xs text-gray-500">Pulling guest, host, episode metadata, photos and Drive assets.</p>
+                            <div class="v2-action-bar">
+                                <button type="button" @click="goToStep(2)" class="v2-btn v2-btn-secondary">Back</button>
+                                <button type="button"
+                                        @click="completeStep(3); openStep(4); goToStep(4)"
+                                        class="v2-btn v2-btn-primary">
+                                    Continue
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -392,7 +392,18 @@
                             <span x-show="completedSteps.includes(4)" x-cloak class="v2-pill v2-pill-green">Completed</span>
                         </div>
                         <div class="v2-section-body">
+                            {{-- Full Step 4 inline body extracted verbatim from the original (lines 1169..1393). Press-release type runs press-release-validate-step internally; spin-pipeline type runs the inline fetch-articles-from-source UI. --}}
                             @include('app-publish::publishing.pipeline-v2._legacy-step-4')
+
+                            <div class="v2-action-bar">
+                                <button type="button" @click="goToStep(3)" class="v2-btn v2-btn-secondary">Back</button>
+                                <button type="button"
+                                        @click="completeStep(4); openStep(5); goToStep(5)"
+                                        class="v2-btn v2-btn-primary">
+                                    Continue to AI Spin
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -415,7 +426,18 @@
                             <span x-show="completedSteps.includes(5)" x-cloak class="v2-pill v2-pill-green">Completed</span>
                         </div>
                         <div class="v2-section-body">
+                            {{-- Full Step 5 inline body extracted verbatim from the original (lines 1394..1711). AI Spin model picker, custom prompt, web research, and real-time generation. --}}
                             @include('app-publish::publishing.pipeline-v2._legacy-step-5')
+
+                            <div class="v2-action-bar">
+                                <button type="button" @click="goToStep(4)" class="v2-btn v2-btn-secondary">Back</button>
+                                <button type="button"
+                                        @click="completeStep(5); openStep(6); goToStep(6)"
+                                        class="v2-btn v2-btn-primary">
+                                    Continue to Create Article
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -452,23 +474,22 @@
                 </div>
             </template>
 
-            <template x-if="[5, 6].includes(currentStep)">
-                <div class="v2-action-bar">
-                    <div class="text-xs text-gray-500">
-                        <span x-show="currentStep === 5 && !isStepAccessible(6)" x-cloak>Spin the article to unlock Create Article.</span>
-                        <span x-show="currentStep === 6 && !isStepAccessible(7)" x-cloak>Finish the article details to unlock Review &amp; Publish.</span>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <button type="button" class="v2-btn v2-btn-secondary" @click="goToStep(currentStep - 1)">Previous</button>
-                        <button type="button" class="v2-btn v2-btn-primary" :disabled="!isStepAccessible(currentStep + 1)" @click="goToStep(currentStep + 1)">
-                            <span x-text="currentStep === 5 ? 'Next: Create Article' : 'Next: Review & Publish'"></span>
-                        </button>
-                    </div>
-                </div>
-            </template>
-
         </main>
     </div>
+
+    {{-- ═══════════════════ ACTIVITY DRAWER ═══════════════════ --}}
+    <div x-cloak class="v2-drawer-overlay" x-bind:style="masterActivityLogOpen ? 'display:block;' : 'display:none;'" @click="masterActivityLogOpen = false"></div>
+    <aside x-cloak data-master-activity-drawer x-bind:style="masterActivityLogOpen ? 'display:flex;' : 'display:none;'" class="v2-drawer">
+        <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+            <h3 class="font-semibold text-gray-900">Activity log</h3>
+            <button type="button" @click="masterActivityLogOpen = false" class="v2-btn v2-btn-ghost p-1.5">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+            @include('app-publish::publishing.pipeline.partials.master-activity-log')
+        </div>
+    </aside>
 
     {{-- ═══════════════════ EXISTING PARTIALS (overlays + mixins, untouched) ═══════════════════ --}}
     @include('app-publish::publishing.pipeline.partials.overlays')

@@ -22,6 +22,7 @@ class PipelineActivityController extends Controller
             'limit' => 'nullable|integer|min:1|max:500',
             'trace' => 'nullable|string|max:255',
             'runs_limit' => 'nullable|integer|min:1|max:25',
+            'api_limit' => 'nullable|integer|min:1|max:2000',
             'include_cross_draft_runs' => 'nullable|boolean',
             'exclude_draft_id' => 'nullable|integer|min:1',
             'all_drafts_limit' => 'nullable|integer|min:1|max:25',
@@ -35,6 +36,7 @@ class PipelineActivityController extends Controller
         );
         $run = $result['run'];
         $recentRuns = $this->activityService->recentRuns($draft, (int) ($validated['runs_limit'] ?? 10));
+        $draftApiEvents = $this->activityService->draftApiEvents($draft, (int) ($validated['api_limit'] ?? 1000));
         $recentDraftRuns = [];
 
         if ((bool) ($validated['include_cross_draft_runs'] ?? false) && auth()->user()) {
@@ -63,6 +65,7 @@ class PipelineActivityController extends Controller
             'events' => $result['events'],
             'selected_trace' => $run?->client_trace,
             'recent_runs' => $recentRuns,
+            'draft_api_events' => $draftApiEvents,
             'recent_draft_runs' => $recentDraftRuns,
         ]);
     }

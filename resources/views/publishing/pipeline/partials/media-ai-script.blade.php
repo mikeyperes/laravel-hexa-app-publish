@@ -435,7 +435,8 @@
                         query: this.photoSearch,
                         draft_id: this.draftId || null,
                         per_page: 15,
-                        sources: ['google', 'pexels', 'pixabay'],
+                        // Keep default inline search on stock-only sources.
+                        sources: ['pexels'],
                         quality_context: 'inline',
                         probe_quality: false,
                     })
@@ -462,6 +463,8 @@
                         query: this.featuredImageSearch,
                         draft_id: this.draftId || null,
                         per_page: 8,
+                        // Force a single explicit Google Images provider call.
+                        provider: 'google-cse',
                         quality_context: 'featured',
                         probe_quality: false,
                     })
@@ -655,7 +658,8 @@
                             query: this.photoSuggestions[idx]?.search_term || '',
                             per_page: 12,
                         })),
-                        sources: ['google', 'pexels', 'pixabay'],
+                        // Auto inline enrichment stays on a single stock provider by default.
+                        sources: ['pexels'],
                         quality_context: 'inline',
                         probe_quality: false,
                     }),

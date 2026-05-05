@@ -32,6 +32,80 @@
                 : null;
         },
 
+        get apiCallActivityEntries() {
+            return (this.draftApiActivityEntries || []).filter(entry => entry.scope === 'api' || entry.service_key || entry.service_label);
+        },
+
+        get apiServiceSummaries() {
+            const groups = new Map();
+
+            this.apiCallActivityEntries.forEach((entry) => {
+                const key = String(entry.service_key || entry.service_label || entry.substage || 'external');
+                if (!groups.has(key)) {
+                    groups.set(key, {
+                        key,
+                        label: String(entry.service_label || entry.service_key || entry.substage || 'External API'),
+                        host: String(entry.service_host || ''),
+                        call_count: 0,
+                        error_count: 0,
+                        total_cost_usd: 0,
+                        has_cost: false,
+                        entries: [],
+                    });
+                }
+
+                const group = groups.get(key);
+                const numericCost = Number(entry.cost_usd);
+                group.call_count += 1;
+                group.error_count += entry.type === 'error' ? 1 : 0;
+                if (Number.isFinite(numericCost) && numericCost > 0) {
+                    group.total_cost_usd += numericCost;
+                    group.has_cost = true;
+                }
+                group.entries.push(entry);
+            });
+
+            return Array.from(groups.values())
+                .map((group) => ({
+                    ...group,
+                    total_cost_usd: group.has_cost ? Number(group.total_cost_usd.toFixed(6)) : null,
+                    entries: group.entries.sort((a, b) => {
+                        const aAt = a.captured_at ? Date.parse(a.captured_at) : 0;
+                        const bAt = b.captured_at ? Date.parse(b.captured_at) : 0;
+                        return bAt - aAt;
+                    }),
+                }))
+                .sort((a, b) => {
+                    if (b.call_count !== a.call_count) return b.call_count - a.call_count;
+                    return a.label.localeCompare(b.label);
+                });
+        },
+
+        get apiCallRunCount() {
+            return new Set(
+                (this.apiCallActivityEntries || [])
+                    .map(entry => String(entry.run_trace || '').trim())
+                    .filter(Boolean)
+            ).size;
+        },
+
+        get apiCallErrorCount() {
+            return (this.apiCallActivityEntries || []).filter(entry => entry.type === 'error').length;
+        },
+
+        get apiCallCostTotal() {
+            const total = (this.apiCallActivityEntries || []).reduce((carry, entry) => {
+                const numeric = Number(entry.cost_usd);
+                if (!Number.isFinite(numeric) || numeric <= 0) {
+                    return carry;
+                }
+
+                return carry + numeric;
+            }, 0);
+
+            return total > 0 ? Number(total.toFixed(6)) : null;
+        },
+
         _activityTime() {
             return new Date().toLocaleTimeString('en-US', {
                 hour12: false,
@@ -99,6 +173,9 @@
             if (!url) return '';
             try {
                 const parsed = new URL(url, window.location.origin);
+                if (parsed.host && parsed.host !== window.location.host) {
+                    return parsed.host + parsed.pathname + parsed.search;
+                }
 
                 return parsed.pathname + parsed.search;
             } catch (e) {
@@ -153,7 +230,108 @@
                 draft_id: entry.draft_id ?? this.draftId ?? null,
                 step: entry.step ?? this.currentStep ?? null,
                 server_persisted: !!entry.server_persisted,
+                meta: entry.meta || null,
+                service_key: entry.service_key || entry.meta?.service_key || '',
+                service_label: entry.service_label || entry.meta?.service_label || '',
+                service_host: entry.service_host || entry.meta?.service_host || '',
+                actor_user_id: entry.actor_user_id ?? entry.meta?.actor_user_id ?? null,
+                actor_name: entry.actor_name || entry.meta?.actor_name || '',
+                request_payload_full: entry.request_payload_full ?? entry.meta?.request_payload_full ?? null,
+                response_payload_full: entry.response_payload_full ?? entry.meta?.response_payload_full ?? null,
+                request_headers: entry.request_headers ?? entry.meta?.request_headers ?? null,
+                response_headers: entry.response_headers ?? entry.meta?.response_headers ?? null,
+                response_error: entry.response_error || entry.meta?.response_error || '',
+                request_sent_at: entry.request_sent_at || entry.meta?.request_sent_at || entry.captured_at || null,
+                model: entry.model || entry.meta?.model || '',
+                input_tokens: Number.isFinite(Number(entry.input_tokens ?? entry.meta?.input_tokens))
+                    ? Number(entry.input_tokens ?? entry.meta?.input_tokens)
+                    : null,
+                output_tokens: Number.isFinite(Number(entry.output_tokens ?? entry.meta?.output_tokens))
+                    ? Number(entry.output_tokens ?? entry.meta?.output_tokens)
+                    : null,
+                total_tokens: Number.isFinite(Number(entry.total_tokens ?? entry.meta?.total_tokens))
+                    ? Number(entry.total_tokens ?? entry.meta?.total_tokens)
+                    : null,
+                cost_usd: Number.isFinite(Number(entry.cost_usd ?? entry.meta?.cost_usd))
+                    ? Number(entry.cost_usd ?? entry.meta?.cost_usd)
+                    : null,
             };
+        },
+
+        apiCallEntryKey(entry = {}) {
+            return String(entry.client_event_id || entry.id || '');
+        },
+
+        toggleApiCallEntry(entry = {}) {
+            const key = this.apiCallEntryKey(entry);
+            if (!key) return;
+
+            this.expandedApiCalls[key] = !this.expandedApiCalls[key];
+        },
+
+        isApiCallEntryExpanded(entry = {}) {
+            return !!this.expandedApiCalls[this.apiCallEntryKey(entry)];
+        },
+
+        formatApiCallWhen(entry = {}) {
+            const value = entry.request_sent_at || entry.captured_at || null;
+            if (!value) return entry.time || '';
+
+            try {
+                return new Date(value).toLocaleString('en-US', {
+                    hour12: false,
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                });
+            } catch (error) {
+                return String(value);
+            }
+        },
+
+        formatApiCost(value) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric) || numeric <= 0) return '';
+
+            return '$' + numeric.toFixed(numeric >= 1 ? 2 : 4);
+        },
+
+        formatApiTokens(entry = {}) {
+            const total = Number(entry.total_tokens);
+            const input = Number(entry.input_tokens);
+            const output = Number(entry.output_tokens);
+            if (Number.isFinite(total) && total > 0) {
+                return total.toLocaleString();
+            }
+            if (Number.isFinite(input) || Number.isFinite(output)) {
+                return [input, output]
+                    .filter((value) => Number.isFinite(value) && value >= 0)
+                    .map((value) => Number(value).toLocaleString())
+                    .join(' / ');
+            }
+
+            return '';
+        },
+
+        formatApiPayload(value) {
+            if (value === null || value === undefined || value === '') return '';
+
+            try {
+                if (typeof value === 'string') {
+                    const trimmed = value.trim();
+                    if ((trimmed.startsWith('{') || trimmed.startsWith('['))) {
+                        return JSON.stringify(JSON.parse(trimmed), null, 2);
+                    }
+
+                    return value;
+                }
+
+                return JSON.stringify(value, null, 2);
+            } catch (error) {
+                return String(value);
+            }
         },
 
         _formatActivityRunStage(run = {}) {
@@ -256,11 +434,12 @@
                 : [];
         },
 
-        _buildActivityIndexUrl({ trace = null, limit = 400, runsLimit = 10, includeCrossDraftRuns = false, allDraftsLimit = 12 } = {}) {
+        _buildActivityIndexUrl({ trace = null, limit = 400, runsLimit = 10, apiLimit = 1000, includeCrossDraftRuns = false, allDraftsLimit = 12 } = {}) {
             const params = new URLSearchParams({
                 draft_id: String(this.draftId || ''),
                 limit: String(limit),
                 runs_limit: String(runsLimit),
+                api_limit: String(apiLimit),
             });
 
             if (trace) {
@@ -274,6 +453,12 @@
             }
 
             return '{{ route("publish.pipeline.activity.index") }}?' + params.toString();
+        },
+
+        _setDraftApiActivityEntries(entries = []) {
+            this.draftApiActivityEntries = Array.isArray(entries)
+                ? entries.map(entry => this._normalizeMasterActivityEntry({ ...entry, server_persisted: true }))
+                : [];
         },
 
         _mergeMasterActivityEntries(entries = []) {
@@ -337,6 +522,10 @@
 
             headers.set('X-Pipeline-Draft-Id', String(this.draftId || ''));
             headers.set('X-Pipeline-Tab-Id', this._ensureTabInstanceId());
+            if (!headers.has('X-Pipeline-Client-Trace')) {
+                headers.set('X-Pipeline-Client-Trace', this._buildClientTrace('request'));
+            }
+            headers.set('X-Pipeline-Run-Trace', this._clientSessionTraceId || this._buildClientTrace('session'));
             if (this.pipelineDebugEnabled) headers.set('X-Pipeline-Debug', '1');
 
             const finalInit = { ...(init || {}), headers };
@@ -506,6 +695,10 @@
                 if (response.ok && data.success) {
                     if (Array.isArray(data.recent_runs)) {
                         this._mergeActivityRunHistory(data.recent_runs);
+                    }
+                    if (Array.isArray(data.draft_api_events)) {
+                        this._setDraftApiActivityEntries(data.draft_api_events);
+                        this._draftApiActivityRestored = true;
                     }
                     this.selectedActivityRunTrace = data.selected_trace || String(trace);
                     this._setActivityRunPreviewEntries(data.events || []);
@@ -736,6 +929,7 @@
             if (!force && !this.pipelineDebugEnabled && !this.masterActivityLogOpen) return;
 
             this._serverActivityLogLoading = true;
+            this.draftApiActivityLoading = true;
 
             try {
                 const response = await this._rawPipelineFetch(this._buildActivityIndexUrl({
@@ -761,6 +955,10 @@
                         this.crossDraftActivityRuns = data.recent_draft_runs.map(run => this._normalizeActivityRun(run));
                         this._crossDraftActivityRunsRestored = true;
                     }
+                    if (Array.isArray(data.draft_api_events)) {
+                        this._setDraftApiActivityEntries(data.draft_api_events);
+                        this._draftApiActivityRestored = true;
+                    }
                     if (!this.selectedActivityRunTrace && Array.isArray(data.events) && data.events.length > 0) {
                         this._mergeMasterActivityEntries(data.events.map(entry => ({ ...entry, server_persisted: true })));
                     }
@@ -768,6 +966,7 @@
                 this._serverActivityLogRestored = true;
             } catch (error) {
             } finally {
+                this.draftApiActivityLoading = false;
                 this._serverActivityLogLoading = false;
             }
         },
@@ -791,14 +990,6 @@
 
         _installActivityFetchTracker() {
             window.__publishPipelineActivityTarget = this;
-
-            if (!window.__publishPipelinePageLifecycleInstalled) {
-                window.__publishPipelinePageLifecycleInstalled = true;
-                window.__publishPipelinePageUnloading = false;
-                window.addEventListener('pageshow', () => { window.__publishPipelinePageUnloading = false; }, { capture: true });
-                window.addEventListener('pagehide', () => { window.__publishPipelinePageUnloading = true; }, { capture: true });
-                window.addEventListener('beforeunload', () => { window.__publishPipelinePageUnloading = true; }, { capture: true });
-            }
 
             if (window.__publishPipelineTrackedFetchInstalled) {
                 return;
@@ -831,6 +1022,7 @@
             if (!headers.has('X-Pipeline-Client-Trace')) {
                 headers.set('X-Pipeline-Client-Trace', traceId);
             }
+            headers.set('X-Pipeline-Run-Trace', this._clientSessionTraceId || this._buildClientTrace('session'));
             headers.set('X-Pipeline-Draft-Id', String(this.draftId || ''));
             headers.set('X-Pipeline-Tab-Id', this._ensureTabInstanceId());
             if (this.pipelineDebugEnabled) {
@@ -901,9 +1093,7 @@
                 return response;
             } catch (error) {
                 const durationMs = Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt));
-                const failedToFetch = /failed to fetch/i.test(String(error?.message || ''));
-                const likelyNavigationAbort = failedToFetch && (window.__publishPipelinePageUnloading || document.visibilityState === 'hidden');
-                const aborted = error?.name === 'AbortError' || error?.code === 20 || likelyNavigationAbort;
+                const aborted = error?.name === 'AbortError' || error?.code === 20;
 
                 this._logActivity('network', aborted ? 'step' : 'error', method + ' ' + normalizedUrl + (aborted ? ' cancelled' : ' failed: ' + (error.message || 'Request failed')), {
                     trace_id: traceId,
@@ -939,6 +1129,7 @@
             this.selectedActivityRunTrace = '';
             this.activityRunPreviewEntries = [];
             this.crossDraftActivityRuns = [];
+            this.draftApiActivityEntries = [];
             this._masterActivitySeq = 0;
             clearTimeout(this._masterActivityPersistTimer);
             clearTimeout(this._serverActivitySyncTimer);
@@ -946,6 +1137,7 @@
             this._serverActivityLogRestored = false;
             this._activityRunHistoryRestored = false;
             this._crossDraftActivityRunsRestored = false;
+            this._draftApiActivityRestored = false;
             localStorage.removeItem(this.masterActivityLogKey);
             localStorage.removeItem(this.legacyMasterActivityLogKey);
             await this._clearMasterActivityLogOnServer();
@@ -955,6 +1147,7 @@
         async refreshActivityRunHistory() {
             this._serverActivityLogRestored = false;
             this._crossDraftActivityRunsRestored = false;
+            this._draftApiActivityRestored = false;
             await this._restoreServerActivityLog(true);
             this.showNotification('success', 'Activity runs reloaded');
         },

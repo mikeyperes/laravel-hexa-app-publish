@@ -153,19 +153,55 @@ class PipelineStateService
 
             $normalized[(string) $profileId] = [
                 'loading' => false,
-                'loaded' => !empty($state['loaded']) || !empty($state['fields']) || !empty($state['relations']) || !empty($state['photos']),
+                'loaded' => !empty($state['loaded']) || !empty($state['fields']) || !empty($state['relations']) || !empty($state['photos']) || !empty($state['googleDocs']),
                 'fields' => $this->sanitizePrFieldsForPersistence($state['fields'] ?? []),
                 'driveUrl' => $this->sanitizeDriveUrl($state['driveUrl'] ?? ''),
+                'driveField' => trim((string) ($state['driveField'] ?? '')),
                 'photos' => $this->sanitizePrPhotosForPersistence($state['photos'] ?? []),
+                'googleDocs' => $this->sanitizePrGoogleDocsForPersistence($state['googleDocs'] ?? []),
+                'loadingGoogleDocs' => false,
                 'loadingPhotos' => false,
                 'notionUrl' => trim((string) ($state['notionUrl'] ?? '')),
                 'relations' => $this->sanitizePrRelationsForPersistence($state['relations'] ?? []),
                 'selectedEntries' => $this->sanitizeBooleanSelectionMap($state['selectedEntries'] ?? []),
-                'selectedPhotos' => $this->sanitizeBooleanSelectionMap($state['selectedPhotos'] ?? []),
+                'selectedFeaturedPhotoId' => trim((string) ($state['selectedFeaturedPhotoId'] ?? '')),
+                'selectedInlinePhotos' => $this->sanitizeBooleanSelectionMap($state['selectedInlinePhotos'] ?? ($state['selectedPhotos'] ?? [])),
+                'selectedPhotos' => $this->sanitizeBooleanSelectionMap($state['selectedInlinePhotos'] ?? ($state['selectedPhotos'] ?? [])),
             ];
         }
 
         return $normalized;
+    }
+
+    private function sanitizePrGoogleDocsForPersistence(mixed $docs): array
+    {
+        if (!is_array($docs)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(function ($doc) {
+            if (!is_array($doc)) {
+                return null;
+            }
+
+            $url = trim((string) ($doc['url'] ?? ''));
+            $title = trim((string) ($doc['title'] ?? ''));
+            $documentId = trim((string) ($doc['document_id'] ?? $doc['documentId'] ?? ''));
+
+            if ($url === '' && $documentId === '' && $title === '') {
+                return null;
+            }
+
+            return [
+                'document_id' => $documentId,
+                'title' => $title,
+                'url' => $url,
+                'excerpt' => trim((string) ($doc['excerpt'] ?? '')),
+                'word_count' => (int) ($doc['word_count'] ?? 0),
+                'html' => is_string($doc['html'] ?? null) ? $doc['html'] : '',
+                'text' => is_string($doc['text'] ?? null) ? $doc['text'] : '',
+            ];
+        }, $docs)));
     }
 
     private function sanitizePrFieldsForPersistence(mixed $fields): array

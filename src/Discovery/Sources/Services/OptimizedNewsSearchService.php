@@ -26,10 +26,10 @@ class OptimizedNewsSearchService
         $backendLabel = trim((string) ($options['backend_label'] ?? (ucfirst($provider) . ' Optimized Search')));
         $searchBackend = Str::slug($provider . '-optimized-search', '_');
         $queryPlan = $this->normalizeQueryPlan($options['query_plan'] ?? null, $topic);
-        $sources = $this->normalizeSources((array) ($options['sources'] ?? ['gnews', 'newsdata', 'currents_news', 'google-news-rss']));
-        $queries = $queryPlan['queries'];
+        $sources = $this->normalizeSources((array) ($options['sources'] ?? ['gnews', 'newsdata', 'google-news-rss']));
+        $queries = array_slice($queryPlan['queries'], 0, 3);
         $seedArticles = $this->normalizeSeedArticles((array) ($options['seed_articles'] ?? []), $topic);
-        $perQuery = max($count + 4, 8);
+        $perQuery = max($count + 2, 6);
         $providerTotals = [];
         $providerErrors = [];
         $queryDiagnostics = [];
@@ -96,8 +96,8 @@ class OptimizedNewsSearchService
             $lookup[$candidate['url']] = $candidate;
         }
 
-        $verificationPool = max($count * 6, 24);
-        $verificationLimit = max($count * 3, $count + 4);
+        $verificationPool = max($count * 4, 12);
+        $verificationLimit = max($count * 2, $count + 2);
         $verified = $this->linkHealth->verifyArticleCandidates(
             array_slice($ranked, 0, $verificationPool),
             $verificationLimit,

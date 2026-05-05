@@ -2081,6 +2081,7 @@ function publishPipeline() {
         selectedActivityRunTrace: '',
         activityRunPreviewEntries: [],
         crossDraftActivityRuns: [],
+        expandedApiCalls: {},
         publishTraceId: '',
         _masterActivitySeq: 0,
         _clientSessionTraceId: '',

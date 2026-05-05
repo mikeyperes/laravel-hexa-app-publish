@@ -275,13 +275,13 @@
 
                     // Featured image — auto-fetch with results
                     const hasPrSubjectPhotoAssets = this.isPrArticleMode() && this.selectedPrPhotoAssets(1).length > 0;
-                    const hasPodcastPressReleaseAssets = this.currentArticleType === 'press-release'
-                        && this.pressRelease?.submit_method === 'notion-podcast'
+                    const hasImportedPressReleaseAssets = this.currentArticleType === 'press-release'
+                        && this.isPressReleaseNotionImport?.()
                         && this.pressReleasePhotoAssets.length > 0;
-                    if (data.featured_image && !hasPrSubjectPhotoAssets && !hasPodcastPressReleaseAssets) {
+                    if (data.featured_image && !hasPrSubjectPhotoAssets && !hasImportedPressReleaseAssets) {
                         this.featuredImageSearch = data.featured_image;
                         this.featuredSearchPending = true;
-                    } else if (hasPrSubjectPhotoAssets || hasPodcastPressReleaseAssets) {
+                    } else if (hasPrSubjectPhotoAssets || hasImportedPressReleaseAssets) {
                         this.featuredImageSearch = '';
                         this.featuredSearchPending = false;
                     }
@@ -315,8 +315,8 @@
                     if (this.isPrArticleMode()) {
                         this.$nextTick(() => this.hydratePrArticleSelectedMedia());
                     }
-                    if (hasPodcastPressReleaseAssets) {
-                        this.$nextTick(() => this.applyPodcastPressReleaseMediaDefaults({ injectInline: true, notify: false }));
+                    if (hasImportedPressReleaseAssets) {
+                        this.applyNotionPressReleaseMediaDefaults({ injectInline: true, notify: false });
                     }
 
                     this.queueAutoSaveDraft(300);

@@ -34,6 +34,9 @@ Route::post('/article/publish/press-release/upload-documents', [PressReleaseWork
 Route::get('/article/publish/press-release/notion/search-episodes/live', [PressReleaseWorkflowController::class, 'smartSearchNotionEpisodes'])->name('publish.pipeline.press-release.search-notion-episodes.live');
 Route::post('/article/publish/press-release/notion/search-episodes', [PressReleaseWorkflowController::class, 'searchNotionEpisodes'])->name('publish.pipeline.press-release.search-notion-episodes');
 Route::post('/article/publish/press-release/notion/import-episode', [PressReleaseWorkflowController::class, 'importNotionEpisode'])->name('publish.pipeline.press-release.import-notion-episode');
+Route::get('/article/publish/press-release/notion/search-people/live', [PressReleaseWorkflowController::class, 'smartSearchNotionPeople'])->name('publish.pipeline.press-release.search-notion-people.live');
+Route::post('/article/publish/press-release/notion/person-books', [PressReleaseWorkflowController::class, 'listNotionPersonBooks'])->name('publish.pipeline.press-release.list-notion-person-books');
+Route::post('/article/publish/press-release/notion/import-book', [PressReleaseWorkflowController::class, 'importNotionBook'])->name('publish.pipeline.press-release.import-notion-book');
 Route::post('/article/publish/press-release/detect-fields', [PressReleaseWorkflowController::class, 'detectFields'])->name('publish.pipeline.press-release.detect-fields');
 Route::post('/article/publish/press-release/detect-photos', [PressReleaseWorkflowController::class, 'detectPhotos'])->name('publish.pipeline.press-release.detect-photos');
 Route::post('/article/publish/pr-article/import-context-url', [PrArticleWorkflowController::class, 'importContextUrl'])->name('publish.pipeline.pr-article.import-context-url');

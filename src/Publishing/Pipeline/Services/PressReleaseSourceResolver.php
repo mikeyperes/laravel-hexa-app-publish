@@ -27,6 +27,7 @@ class PressReleaseSourceResolver
             'upload-documents' => $this->resolveDocuments($state, $log),
             'public-url' => $this->resolvePublicUrl($state, $log),
             'notion-podcast' => $this->resolveNotionPodcast($state, $log),
+            'notion-book' => $this->resolveNotionBook($state, $log),
             default => [
                 'success' => false,
                 'source_text' => '',
@@ -195,6 +196,39 @@ class PressReleaseSourceResolver
             'preview' => mb_substr($text, 0, 1000),
             'log' => $log,
             'message' => 'Resolved source from imported Notion podcast episode.',
+        ];
+    }
+
+    private function resolveNotionBook(array $state, array $log): array
+    {
+        $text = trim((string) ($state['resolved_source_text'] ?? $state['content_dump'] ?? ''));
+        $title = trim((string) (($state['notion_book']['title'] ?? '') ?: 'Notion Book'));
+
+        $log[] = $this->entry('info', 'Using imported Notion book.', [
+            'book_id' => $state['notion_book']['id'] ?? null,
+            'title' => $title,
+        ]);
+
+        if ($text === '') {
+            $log[] = $this->entry('error', 'No imported Notion book content is available yet.');
+
+            return [
+                'success' => false,
+                'source_text' => '',
+                'label' => 'Notion Book',
+                'preview' => '',
+                'log' => $log,
+                'message' => 'Select a Notion person and related book before continuing.',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'source_text' => $text,
+            'label' => 'Notion Book · ' . $title,
+            'preview' => mb_substr($text, 0, 1000),
+            'log' => $log,
+            'message' => 'Resolved source from imported Notion book.',
         ];
     }
 

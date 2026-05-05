@@ -11,6 +11,7 @@ use hexa_app_publish\Publishing\Pipeline\Http\Requests\PressReleaseDocumentUploa
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineStateService;
 use hexa_app_publish\Publishing\Pipeline\Services\PressReleaseFieldDetectionService;
 use hexa_app_publish\Publishing\Pipeline\Services\PressReleasePhotoDetectionService;
+use hexa_app_publish\Publishing\Pipeline\Services\PressReleaseNotionBookImportService;
 use hexa_app_publish\Publishing\Pipeline\Services\PressReleaseNotionPodcastImportService;
 use hexa_app_publish\Publishing\Pipeline\Services\PressReleaseSourceResolver;
 use hexa_app_publish\Publishing\Pipeline\Services\PressReleaseWorkflowService;
@@ -28,6 +29,7 @@ class PressReleaseWorkflowController extends Controller
         private PressReleaseSourceResolver $sourceResolver,
         private PressReleaseFieldDetectionService $fieldDetection,
         private PressReleasePhotoDetectionService $photoDetection,
+        private PressReleaseNotionBookImportService $notionBookImport,
         private PressReleaseNotionPodcastImportService $notionPodcastImport,
         private UploadService $uploadService
     ) {}
@@ -71,6 +73,153 @@ class PressReleaseWorkflowController extends Controller
         return response()->json(array_values($result['records'] ?? []));
     }
 
+    public function smartSearchNotionPeople(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'draft_id' => ['required', 'integer'],
+            'q' => ['nullable', 'string'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:15'],
+        ]);
+
+        $this->resolveDraft((int) $validated['draft_id']);
+
+        $result = $this->notionBookImport->searchPeople(
+            (string) ($validated['q'] ?? ''),
+            (int) ($validated['limit'] ?? 10)
+        );
+
+        if (!($result['success'] ?? false)) {
+            return response()->json([]);
+        }
+
+        return response()->json(array_values($result['records'] ?? []));
+    }
+
+    public function listNotionPersonBooks(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'draft_id' => ['required', 'integer'],
+            'person_id' => ['required', 'string', 'max:255'],
+        ]);
+
+        $draft = $this->resolveDraft((int) $validated['draft_id']);
+        $payload = $this->stateService->payload($draft);
+        $pressRelease = $this->workflow->normalizeState($payload['pressRelease'] ?? []);
+
+        $result = $this->notionBookImport->listRelatedBooks((string) $validated['person_id']);
+        if (!($result['success'] ?? false)) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'] ?? 'Failed to load the related books for that Notion person.',
+            ], 422);
+        }
+
+        $pressRelease['submit_method'] = 'notion-book';
+        $pressRelease['notion_person'] = $result['selected_person'] ?? [];
+        $pressRelease['notion_book_options'] = $result['records'] ?? [];
+        $pressRelease['notion_book'] = [];
+        $pressRelease['notion_episode'] = [];
+        $pressRelease['notion_guest'] = [];
+        $pressRelease['notion_host'] = [];
+        $pressRelease['notion_podcast'] = [];
+        $pressRelease['resolved_source_text'] = '';
+        $pressRelease['resolved_source_preview'] = '';
+        $pressRelease['resolved_source_label'] = '';
+        $pressRelease['content_dump'] = '';
+        $pressRelease['detected_photos'] = [];
+        $pressRelease['photo_method'] = 'notion-import';
+        $pressRelease['google_drive_url'] = '';
+        $pressRelease['notion_missing_fields'] = [];
+        $pressRelease['notion_source_fields'] = [
+            'person' => [],
+            'book' => [],
+            'episode' => [],
+            'guest' => [],
+            'host' => [],
+            'podcast' => [],
+            'enforcement' => [],
+        ];
+        $pressRelease = $this->workflow->appendLog($pressRelease, 'info', 'Loaded related books from the selected Notion person.', [
+            'person_id' => $pressRelease['notion_person']['id'] ?? null,
+            'person_name' => $pressRelease['notion_person']['name'] ?? null,
+            'book_count' => count((array) ($pressRelease['notion_book_options'] ?? [])),
+        ]);
+        $this->stateService->updatePressRelease($draft, $pressRelease);
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['message'] ?? 'Related books loaded.',
+            'records' => $pressRelease['notion_book_options'],
+            'selected_person' => $pressRelease['notion_person'],
+            'press_release' => $pressRelease,
+        ]);
+    }
+
+    public function importNotionBook(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'draft_id' => ['required', 'integer'],
+            'person_id' => ['required', 'string', 'max:255'],
+            'book_id' => ['required', 'string', 'max:255'],
+        ]);
+
+        $draft = $this->resolveDraft((int) $validated['draft_id']);
+        $payload = $this->stateService->payload($draft);
+        $pressRelease = $this->workflow->normalizeState($payload['pressRelease'] ?? []);
+
+        $result = $this->notionBookImport->importBook(
+            (string) $validated['person_id'],
+            (string) $validated['book_id']
+        );
+
+        if (!($result['success'] ?? false)) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'] ?? 'Failed to import the selected Notion book.',
+            ], 422);
+        }
+
+        $pressRelease['submit_method'] = 'notion-book';
+        $pressRelease['resolved_source_text'] = $result['source_text'] ?? '';
+        $pressRelease['resolved_source_preview'] = $result['preview'] ?? '';
+        $pressRelease['resolved_source_label'] = $result['label'] ?? 'Notion Book';
+        $pressRelease['content_dump'] = $result['source_text'] ?? '';
+        $pressRelease['details'] = array_replace($pressRelease['details'] ?? [], $result['details'] ?? []);
+        $pressRelease['detected_photos'] = $result['detected_photos'] ?? [];
+        $pressRelease['photo_method'] = 'notion-import';
+        $pressRelease['google_drive_url'] = '';
+        $pressRelease['notion_person'] = $result['selected_person'] ?? [];
+        $pressRelease['notion_book'] = $result['selected_book'] ?? [];
+        $pressRelease['notion_book_options'] = array_values(array_filter((array) ($pressRelease['notion_book_options'] ?? []), 'is_array'));
+        $pressRelease['notion_episode'] = [];
+        $pressRelease['notion_guest'] = [];
+        $pressRelease['notion_host'] = [];
+        $pressRelease['notion_podcast'] = [];
+        $pressRelease['notion_missing_fields'] = $result['missing_fields'] ?? [];
+        $pressRelease['notion_source_fields'] = $result['source_fields'] ?? [
+            'person' => [],
+            'book' => [],
+            'episode' => [],
+            'guest' => [],
+            'host' => [],
+            'podcast' => [],
+            'enforcement' => [],
+        ];
+        $pressRelease = $this->workflow->appendLog($pressRelease, 'success', 'Imported book context from Notion.', [
+            'person_id' => $pressRelease['notion_person']['id'] ?? null,
+            'person_name' => $pressRelease['notion_person']['name'] ?? null,
+            'book_id' => $pressRelease['notion_book']['id'] ?? null,
+            'book_title' => $pressRelease['notion_book']['title'] ?? null,
+        ]);
+        $this->stateService->updatePressRelease($draft, $pressRelease);
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['message'] ?? 'Book imported from Notion.',
+            'press_release' => $pressRelease,
+        ]);
+    }
+
     public function importNotionEpisode(PressReleaseImportNotionEpisodeRequest $request): JsonResponse
     {
         $validated = $request->validated();
@@ -95,6 +244,9 @@ class PressReleaseWorkflowController extends Controller
         $pressRelease['detected_photos'] = $result['detected_photos'] ?? [];
         $pressRelease['photo_method'] = 'notion-import';
         $pressRelease['google_drive_url'] = '';
+        $pressRelease['notion_person'] = [];
+        $pressRelease['notion_book'] = [];
+        $pressRelease['notion_book_options'] = [];
         $pressRelease['notion_episode'] = $result['selected_episode'] ?? [];
         $pressRelease['notion_guest'] = $result['selected_guest'] ?? [];
         $pressRelease['notion_host'] = $result['selected_host'] ?? [];
@@ -172,15 +324,15 @@ class PressReleaseWorkflowController extends Controller
         $payload = $this->stateService->payload($draft);
         $pressRelease = $this->workflow->normalizeState($payload['pressRelease'] ?? []);
 
-        if (($pressRelease['submit_method'] ?? '') === 'notion-podcast') {
-            $pressRelease = $this->workflow->appendLog($pressRelease, 'info', 'Skipped AI field detection; using imported Notion podcast details.', [
+        if (in_array(($pressRelease['submit_method'] ?? ''), ['notion-podcast', 'notion-book'], true)) {
+            $pressRelease = $this->workflow->appendLog($pressRelease, 'info', 'Skipped AI field detection; using imported Notion details.', [
                 'details' => $pressRelease['details'] ?? [],
             ]);
             $this->stateService->updatePressRelease($draft, $pressRelease);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Using imported Notion podcast details.',
+                'message' => 'Using imported Notion details.',
                 'fields' => $pressRelease['details'],
                 'press_release' => $pressRelease,
                 'resolved_source_preview' => $pressRelease['resolved_source_preview'] ?? '',
@@ -226,15 +378,15 @@ class PressReleaseWorkflowController extends Controller
         $payload = $this->stateService->payload($draft);
         $pressRelease = $this->workflow->normalizeState($payload['pressRelease'] ?? []);
 
-        if (($pressRelease['submit_method'] ?? '') === 'notion-podcast' && !empty($pressRelease['detected_photos'])) {
-            $pressRelease = $this->workflow->appendLog($pressRelease, 'info', 'Using imported Notion podcast media instead of URL photo detection.', [
+        if (in_array(($pressRelease['submit_method'] ?? ''), ['notion-podcast', 'notion-book'], true) && !empty($pressRelease['detected_photos'])) {
+            $pressRelease = $this->workflow->appendLog($pressRelease, 'info', 'Using imported Notion media instead of URL photo detection.', [
                 'count' => count((array) ($pressRelease['detected_photos'] ?? [])),
             ]);
             $this->stateService->updatePressRelease($draft, $pressRelease);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Using imported Notion podcast media.',
+                'message' => 'Using imported Notion media.',
                 'photos' => $pressRelease['detected_photos'],
                 'press_release' => $pressRelease,
             ]);

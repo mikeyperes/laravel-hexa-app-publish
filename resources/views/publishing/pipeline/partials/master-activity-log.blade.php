@@ -1,5 +1,5 @@
-<div class="pipeline-step-card">
-    <button @click.prevent="masterActivityLogOpen = !masterActivityLogOpen" type="button" data-master-activity-toggle class="pipeline-step-toggle">
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <button @click.prevent="masterActivityLogOpen = !masterActivityLogOpen" type="button" data-master-activity-toggle class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-xl transition-colors">
         <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
                 <span class="font-semibold text-gray-800">Master Activity Log</span>
@@ -16,7 +16,7 @@
         </svg>
     </button>
 
-    <div x-show="masterActivityLogOpen" x-cloak x-collapse class="pipeline-step-panel">
+    <div x-show="masterActivityLogOpen" x-cloak x-collapse class="px-4 pb-4">
         <div class="flex flex-wrap items-center gap-2 mb-3">
             <button @click.stop.prevent="togglePipelineDebug()"
                     type="button"
@@ -155,8 +155,139 @@
             </div>
         </div>
 
+        <div class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-3 text-xs text-sky-900 mb-3" data-api-service-summary>
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div>
+                    <p class="font-semibold">API Call Activity</p>
+                    <p class="text-sky-700 mt-0.5">Grouped external calls for this entire draft across persisted runs, including AI, search, WordPress, and remote fetches.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span x-show="draftApiActivityLoading" x-cloak class="inline-flex items-center gap-1 text-[11px] text-sky-700">
+                        <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Loading…
+                    </span>
+                    <span class="inline-flex items-center px-2 py-1 rounded-full bg-white text-[11px] font-medium text-sky-800"
+                          x-text="apiCallActivityEntries.length + ' call' + (apiCallActivityEntries.length === 1 ? '' : 's')"></span>
+                    <span x-show="apiCallRunCount > 0" x-cloak class="inline-flex items-center px-2 py-1 rounded-full bg-white text-[11px] font-medium text-sky-800"
+                          x-text="apiCallRunCount + ' run' + (apiCallRunCount === 1 ? '' : 's')"></span>
+                    <span x-show="apiCallErrorCount > 0" x-cloak class="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-[11px] font-medium text-red-700"
+                          x-text="apiCallErrorCount + ' error' + (apiCallErrorCount === 1 ? '' : 's')"></span>
+                    <span x-show="apiCallCostTotal !== null" x-cloak class="inline-flex items-center px-2 py-1 rounded-full bg-emerald-100 text-[11px] font-medium text-emerald-700"
+                          x-text="formatApiCost(apiCallCostTotal)"></span>
+                </div>
+            </div>
+
+            <div x-show="apiServiceSummaries.length === 0" x-cloak class="rounded-lg border border-dashed border-sky-200 bg-white px-3 py-3 text-sky-700">
+                No persisted outbound API calls have been captured for this draft yet.
+            </div>
+
+            <div x-show="apiServiceSummaries.length > 0" x-cloak class="space-y-3">
+                <template x-for="service in apiServiceSummaries" :key="'svc:' + service.key">
+                    <div class="rounded-xl border border-sky-100 bg-white px-3 py-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="font-semibold text-sky-900" x-text="service.label"></span>
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-sky-100 text-[10px] font-medium text-sky-700"
+                                          x-text="service.call_count + ' call' + (service.call_count === 1 ? '' : 's')"></span>
+                                    <span x-show="service.error_count > 0" x-cloak class="inline-flex items-center px-1.5 py-0.5 rounded bg-red-100 text-[10px] font-medium text-red-700"
+                                          x-text="service.error_count + ' error' + (service.error_count === 1 ? '' : 's')"></span>
+                                    <span x-show="service.total_cost_usd !== null" x-cloak class="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-100 text-[10px] font-medium text-emerald-700"
+                                          x-text="formatApiCost(service.total_cost_usd)"></span>
+                                </div>
+                                <p x-show="service.host" x-cloak class="mt-1 text-[11px] text-sky-700" x-text="service.host"></p>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 space-y-2">
+                            <template x-for="entry in service.entries" :key="apiCallEntryKey(entry)">
+                                <div class="rounded-lg border border-sky-100 bg-slate-50 overflow-hidden">
+                                    <button @click.stop.prevent="toggleApiCallEntry(entry)"
+                                            type="button"
+                                            class="w-full px-3 py-2 text-left hover:bg-slate-100 transition-colors">
+                                        <div class="flex flex-wrap items-start justify-between gap-2">
+                                            <div class="min-w-0">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <span class="font-medium text-slate-900" x-text="entry.method || 'CALL'"></span>
+                                                    <span class="text-slate-700 break-all" x-text="entry.url || entry.message"></span>
+                                                </div>
+                                                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600">
+                                                    <span x-text="formatApiCallWhen(entry)"></span>
+                                                    <span x-show="entry.actor_name" x-cloak x-text="'User: ' + entry.actor_name"></span>
+                                                    <span x-show="entry.run_trace" x-cloak class="break-all" x-text="'Run: ' + entry.run_trace"></span>
+                                                    <span x-show="entry.duration_ms !== null" x-cloak x-text="entry.duration_ms + 'ms'"></span>
+                                                    <span x-show="entry.model" x-cloak x-text="entry.model"></span>
+                                                    <span x-show="formatApiTokens(entry)" x-cloak x-text="formatApiTokens(entry) + ' tokens'"></span>
+                                                    <span x-show="entry.cost_usd !== null" x-cloak x-text="formatApiCost(entry.cost_usd)"></span>
+                                                </div>
+                                            </div>
+                                            <div class="flex items-center gap-2 flex-shrink-0">
+                                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
+                                                      :class="entry.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'"
+                                                      x-text="entry.status ? ('HTTP ' + entry.status) : (entry.type === 'error' ? 'failed' : 'ok')"></span>
+                                                <svg class="w-4 h-4 text-slate-400 transition-transform"
+                                                     :class="isApiCallEntryExpanded(entry) ? 'rotate-180' : ''"
+                                                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </button>
+
+                                    <div x-show="isApiCallEntryExpanded(entry)" x-cloak class="border-t border-sky-100 bg-white px-3 py-3 space-y-3">
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] text-slate-700">
+                                            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                                <p class="font-semibold text-slate-900 mb-1">Request</p>
+                                                <div class="space-y-1">
+                                                    <p><span class="font-medium">Method:</span> <span x-text="entry.method || 'GET'"></span></p>
+                                                    <p><span class="font-medium">URL:</span> <span class="break-all" x-text="entry.url || ''"></span></p>
+                                                    <p x-show="entry.run_trace" x-cloak><span class="font-medium">Run:</span> <span class="break-all" x-text="entry.run_trace"></span></p>
+                                                    <p x-show="entry.actor_name" x-cloak><span class="font-medium">User:</span> <span x-text="entry.actor_name"></span></p>
+                                                    <p><span class="font-medium">When:</span> <span x-text="formatApiCallWhen(entry)"></span></p>
+                                                </div>
+                                            </div>
+
+                                            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                                <p class="font-semibold text-slate-900 mb-1">Response</p>
+                                                <div class="space-y-1">
+                                                    <p><span class="font-medium">Status:</span> <span x-text="entry.status ? ('HTTP ' + entry.status) : (entry.response_error || 'failed')"></span></p>
+                                                    <p x-show="entry.duration_ms !== null" x-cloak><span class="font-medium">Duration:</span> <span x-text="entry.duration_ms + 'ms'"></span></p>
+                                                    <p x-show="entry.model" x-cloak><span class="font-medium">Model:</span> <span x-text="entry.model"></span></p>
+                                                    <p x-show="entry.total_tokens !== null || entry.input_tokens !== null || entry.output_tokens !== null" x-cloak>
+                                                        <span class="font-medium">Tokens:</span>
+                                                        <span x-text="formatApiTokens(entry)"></span>
+                                                    </p>
+                                                    <p x-show="entry.cost_usd !== null" x-cloak><span class="font-medium">Cost:</span> <span x-text="formatApiCost(entry.cost_usd)"></span></p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div x-show="entry.request_headers || entry.request_payload_full" x-cloak class="space-y-2">
+                                            <p class="text-[11px] font-semibold text-slate-900">Full Request Detail</p>
+                                            <pre class="rounded-lg bg-slate-950 text-slate-100 p-3 text-[11px] overflow-x-auto whitespace-pre-wrap break-words"
+                                                 x-text="formatApiPayload({ headers: entry.request_headers || {}, payload: entry.request_payload_full })"></pre>
+                                        </div>
+
+                                        <div x-show="entry.response_headers || entry.response_payload_full || entry.response_error" x-cloak class="space-y-2">
+                                            <p class="text-[11px] font-semibold text-slate-900">Full Response Detail</p>
+                                            <pre class="rounded-lg bg-slate-950 text-emerald-100 p-3 text-[11px] overflow-x-auto whitespace-pre-wrap break-words"
+                                                 x-text="formatApiPayload({ headers: entry.response_headers || {}, payload: entry.response_payload_full, error: entry.response_error || '' })"></pre>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
         <div x-show="visibleMasterActivityEntries.length === 0" x-cloak class="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
             No activity captured yet.
+        </div>
+
+        <div x-show="visibleMasterActivityEntries.length > 0" x-cloak class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">
+            Full Trace
         </div>
 
         <div x-show="visibleMasterActivityEntries.length > 0"

@@ -153,6 +153,19 @@ class PipelineActivityService
             ->all();
     }
 
+    public function draftApiEvents(PublishArticle $article, int $limit = 500): array
+    {
+        return PublishPipelineRunEvent::query()
+            ->where('publish_article_id', $article->id)
+            ->where('scope', 'api')
+            ->orderByDesc('captured_at')
+            ->orderByDesc('id')
+            ->limit(max(1, min($limit, 2000)))
+            ->get()
+            ->map(fn (PublishPipelineRunEvent $event) => $this->formatEvent($event))
+            ->all();
+    }
+
     public function recentRunsForUser(User $user, int $limit = 12, ?int $excludeDraftId = null): array
     {
         return PublishPipelineRun::query()

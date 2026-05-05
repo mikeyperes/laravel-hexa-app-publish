@@ -232,6 +232,7 @@
 
         sanitizePhotoSuggestionForPersistence(ps, idx) {
             const suggestion = ps || {};
+            const autoPhoto = this.sanitizePhotoAssetForPersistence(suggestion.autoPhoto || null);
 
             return {
                 position: Number.isFinite(Number(suggestion.position)) ? Number(suggestion.position) : idx,
@@ -239,9 +240,10 @@
                 alt_text: suggestion.alt_text || '',
                 caption: suggestion.caption || '',
                 suggestedFilename: suggestion.suggestedFilename || this.buildFilename(suggestion.search_term, idx + 1),
-                autoPhoto: this.sanitizePhotoAssetForPersistence(suggestion.autoPhoto || null),
-                confirmed: !!(suggestion.autoPhoto && suggestion.confirmed),
+                autoPhoto,
+                confirmed: !!(autoPhoto && suggestion.confirmed),
                 removed: !!suggestion.removed,
+                loadAttempted: !!suggestion.loadAttempted || !!autoPhoto,
             };
         },
 
@@ -613,6 +615,8 @@
                     || restoredPressReleaseState.content_dump
                     || restoredPressReleaseState.public_url
                     || (Array.isArray(restoredPressReleaseState.document_files) && restoredPressReleaseState.document_files.length > 0)
+                    || restoredPressReleaseState.notion_book?.id
+                    || restoredPressReleaseState.notion_person?.name
                     || restoredPressReleaseState.notion_episode?.id
                     || restoredPressReleaseState.notion_guest?.name
                     || (Array.isArray(restoredPressReleaseState.detected_photos) && restoredPressReleaseState.detected_photos.length > 0)
@@ -895,13 +899,15 @@
                             });
                         });
                 }
-                if (this.currentArticleType === 'press-release' && this.pressRelease?.submit_method === 'notion-podcast') {
+                if (this.currentArticleType === 'press-release' && this.isPressReleaseNotionImport?.()) {
                     this.$nextTick(async () => {
-                        this.applyPodcastPressReleaseMediaDefaults?.({
+                        this.applyNotionPressReleaseMediaDefaults?.({
                             injectInline: this.currentStep === 6 || (Array.isArray(this.openSteps) && this.openSteps.includes(6)),
                             notify: false,
                         });
-                        await this.maybeAutoRefreshLegacyNotionPodcastImport?.();
+                        if (this.isPressReleaseNotionPodcastImport?.()) {
+                            await this.maybeAutoRefreshLegacyNotionPodcastImport?.();
+                        }
                     });
                 }
                 if (this.currentStep === 6 || (Array.isArray(this.openSteps) && this.openSteps.includes(6))) {
@@ -1101,8 +1107,8 @@
                 if (step === 6 || this.openSteps.includes(6)) {
                     this.queueInlinePhotoAutoHydration('step_change');
                     this.queueFeaturedImageAutoHydration('step_change');
-                    if (this.currentArticleType === 'press-release' && this.pressRelease?.submit_method === 'notion-podcast') {
-                        this.$nextTick(() => this.applyPodcastPressReleaseMediaDefaults?.({ injectInline: true, notify: false }));
+                    if (this.currentArticleType === 'press-release' && this.isPressReleaseNotionImport?.()) {
+                        this.$nextTick(() => this.applyNotionPressReleaseMediaDefaults?.({ injectInline: true, notify: false }));
                     }
                 }
                 if ((step === 5 || this.openSteps.includes(5) || this.promptLogOpen) && !this.promptLoading) {
@@ -1113,8 +1119,8 @@
                 if (!this._restoring && Array.isArray(steps) && steps.includes(6)) {
                     this.queueInlinePhotoAutoHydration('open_steps');
                     this.queueFeaturedImageAutoHydration('open_steps');
-                    if (this.currentArticleType === 'press-release' && this.pressRelease?.submit_method === 'notion-podcast') {
-                        this.$nextTick(() => this.applyPodcastPressReleaseMediaDefaults?.({ injectInline: true, notify: false }));
+                    if (this.currentArticleType === 'press-release' && this.isPressReleaseNotionImport?.()) {
+                        this.$nextTick(() => this.applyNotionPressReleaseMediaDefaults?.({ injectInline: true, notify: false }));
                     }
                 }
             });
