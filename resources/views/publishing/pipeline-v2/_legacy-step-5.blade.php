@@ -288,6 +288,28 @@
                 <p class="text-sm text-red-700" x-text="spinError"></p>
             </div>
 
+            {{-- Spin activity --}}
+            <div class="mb-4 bg-white rounded-xl border border-gray-300 p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h5 class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Spin Activity</h5>
+                    <span x-show="spinning" x-cloak class="text-xs text-amber-500">Request in progress...</span>
+                </div>
+                <div x-show="spinLog.length === 0" x-cloak class="text-sm text-gray-400 border border-gray-200 rounded-lg px-3 py-3">
+                    No spin activity yet.
+                </div>
+                <div x-show="spinLog.length > 0" x-cloak class="border border-gray-300 rounded-lg overflow-hidden">
+                    <div class="max-h-72 overflow-y-auto bg-white">
+                        <template x-for="(entry, idx) in spinLog" :key="idx">
+                            <div class="px-3 py-2 border-b border-gray-200 last:border-b-0 font-mono text-sm leading-6"
+                                 :class="entry.type === 'error' ? 'text-red-500' : (entry.type === 'success' ? 'text-green-600' : (entry.type === 'info' ? 'text-gray-800' : 'text-gray-500'))">
+                                <span x-text="entry.time"></span>
+                                <span x-text="' ' + entry.message"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
             {{-- AI Call Report --}}
             <div x-show="lastAiCall" x-cloak class="mb-4 bg-gray-900 rounded-xl border border-gray-700 p-4">
                 <div class="flex items-center justify-between mb-2">
@@ -312,8 +334,25 @@
                         <p class="font-medium text-white" x-text="(lastAiCall?.usage?.input_tokens || 0) + ' in / ' + (lastAiCall?.usage?.output_tokens || 0) + ' out'"></p>
                     </div>
                 </div>
+                <div x-show="spinDiagnostics" x-cloak class="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs border-t border-gray-800 pt-3">
+                    <div>
+                        <span class="text-gray-500">Server time</span>
+                        <p class="font-medium text-white" x-text="spinDiagnostics?.total_ms ? ((spinDiagnostics.total_ms / 1000).toFixed(1) + 's') : '—'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Provider call</span>
+                        <p class="font-medium text-white" x-text="spinDiagnostics?.provider_call_ms ? ((spinDiagnostics.provider_call_ms / 1000).toFixed(1) + 's') : '—'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Prompt build</span>
+                        <p class="font-medium text-white" x-text="spinDiagnostics?.prompt_build_ms ? (spinDiagnostics.prompt_build_ms + 'ms') : '—'"></p>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Attempts</span>
+                        <p class="font-medium text-white" x-text="Array.isArray(spinDiagnostics?.attempts) ? spinDiagnostics.attempts.length : 0"></p>
+                    </div>
+                </div>
             </div>
 
         </div>
     </div>
-

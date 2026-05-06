@@ -32,29 +32,12 @@
             return normalized;
         },
 
-        _ensureCreateArticleStepReady(reason = 'step_change') {
-            this.$nextTick(() => {
-                this.maybeAutoLoadSyndicationCategories?.();
-                if (typeof this._ensureSpinEditorConfigured === 'function') {
-                    this._ensureSpinEditorConfigured(this.editorContent || this.spunContent || this.preparedHtml || '');
-                }
-                this._logDebug('ui', 'Ensured Create Article step readiness', {
-                    stage: 'navigation',
-                    substage: reason,
-                    current_step: this.currentStep,
-                });
-            });
-        },
-
         goToStep(step) {
             if (this.isStepAccessible(step)) {
                 this.currentStep = step;
                 this.openSteps = this.normalizeNestedOpenSteps(this.normalizedOpenSteps(step), step);
                 if (step === 5 || this.openSteps.includes(5)) {
                     this._queuePromptRefresh('go_to_step');
-                }
-                if (step === 6 || this.openSteps.includes(6)) {
-                    this._ensureCreateArticleStepReady('go_to_step');
                 }
                 if (step === 7 || this.openSteps.includes(7)) {
                     this.$nextTick(() => this._restorePipelineOperations());
@@ -81,9 +64,6 @@
             if (step === 5 && this.openSteps.includes(5)) {
                 this._queuePromptRefresh('toggle_step');
             }
-            if (step === 6 && this.openSteps.includes(6)) {
-                this._ensureCreateArticleStepReady('toggle_step');
-            }
             if (step === 7 && this.openSteps.includes(7)) {
                 this.$nextTick(() => this._restorePipelineOperations());
                 this._focusPublishActionBox({ behavior: 'smooth' });
@@ -101,9 +81,6 @@
             this.openSteps = this.normalizeNestedOpenSteps(this.normalizedOpenSteps(step), step);
             if (step === 5 || this.openSteps.includes(5)) {
                 this._queuePromptRefresh('open_step');
-            }
-            if (step === 6 || this.openSteps.includes(6)) {
-                this._ensureCreateArticleStepReady('open_step');
             }
             if (step === 7 || this.openSteps.includes(7)) {
                 this.$nextTick(() => this._restorePipelineOperations());
@@ -127,6 +104,47 @@
                     debug_only: true,
                 });
             }
+        },
+
+        verifiedSourceCount() {
+            return (Array.isArray(this.checkResults) ? this.checkResults : []).filter((result) => {
+                return !!result?.success && String(result?.text || '').trim() !== '';
+            }).length;
+        },
+
+        hasVerifiedSourceArticles() {
+            return this.verifiedSourceCount() > 0;
+        },
+
+        stepFourPrimaryLabel() {
+            if (this.currentArticleType === 'press-release') {
+                return this.pressRelease?.polish_only ? 'Continue to Polish' : 'Continue to AI Spin';
+            }
+            if (this.checking) return 'Getting Article(s)...';
+            return this.hasVerifiedSourceArticles() ? 'Continue to AI Spin' : 'Get Article(s)';
+        },
+
+        async handleStepFourPrimaryAction() {
+            if (this.checking) return;
+
+            if (this.currentArticleType === 'press-release') {
+                this.completeStep(4);
+                this.openStep(5);
+                return;
+            }
+
+            if (this.hasVerifiedSourceArticles()) {
+                this.completeStep(4);
+                this.openStep(5);
+                this.showNotification('success', 'Source articles ready — continue to AI Spin.');
+                return;
+            }
+
+            await this.checkAllSources();
+        },
+
+        hasSpinOutput() {
+            return !!String(this.spunContent || this.editorContent || '').trim() || Number(this.spunWordCount || 0) > 0;
         },
 
         // ── Step 1: User Selection ───────────────────────────
@@ -257,14 +275,6 @@
             if (this.selectedSiteId) {
                 this.selectedSite = this.sites.find(s => s.id == this.selectedSiteId) || this.prSourceSites.find(s => s.id == this.selectedSiteId) || null;
                 if (this.selectedSite) {
-                    const nextSiteId = String(this.selectedSite.id || '');
-                    if (this._syndicationAutoSiteId !== nextSiteId) {
-                        this.syndicationCategories = [];
-                        this.syndicationCategoriesCacheMeta = null;
-                        this.selectedSyndicationCats = [];
-                        this._syndicationAutoRequested = false;
-                        this._syndicationAutoSiteId = nextSiteId;
-                    }
                     const cacheKey = this.siteConnectionCacheKey(this.selectedSiteId);
                     const restoredFromCache = cacheKey ? this.restoreSiteConnection(this.selectedSiteId, cacheKey) : false;
 
@@ -294,8 +304,8 @@
                     if (!this.siteConn.authors.length) {
                         this.loadSiteAuthors(this.selectedSiteId, { cacheKey });
                     }
-                    if (this.currentArticleType === 'press-release' && this.selectedSite?.is_press_release_source) {
-                        this.$nextTick(() => this.maybeAutoLoadSyndicationCategories?.());
+                    if (this.currentArticleType === 'press-release' && this.selectedSite?.is_press_release_source && typeof this.loadSyndicationCategories === 'function') {
+                        this.loadSyndicationCategories(false);
                     }
                     this._logActivity('site', this.siteConn.status === true ? 'success' : 'warning', 'Selected site ' + this.selectedSite.name, {
                         stage: 'selection',
@@ -315,11 +325,6 @@
                 this.siteConn.log = [];
                 this.siteConn.status = null;
                 this.siteConn.message = '';
-                this.syndicationCategories = [];
-                this.syndicationCategoriesCacheMeta = null;
-                this.selectedSyndicationCats = [];
-                this._syndicationAutoRequested = false;
-                this._syndicationAutoSiteId = '';
                 this._logDebug('site', 'Cleared selected site', {
                     stage: 'selection',
                     substage: 'site_clear',
@@ -557,35 +562,6 @@
 
         async aiSearchArticles() {
             if (!this.aiSearchTopic.trim()) return;
-            const previousSearchUrls = Array.isArray(this.aiSearchResults)
-                ? this.aiSearchResults.map(article => article?.url).filter(Boolean)
-                : [];
-            const isPrContextSearch = this.isPrArticleMode() && this.prContextTab === 'ai';
-            const defaultSearchModel = @json(($pipelineDefaults['search_model'] ?? null));
-            const defaultPrContextSearchModel = this.aiSearchOptionLabels?.['optimized:gemini']
-                ? 'optimized:gemini'
-                : (this.aiSearchOptionLabels?.['optimized:openai']
-                    ? 'optimized:openai'
-                    : (this.aiSearchOptionLabels?.['optimized:grok']
-                        ? 'optimized:grok'
-                        : (this.aiSearchOptionLabels?.['gpt-4o-mini']
-                            ? 'gpt-4o-mini'
-                            : (this.aiSearchOptionLabels?.['gemini-2.5-flash-lite']
-                                ? 'gemini-2.5-flash-lite'
-                                : (defaultSearchModel || this.aiSearchModel)))));
-
-            if (isPrContextSearch && (!this.aiSearchModel || this.aiSearchModel === defaultSearchModel)) {
-                this.aiSearchModel = defaultPrContextSearchModel;
-            }
-
-            const requestedCount = isPrContextSearch ? 5 : 10;
-            const selectedSearchModel = String(this.aiSearchModel || '');
-            const timeoutMs = isPrContextSearch
-                ? 45000
-                : 120000;
-            const controller = new AbortController();
-            const timeoutHandle = setTimeout(() => controller.abort(new DOMException('Search request timed out.', 'AbortError')), timeoutMs);
-
             this.aiSearching = true;
             this.aiSearchResults = [];
             this.aiSearchError = '';
@@ -595,53 +571,27 @@
 
             const searchAgentLabel = this.aiSearchOptionLabels?.[this.aiSearchModel] || this.aiSearchModel;
             this._logAi('info', 'Starting AI article search for: ' + this.aiSearchTopic);
-            this._logAi('info', isPrContextSearch
-                ? ('Requesting top ' + requestedCount + ' context article(s) via reliable live article search...')
-                : ('Requesting top ' + requestedCount + ' articles via ' + searchAgentLabel + ' with web search...'));
+            this._logAi('info', 'Requesting top 10 articles via ' + searchAgentLabel + ' with web search...');
 
             try {
                 // Collect URLs from current results + already-added sources to exclude duplicates on re-search
                 const excludeUrls = [
-                    ...previousSearchUrls,
+                    ...this.aiSearchResults.map(a => a.url),
                     ...this.sources.map(s => s.url),
                 ].filter(Boolean);
 
                 const resp = await fetch('{{ route("publish.pipeline.ai-search") }}', {
                     method: 'POST',
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
-                    signal: controller.signal,
                     body: JSON.stringify({
                         topic: this.aiSearchTopic,
                         draft_id: this.draftId || null,
-                        count: requestedCount,
+                        count: 10,
                         model: this.aiSearchModel,
-                        allow_fallback: !isPrContextSearch,
-                        search_mode: isPrContextSearch ? 'pr_context' : 'source_discovery',
                         exclude_urls: excludeUrls.length > 0 ? excludeUrls : undefined,
                     }),
                 });
-                const rawResponse = await resp.text();
-                let data = null;
-                if (rawResponse) {
-                    try {
-                        data = JSON.parse(rawResponse);
-                    } catch (_parseError) {
-                        data = null;
-                    }
-                }
-                if (!resp.ok) {
-                    const serverMessage = data?.message
-                        ? 'Search request failed with status ' + resp.status + ': ' + data.message
-                        : 'Search request failed with status ' + resp.status;
-                    this._logAi('error', serverMessage);
-                    if (rawResponse) {
-                        this._logAi('step', 'Server response: ' + rawResponse.slice(0, 240));
-                    }
-                    throw new Error(serverMessage);
-                }
-                if (!data) {
-                    throw new Error('Search response was empty.');
-                }
+                const data = await resp.json();
                 if (data.success && data.data && data.data.articles) {
                     this._logAi('success', 'Found ' + data.data.articles.length + ' article(s)');
                     this.aiSearchResults = data.data.articles;
@@ -652,10 +602,6 @@
                             backendMessage += ' | AI search fallback reason: ' + data.data.fallback_reason;
                         }
                         this._logAi('info', backendMessage);
-                    }
-
-                    if (data.data.elapsed_seconds) {
-                        this._logAi('info', 'Server time: ' + data.data.elapsed_seconds + 's');
                     }
 
                     // Save to search history
@@ -685,16 +631,11 @@
                 }
                 this.aiHasSearched = true;
             } catch (e) {
-                const message = e?.name === 'AbortError'
-                    ? 'Search timed out. Try a narrower query or use Search News.'
-                    : 'Search failed: ' + (e?.message || 'Unknown error');
-                this._logAi('error', message);
-                this.aiSearchError = message;
+                this._logAi('error', 'Search failed: ' + e.message);
+                this.aiSearchError = 'Search failed: ' + e.message;
                 this.aiHasSearched = true;
-            } finally {
-                clearTimeout(timeoutHandle);
-                this.aiSearching = false;
             }
+            this.aiSearching = false;
         },
 
         isPrArticleMode() {
@@ -719,7 +660,7 @@
             normalized.include_subject_name_in_title = normalized.include_subject_name_in_title !== false;
             normalized.feature_photo_mode = normalized.feature_photo_mode || defaults.feature_photo_mode || 'featured_and_inline';
             normalized.inline_photo_target = Math.max(0, Number(normalized.inline_photo_target || defaults.inline_photo_target || 0));
-            normalized.expert_source_mode = normalized.expert_source_mode || defaults.expert_source_mode || 'article';
+            normalized.expert_source_mode = normalized.expert_source_mode || defaults.expert_source_mode || 'keywords';
             normalized.expert_keywords = normalized.expert_keywords || '';
             normalized.expert_context_url = normalized.expert_context_url || '';
             normalized.expert_context_extracted = normalized.expert_context_extracted && typeof normalized.expert_context_extracted === 'object'
@@ -727,52 +668,6 @@
                 : {};
 
             return normalized;
-        },
-
-        resolvePrArticleTypeFromState(explicitType = null, state = null) {
-            const normalizedExplicitType = String(explicitType || '').trim();
-            if (['press-release', 'pr-full-feature', 'expert-article'].includes(normalizedExplicitType)) {
-                return normalizedExplicitType;
-            }
-            const sourceState = state && typeof state === 'object' ? state : {};
-            const selectedProfiles = Array.isArray(sourceState.selectedPrProfiles)
-                ? sourceState.selectedPrProfiles
-                : (Array.isArray(this.selectedPrProfiles) ? this.selectedPrProfiles : []);
-            const prArticleState = sourceState.prArticle && typeof sourceState.prArticle === 'object'
-                ? sourceState.prArticle
-                : (this.prArticle || {});
-            const prSubjectState = sourceState.prSubjectData && typeof sourceState.prSubjectData === 'object'
-                ? sourceState.prSubjectData
-                : (this.prSubjectData || {});
-
-            const hasPrProfiles = selectedProfiles.length > 0;
-            const hasPrMainSubject = !!Number(prArticleState?.main_subject_id || 0);
-            const hasPrSubjectState = Object.values(prSubjectState || {}).some((subjectState) => {
-                const normalizedSubjectState = subjectState && typeof subjectState === 'object' ? subjectState : {};
-                return !!normalizedSubjectState.loaded
-                    || (Array.isArray(normalizedSubjectState.fields) && normalizedSubjectState.fields.length > 0)
-                    || (Array.isArray(normalizedSubjectState.relations) && normalizedSubjectState.relations.length > 0)
-                    || (Array.isArray(normalizedSubjectState.photos) && normalizedSubjectState.photos.length > 0)
-                    || (Array.isArray(normalizedSubjectState.googleDocs) && normalizedSubjectState.googleDocs.length > 0)
-                    || (normalizedSubjectState.selectedEntries && Object.keys(normalizedSubjectState.selectedEntries).length > 0);
-            });
-
-            if (!(hasPrProfiles || hasPrMainSubject || hasPrSubjectState)) {
-                return normalizedExplicitType;
-            }
-
-            if (normalizedExplicitType === 'press-release') {
-                return normalizedExplicitType;
-            }
-
-            if (['pr-full-feature', 'expert-article'].includes(normalizedExplicitType)) {
-                return normalizedExplicitType;
-            }
-
-            const looksLikeExpertArticle = !!String(prArticleState?.subject_position || '').trim()
-                || String(prArticleState?.feature_photo_mode || '').trim() === 'inline_only';
-
-            return looksLikeExpertArticle ? 'expert-article' : 'pr-full-feature';
         },
 
         syncPrArticleForCurrentArticleType({ force = false } = {}) {
@@ -786,8 +681,8 @@
                 if (force || !this.prArticle.quote_count || this.prArticle.quote_count < 3) {
                     this.prArticle.quote_count = 4;
                 }
-                if (!['article', 'keywords', 'url', 'none'].includes(this.prArticle.expert_source_mode)) {
-                    this.prArticle.expert_source_mode = 'article';
+                if (!['keywords', 'url', 'none'].includes(this.prArticle.expert_source_mode)) {
+                    this.prArticle.expert_source_mode = 'keywords';
                 }
                 if (!['featured_and_inline', 'inline_only'].includes(this.prArticle.feature_photo_mode)) {
                     this.prArticle.feature_photo_mode = 'featured_and_inline';
@@ -798,8 +693,8 @@
                 if (force || !this.prArticle.quote_count || this.prArticle.quote_count > 3) {
                     this.prArticle.quote_count = 2;
                 }
-                if (!['article', 'keywords', 'url', 'none'].includes(this.prArticle.expert_source_mode)) {
-                    this.prArticle.expert_source_mode = 'article';
+                if (!['keywords', 'url', 'none'].includes(this.prArticle.expert_source_mode)) {
+                    this.prArticle.expert_source_mode = 'keywords';
                 }
                 this.prArticle.include_subject_name_in_title = this.prArticle.include_subject_name_in_title !== false;
                 this.prArticle.feature_photo_mode = 'featured_and_inline';
@@ -807,24 +702,6 @@
 
             if (!this.prArticle.inline_photo_target || this.prArticle.inline_photo_target < 2) {
                 this.prArticle.inline_photo_target = 3;
-            }
-
-            if (this.isPrArticleMode() && Array.isArray(this.selectedPrProfiles)) {
-                this.selectedPrProfiles.forEach((profile) => {
-                    const profileId = String(profile?.id || '').trim();
-                    if (!profileId) return;
-                    const state = this.prSubjectData?.[profileId] || {};
-                    const needsInitialLoad = !state.loaded;
-                    if (needsInitialLoad && !state._metadataRefreshRequested) {
-                        state._metadataRefreshRequested = true;
-                        Promise.resolve(this.loadProfileData(profile, { preserveSelections: true, skipSave: true }))
-                            .finally(() => {
-                                if (this.prSubjectData?.[profileId]) {
-                                    this.prSubjectData[profileId]._metadataRefreshRequested = false;
-                                }
-                            });
-                    }
-                });
             }
         },
 
@@ -836,49 +713,6 @@
                 return polish ? 'expert-article-polish' : 'expert-article-spin';
             }
             return null;
-        },
-
-        ensurePrValidationErrors() {
-            if (!this.prValidationErrors || typeof this.prValidationErrors !== 'object') {
-                this.prValidationErrors = {};
-            }
-            return this.prValidationErrors;
-        },
-
-        clearPrValidationError(field) {
-            const state = this.ensurePrValidationErrors();
-            if (state[field]) {
-                delete state[field];
-            }
-        },
-
-        clearAllPrValidationErrors() {
-            this.prValidationErrors = {};
-        },
-
-        setPrValidationError(field, active = true) {
-            const state = this.ensurePrValidationErrors();
-            if (active) {
-                state[field] = true;
-                return;
-            }
-            delete state[field];
-        },
-
-        prFieldHasError(field) {
-            return !!this.prValidationErrors?.[field];
-        },
-
-        prInputBorderClass(field) {
-            return this.prFieldHasError(field)
-                ? 'border border-red-400 ring-2 ring-red-100 focus:ring-red-200 focus:border-red-400'
-                : 'border border-gray-300 focus:ring-2 focus:ring-blue-400 focus:border-blue-400';
-        },
-
-        prCardBorderClass(field) {
-            return this.prFieldHasError(field)
-                ? 'border-red-300 bg-red-50/40 ring-1 ring-red-100'
-                : 'border-gray-200 bg-white';
         },
 
         currentWorkflowPromptSlug(polish = false) {
@@ -1262,8 +1096,6 @@
                 driveCount: drive.length,
                 driveAvailable: !!pd.driveUrl,
                 driveLoaded: drive.length > 0,
-                driveField: String(pd.driveField || '').trim(),
-                driveUrl: String(pd.driveUrl || '').trim(),
                 inlineSelectedCount: selectedInline.length,
                 directFields,
                 featuredLabel: featuredPhoto ? this.prFriendlyPhotoLabel(profile || {}, featuredPhoto, 1) : '',
@@ -1441,162 +1273,6 @@
             return table || field || 'Notion';
         },
 
-        escapePipelineHtml(value = '') {
-            return String(value ?? '')
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
-        },
-
-        linkifyPipelineText(value = '') {
-            const escaped = this.escapePipelineHtml(value || '');
-            return escaped
-                .replace(/(https?:\/\/[^\s<&]+)/g, (url) => {
-                    const safeUrl = this.escapePipelineHtml(url);
-                    return '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 break-all underline decoration-blue-200 underline-offset-2">' + safeUrl + '<svg class="w-3 h-3 flex-shrink-0 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>';
-                })
-                .replace(/\n/g, '<br>');
-        },
-
-        linkedValueHtml(value = '') {
-            if (value === null || typeof value === 'undefined' || value === '') {
-                return '';
-            }
-
-            if (typeof value === 'string') {
-                return this.linkifyPipelineText(value);
-            }
-
-            try {
-                return this.linkifyPipelineText(JSON.stringify(value));
-            } catch (error) {
-                return this.linkifyPipelineText(String(value));
-            }
-        },
-
-        extractGoogleDriveFileId(candidate = '') {
-            const raw = String(candidate || '').trim();
-            if (!raw) return '';
-
-            try {
-                const parsed = new URL(raw, window.location.origin);
-                const directId = parsed.searchParams.get('id');
-                if (directId) return directId;
-                const match = parsed.pathname.match(/\/d\/([A-Za-z0-9_-]+)/i) || parsed.pathname.match(/\/file\/d\/([A-Za-z0-9_-]+)/i);
-                if (match && match[1]) return match[1];
-            } catch (error) {
-                const match = raw.match(/[?&]id=([A-Za-z0-9_-]+)/i) || raw.match(/\/d\/([A-Za-z0-9_-]+)/i);
-                if (match && match[1]) return match[1];
-            }
-
-            return '';
-        },
-
-        extractGoogleDriveResourceKey(candidate = '') {
-            const raw = String(candidate || '').trim();
-            if (!raw) return '';
-
-            try {
-                const parsed = new URL(raw, window.location.origin);
-                return parsed.searchParams.get('resourcekey') || parsed.searchParams.get('resourceKey') || '';
-            } catch (error) {
-                const match = raw.match(/[?&]resourcekey=([^&]+)/i) || raw.match(/[?&]resourceKey=([^&]+)/i);
-                return match?.[1] || '';
-            }
-        },
-
-        stableGoogleDrivePreviewUrl(...candidates) {
-            for (const candidate of candidates.flat()) {
-                const fileId = this.extractGoogleDriveFileId(candidate || '');
-                if (fileId) {
-                    const resourceKey = this.extractGoogleDriveResourceKey(candidate || '');
-                    return 'https://lh3.googleusercontent.com/d/' + encodeURIComponent(fileId) + '=w1600' + (resourceKey ? '?resourcekey=' + encodeURIComponent(resourceKey) : '');
-                }
-            }
-
-            return '';
-        },
-
-        prSelectedContextEntries() {
-            const selected = [];
-
-            for (const profile of (this.selectedPrProfiles || [])) {
-                const pd = this.prSubjectData?.[profile.id];
-                if (!pd?.relations?.length) continue;
-
-                const selectedIds = new Set(
-                    Object.keys(pd.selectedEntries || {}).filter((id) => pd.selectedEntries?.[id]).map((id) => String(id))
-                );
-                if (!selectedIds.size) continue;
-
-                for (const rel of pd.relations) {
-                    for (const entry of (rel.entries || [])) {
-                        if (!selectedIds.has(String(entry?.id ?? ''))) continue;
-                        selected.push({
-                            profile,
-                            relation: rel,
-                            entry,
-                        });
-                    }
-                }
-            }
-
-            return selected;
-        },
-
-        hasSelectedPrContextEntries() {
-            return this.prSelectedContextEntries().length > 0;
-        },
-
-        prContextUrlFromEntry(entry = {}) {
-            const detail = entry?.detail?.properties || {};
-            const candidates = [
-                entry?.url,
-                detail['URL'],
-                detail['Live Link/s'],
-                detail['Link'],
-                detail['Website'],
-                detail['Article Draft'],
-                detail['Draft URL'],
-                detail['Photos'],
-            ];
-            for (const candidate of candidates) {
-                const match = String(candidate || '').match(/https?:\/\/[^\s"]+/i);
-                if (match?.[0]) {
-                    return match[0];
-                }
-            }
-            return '';
-        },
-
-        currentPrContextStatusLabel() {
-            if (this.hasSelectedPrContextEntries()) {
-                return this.prSelectedContextEntries().length + ' Notion article(s) selected';
-            }
-            if (this.prArticle?.expert_context_extracted?.title) {
-                return 'External article imported';
-            }
-            if (String(this.prArticle?.expert_context_url || '').trim()) {
-                return 'External article ready to import';
-            }
-            return 'Context article required';
-        },
-
-        async usePrContextArticle(article = {}) {
-            const url = String(article?.url || '').trim();
-            if (!url) {
-                this.showNotification('error', 'This article does not have a usable URL.');
-                return false;
-            }
-            this.prArticle.expert_source_mode = 'article';
-            this.prArticle.expert_context_url = url;
-            this.clearPrValidationError('context_article');
-            this.savePipelineState();
-            return this.importPrArticleContextUrl();
-        },
-
         prProfilePhotoUrl(photo = {}) {
             return this.toAbsoluteMediaUrl(photo?.webContentLink || photo?.webViewLink || photo?.thumbnailLink || photo?.url || '');
         },
@@ -1615,42 +1291,18 @@
 
         prPhotoSourceLabel(photo = {}, driveUrl = '') {
             return this.prProfilePhotoSource(photo, driveUrl) === 'notion-drive'
-                ? 'Google Drive folder media'
-                : 'Direct Notion photo field';
+                ? 'Google Drive gallery'
+                : 'Direct Notion field';
         },
 
         prPhotoOriginAuditLabel(profile = {}, photo = {}, driveUrl = '') {
             if (!photo) return '';
             if (this.prProfilePhotoSource(photo, driveUrl) === 'notion-drive') {
-                const driveField = String(photo?.drive_field || this.prSubjectData?.[profile?.id]?.driveField || '').trim();
-                return driveField ? `Google Drive folder • ${driveField}` : 'Google Drive folder';
+                return 'Google Drive gallery';
             }
             const fieldLabel = this.prPhotoFieldLabel(photo);
             const tableLabel = this.notionTableLabelForProfile(profile);
             return fieldLabel ? `${tableLabel} > ${fieldLabel}` : `${tableLabel} direct photo`;
-        },
-
-        prPhotoSourceMetaHtml(profile = {}, photo = {}, state = null) {
-            const resolvedState = state && typeof state === 'object' ? state : (this.prSubjectData?.[profile?.id] || {});
-            const driveUrl = String(photo?.drive_folder_url || resolvedState?.driveUrl || '').trim();
-            const driveField = String(photo?.drive_field || resolvedState?.driveField || '').trim();
-
-            if (this.prProfilePhotoSource(photo, driveUrl) === 'notion-drive') {
-                const segments = [];
-                if (driveField) {
-                    segments.push('<span class="inline-flex items-center gap-1"><span class="text-gray-500">Notion field:</span><span class="font-medium text-gray-700">' + this.escapePipelineHtml(driveField) + '</span></span>');
-                }
-                if (driveUrl) {
-                    const safeUrl = this.escapePipelineHtml(driveUrl);
-                    segments.push('<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 underline decoration-blue-200 underline-offset-2">Open Drive folder<svg class="w-3 h-3 flex-shrink-0 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>');
-                }
-                return segments.join('<span class="text-gray-300">•</span>');
-            }
-
-            const fieldLabel = this.prPhotoFieldLabel(photo);
-            return fieldLabel
-                ? '<span class="inline-flex items-center gap-1"><span class="text-gray-500">Notion field:</span><span class="font-medium text-gray-700">' + this.escapePipelineHtml(fieldLabel) + '</span></span>'
-                : '';
         },
 
         prPhotoIsAvatarLike(photo = {}, driveUrl = '') {
@@ -1780,24 +1432,7 @@
 
         normalizePrPhotoCandidate(photo = {}) {
             const raw = JSON.parse(JSON.stringify(photo || {}));
-            const previewUrl = this.normalizeHostedMediaUrl(raw.preview_url
-                || raw.thumbnails?.['1280']
-                || raw.thumbnails?.['640']
-                || raw.quality_urls?.thumb_1280
-                || raw.quality_urls?.thumb_640
-                || this.stableGoogleDrivePreviewUrl(
-                    raw.thumbnail_url,
-                    raw.preview_url,
-                    raw.thumbnailLink,
-                    raw.webContentLink,
-                    raw.webViewLink,
-                    raw.url,
-                    raw.url_large,
-                    raw.url_full
-                )
-                || raw.thumbnail_url
-                || raw.thumbnailLink);
-            const url = this.normalizeHostedMediaUrl(raw.webContentLink || raw.webViewLink || raw.url || raw.url_large || raw.url_full || previewUrl || '');
+            const url = raw.webContentLink || raw.webViewLink || raw.thumbnailLink || raw.url || raw.url_large || raw.url_full || '';
             if (!url) {
                 return null;
             }
@@ -1820,19 +1455,10 @@
                 name: raw.name || raw.label || raw.property || 'Subject Photo',
                 property: raw.property || raw.source_field || raw.field || '',
                 source: inferredSource,
-                source_url: raw.source_url || raw.drive_folder_url || raw.webViewLink || raw.webContentLink || raw.thumbnailLink || url,
-                drive_field: raw.drive_field || raw.source_field || raw.field || '',
-                drive_folder_url: raw.drive_folder_url || '',
-                thumbnail_url: this.normalizeHostedMediaUrl(previewUrl || url),
-                preview_url: this.normalizeHostedMediaUrl(previewUrl || url),
-                thumbnailLink: this.normalizeHostedMediaUrl(previewUrl || raw.thumbnailLink || url),
-                thumbnails: raw.thumbnails || {},
-                quality_urls: raw.quality_urls || {},
-                resourceKey: raw.resourceKey || raw.resource_key || '',
-                webContentLink: this.normalizeHostedMediaUrl(raw.webContentLink || url),
-                webViewLink: this.normalizeHostedMediaUrl(raw.webViewLink || raw.webContentLink || raw.source_url || url),
-                download_url: this.normalizeHostedMediaUrl(raw.download_url || raw.webContentLink || raw.url || previewUrl || ''),
-                view_url: this.normalizeHostedMediaUrl(raw.view_url || raw.webViewLink || raw.source_url || raw.url || previewUrl || ''),
+                source_url: raw.source_url || raw.webViewLink || raw.webContentLink || raw.thumbnailLink || url,
+                thumbnailLink: raw.thumbnailLink || url,
+                webContentLink: raw.webContentLink || url,
+                webViewLink: raw.webViewLink || url,
                 width: Number(raw.width || 0),
                 height: Number(raw.height || 0),
             };
@@ -1856,13 +1482,6 @@
 
         sanitizePrSubjectDataForPersistence(subjectData = {}) {
             const normalized = {};
-            const cloneStateValue = (value) => {
-                try {
-                    return JSON.parse(JSON.stringify(value ?? null));
-                } catch (error) {
-                    return value ?? null;
-                }
-            };
 
             Object.entries(subjectData || {}).forEach(([profileId, rawState]) => {
                 const state = rawState && typeof rawState === 'object' ? rawState : {};
@@ -1880,11 +1499,8 @@
                     loaded: !!state.loaded || fields.length > 0 || relations.length > 0 || photos.length > 0,
                     fields,
                     driveUrl: this.looksLikeGoogleDriveFolderUrl(state.driveUrl || '') ? String(state.driveUrl) : '',
-                    driveField: String(state.driveField || ''),
                     photos,
-                    googleDocs: Array.isArray(state.googleDocs)
-                        ? state.googleDocs.map((doc) => cloneStateValue(doc)).filter(Boolean)
-                        : [],
+                    googleDocs: [],
                     loadingGoogleDocs: false,
                     loadingPhotos: false,
                     notionUrl: String(state.notionUrl || ''),
@@ -1900,14 +1516,10 @@
                         entries: (Array.isArray(rel?.entries) ? rel.entries : []).map((entry) => ({
                             id: entry?.id ?? null,
                             title: entry?.title || '',
-                            preview: entry?.preview && typeof entry.preview === 'object' ? cloneStateValue(entry.preview) : {},
+                            preview: entry?.preview && typeof entry.preview === 'object' ? entry.preview : {},
                             open: !!entry?.open,
                             loading: false,
-                            loadingGoogleDocs: false,
-                            detail: entry?.detail && typeof entry.detail === 'object' ? cloneStateValue(entry.detail) : null,
-                            google_docs: Array.isArray(entry?.google_docs)
-                                ? entry.google_docs.map((doc) => cloneStateValue(doc)).filter(Boolean)
-                                : [],
+                            detail: null,
                         })),
                     })).filter((rel) => rel.slug),
                     selectedEntries: this.normalizePrSelectionMap(state.selectedEntries || {}),
@@ -2105,12 +1717,10 @@
                 loaded: !!existing.loaded,
                 fields: Array.isArray(existing.fields) ? existing.fields : [],
                 driveUrl: this.looksLikeGoogleDriveFolderUrl(existing.driveUrl || '') ? String(existing.driveUrl) : '',
-                driveField: String(existing.driveField || ''),
                 photos: this.mergePrPhotoCollections([], existing.photos || []),
                 googleDocs: Array.isArray(existing.googleDocs) ? existing.googleDocs : [],
                 loadingGoogleDocs: false,
                 loadingPhotos: false,
-                _metadataRefreshRequested: !!existing._metadataRefreshRequested,
                 notionUrl: String(existing.notionUrl || ''),
                 relations: Array.isArray(existing.relations) ? existing.relations : [],
                 selectedEntries,
@@ -2141,11 +1751,9 @@
                     if (data.success) {
                         if (data.fields?.length) pd.fields = data.fields;
                         pd.driveUrl = this.looksLikeGoogleDriveFolderUrl(data.profile?.drive_url || '') ? data.profile.drive_url : '';
-                        pd.driveField = String(data.profile?.drive_field || '');
                         pd.notionUrl = data.profile?.notion_url || pd.notionUrl;
                         pd.photos = this.mergePrPhotoCollections(pd.photos, data.profile?.photo_candidates || []);
-                        const hasDrivePhotos = (pd.photos || []).some((photo) => this.prProfilePhotoSource(photo, pd.driveUrl) === 'notion-drive');
-                        if (pd.driveUrl && !hasDrivePhotos) {
+                        if (pd.driveUrl) {
                             await this.loadProfilePhotos(normalizedProfile);
                         } else {
                             this.bootstrapPrPhotoSelection(normalizedProfile.id);
@@ -2240,9 +1848,6 @@
             if (!pd.selectedEntries) pd.selectedEntries = {};
             pd.selectedEntries[entryId] = !pd.selectedEntries[entryId];
             if (pd.selectedEntries[entryId]) {
-                this.clearPrValidationError('context_article');
-            }
-            if (pd.selectedEntries[entryId]) {
                 for (const rel of (pd.relations || [])) {
                     const entry = (rel.entries || []).find((candidate) => String(candidate.id) === String(entryId));
                     if (entry && !entry.detail && !entry.loading) {
@@ -2327,18 +1932,16 @@
         },
 
         prPhotoAssetFromDrivePhoto(profile, photo) {
-            const url = this.normalizeHostedMediaUrl(photo.webContentLink || photo.download_url || photo.webViewLink || photo.url || photo.thumbnailLink || '');
-            const thumb = this.normalizeHostedMediaUrl(photo.preview_url || photo.thumbnail_url || this.stableGoogleDrivePreviewUrl(photo.thumbnailLink, photo.webContentLink, photo.webViewLink, photo.url, photo.source_url, photo.download_url) || photo.thumbnailLink || url);
+            const url = photo.webContentLink || photo.webViewLink || photo.thumbnailLink || '';
+            const thumb = photo.thumbnailLink || photo.webContentLink || photo.webViewLink || url;
             const inferredSource = this.prProfilePhotoSource(photo, this.prSubjectData?.[profile?.id]?.driveUrl || '');
-            const sourceUrl = photo.source_url || photo.drive_folder_url || photo.webViewLink || url;
+            const sourceUrl = photo.source_url || photo.webViewLink || url;
             const label = this.prFriendlyPhotoLabel(profile, photo, 1);
             return {
                 id: photo.id || null,
                 source: inferredSource,
                 source_url: sourceUrl,
                 source_field: this.prPhotoFieldLabel(photo),
-                drive_field: photo.drive_field || this.prSubjectData?.[profile?.id]?.driveField || '',
-                drive_folder_url: photo.drive_folder_url || this.prSubjectData?.[profile?.id]?.driveUrl || '',
                 url,
                 url_thumb: thumb,
                 url_large: url,
@@ -2546,7 +2149,6 @@
 
             this.syncPrArticleForCurrentArticleType();
             const mainSubject = this.selectedPrProfiles.find(p => Number(p.id) === Number(this.prArticle.main_subject_id || 0)) || this.selectedPrProfiles[0] || null;
-            const selectedContextEntries = this.prSelectedContextEntries();
             const lines = [
                 '=== ARTICLE BRIEF ===',
                 'Article type: ' + (this.currentArticleType === 'pr-full-feature' ? 'PR Full Feature' : 'Expert Article'),
@@ -2577,18 +2179,13 @@
             }
 
             const contextLabel = this.currentArticleType === 'expert-article' ? 'TOPIC CONTEXT' : 'EDITORIAL CONTEXT';
-            if (selectedContextEntries.length > 0) {
-                lines.push(`\n=== SELECTED NOTION ${contextLabel} ARTICLES ===`);
-                selectedContextEntries.forEach(({ relation, entry }) => {
-                    lines.push('- ' + (entry?.title || 'Untitled context article') + ' [' + (relation?.label || 'Related Content') + ']');
-                    const entryUrl = this.prContextUrlFromEntry(entry);
-                    if (entryUrl) {
-                        lines.push('  URL: ' + entryUrl);
-                    }
-                });
+            if (this.prArticle.expert_source_mode === 'keywords' && this.prArticle.expert_keywords) {
+                lines.push(`\n=== ${contextLabel} SEARCH TERMS ===\n` + this.prArticle.expert_keywords);
+            } else if (this.prArticle.expert_source_mode === 'keywords' && usePlaceholder) {
+                lines.push(`\n=== ${contextLabel} SEARCH TERMS ===\n[Context search terms will be inserted here]`);
             }
 
-            if (this.prArticle.expert_context_extracted?.text) {
+            if (this.prArticle.expert_source_mode === 'url' && this.prArticle.expert_context_extracted?.text) {
                 const imported = this.prArticle.expert_context_extracted;
                 lines.push(`\n=== IMPORTED ${contextLabel} ARTICLE ===`);
                 lines.push('Title: ' + (imported.title || ''));
@@ -2602,7 +2199,7 @@
                 if (imported.text) {
                     lines.push("\n" + imported.text.substring(0, 12000));
                 }
-            } else if (!selectedContextEntries.length && usePlaceholder) {
+            } else if (this.prArticle.expert_source_mode === 'url' && usePlaceholder) {
                 lines.push(`\n=== IMPORTED ${contextLabel} ARTICLE ===\n[Imported article context will be inserted here]`);
             }
 
@@ -2648,7 +2245,13 @@
                 parts.push('');
             }
 
-            if (this.prArticle.expert_context_extracted?.text) {
+            if (this.prArticle.expert_source_mode === 'keywords' && this.prArticle.expert_keywords) {
+                parts.push('=== CONTEXT SEARCH TERMS ===');
+                parts.push(this.prArticle.expert_keywords);
+                parts.push('');
+            }
+
+            if (this.prArticle.expert_source_mode === 'url' && this.prArticle.expert_context_extracted?.text) {
                 parts.push('=== IMPORTED CONTEXT ARTICLE ===');
                 parts.push('Title: ' + (this.prArticle.expert_context_extracted.title || ''));
                 parts.push('URL: ' + (this.prArticle.expert_context_extracted.url || this.prArticle.expert_context_url || ''));
@@ -2793,62 +2396,44 @@
         },
 
         async continuePrArticleStep3() {
-            this.clearAllPrValidationErrors();
-            const missing = [];
             if (!this.selectedPrProfiles.length) {
-                this.setPrValidationError('subjects');
-                missing.push('subjects');
+                this.showNotification('error', 'Select at least one Notion subject before continuing.');
+                return;
             }
 
             this.syncPrArticleForCurrentArticleType();
 
+            const effectiveMode = String(this.prArticle.expert_source_mode || '').trim() || (String(this.prArticle.expert_context_url || '').trim() ? 'url' : (String(this.prArticle.expert_keywords || '').trim() ? 'keywords' : 'none'));
             const hasFocusInstructions = !!String(this.prArticle.focus_instructions || '').trim();
-            const hasMainSubject = !!Number(this.prArticle.main_subject_id || this.selectedPrProfiles[0]?.id || 0);
-            const hasSelectedContext = this.hasSelectedPrContextEntries();
+            const hasContextKeywords = effectiveMode !== 'url' && !!String(this.prArticle.expert_keywords || '').trim();
             const hasContextUrl = !!String(this.prArticle.expert_context_url || '').trim();
             const hasImportedContext = !!String(this.prArticle.expert_context_extracted?.text || '').trim();
-            const hasContextPackage = hasSelectedContext || hasImportedContext || hasContextUrl;
-
-            if (this.selectedPrProfiles.length && !hasMainSubject) {
-                this.setPrValidationError('main_subject');
-                missing.push('main_subject');
-            }
+            const hasContextPackage = effectiveMode === 'url' ? (hasContextUrl || hasImportedContext) : hasContextKeywords;
 
             if (this.currentArticleType === 'pr-full-feature') {
                 if (!hasContextPackage) {
-                    this.setPrValidationError('context_article');
-                    missing.push('context_article');
+                    this.showNotification('error', 'Add editorial context terms or import a context article before continuing.');
+                    return;
                 }
                 if (!hasFocusInstructions) {
-                    this.setPrValidationError('focus_instructions');
-                    missing.push('focus_instructions');
+                    this.showNotification('error', 'Tell the writer how to use that context in Article Focus Instructions before continuing.');
+                    return;
                 }
             }
 
-            if (this.currentArticleType === 'expert-article') {
-                if (!hasContextPackage) {
-                    this.setPrValidationError('context_article');
-                    missing.push('context_article');
-                }
-                if (!hasFocusInstructions) {
-                    this.setPrValidationError('focus_instructions');
-                    missing.push('focus_instructions');
-                }
-            }
-
-            if (missing.length > 0) {
-                this.showNotification('error', 'Complete the required PR article fields before continuing.');
+            if (this.currentArticleType === 'expert-article' && !hasContextPackage) {
+                this.showNotification('error', 'Add topic context terms or import a context article before continuing.');
                 return;
             }
 
             await this.ensurePrSubjectContextReady();
 
             if ((this.currentArticleType === 'expert-article' || this.currentArticleType === 'pr-full-feature')
+                && this.prArticle.expert_source_mode === 'url'
                 && this.prArticle.expert_context_url
                 && !this.prArticle.expert_context_extracted?.text) {
                 const imported = await this.importPrArticleContextUrl(true);
                 if (!imported) {
-                    this.setPrValidationError('context_article');
                     return;
                 }
             }
@@ -2862,41 +2447,18 @@
 
         async loadProfilePhotos(profile) {
             const data = this.prSubjectData[profile.id];
-            if (!data || !data.driveUrl || data.loadingPhotos) return;
+            if (!data || !data.driveUrl) return;
             data.loadingPhotos = true;
             try {
                 const resp = await fetch('{{ route("notion.profile.fetch-photos") }}', {
                     method: 'POST',
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
-                    body: JSON.stringify({ drive_url: data.driveUrl, drive_field: data.driveField || '' }),
+                    body: JSON.stringify({ drive_url: data.driveUrl }),
                 });
                 const result = await resp.json();
                 if (result.success) {
-                    const drivePhotos = (result.photos || []).map((photo) => ({
-                        ...photo,
-                        source: photo?.source || 'notion-drive',
-                        drive_field: photo?.drive_field || data.driveField || '',
-                        drive_folder_url: data.driveUrl || '',
-                        resourceKey: photo?.resourceKey || photo?.resource_key || '',
-                        thumbnail_url: photo?.preview_url
-                            || photo?.thumbnails?.['1280']
-                            || photo?.thumbnails?.['640']
-                            || photo?.quality_urls?.thumb_1280
-                            || photo?.quality_urls?.thumb_640
-                            || this.stableGoogleDrivePreviewUrl(photo?.thumbnailLink, photo?.webContentLink, photo?.webViewLink, photo?.url, photo?.resourceKey, photo?.resource_key)
-                            || photo?.thumbnail_url,
-                        preview_url: photo?.preview_url
-                            || photo?.thumbnails?.['1280']
-                            || photo?.thumbnails?.['640']
-                            || photo?.quality_urls?.thumb_1280
-                            || photo?.quality_urls?.thumb_640
-                            || this.stableGoogleDrivePreviewUrl(photo?.thumbnailLink, photo?.webContentLink, photo?.webViewLink, photo?.url, photo?.resourceKey, photo?.resource_key)
-                            || photo?.thumbnail_url,
-                        download_url: photo?.download_url || photo?.webContentLink || photo?.url || '',
-                        view_url: photo?.view_url || photo?.webViewLink || photo?.webContentLink || photo?.url || '',
-                    }));
-                    const basePhotos = (data.photos || []).filter((photo) => this.prProfilePhotoSource(photo, data.driveUrl) !== 'notion-drive');
-                    data.photos = this.mergePrPhotoCollections(basePhotos, drivePhotos);
+                    const drivePhotos = (result.photos || []).map((photo) => ({ ...photo, source: photo?.source || 'notion-drive' }));
+                    data.photos = this.mergePrPhotoCollections(data.photos, drivePhotos);
                     this.bootstrapPrPhotoSelection(profile.id);
                     this.hydratePrArticleSelectedMedia();
                     this.savePipelineState();

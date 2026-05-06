@@ -172,7 +172,6 @@
             </a>
         </div>
     </div>
-
     {{-- ═══════════════════ TWO-COLUMN BODY ═══════════════════ --}}
     <div class="v2-body">
 
@@ -419,9 +418,10 @@
                             <div class="v2-action-bar">
                                 <button type="button" @click="goToStep(3)" class="v2-btn v2-btn-secondary">Back</button>
                                 <button type="button"
-                                        @click="completeStep(4); openStep(5); goToStep(5)"
+                                        @click="handleStepFourPrimaryAction()"
+                                        :disabled="checking || (!hasVerifiedSourceArticles() && sources.length === 0)"
                                         class="v2-btn v2-btn-primary">
-                                    Continue to AI Spin
+                                    <span x-text="stepFourPrimaryLabel()"></span>
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                                 </button>
                             </div>
@@ -454,8 +454,9 @@
                                 <button type="button" @click="goToStep(4)" class="v2-btn v2-btn-secondary">Back</button>
                                 <button type="button"
                                         @click="completeStep(5); openStep(6); goToStep(6)"
+                                        :disabled="!hasSpinOutput()"
                                         class="v2-btn v2-btn-primary">
-                                    Continue to Create Article
+                                    <span x-text="hasSpinOutput() ? 'Continue to Create Article' : 'Spin Article First'"></span>
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                                 </button>
                             </div>

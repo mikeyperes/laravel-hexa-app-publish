@@ -6,14 +6,13 @@ use hexa_core\Forms\Runtime\FormRuntimeService;
 use hexa_core\Http\Controllers\Controller;
 use hexa_core\Models\Setting;
 use hexa_core\Models\User;
-use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
+use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Models\PublishSite;
 use hexa_app_publish\Discovery\Links\Health\Services\LinkHealthService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Discovery\Sources\Health\Services\SourceAccessStrategyService;
 use hexa_app_publish\Publishing\Campaigns\Services\NewsDiscoveryOptionsService;
-use hexa_app_publish\Publishing\Access\Services\PublishAccessService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleGenerationService;
 use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Publishing\Articles\Services\MetadataGenerationService;
@@ -37,8 +36,6 @@ use hexa_app_publish\Publishing\Pipeline\Http\Requests\PreviewPromptRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\PublishToWordpressRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\SaveDraftRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\SpinRequest;
-use hexa_core\Services\EmailService;
-use hexa_core\TemplateCenter\Models\EmailTemplate;
 use hexa_app_publish\Support\AiModelCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -62,7 +59,6 @@ class PipelineController extends Controller
     protected PipelineWorkflowRegistry $workflowRegistry;
     protected ArticleActivityService $articleActivity;
     protected FormRuntimeService $formRuntime;
-    protected PublishAccessService $access;
 
     /**
      * @param SourceExtractionService $sourceExtraction
@@ -74,8 +70,7 @@ class PipelineController extends Controller
         PipelineDraftSessionService $draftSession,
         PipelineWorkflowRegistry $workflowRegistry,
         ArticleActivityService $articleActivity,
-        FormRuntimeService $formRuntime,
-        PublishAccessService $access
+        FormRuntimeService $formRuntime
     )
     {
         $this->sourceExtraction = $sourceExtraction;
@@ -85,7 +80,6 @@ class PipelineController extends Controller
         $this->workflowRegistry = $workflowRegistry;
         $this->articleActivity = $articleActivity;
         $this->formRuntime = $formRuntime;
-        $this->access = $access;
     }
 
     public function index(Request $request)
@@ -113,36 +107,24 @@ class PipelineController extends Controller
                 $draft = $this->createFreshPipelineDraft();
             }
 
-            return redirect()->route(
-                request()->routeIs('publish.pipeline.legacy') ? 'publish.pipeline.legacy' : 'publish.pipeline',
-                ['id' => $draft->id]
-            );
+            return redirect()->route('publish.pipeline', ['id' => $draft->id]);
         }
 
         // Load existing draft
         $draftId = (int) $request->input('id');
-        $draft = $this->access->articleQuery($request->user())
-            ->with(['pipelineState', 'site', 'creator'])
-            ->find($draftId);
-
+        $draft = PublishArticle::with(['pipelineState', 'site', 'creator'])->find($draftId);
         if (!$draft) {
-            abort(404);
+            return redirect()->route('publish.pipeline');
         }
 
-        $sites = $this->access->siteQuery($request->user())
-            ->where('status', 'connected')
+        $sites = PublishSite::where('status', 'connected')
             ->orderBy('name')
             ->get(['id', 'name', 'url', 'status', 'default_author', 'is_press_release_source', 'last_connected_at', 'wp_username', 'connection_type', 'user_id']);
         $prSourceSites = $sites->where('is_press_release_source', true)->values();
         $draftSite = $draft->site;
-        $restrictedWorkspaceUser = $this->access->isRestrictedWorkspaceUser($request->user());
         if ($draftSite && !$sites->contains('id', $draftSite->id)) {
-            if ($restrictedWorkspaceUser) {
-                $draftSite = null;
-            } else {
-                $sites->push($draftSite);
-                $sites = $sites->sortBy('name')->values();
-            }
+            $sites->push($draftSite);
+            $sites = $sites->sortBy('name')->values();
         }
         $newsCategories = $this->newsOptions->newsCategories();
         $aiCatalog = app(AiModelCatalog::class);
@@ -246,39 +228,6 @@ class PipelineController extends Controller
             ];
         }
 
-        $publicationNotificationConfig = config('hws-publish.publication_notification', []);
-        $publicationNotificationTemplateModels = EmailTemplate::query()
-            ->where('use_case', 'publication_notification')
-            ->where('is_active', true)
-            ->orderByDesc('is_primary')
-            ->orderBy('name')
-            ->get(['id', 'name', 'is_primary', 'from_name', 'from_email', 'reply_to', 'cc', 'subject', 'body', 'smtp_account_id']);
-        $primaryPublicationNotificationTemplate = $publicationNotificationTemplateModels->firstWhere('is_primary', true)
-            ?: $publicationNotificationTemplateModels->first();
-        $publicationNotificationTemplates = $publicationNotificationTemplateModels
-            ->map(fn (EmailTemplate $template) => [
-                'id' => (int) $template->id,
-                'name' => (string) $template->name,
-                'is_primary' => (bool) $template->is_primary,
-                'from_name' => (string) ($template->from_name ?? ''),
-                'from_email' => (string) ($template->from_email ?? ''),
-                'reply_to' => (string) ($template->reply_to ?? ''),
-                'cc' => (string) ($template->cc ?? ''),
-                'subject' => (string) ($template->subject ?? ''),
-                'body' => (string) ($template->body ?? ''),
-                'smtp_account_id' => $template->smtp_account_id ? (int) $template->smtp_account_id : null,
-            ])
-            ->values();
-        $publicationNotificationDefaults = [
-            'template_id' => $primaryPublicationNotificationTemplate?->id ? (string) $primaryPublicationNotificationTemplate->id : '',
-            'from_name' => (string) (($primaryPublicationNotificationTemplate?->from_name) ?: ($publicationNotificationConfig['default_from_name'] ?? 'Scale My Publication')),
-            'from_email' => (string) (($primaryPublicationNotificationTemplate?->from_email) ?: ($publicationNotificationConfig['default_from_email'] ?? 'no-reply@scalemypublication.com')),
-            'reply_to' => (string) (($primaryPublicationNotificationTemplate?->reply_to) ?: ($publicationNotificationConfig['default_reply_to'] ?? '')),
-            'cc' => (string) (($primaryPublicationNotificationTemplate?->cc) ?: ($publicationNotificationConfig['default_cc'] ?? '')),
-            'subject' => (string) (($primaryPublicationNotificationTemplate?->subject) ?: ($publicationNotificationConfig['default_subject'] ?? 'Your article is now live on {publication_name}')),
-            'body' => (string) (($primaryPublicationNotificationTemplate?->body) ?: ($publicationNotificationConfig['default_body'] ?? '')),
-        ];
-
         return view('app-publish::publishing.pipeline.index', [
             'sites'             => $sites,
             'prSourceSites'     => $prSourceSites,
@@ -308,63 +257,7 @@ class PipelineController extends Controller
             'workflowDefinitions' => $this->workflowRegistry->definitions(),
             'pressReleaseDefaultState' => app(\hexa_app_publish\Publishing\Pipeline\Services\PressReleaseWorkflowService::class)->defaultState(),
             'prArticleDefaultState' => app(PrArticleWorkflowService::class)->defaultState(),
-            'publicationNotificationTemplates' => $publicationNotificationTemplates,
-            'publicationNotificationDefaults' => $publicationNotificationDefaults,
         ]);
-    }
-
-    public function sendPublicationNotification(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'draft_id' => 'required|integer|exists:publish_articles,id',
-            'template_id' => 'nullable|integer|exists:email_templates,id',
-            'to' => 'required|email|max:255',
-            'from_name' => 'nullable|string|max:255',
-            'from_email' => 'required|email|max:255',
-            'reply_to' => 'nullable|email|max:255',
-            'cc' => 'nullable|string|max:500',
-            'subject' => 'required|string|max:500',
-            'body' => 'required|string',
-        ]);
-
-        $this->access->articleQuery($request->user())->findOrFail((int) $validated['draft_id']);
-
-        $template = null;
-        if (!empty($validated['template_id'])) {
-            $template = EmailTemplate::query()
-                ->whereKey((int) $validated['template_id'])
-                ->where('use_case', 'publication_notification')
-                ->where('is_active', true)
-                ->first();
-
-            if (!$template) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'The selected publication notification template is no longer available.',
-                ], 422);
-            }
-        }
-
-        $body = trim((string) $validated['body']);
-        $bodyHtml = $body !== strip_tags($body) ? $body : nl2br(e($body));
-        $smtpAccountId = $template?->smtp_account_id ? (int) $template->smtp_account_id : null;
-
-        $result = app(EmailService::class)->send(
-            (string) $validated['to'],
-            (string) $validated['subject'],
-            $bodyHtml,
-            filled($validated['from_name'] ?? null) ? (string) $validated['from_name'] : null,
-            (string) $validated['from_email'],
-            filled($validated['reply_to'] ?? null) ? (string) $validated['reply_to'] : null,
-            filled($validated['cc'] ?? null) ? (string) $validated['cc'] : null,
-            $smtpAccountId,
-            'publication_notification'
-        );
-
-        return response()->json([
-            'success' => (bool) ($result['success'] ?? false),
-            'message' => (string) ($result['message'] ?? 'Notification send finished.'),
-        ], ($result['success'] ?? false) ? 200 : 422);
     }
 
     public function generatePhotoMeta(GeneratePhotoMetaRequest $request): JsonResponse
@@ -445,24 +338,10 @@ class PipelineController extends Controller
      */
     public function searchUsers(Request $request): JsonResponse
     {
-        $query = trim((string) $request->input('q', ''));
+        $query = $request->input('q', '');
 
         if (strlen($query) < 2) {
             return response()->json([]);
-        }
-
-        $currentUser = $request->user();
-        if ($this->access->isRestrictedWorkspaceUser($currentUser)) {
-            $matches = collect([$currentUser])
-                ->filter(fn ($user) => $user && (stripos((string) $user->name, $query) !== false || stripos((string) $user->email, $query) !== false))
-                ->map(fn ($user) => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                ])
-                ->values();
-
-            return response()->json($matches);
         }
 
         $users = User::where('name', 'like', "%{$query}%")
@@ -709,8 +588,6 @@ class PipelineController extends Controller
      */
     public function aiSearchArticles(Request $request): JsonResponse
     {
-        $startedAt = microtime(true);
-
         $request->validate([
             'topic' => 'required|string|min:3|max:500',
             'count' => 'nullable|integer|min:2|max:10',
@@ -718,8 +595,6 @@ class PipelineController extends Controller
             'draft_id' => 'nullable|integer|exists:publish_articles,id',
             'exclude_urls' => 'nullable|array|max:50',
             'exclude_urls.*' => 'string|max:2000',
-            'allow_fallback' => 'nullable|boolean',
-            'search_mode' => 'nullable|string|max:50',
         ]);
 
         $catalog = app(AiModelCatalog::class);
@@ -727,27 +602,9 @@ class PipelineController extends Controller
         $requestedSelection = $selection;
         $resolvedSelection = $catalog->resolveSearchSelection($selection);
         $model = (string) ($resolvedSelection['model'] ?? '');
-        $topic = (string) $request->input('topic');
+        $topic = $request->input('topic');
         $count = min((int) $request->input('count', 10), 10);
-        $allowFallback = $request->boolean('allow_fallback', true);
-        $searchMode = (string) $request->input('search_mode', 'source_discovery');
         $provider = $resolvedSelection['provider'] ?? null;
-        $strictPrContextSearch = $searchMode === 'pr_context';
-        $searchTopic = $strictPrContextSearch ? $this->normalizePrContextSearchTopic($topic) : $topic;
-        $searchCount = $strictPrContextSearch ? max($count + 3, 8) : $count;
-
-        if ($strictPrContextSearch) {
-            $optimizedSelection = $this->optimizedSearchSelectionForProvider($catalog, $provider);
-            if ($optimizedSelection) {
-                $selection = $optimizedSelection;
-                $resolvedSelection = $catalog->resolveSearchSelection($selection);
-                $provider = $resolvedSelection['provider'] ?? $provider;
-                $model = (string) ($resolvedSelection['model'] ?? $model);
-            }
-        }
-
-        $allowAiFallback = $allowFallback && !$strictPrContextSearch;
-        $allowDeterministicBackfill = $allowFallback || $strictPrContextSearch;
         $excludeUrls = array_filter((array) $request->input('exclude_urls', []));
         $draft = $request->filled('draft_id')
             ? $this->resolveAuthorizedDraft((int) $request->input('draft_id'))
@@ -761,435 +618,122 @@ class PipelineController extends Controller
             . "Return ONLY a JSON array of objects with keys: url, title, description. No other text.";
 
         if (!empty($excludeUrls)) {
-            $excludeList = implode("
-", array_slice($excludeUrls, 0, 20));
-            $searchPrompt .= "
-
-Do NOT include any of these URLs or articles from the same pages — they were already found:
-{$excludeList}";
+            $excludeList = implode("\n", array_slice($excludeUrls, 0, 20));
+            $searchPrompt .= "\n\nDo NOT include any of these URLs or articles from the same pages — they were already found:\n{$excludeList}";
         }
 
-        try {
-            if ($strictPrContextSearch) {
-                $fastResult = $this->fallbackArticleSearch($searchTopic, (int) max(2, min(10, $count ?: 5)), 'Reliable context article search was used for PR article context.');
-                $verifiedFast = ['articles' => [], 'stats' => ['checked' => 0, 'kept' => 0, 'discarded' => 0]];
+        $searchService = app(\hexa_app_publish\Discovery\Sources\Services\AiOptimizedArticleSearchService::class);
+        $result = $searchService->search($topic, $count, $selection);
+        $aiFallbackUsed = false;
+        $aiFallbackFrom = null;
 
-                if (($fastResult['success'] ?? false) && !empty((array) data_get($fastResult, 'data.articles', []))) {
-                    $verifiedFast = $this->verifyArticleCandidates(
-                        (array) data_get($fastResult, 'data.articles', []),
-                        (int) max(2, min(10, $count ?: 5)),
-                        array_values($excludeUrls),
-                        $searchTopic,
-                        $searchMode
-                    );
-
-                    $articles = $verifiedFast['articles'];
-                    if (!empty($articles)) {
-                        $backendLabel = data_get($fastResult, 'data.search_backend_label') ?: 'Reliable news search';
-                        $backend = data_get($fastResult, 'data.search_backend') ?: 'deterministic_news_fallback';
-
-                        $this->articleActivity->record($draft, [
-                            'activity_group' => 'search:' . md5($topic),
-                            'activity_type' => 'search',
-                            'stage' => 'discovery',
-                            'substage' => 'complete_pr_context_fast_path',
-                            'status' => 'success',
-                            'provider' => 'reliable_context_search',
-                            'model' => $selection,
-                            'agent' => 'pipeline-search',
-                            'method' => 'ai_search_articles',
-                            'success' => true,
-                            'message' => count($articles) . ' live context article(s) verified.',
-                            'request_payload' => [
-                                'topic' => $topic,
-                                'count' => $count,
-                                'exclude_urls' => array_values($excludeUrls),
-                                'search_mode' => $searchMode,
-                            ],
-                            'response_payload' => [
-                                'articles' => array_slice($articles, 0, $count),
-                                'search_backend' => $backend,
-                                'search_backend_label' => $backendLabel,
-                                'verification' => [
-                                    'primary' => $verifiedFast['stats'],
-                                    'fallback' => ['checked' => 0, 'kept' => 0, 'discarded' => 0],
-                                ],
-                                'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
-                            ],
-                        ]);
-
-                        return response()->json([
-                            'success' => true,
-                            'message' => count($articles) . ' live context article(s) verified.',
-                            'data' => [
-                                'articles' => array_slice($articles, 0, $count),
-                                'model' => $selection,
-                                'usage' => [],
-                                'cost' => null,
-                                'search_backend' => $backend,
-                                'search_backend_label' => $backendLabel,
-                                'fallback_reason' => data_get($fastResult, 'data.fallback_reason'),
-                                'ai_fallback_used' => false,
-                                'ai_fallback_from' => $requestedSelection,
-                                'verification' => [
-                                    'primary' => $verifiedFast['stats'],
-                                    'fallback' => ['checked' => 0, 'kept' => 0, 'discarded' => 0],
-                                ],
-                                'fallback_enabled' => true,
-                                'search_mode' => $searchMode,
-                                'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
-                            ],
-                        ]);
-                    }
+        if (!(bool) ($result['success'] ?? false) || empty((array) data_get($result, 'data.articles', []))) {
+            foreach (['optimized:grok', 'optimized:openai', 'grok-3-mini', 'gpt-4o-mini'] as $fallbackSelection) {
+                if ($fallbackSelection === $selection) {
+                    continue;
                 }
 
-                return response()->json([
-                    'success' => false,
-                    'message' => (string) (($fastResult['message'] ?? null) ?: 'No live context articles were found.'),
-                    'data' => [
-                        'verification' => [
-                            'primary' => $verifiedFast['stats'],
-                            'fallback' => ['checked' => 0, 'kept' => 0, 'discarded' => 0],
-                        ],
-                        'fallback_enabled' => true,
-                        'search_mode' => $searchMode,
-                        'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
-                    ],
-                ]);
-            }
-
-            $searchService = app(\hexa_app_publish\Discovery\Sources\Services\AiOptimizedArticleSearchService::class);
-            $result = $searchService->search($searchTopic, $searchCount, $selection);
-            $aiFallbackUsed = false;
-            $aiFallbackFrom = null;
-
-            if ($allowAiFallback && (!(bool) ($result['success'] ?? false) || empty((array) data_get($result, 'data.articles', [])))) {
-                foreach (['optimized:grok', 'optimized:openai', 'grok-3-mini', 'gpt-4o-mini'] as $fallbackSelection) {
-                    if ($fallbackSelection === $selection) {
-                        continue;
-                    }
-
-                    $candidateResult = $searchService->search($searchTopic, $searchCount, $fallbackSelection);
-                    if ((bool) ($candidateResult['success'] ?? false) && !empty((array) data_get($candidateResult, 'data.articles', []))) {
-                        $aiFallbackUsed = true;
-                        $aiFallbackFrom = $selection;
-                        $selection = $fallbackSelection;
-                        $resolvedSelection = $catalog->resolveSearchSelection($selection);
-                        $provider = $resolvedSelection['provider'] ?? $provider;
-                        $model = (string) ($resolvedSelection['model'] ?? $model);
-                        $result = $candidateResult;
-                        break;
-                    }
-                }
-            }
-
-            if ($result['success'] && !empty($result['data']['usage'])) {
-                $usedModel = $result['data']['model'] ?? $model;
-                if ($usedModel) {
-                    $result['data']['cost'] = round($catalog->calculateCost($usedModel, (array) $result['data']['usage']), 6);
-                }
-            }
-
-            $verifiedPrimary = $this->verifyArticleCandidates((array) data_get($result, 'data.articles', []), $count, [], $searchTopic, $searchMode);
-            $articles = $verifiedPrimary['articles'];
-
-            if ($allowAiFallback && empty($articles) && !$aiFallbackUsed) {
-                foreach (['optimized:grok', 'optimized:openai', 'grok-3-mini', 'gpt-4o-mini'] as $fallbackSelection) {
-                    if ($fallbackSelection === $selection) {
-                        continue;
-                    }
-
-                    $candidateResult = $searchService->search($searchTopic, $searchCount, $fallbackSelection);
-                    if (!(bool) ($candidateResult['success'] ?? false) || empty((array) data_get($candidateResult, 'data.articles', []))) {
-                        continue;
-                    }
-
-                    $candidateVerified = $this->verifyArticleCandidates((array) data_get($candidateResult, 'data.articles', []), $count, [], $searchTopic, $searchMode);
-                    if (empty($candidateVerified['articles'])) {
-                        continue;
-                    }
-
+                $candidateResult = $searchService->search($topic, $count, $fallbackSelection);
+                if ((bool) ($candidateResult['success'] ?? false) && !empty((array) data_get($candidateResult, 'data.articles', []))) {
                     $aiFallbackUsed = true;
-                    $aiFallbackFrom = $requestedSelection;
+                    $aiFallbackFrom = $selection;
                     $selection = $fallbackSelection;
                     $resolvedSelection = $catalog->resolveSearchSelection($selection);
                     $provider = $resolvedSelection['provider'] ?? $provider;
                     $model = (string) ($resolvedSelection['model'] ?? $model);
                     $result = $candidateResult;
-                    $verifiedPrimary = $candidateVerified;
-                    $articles = $candidateVerified['articles'];
-
-                    if ($result['success'] && !empty($result['data']['usage'])) {
-                        $usedModel = $result['data']['model'] ?? $model;
-                        if ($usedModel) {
-                            $result['data']['cost'] = round($catalog->calculateCost($usedModel, (array) $result['data']['usage']), 6);
-                        }
-                    }
-
                     break;
                 }
             }
+        }
 
-            $fallbackStats = ['checked' => 0, 'kept' => 0, 'discarded' => 0];
-            $fallbackResult = null;
-            $fallbackUsed = false;
+        if ($result['success'] && !empty($result['data']['usage'])) {
+            $usedModel = $result['data']['model'] ?? $model;
+            if ($usedModel) {
+                $result['data']['cost'] = round($catalog->calculateCost($usedModel, (array) $result['data']['usage']), 6);
+            }
+        }
 
-            if ($allowDeterministicBackfill && count($articles) < $count) {
-                $fallbackReason = (!$result['success'] || empty(data_get($result, 'data.articles')))
-                    ? (string) ($result['message'] ?? 'AI article search failed.')
-                    : 'AI article search returned dead, duplicate, or non-canonical URLs.';
+        $verifiedPrimary = $this->verifyArticleCandidates((array) data_get($result, 'data.articles', []), $count, [], $topic);
+        $articles = $verifiedPrimary['articles'];
 
-                $fallbackResult = $this->fallbackArticleSearch($searchTopic, (int) $count, $fallbackReason);
+        if (empty($articles) && !$aiFallbackUsed) {
+            foreach (['optimized:grok', 'optimized:openai', 'grok-3-mini', 'gpt-4o-mini'] as $fallbackSelection) {
+                if ($fallbackSelection === $selection) {
+                    continue;
+                }
 
-                if ($fallbackResult['success']) {
-                    $verifiedFallback = $this->verifyArticleCandidates(
-                        (array) data_get($fallbackResult, 'data.articles', []),
-                        $count - count($articles),
-                        array_column($articles, 'url'),
-                        $searchTopic,
-                        $searchMode
-                    );
+                $candidateResult = $searchService->search($topic, $count, $fallbackSelection);
+                if (!(bool) ($candidateResult['success'] ?? false) || empty((array) data_get($candidateResult, 'data.articles', []))) {
+                    continue;
+                }
 
-                    $fallbackStats = $verifiedFallback['stats'];
-                    if (!empty($verifiedFallback['articles'])) {
-                        $articles = array_merge($articles, $verifiedFallback['articles']);
-                        $fallbackUsed = true;
+                $candidateVerified = $this->verifyArticleCandidates((array) data_get($candidateResult, 'data.articles', []), $count, [], $topic);
+                if (empty($candidateVerified['articles'])) {
+                    continue;
+                }
+
+                $aiFallbackUsed = true;
+                $aiFallbackFrom = $requestedSelection;
+                $selection = $fallbackSelection;
+                $resolvedSelection = $catalog->resolveSearchSelection($selection);
+                $provider = $resolvedSelection['provider'] ?? $provider;
+                $model = (string) ($resolvedSelection['model'] ?? $model);
+                $result = $candidateResult;
+                $verifiedPrimary = $candidateVerified;
+                $articles = $candidateVerified['articles'];
+
+                if ($result['success'] && !empty($result['data']['usage'])) {
+                    $usedModel = $result['data']['model'] ?? $model;
+                    if ($usedModel) {
+                        $result['data']['cost'] = round($catalog->calculateCost($usedModel, (array) $result['data']['usage']), 6);
                     }
                 }
+
+                break;
             }
+        }
 
-            if (empty($articles)) {
-                $this->articleActivity->record($draft, [
-                    'activity_group' => 'search:' . md5($topic),
-                    'activity_type' => 'search',
-                    'stage' => 'discovery',
-                    'substage' => 'failed',
-                    'status' => 'failed',
-                    'provider' => $provider,
-                    'model' => $model ?: $selection,
-                    'agent' => 'pipeline-search',
-                    'method' => 'ai_search_articles',
-                    'success' => false,
-                    'message' => (string) (($fallbackResult['message'] ?? null) ?: ($result['message'] ?? 'No live articles found.')),
-                    'request_payload' => [
-                        'topic' => $topic,
-                        'count' => $count,
-                        'selection' => $selection,
-                        'exclude_urls' => array_values($excludeUrls),
-                        'prompt' => $searchPrompt,
-                    ],
-                    'response_payload' => [
-                        'verification' => [
-                            'primary' => $verifiedPrimary['stats'],
-                            'fallback' => $fallbackStats,
-                        ],
-                        'backend' => data_get($result, 'data.search_backend', $provider),
-                    ],
-                ]);
-                $failureMessage = 'Search found candidates, but none verified as live, on-topic article URLs.';
-                if (!$result['success']) {
-                    $failureMessage = (string) ($result['message'] ?? $failureMessage);
-                }
-                if ($fallbackResult && (bool) ($fallbackResult['success'] ?? false)) {
-                    $failureMessage .= ' Deterministic news fallback also found candidates, but none survived live verification.';
-                } elseif ($fallbackResult) {
-                    $failureMessage = (string) (($fallbackResult['message'] ?? null) ?: $failureMessage);
-                }
+        $fallbackStats = ['checked' => 0, 'kept' => 0, 'discarded' => 0];
+        $fallbackResult = null;
+        $fallbackUsed = false;
 
-                return response()->json([
-                    'success' => false,
-                    'message' => $failureMessage,
-                    'data' => [
-                        'verification' => [
-                            'primary' => $verifiedPrimary['stats'],
-                            'fallback' => $fallbackStats,
-                        ],
-                        'fallback_enabled' => $allowDeterministicBackfill,
-                        'search_mode' => $searchMode,
-                        'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
-                    ],
-                ]);
+        if (count($articles) < $count) {
+            $fallbackReason = (!$result['success'] || empty(data_get($result, 'data.articles')))
+                ? (string) ($result['message'] ?? 'AI article search failed.')
+                : 'AI article search returned dead, duplicate, or non-canonical URLs.';
+
+            $fallbackResult = $this->fallbackArticleSearch($topic, (int) $count, $fallbackReason);
+
+            if ($fallbackResult['success']) {
+                $verifiedFallback = $this->verifyArticleCandidates(
+                    (array) data_get($fallbackResult, 'data.articles', []),
+                    $count - count($articles),
+                    array_column($articles, 'url'),
+                    $topic
+                );
+
+                $fallbackStats = $verifiedFallback['stats'];
+                if (!empty($verifiedFallback['articles'])) {
+                    $articles = array_merge($articles, $verifiedFallback['articles']);
+                    $fallbackUsed = true;
+                }
             }
+        }
 
-            $backendLabels = array_values(array_filter([
-                data_get($result, 'data.search_backend_label') ?: ucfirst((string) $provider),
-                $fallbackUsed ? (data_get($fallbackResult, 'data.search_backend_label') ?: 'News providers') : null,
-            ]));
-
+        if (empty($articles)) {
             $this->articleActivity->record($draft, [
                 'activity_group' => 'search:' . md5($topic),
                 'activity_type' => 'search',
                 'stage' => 'discovery',
-                'substage' => $fallbackUsed ? 'complete_with_fallback' : 'complete',
-                'status' => 'success',
-                'provider' => $provider,
-                'model' => $model ?: $selection,
-                'agent' => 'pipeline-search',
-                'method' => 'ai_search_articles',
-                'success' => true,
-                'message' => count($articles) . ' live article(s) verified.',
-                'request_payload' => [
-                    'topic' => $topic,
-                    'count' => $count,
-                    'exclude_urls' => array_values($excludeUrls),
-                    'prompt' => $searchPrompt,
-                ],
-                'response_payload' => [
-                    'articles' => array_slice($articles, 0, $count),
-                    'search_backend' => $fallbackUsed ? 'hybrid_live_verification' : (data_get($result, 'data.search_backend') ?: $provider),
-                    'search_backend_label' => !empty($backendLabels) ? implode(' + ', $backendLabels) : 'Live article verification',
-                    'fallback_reason' => $fallbackUsed ? data_get($fallbackResult, 'data.fallback_reason') : null,
-                    'ai_fallback_used' => $aiFallbackUsed,
-                    'ai_fallback_from' => $aiFallbackFrom,
-                    'verification' => [
-                        'primary' => $verifiedPrimary['stats'],
-                        'fallback' => $fallbackStats,
-                    ],
-                    'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
-                ],
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => count($articles) . ' live article(s) verified.',
-                'data' => [
-                    'articles' => array_slice($articles, 0, $count),
-                    'model' => data_get($result, 'data.model', $model),
-                    'usage' => (array) data_get($result, 'data.usage', []),
-                    'cost' => data_get($result, 'data.cost'),
-                    'search_backend' => $fallbackUsed ? 'hybrid_live_verification' : (data_get($result, 'data.search_backend') ?: $provider),
-                    'search_backend_label' => !empty($backendLabels) ? implode(' + ', $backendLabels) : 'Live article verification',
-                    'fallback_reason' => $fallbackUsed ? data_get($fallbackResult, 'data.fallback_reason') : null,
-                    'ai_fallback_used' => $aiFallbackUsed,
-                    'ai_fallback_from' => $aiFallbackFrom,
-                    'verification' => [
-                        'primary' => $verifiedPrimary['stats'],
-                        'fallback' => $fallbackStats,
-                    ],
-                    'fallback_enabled' => $allowDeterministicBackfill,
-                    'search_mode' => $searchMode,
-                    'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
-                ],
-            ]);
-        } catch (\Throwable $e) {
-            $exceptionMessage = trim((string) $e->getMessage()) !== '' ? trim((string) $e->getMessage()) : get_class($e);
-            hexaLogError('publish.pipeline.ai_search', 'PipelineController::aiSearchArticles exception', [
-                'topic' => $topic,
-                'count' => $count,
-                'selection' => $selection,
-                'requested_selection' => $requestedSelection,
-                'provider' => $provider,
-                'model' => $model,
-                'draft_id' => $draft?->id ?: ($request->input('draft_id') ?: null),
-                'exclude_urls' => array_values($excludeUrls),
-                'error' => $exceptionMessage,
-                'exception' => get_class($e),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-            ]);
-
-            $fallbackStats = ['checked' => 0, 'kept' => 0, 'discarded' => 0];
-            $fallbackMessage = 'AI article search failed: ' . $exceptionMessage;
-
-            if ($allowFallback) {
-                try {
-                    $fallbackResult = $this->fallbackArticleSearch($searchTopic, (int) max(2, min(10, $count ?: 5)), $fallbackMessage);
-                    if (($fallbackResult['success'] ?? false) && !empty((array) data_get($fallbackResult, 'data.articles', []))) {
-                        $verifiedFallback = $this->verifyArticleCandidates(
-                            (array) data_get($fallbackResult, 'data.articles', []),
-                            (int) max(2, min(10, $count ?: 5)),
-                            array_values($excludeUrls),
-                            $searchTopic,
-                            $searchMode
-                        );
-                        $fallbackStats = $verifiedFallback['stats'];
-                        $articles = $verifiedFallback['articles'];
-
-                        if (!empty($articles)) {
-                            $backendLabel = data_get($fallbackResult, 'data.search_backend_label') ?: 'News providers';
-                            $backend = data_get($fallbackResult, 'data.search_backend') ?: 'deterministic_news_fallback';
-
-                            $this->articleActivity->record($draft, [
-                            'activity_group' => 'search:' . md5($topic),
-                            'activity_type' => 'search',
-                            'stage' => 'discovery',
-                            'substage' => 'complete_with_exception_fallback',
-                            'status' => 'success',
-                            'provider' => $provider ?: 'fallback',
-                            'model' => $model ?: $selection,
-                            'agent' => 'pipeline-search',
-                            'method' => 'ai_search_articles',
-                            'success' => true,
-                            'message' => count($articles) . ' live article(s) verified after AI search exception.',
-                            'request_payload' => [
-                                'topic' => $topic,
-                                'count' => $count,
-                                'selection' => $selection,
-                                'exclude_urls' => array_values($excludeUrls),
-                                'prompt' => $searchPrompt,
-                            ],
-                            'response_payload' => [
-                                'articles' => array_slice($articles, 0, $count),
-                                'search_backend' => $backend,
-                                'search_backend_label' => $backendLabel,
-                                'fallback_reason' => $fallbackMessage,
-                                'exception' => get_class($e),
-                                'verification' => [
-                                    'primary' => ['checked' => 0, 'kept' => 0, 'discarded' => 0],
-                                    'fallback' => $fallbackStats,
-                                ],
-                                'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
-                            ],
-                        ]);
-
-                            return response()->json([
-                                'success' => true,
-                                'message' => count($articles) . ' live article(s) verified via fallback.',
-                                'data' => [
-                                    'articles' => array_slice($articles, 0, $count),
-                                    'model' => $model ?: $selection,
-                                    'usage' => [],
-                                    'cost' => null,
-                                    'search_backend' => $backend,
-                                    'search_backend_label' => $backendLabel,
-                                    'fallback_reason' => $fallbackMessage,
-                                    'ai_fallback_used' => false,
-                                    'ai_fallback_from' => $requestedSelection,
-                                    'fallback_enabled' => $allowDeterministicBackfill,
-                                    'search_mode' => $searchMode,
-                                    'verification' => [
-                                        'primary' => ['checked' => 0, 'kept' => 0, 'discarded' => 0],
-                                        'fallback' => $fallbackStats,
-                                    ],
-                                    'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
-                                ],
-                            ]);
-                        }
-                    }
-                } catch (\Throwable $fallbackException) {
-                    hexaLogError('publish.pipeline.ai_search', 'PipelineController::aiSearchArticles fallback exception', [
-                        'topic' => $topic,
-                        'count' => $count,
-                        'error' => $fallbackException->getMessage(),
-                        'exception' => get_class($fallbackException),
-                        'file' => $fallbackException->getFile(),
-                        'line' => $fallbackException->getLine(),
-                    ]);
-                }
-            }
-
-            $this->articleActivity->record($draft, [
-                'activity_group' => 'search:' . md5($topic),
-                'activity_type' => 'search',
-                'stage' => 'discovery',
-                'substage' => 'exception',
+                'substage' => 'failed',
                 'status' => 'failed',
                 'provider' => $provider,
                 'model' => $model ?: $selection,
                 'agent' => 'pipeline-search',
                 'method' => 'ai_search_articles',
                 'success' => false,
-                'message' => $fallbackMessage,
+                'message' => (string) (($fallbackResult['message'] ?? null) ?: ($result['message'] ?? 'No live articles found.')),
                 'request_payload' => [
                     'topic' => $topic,
                     'count' => $count,
@@ -1198,29 +742,91 @@ Do NOT include any of these URLs or articles from the same pages — they were a
                     'prompt' => $searchPrompt,
                 ],
                 'response_payload' => [
-                    'exception' => get_class($e),
                     'verification' => [
-                        'primary' => ['checked' => 0, 'kept' => 0, 'discarded' => 0],
+                        'primary' => $verifiedPrimary['stats'],
                         'fallback' => $fallbackStats,
                     ],
-                    'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
+                    'backend' => data_get($result, 'data.search_backend', $provider),
                 ],
             ]);
+            $failureMessage = 'Search found candidates, but none verified as live, on-topic article URLs.';
+            if (!$result['success']) {
+                $failureMessage = (string) ($result['message'] ?? $failureMessage);
+            }
+            if ($fallbackResult && (bool) ($fallbackResult['success'] ?? false)) {
+                $failureMessage .= ' Deterministic news fallback also found candidates, but none survived live verification.';
+            } elseif ($fallbackResult) {
+                $failureMessage = (string) (($fallbackResult['message'] ?? null) ?: $failureMessage);
+            }
 
             return response()->json([
                 'success' => false,
-                'message' => $fallbackMessage,
+                'message' => $failureMessage,
                 'data' => [
                     'verification' => [
-                        'primary' => ['checked' => 0, 'kept' => 0, 'discarded' => 0],
+                        'primary' => $verifiedPrimary['stats'],
                         'fallback' => $fallbackStats,
                     ],
-                    'fallback_enabled' => $allowFallback,
-                    'search_mode' => $searchMode,
-                    'elapsed_seconds' => round(microtime(true) - $startedAt, 3),
                 ],
             ]);
         }
+
+        $backendLabels = array_values(array_filter([
+            data_get($result, 'data.search_backend_label') ?: ucfirst($provider),
+            $fallbackUsed ? (data_get($fallbackResult, 'data.search_backend_label') ?: 'News providers') : null,
+        ]));
+
+        $this->articleActivity->record($draft, [
+            'activity_group' => 'search:' . md5($topic),
+            'activity_type' => 'search',
+            'stage' => 'discovery',
+            'substage' => $fallbackUsed ? 'complete_with_fallback' : 'complete',
+            'status' => 'success',
+            'provider' => $provider,
+            'model' => $model ?: $selection,
+            'agent' => 'pipeline-search',
+            'method' => 'ai_search_articles',
+            'success' => true,
+            'message' => count($articles) . ' live article(s) verified.',
+            'request_payload' => [
+                'topic' => $topic,
+                'count' => $count,
+                'exclude_urls' => array_values($excludeUrls),
+                'prompt' => $searchPrompt,
+            ],
+            'response_payload' => [
+                'articles' => array_slice($articles, 0, $count),
+                'search_backend' => $fallbackUsed ? 'hybrid_live_verification' : (data_get($result, 'data.search_backend') ?: $provider),
+                'search_backend_label' => !empty($backendLabels) ? implode(' + ', $backendLabels) : 'Live article verification',
+                'fallback_reason' => $fallbackUsed ? data_get($fallbackResult, 'data.fallback_reason') : null,
+                'ai_fallback_used' => $aiFallbackUsed,
+                'ai_fallback_from' => $aiFallbackFrom,
+                'verification' => [
+                    'primary' => $verifiedPrimary['stats'],
+                    'fallback' => $fallbackStats,
+                ],
+            ],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => count($articles) . ' live article(s) verified.',
+            'data' => [
+                'articles' => array_slice($articles, 0, $count),
+                'model' => data_get($result, 'data.model', $model),
+                'usage' => (array) data_get($result, 'data.usage', []),
+                'cost' => data_get($result, 'data.cost'),
+                'search_backend' => $fallbackUsed ? 'hybrid_live_verification' : (data_get($result, 'data.search_backend') ?: $provider),
+                'search_backend_label' => !empty($backendLabels) ? implode(' + ', $backendLabels) : 'Live article verification',
+                'fallback_reason' => $fallbackUsed ? data_get($fallbackResult, 'data.fallback_reason') : null,
+                'ai_fallback_used' => $aiFallbackUsed,
+                'ai_fallback_from' => $aiFallbackFrom,
+                'verification' => [
+                    'primary' => $verifiedPrimary['stats'],
+                    'fallback' => $fallbackStats,
+                ],
+            ],
+        ]);
     }
 
     /**
@@ -1262,56 +868,6 @@ Do NOT include any of these URLs or articles from the same pages — they were a
         ];
     }
 
-    private function optimizedSearchSelectionForProvider(AiModelCatalog $catalog, ?string $provider): ?string
-    {
-        $provider = trim((string) ($provider ?? ''));
-        if ($provider === '') {
-            return null;
-        }
-
-        $selection = 'optimized:' . $provider;
-        $resolved = $catalog->resolveSearchSelection($selection);
-
-        return (($resolved['provider'] ?? null) === $provider && !empty($resolved['model']))
-            ? $selection
-            : null;
-    }
-
-    private function normalizePrContextSearchTopic(string $topic): string
-    {
-        $clean = trim(preg_replace('/\s+/', ' ', $topic));
-        if ($clean === '') {
-            return '';
-        }
-
-        $genericTerms = [
-            'news',
-            'article',
-            'articles',
-            'story',
-            'stories',
-            'context',
-            'latest',
-            'recent',
-            'online',
-        ];
-
-        $parts = preg_split('/\s+/', $clean, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        $filtered = [];
-
-        foreach ($parts as $part) {
-            $normalized = $this->normalizeSearchToken($part);
-            if ($normalized === '' || in_array($normalized, $genericTerms, true)) {
-                continue;
-            }
-            $filtered[] = $part;
-        }
-
-        $rebuilt = trim(implode(' ', $filtered));
-
-        return $rebuilt !== '' ? $rebuilt : $clean;
-    }
-
     /**
      * @param array<int, string> $providers
      */
@@ -1334,19 +890,13 @@ Do NOT include any of these URLs or articles from the same pages — they were a
      * @param array<int, string> $excludeUrls
      * @return array{articles: array<int, array<string, mixed>>, stats: array{checked: int, kept: int, discarded: int}}
      */
-    private function verifyArticleCandidates(
-        array $articles,
-        int $limit,
-        array $excludeUrls = [],
-        ?string $topic = null,
-        string $searchMode = 'source_discovery'
-    ): array
+    private function verifyArticleCandidates(array $articles, int $limit, array $excludeUrls = [], ?string $topic = null): array
     {
         return app(LinkHealthService::class)->verifyArticleCandidates(
             $articles,
             $limit,
             $excludeUrls,
-            fn (array $candidate): bool => $this->matchesSearchTopic($candidate, $topic, $searchMode)
+            fn (array $candidate): bool => $this->matchesSearchTopic($candidate, $topic)
                 && !app(SourceAccessStrategyService::class)->shouldBlockDiscoveryCandidate((string) ($candidate['url'] ?? '')),
             'pipeline'
         );
@@ -1355,9 +905,9 @@ Do NOT include any of these URLs or articles from the same pages — they were a
     /**
      * @param array<string, mixed> $candidate
      */
-    private function matchesSearchTopic(array $candidate, ?string $topic, string $searchMode = 'source_discovery'): bool
+    private function matchesSearchTopic(array $candidate, ?string $topic): bool
     {
-        if ($this->isLowValueSearchCandidate($candidate, $searchMode)) {
+        if ($this->isLowValueSearchCandidate($candidate)) {
             return false;
         }
 
@@ -1365,17 +915,10 @@ Do NOT include any of these URLs or articles from the same pages — they were a
             return true;
         }
 
-        $topicTokens = $this->searchTopicTokens($topic);
-        if ($topicTokens === []) {
-            return true;
-        }
-
-        $requiredTerms = array_slice($topicTokens, 0, min(4, count($topicTokens)));
-        $minimumRequiredHits = $searchMode === 'pr_context'
-            ? 1
-            : (count($requiredTerms) >= 3 ? 2 : 1);
-        $textTokens = $this->searchTopicTokens(trim((string) (($candidate['title'] ?? '') . ' ' . ($candidate['description'] ?? '') . ' ' . ($candidate['url'] ?? ''))));
-        $topicHits = count(array_intersect($textTokens, $topicTokens));
+        $requiredTerms = array_slice($this->searchTopicTokens($topic), 0, 3);
+        $minimumRequiredHits = count($requiredTerms) >= 3 ? 2 : 1;
+        $textTokens = $this->searchTopicTokens(trim((string) (($candidate['title'] ?? '') . ' ' . ($candidate['description'] ?? ''))));
+        $topicHits = count(array_intersect($textTokens, $this->searchTopicTokens($topic)));
         $requiredHits = count(array_intersect($textTokens, $requiredTerms));
 
         if ($requiredTerms !== [] && $requiredHits < $minimumRequiredHits) {
@@ -1388,13 +931,9 @@ Do NOT include any of these URLs or articles from the same pages — they were a
     /**
      * @param array<string, mixed> $candidate
      */
-    private function isLowValueSearchCandidate(array $candidate, string $searchMode = 'source_discovery'): bool
+    private function isLowValueSearchCandidate(array $candidate): bool
     {
         $text = Str::lower(trim((string) (($candidate['title'] ?? '') . ' ' . ($candidate['description'] ?? '') . ' ' . ($candidate['url'] ?? ''))));
-
-        if ($searchMode === 'pr_context') {
-            return (bool) preg_match('/(\bsponsored\b|\badvertorial\b)/', $text);
-        }
 
         return (bool) preg_match('/(\btop\s+\d+\b|\bpower\s+list\b|\bblog\s+posts\b|\bhow\s+to\b|\bguide\b|\btips\b|\broundup\b|\bsponsored\b|\badvertorial\b|\baward\b|\bawards\b|\/awards?\/|\/lists?\/)/', $text);
     }
@@ -1408,58 +947,15 @@ Do NOT include any of these URLs or articles from the same pages — they were a
         $text = preg_replace('/[^a-z0-9\s]+/', ' ', $text);
         $parts = preg_split('/\s+/', (string) $text, -1, PREG_SPLIT_NO_EMPTY) ?: [];
         $stopWords = [
-            'about', 'after', 'amid', 'analysis', 'article', 'articles', 'be', 'because', 'before', 'being', 'between', 'breaking',
+            'about', 'after', 'amid', 'analysis', 'article', 'articles', 'because', 'before', 'between', 'breaking',
             'commentary', 'could', 'daily', 'editorial', 'feature', 'from', 'have', 'into', 'latest', 'more', 'most',
             'news', 'over', 'reuters', 'says', 'show', 'story', 'than', 'that', 'their', 'them', 'these', 'they',
-            'this', 'those', 'through', 'today', 'under', 'update', 'updates', 'what', 'when', 'where', 'which', 'while', 'with',
+            'this', 'those', 'today', 'under', 'update', 'updates', 'what', 'when', 'where', 'which', 'while', 'with',
         ];
 
-        $normalized = [];
-        foreach ($parts as $part) {
-            $token = $this->normalizeSearchToken($part);
-            if (strlen($token) < 3 || in_array($token, $stopWords, true)) {
-                continue;
-            }
-            $normalized[] = $token;
-        }
-
-        return array_values(array_unique($normalized));
-    }
-
-    private function normalizeSearchToken(string $token): string
-    {
-        $token = Str::lower(trim($token));
-        if ($token === '') {
-            return '';
-        }
-
-        $directMap = [
-            'traveler' => 'travel',
-            'travellers' => 'travel',
-            'travelers' => 'travel',
-            'travelling' => 'travel',
-            'traveling' => 'travel',
-            'entrepreneurs' => 'entrepreneur',
-            'founders' => 'founder',
-        ];
-
-        if (array_key_exists($token, $directMap)) {
-            return $directMap[$token];
-        }
-
-        if (strlen($token) > 5 && Str::endsWith($token, 'ies')) {
-            return substr($token, 0, -3) . 'y';
-        }
-
-        if (strlen($token) > 6 && Str::endsWith($token, 'ing')) {
-            return substr($token, 0, -3);
-        }
-
-        if (strlen($token) > 4 && Str::endsWith($token, 's') && !Str::endsWith($token, 'ss')) {
-            return substr($token, 0, -1);
-        }
-
-        return $token;
+        return array_values(array_unique(array_filter($parts, static function ($part) use ($stopWords) {
+            return strlen($part) >= 3 && !in_array($part, $stopWords, true);
+        })));
     }
 
     /**
@@ -1775,6 +1271,7 @@ Do NOT include any of these URLs or articles from the same pages — they were a
     public function spin(SpinRequest $request): JsonResponse
     {
         $validated = $request->validated();
+        $startedAt = microtime(true);
 
         $result = app(ArticleGenerationService::class)->generate(
             $validated['source_texts'],
@@ -1795,13 +1292,24 @@ Do NOT include any of these URLs or articles from the same pages — they were a
         );
 
         if (!$result['success']) {
-            return response()->json(['success' => false, 'message' => $result['message']]);
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+                'diagnostics' => array_merge((array) ($result['diagnostics'] ?? []), [
+                    'controller_total_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                ]),
+                'attempted_models' => $result['attempted_models'] ?? [],
+                'timestamp_utc' => now()->utc()->format('Y-m-d H:i:s'),
+            ]);
         }
 
         return response()->json(array_merge($result, [
             'user_name'     => auth()->user()?->name ?? 'System',
             'ip'            => request()->ip(),
             'timestamp_utc' => now()->utc()->format('Y-m-d H:i:s'),
+            'diagnostics'   => array_merge((array) ($result['diagnostics'] ?? []), [
+                'controller_total_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]),
         ]));
     }
 
@@ -1835,7 +1343,7 @@ Do NOT include any of these URLs or articles from the same pages — they were a
     {
         $validated = $request->validated();
         $draft = $this->resolveAuthorizedDraft((int) $validated['draft_id']);
-        $site = $this->access->resolveSiteOrFail($request->user(), (int) $validated['site_id']);
+        $site = PublishSite::findOrFail($validated['site_id']);
         $operationService = app(PipelineOperationService::class);
         $active = $operationService->activeForArticle($draft, PublishPipelineOperation::TYPE_PREPARE);
         if ($active) {
@@ -1908,7 +1416,7 @@ Do NOT include any of these URLs or articles from the same pages — they were a
             'media_id' => 'required|integer',
         ]);
 
-        $site = $this->access->resolveSiteOrFail($request->user(), (int) $validated['site_id']);
+        $site = PublishSite::findOrFail($validated['site_id']);
         $mediaId = (int) $validated['media_id'];
 
         if ($site->connection_type === 'wptoolkit') {
@@ -1946,7 +1454,7 @@ Do NOT include any of these URLs or articles from the same pages — they were a
     {
         $validated = $request->validated();
         $draft = $this->resolveAuthorizedDraft((int) $validated['draft_id']);
-        $site = $this->access->resolveSiteOrFail($request->user(), (int) $validated['site_id']);
+        $site = PublishSite::findOrFail($validated['site_id']);
         $operationService = app(PipelineOperationService::class);
         $active = $operationService->activeForArticle($draft, PublishPipelineOperation::TYPE_PUBLISH);
         if ($active) {
@@ -2166,7 +1674,7 @@ Do NOT include any of these URLs or articles from the same pages — they were a
         ];
 
         if (!empty($validated['draft_id'])) {
-            $draft = $this->resolveAuthorizedDraft((int) $validated['draft_id']);
+            $draft = PublishArticle::findOrFail($validated['draft_id']);
             if ($conflict = $this->draftSession->conflictFor($draft, $tabId, auth()->id())) {
                 return $this->draftSessionConflictResponse($draft, $conflict, 'draft save');
             }
@@ -2451,7 +1959,9 @@ Do NOT include any of these URLs or articles from the same pages — they were a
 
     private function pipelineClientTrace(Request $request): string
     {
-        return (string) ($request->headers->get('X-Pipeline-Client-Trace') ?: '');
+        return (string) ($request->headers->get('X-Pipeline-Run-Trace')
+            ?: $request->headers->get('X-Pipeline-Client-Trace')
+            ?: '');
     }
 
     private function pipelineBootstrapPresetsForUser(int $userId): array
@@ -2775,10 +2285,15 @@ Do NOT include any of these URLs or articles from the same pages — they were a
 
     private function resolveAuthorizedDraft(int $draftId): PublishArticle
     {
+        $draft = PublishArticle::findOrFail($draftId);
         $user = auth()->user();
-        abort_unless($user, 403);
 
-        return $this->access->resolveArticleOrFail($user, $draftId);
+        abort_unless(
+            $user && ($user->isAdmin() || $draft->created_by === $user->id || $draft->user_id === $user->id),
+            403
+        );
+
+        return $draft;
     }
 
     private function createFreshPipelineDraft(): PublishArticle

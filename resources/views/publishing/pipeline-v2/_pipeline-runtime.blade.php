@@ -181,6 +181,7 @@ function publishPipeline() {
         lastAiCall: null,
         tokenUsage: null,
         spinError: '',
+        spinDiagnostics: null,
 
         // Step 8 — Publish (combined)
         syndicationCategories: [],
@@ -299,21 +300,6 @@ function publishPipeline() {
 
         // Notification
         notification: { show: false, type: 'success', message: '' },
-        saveError: '',
-        publicationNotificationTemplates: @json($publicationNotificationTemplates ?? []),
-        publicationNotificationDefaults: @json($publicationNotificationDefaults ?? []),
-        publicationNotificationShortcodes: @json(config('hws-publish.shortcodes', [])),
-        publicationNotificationTemplateId: @json(($publicationNotificationDefaults['template_id'] ?? '')),
-        publicationNotificationFromName: @json(($publicationNotificationDefaults['from_name'] ?? '')),
-        publicationNotificationFromEmail: @json(($publicationNotificationDefaults['from_email'] ?? '')),
-        publicationNotificationReplyTo: @json(($publicationNotificationDefaults['reply_to'] ?? '')),
-        publicationNotificationCc: @json(($publicationNotificationDefaults['cc'] ?? '')),
-        publicationNotificationTo: '',
-        publicationNotificationSubject: @json(($publicationNotificationDefaults['subject'] ?? '')),
-        publicationNotificationBody: @json(($publicationNotificationDefaults['body'] ?? '')),
-        publicationNotificationSending: false,
-        publicationNotificationStatus: '',
-        publicationNotificationResult: null,
         pipelineDebugEnabled: new URLSearchParams(window.location.search).get('debug') === '1'
             || localStorage.getItem('publishPipelineDebug') === 'true',
         masterActivityLog: [],
@@ -366,14 +352,6 @@ function publishPipeline() {
 
         // Flag to suppress step auto-navigation during state restore
         _restoring: false,
-
-        formatLabel(value) {
-            return String(value || '')
-                .replace(/[_-]+/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim()
-                .replace(/\w/g, (c) => c.toUpperCase());
-        },
 
         // CSRF token
         get csrfToken() {

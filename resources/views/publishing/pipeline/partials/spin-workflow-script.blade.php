@@ -22,6 +22,66 @@
             this._logActivity('spin', type, message, { debug_only: type === 'step' });
         },
 
+        _formatSpinMs(ms) {
+            const numeric = Number(ms || 0);
+            if (!Number.isFinite(numeric) || numeric <= 0) return '0ms';
+            if (numeric >= 1000) return (numeric / 1000).toFixed(1) + 's';
+            return Math.round(numeric) + 'ms';
+        },
+
+        _startSpinRequestWatchdog() {
+            this._stopSpinRequestWatchdog();
+            const startedAt = Date.now();
+            const checkpoints = [15, 30, 45, 60];
+            let checkpointIndex = 0;
+            this._spinRequestStartedAt = startedAt;
+            this._spinRequestWatchdog = setInterval(() => {
+                const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+                if (checkpointIndex < checkpoints.length && elapsedSeconds >= checkpoints[checkpointIndex]) {
+                    this._logSpin('step', 'Still waiting on ' + (this.aiModel || 'the selected model') + ' — ' + elapsedSeconds + 's elapsed.');
+                    checkpointIndex += 1;
+                }
+            }, 1000);
+        },
+
+        _stopSpinRequestWatchdog() {
+            if (this._spinRequestWatchdog) {
+                clearInterval(this._spinRequestWatchdog);
+                this._spinRequestWatchdog = null;
+            }
+            this._spinRequestStartedAt = 0;
+        },
+
+        _recordSpinDiagnostics(diagnostics, fallbackElapsedMs = 0) {
+            if (!diagnostics || typeof diagnostics !== 'object') {
+                return;
+            }
+
+            this.spinDiagnostics = diagnostics;
+
+            const totalMs = Number(diagnostics.total_ms || fallbackElapsedMs || 0);
+            const providerCallMs = Number(diagnostics.provider_call_ms || 0);
+            const promptBuildMs = Number(diagnostics.prompt_build_ms || 0);
+            const postProcessMs = Number(diagnostics.post_process_ms || 0);
+            const attempts = Array.isArray(diagnostics.attempts) ? diagnostics.attempts : [];
+
+            this._logSpin('step', 'Server timings — prompt build ' + this._formatSpinMs(promptBuildMs) + ', provider call ' + this._formatSpinMs(providerCallMs) + ', post-process ' + this._formatSpinMs(postProcessMs) + ', total ' + this._formatSpinMs(totalMs) + '.');
+
+            if (attempts.length > 0) {
+                attempts.forEach((attempt, index) => {
+                    const provider = attempt?.provider || 'unknown';
+                    const model = attempt?.model || 'unknown';
+                    const durationMs = Number(attempt?.duration_ms || 0);
+                    const status = attempt?.success ? 'success' : 'failed';
+                    const message = String(attempt?.message || '').trim();
+                    this._logSpin(
+                        attempt?.success ? 'info' : 'step',
+                        'Attempt ' + (index + 1) + ' — ' + provider + ' / ' + model + ' — ' + status + ' in ' + this._formatSpinMs(durationMs) + (message ? ' — ' + message : '')
+                    );
+                });
+            }
+        },
+
         _promptRefreshTimer: null,
         _queuePromptRefresh(reason = 'queued', force = false) {
             clearTimeout(this._promptRefreshTimer);
@@ -183,6 +243,7 @@
             this.spinning = true;
             this.spinError = '';
             this.spinLog = [];
+            this.spinDiagnostics = null;
             this._logSpin('info', 'Starting article spin...');
             this._logSpin('step', 'Model: ' + this.aiModel);
             this._logSpin('step', this.currentArticleType === 'press-release'
@@ -211,13 +272,11 @@
                 return;
             }
 
-            let timeoutId = null;
             try {
-                const controller = new AbortController();
-                timeoutId = setTimeout(() => controller.abort(new Error('Spin timed out after 180 seconds.')), 180000);
+                const requestStartedAt = Date.now();
+                this._startSpinRequestWatchdog();
                 const resp = await fetch('{{ route('publish.pipeline.spin') }}', {
                     method: 'POST',
-                    signal: controller.signal,
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         draft_id: this.draftId || null,
@@ -233,19 +292,21 @@
                         web_research: this.spinWebResearch,
                     })
                 });
-                clearTimeout(timeoutId);
-                timeoutId = null;
                 const data = await resp.json();
+                const elapsedMs = Date.now() - requestStartedAt;
+                this._stopSpinRequestWatchdog();
 
                 if (data.success) {
                     this.resetGeneratedArticleStateForSpin();
                     let nextHtml = data.html;
                     this.spunWordCount = data.word_count;
                     this.tokenUsage = data.usage;
+                    this.spinDiagnostics = data.diagnostics || null;
                     this.lastAiCall = { user_name: data.user_name, model: data.model, provider: data.provider, usage: data.usage, cost: data.cost, ip: data.ip, timestamp_utc: data.timestamp_utc };
                     this.showNotification('success', data.message);
                     this._logSpin('success', 'Article generated — ' + data.word_count + ' words');
                     this._logSpin('info', 'Model: ' + (data.model || this.aiModel) + ' | Cost: $' + (data.cost || 0).toFixed(4) + ' | Tokens: ' + ((data.usage?.input_tokens || 0) + '+' + (data.usage?.output_tokens || 0)));
+                    this._recordSpinDiagnostics(data.diagnostics, elapsedMs);
                     this.extractArticleLinks(nextHtml);
 
                     // Metadata from single prompt (titles, categories, tags)
@@ -316,7 +377,7 @@
                         this.$nextTick(() => this.hydratePrArticleSelectedMedia());
                     }
                     if (hasImportedPressReleaseAssets) {
-                        this.applyNotionPressReleaseMediaDefaults({ injectInline: true, notify: false });
+                        this.$nextTick(() => this.applyNotionPressReleaseMediaDefaults({ injectInline: true, notify: false }));
                     }
 
                     this.queueAutoSaveDraft(300);
@@ -335,17 +396,15 @@
                     }
                     this._hasSpunThisSession = true;
                 } else {
+                    this.spinDiagnostics = data.diagnostics || null;
                     this.spinError = data.message;
                     this._logSpin('error', 'Spin failed: ' + data.message);
+                    this._recordSpinDiagnostics(data.diagnostics, elapsedMs);
                 }
             } catch (e) {
-                if (timeoutId) {
-                    clearTimeout(timeoutId);
-                }
-                this.spinError = e?.name === 'AbortError'
-                    ? 'Spin timed out before the model returned a response.'
-                    : 'Network error during spinning.';
-                this._logSpin('error', (e?.name === 'AbortError' ? 'Spin timeout: ' : 'Network error: ') + (e.message || 'Request failed'));
+                this._stopSpinRequestWatchdog();
+                this.spinError = 'Network error during spinning.';
+                this._logSpin('error', 'Network error: ' + (e.message || 'Request failed'));
             }
             this.spinning = false;
         },
@@ -377,7 +436,10 @@
             if (!currentContent) return;
             this.spinning = true;
             this.spinError = '';
+            this.spinDiagnostics = null;
             try {
+                const requestStartedAt = Date.now();
+                this._startSpinRequestWatchdog();
                 const resp = await fetch('{{ route('publish.pipeline.spin') }}', {
                     method: 'POST',
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
@@ -394,26 +456,33 @@
                     })
                 });
                 const data = await resp.json();
+                const elapsedMs = Date.now() - requestStartedAt;
+                this._stopSpinRequestWatchdog();
                 if (data.success) {
                     this.spunContent = data.html;
                     this.editorContent = data.html;
                     this.spunWordCount = data.word_count;
                     this.tokenUsage = data.usage;
+                    this.spinDiagnostics = data.diagnostics || null;
                     this.setSpinEditor(data.html);
                     this.lastAiCall = { user_name: data.user_name, model: data.model, provider: data.provider, usage: data.usage, cost: data.cost, ip: data.ip, timestamp_utc: data.timestamp_utc };
                     this.spinChangeRequest = '';
                     this.showChangeInput = false;
                     this.appliedSmartEdits = [];
                     this.showNotification('success', 'Changes applied.');
+                    this._recordSpinDiagnostics(data.diagnostics, elapsedMs);
                     this.queueAutoSaveDraft(300);
                     this._hasSpunThisSession = true;
 
                     // Re-run AI detection after changes
                     this.$nextTick(() => this.runAiDetection());
                 } else {
+                    this.spinDiagnostics = data.diagnostics || null;
                     this.spinError = data.message;
+                    this._recordSpinDiagnostics(data.diagnostics, elapsedMs);
                 }
             } catch (e) {
+                this._stopSpinRequestWatchdog();
                 this.spinError = 'Network error.';
             }
             this.spinning = false;

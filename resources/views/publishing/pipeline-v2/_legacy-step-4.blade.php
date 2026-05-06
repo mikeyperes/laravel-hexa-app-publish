@@ -76,10 +76,10 @@
                         <input type="checkbox" x-model="extractAutoFallback" class="rounded border-gray-300 text-blue-600 w-3.5 h-3.5">
                         Auto-fallback
                     </label>
-                    <button @click.stop="checkAllSources()" :disabled="checking" class="bg-blue-600 text-white px-4 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1.5 ml-auto">
-                        <svg x-show="checking" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        <span x-text="checking ? 'Extracting...' : 'Get Articles'"></span>
-                    </button>
+                    <div class="ml-auto text-right">
+                        <p class="text-[11px] text-gray-500 uppercase tracking-wide">Step action</p>
+                        <p class="text-xs text-gray-400">Use the bottom action bar to fetch article(s) and continue.</p>
+                    </div>
                 </div>
             </div>
 
@@ -212,9 +212,6 @@
                 </template>
             </div>
 
-            <div class="mt-3" x-show="checkResults.length > 0 && checkPassCount > 0" x-cloak>
-                <button @click="completeStep(4); openStep(5)" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Continue to AI & Spin &rarr;</button>
-            </div>
             </div>
         </div>
     </div>
