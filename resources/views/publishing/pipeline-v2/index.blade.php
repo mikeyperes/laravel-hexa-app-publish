@@ -5,8 +5,8 @@
      right pane, and slide-in drawers. The original /article/publish URL
      is left untouched. --}}
 @extends('layouts.app')
-@section('title', 'Publish Article v2 — #' . $draftId)
-@section('header', 'Publish Article v2 — #' . $draftId)
+@section('title', 'Publish Article — #' . $draftId)
+@section('header', 'Publish Article — #' . $draftId)
 
 @section('content')
 
@@ -117,7 +117,7 @@
             </div>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
-            <a href="{{ route('publish.pipeline.v2', ['spawn' => 1]) }}" target="_blank" rel="noopener" class="v2-btn v2-btn-secondary text-red-700">Open Isolated Draft</a>
+            <a href="{{ route('publish.pipeline', ['spawn' => 1]) }}" target="_blank" rel="noopener" class="v2-btn v2-btn-secondary text-red-700">Open Isolated Draft</a>
             <button type="button" @click="_clearDraftSessionConflict()" class="v2-btn v2-btn-ghost text-white hover:bg-red-700">Dismiss</button>
         </div>
     </div>
@@ -142,11 +142,11 @@
                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg>
                     </button>
                     <div x-show="open" x-cloak x-transition class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg w-56 py-1 z-50">
-                        <a href="{{ route('publish.pipeline.v2', ['spawn' => 1]) }}" target="_blank" rel="noopener" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                        <a href="{{ route('publish.pipeline', ['spawn' => 1]) }}" target="_blank" rel="noopener" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                             Open Isolated Draft (new tab)
                         </a>
-                        <a href="{{ route('publish.pipeline', ['id' => $draftId]) }}" class="block px-4 py-2 text-sm text-amber-700 hover:bg-amber-50">
-                            View in legacy /article/publish
+                        <a href="{{ route('publish.pipeline.legacy', ['id' => $draftId]) }}" class="block px-4 py-2 text-sm text-amber-700 hover:bg-amber-50">
+                            View in legacy /article/publish-legacy
                         </a>
                         <hr class="my-1 border-gray-100">
                         <button type="button"
@@ -159,6 +159,19 @@
             </div>
         </div>
     </header>
+
+    <div class="bg-red-600 border-b border-red-700 text-white">
+        <div class="px-6 py-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+                <p class="text-sm font-semibold">Legacy builder is still available</p>
+                <p class="text-xs text-red-100">Publish is now the primary builder. Use the legacy screen only for comparison or fallback while we finish parity.</p>
+            </div>
+            <a href="{{ route('publish.pipeline.legacy', ['id' => $draftId]) }}" class="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/20">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                Open legacy /article/publish-legacy
+            </a>
+        </div>
+    </div>
 
     {{-- ═══════════════════ TWO-COLUMN BODY ═══════════════════ --}}
     <div class="v2-body">
@@ -301,7 +314,7 @@
                     </span>
                     <span class="v2-pill v2-pill-gray" x-text="masterActivityLog.length || ''"></span>
                 </button>
-                <a href="{{ route('publish.pipeline', ['id' => $draftId]) }}">
+                <a href="{{ route('publish.pipeline.legacy', ['id' => $draftId]) }}">
                     <span class="flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                         Open in legacy
@@ -347,7 +360,7 @@
 
             {{-- Step 3: Submit press release (press-release types) OR gather sources (spin) --}}
             <template x-if="currentStep === 3">
-                <div>
+                <div class="relative">
                     <div class="v2-section">
                         <div class="v2-section-head">
                             <div class="v2-section-title">
@@ -372,6 +385,14 @@
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                                 </button>
                             </div>
+                        </div>
+                    </div>
+
+                    <div x-show="pressReleaseImportingEpisodeId" x-cloak class="absolute inset-0 z-30 flex items-center justify-center rounded-xl bg-white/85">
+                        <div class="flex flex-col items-center gap-3 rounded-xl border border-purple-200 bg-white px-6 py-5 shadow-lg">
+                            <svg class="h-8 w-8 animate-spin text-purple-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <p class="text-sm font-semibold text-purple-900">Importing podcast episode from Notion…</p>
+                            <p class="text-center text-xs text-gray-500">Pulling guest, host, episode metadata, photos and Drive assets.</p>
                         </div>
                     </div>
                 </div>
