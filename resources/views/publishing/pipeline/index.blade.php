@@ -42,7 +42,7 @@
     <div class="flex flex-wrap items-center justify-between gap-2">
         <p class="text-xs font-mono text-gray-400">Article #{{ $draftId }}</p>
         <div class="flex items-center gap-2">
-            <a href="{{ route('publish.pipeline', ['spawn' => 1]) }}"
+            <a href="{{ route('publish.pipeline.legacy', ['spawn' => 1]) }}"
                target="_blank"
                rel="noopener"
                class="text-xs text-blue-600 hover:text-blue-800 px-3 py-1.5 border border-blue-200 rounded-lg hover:bg-blue-50 inline-flex items-center gap-1">
@@ -66,7 +66,7 @@
                 <p class="text-xs text-amber-700" x-show="draftSessionConflict?.last_seen_at || draftSessionConflict?.tab_id" x-text="'Active tab: ' + (draftSessionConflict?.tab_id || 'unknown') + (draftSessionConflict?.last_seen_at ? ' • last seen ' + draftSessionConflict.last_seen_at : '')"></p>
             </div>
             <div class="flex items-center gap-2">
-                <a href="{{ route('publish.pipeline', ['spawn' => 1]) }}"
+                <a href="{{ route('publish.pipeline.legacy', ['spawn' => 1]) }}"
                    target="_blank"
                    rel="noopener"
                    class="text-xs text-amber-900 hover:text-amber-950 px-3 py-1.5 border border-amber-300 rounded-lg hover:bg-amber-100 inline-flex items-center gap-1">

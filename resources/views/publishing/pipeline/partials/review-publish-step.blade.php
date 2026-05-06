@@ -289,7 +289,7 @@
 
         </div>
 
-        @if(request()->routeIs('publish.pipeline.v2'))
+        @if(request()->routeIs('publish.pipeline') || request()->routeIs('publish.pipeline.v2'))
         <div class="mt-4" x-ref="inlineMasterActivityLog" data-inline-master-activity-log>
             @include('app-publish::publishing.pipeline.partials.master-activity-log')
         </div>

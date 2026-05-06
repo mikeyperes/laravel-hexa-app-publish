@@ -26,7 +26,7 @@
                 <svg x-show="bulkDeleting" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 Delete Selected (<span x-text="selectedIds.length"></span>)
             </button>
-            <a href="{{ route('publish.pipeline.v2', ['spawn' => 1]) }}" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 inline-flex items-center gap-1.5">
+            <a href="{{ route('publish.pipeline', ['spawn' => 1]) }}" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 inline-flex items-center gap-1.5">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                 New Article
             </a>
@@ -85,7 +85,7 @@
                 <div class="flex-1 min-w-0">
                     {{-- Title + Status --}}
                     <div class="flex items-start justify-between gap-3">
-                        <a href="{{ route('publish.pipeline.v2', ['id' => $draft->id]) }}" class="text-sm font-semibold text-gray-900 hover:text-blue-600 break-words leading-snug">{{ $draft->title ?: 'Untitled' }}</a>
+                        <a href="{{ route('publish.pipeline', ['id' => $draft->id]) }}" class="text-sm font-semibold text-gray-900 hover:text-blue-600 break-words leading-snug">{{ $draft->title ?: 'Untitled' }}</a>
                         <div class="flex-shrink-0 flex items-center gap-2">
                             @if($draft->article_type)
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-50 text-indigo-600 border border-indigo-100">{{ ucfirst(str_replace('_', ' ', $draft->article_type)) }}</span>
@@ -162,7 +162,7 @@
 
                 {{-- Actions --}}
                 <div class="flex-shrink-0 flex items-center gap-1.5 pt-1">
-                    <a href="{{ route('publish.pipeline.v2', ['id' => $draft->id]) }}" class="p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Open in Pipeline">
+                    <a href="{{ route('publish.pipeline', ['id' => $draft->id]) }}" class="p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Open in Pipeline">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     </a>
                     @if($draft->wp_post_url)
@@ -187,7 +187,7 @@
         <div class="bg-white rounded-lg border border-gray-200 p-12 text-center">
             <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             <p class="text-gray-400 text-sm">No articles found.</p>
-            <a href="{{ route('publish.pipeline.v2', ['spawn' => 1]) }}" class="inline-flex items-center gap-1.5 mt-3 text-sm text-blue-600 hover:text-blue-700">
+            <a href="{{ route('publish.pipeline', ['spawn' => 1]) }}" class="inline-flex items-center gap-1.5 mt-3 text-sm text-blue-600 hover:text-blue-700">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                 Create your first article
             </a>

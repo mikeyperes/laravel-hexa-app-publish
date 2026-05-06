@@ -14,11 +14,6 @@ class PipelineV2Controller extends Controller
         $response = app(PipelineController::class)->index($request);
 
         if ($response instanceof RedirectResponse) {
-            $url = $response->getTargetUrl();
-            if (str_contains($url, '/article/publish')) {
-                $url = str_replace('/article/publish', '/publish2', $url);
-                return redirect($url);
-            }
             return $response;
         }
 

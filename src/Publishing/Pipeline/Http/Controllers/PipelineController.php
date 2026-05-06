@@ -113,7 +113,10 @@ class PipelineController extends Controller
                 $draft = $this->createFreshPipelineDraft();
             }
 
-            return redirect()->route('publish.pipeline', ['id' => $draft->id]);
+            return redirect()->route(
+                request()->routeIs('publish.pipeline.legacy') ? 'publish.pipeline.legacy' : 'publish.pipeline',
+                ['id' => $draft->id]
+            );
         }
 
         // Load existing draft

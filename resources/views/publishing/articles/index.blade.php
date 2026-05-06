@@ -33,7 +33,7 @@
                 <a href="{{ route('publish.articles.index') }}" class="text-xs text-gray-400 hover:text-gray-600">Clear</a>
             @endif
         </form>
-        <a href="{{ route('publish.pipeline.v2', ['spawn' => 1]) }}" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 inline-flex items-center gap-1.5">
+        <a href="{{ route('publish.pipeline', ['spawn' => 1]) }}" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 inline-flex items-center gap-1.5">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
             New Article
         </a>
@@ -60,7 +60,7 @@
     @if($articles->isEmpty())
         <div class="bg-white rounded-lg border border-gray-200 p-12 text-center">
             <p class="text-gray-400 text-sm">No articles found.</p>
-            <a href="{{ route('publish.pipeline.v2', ['spawn' => 1]) }}" class="inline-block mt-3 text-sm text-blue-600 hover:text-blue-700">Create your first article</a>
+            <a href="{{ route('publish.pipeline', ['spawn' => 1]) }}" class="inline-block mt-3 text-sm text-blue-600 hover:text-blue-700">Create your first article</a>
         </div>
     @else
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">

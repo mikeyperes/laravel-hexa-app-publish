@@ -7,7 +7,7 @@ use hexa_app_publish\Publishing\Pipeline\Http\Controllers\PipelineStateControlle
 use hexa_app_publish\Publishing\Pipeline\Http\Controllers\PressReleaseWorkflowController;
 use hexa_app_publish\Publishing\Pipeline\Http\Controllers\PrArticleWorkflowController;
 
-Route::get('/article/publish', [PipelineController::class, 'index'])->name('publish.pipeline');
+Route::get('/article/publish-legacy', [PipelineController::class, 'index'])->name('publish.pipeline.legacy');
 Route::post('/article/publish/check-sources', [PipelineController::class, 'checkSources'])->name('publish.pipeline.check');
 Route::post('/article/publish/ai-search', [PipelineController::class, 'aiSearchArticles'])->name('publish.pipeline.ai-search');
 Route::post('/article/publish/link-status', [PipelineController::class, 'checkLinkStatus'])->name('publish.pipeline.link-status');
