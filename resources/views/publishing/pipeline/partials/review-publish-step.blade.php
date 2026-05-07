@@ -196,6 +196,12 @@
                         @include('app-publish::publishing.pipeline.partials.checklist-item')
                     </template>
                 </div>
+                <div x-show="prepareChecklist.some(c => c.type === 'publication')" x-cloak class="mb-3">
+                    <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Publication Syndication</p>
+                    <template x-for="item in prepareChecklist.filter(c => c.type === 'publication')" :key="item.label">
+                        @include('app-publish::publishing.pipeline.partials.checklist-item')
+                    </template>
+                </div>
                 <div x-show="prepareChecklist.some(c => c.type === 'tag')" x-cloak>
                     <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Tags</p>
                     <template x-for="item in prepareChecklist.filter(c => c.type === 'tag')" :key="item.label">

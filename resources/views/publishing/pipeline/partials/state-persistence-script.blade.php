@@ -810,6 +810,9 @@
                 const derivedTitle = this.deriveArticleTitleFromHtml(this.editorContent || this.spunContent || draftState.body || '');
                 if (derivedTitle) this.articleTitle = this.ensurePrArticleTitleSubject ? this.ensurePrArticleTitleSubject(derivedTitle) : derivedTitle;
             }
+            if (this.maybeApplySmartDraftTitle && this.draftTitleLooksPlaceholder && this.draftTitleLooksPlaceholder(this.articleTitle)) {
+                this.maybeApplySmartDraftTitle();
+            }
             if (!this.featuredImageSearch && draftState.featuredImageSearch) {
                 this.featuredImageSearch = draftState.featuredImageSearch;
             }

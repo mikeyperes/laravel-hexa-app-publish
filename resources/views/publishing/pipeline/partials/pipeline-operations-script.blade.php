@@ -258,6 +258,14 @@
 
         _buildPrepareChecklist() {
             const activePhotos = this.photoSuggestions.filter(p => !p.removed && p.autoPhoto);
+            const selectedPublicationIds = Array.isArray(this.selectedSyndicationCats)
+                ? this.selectedSyndicationCats.map((id) => Number(id))
+                : [];
+            const publicationNames = Array.isArray(this.syndicationCategories)
+                ? this.syndicationCategories
+                    .filter((cat) => selectedPublicationIds.includes(Number(cat.id)))
+                    .map((cat) => cat.label || cat.name || ('Publication #' + cat.id))
+                : selectedPublicationIds.map((id) => 'Publication #' + id);
             const photoItems = activePhotos.map((p, i) => ({
                 label: 'Photo ' + (i + 1) + ': ' + (p.search_term || 'image'),
                 status: 'pending',
@@ -290,6 +298,12 @@
                 detail: '',
                 type: 'tag',
             }));
+            const publicationItems = publicationNames.map((name) => ({
+                label: name,
+                status: 'pending',
+                detail: 'selected for syndication',
+                type: 'publication',
+            }));
 
             return [
                 { label: 'Connect to WordPress & author', status: 'running', detail: (this.publishAuthor || 'default') + ' — waiting to connect...', type: 'auth' },
@@ -297,6 +311,7 @@
                 ...photoItems,
                 featuredItem,
                 ...catItems,
+                ...publicationItems,
                 ...tagItems,
                 { label: 'Integrity check', status: 'pending', detail: '', type: 'integrity' },
             ];
@@ -328,6 +343,12 @@
             if (this.publishAuthor) this._logPrepare('info', 'Author: ' + this.publishAuthor);
             this._logPrepare('info', 'Images: ' + activePhotos.length + ' inner + ' + (this.featuredPhoto ? '1 featured' : 'no featured'));
             this._logPrepare('info', 'Categories: ' + this.selectedCategoryNames().join(', '));
+            const publicationNames = Array.isArray(this.syndicationCategories)
+                ? this.syndicationCategories
+                    .filter((cat) => (this.selectedSyndicationCats || []).map((id) => Number(id)).includes(Number(cat.id)))
+                    .map((cat) => cat.label || cat.name || ('Publication #' + cat.id))
+                : [];
+            if (publicationNames.length) this._logPrepare('info', 'Publication Syndication: ' + publicationNames.join(', '));
             this._logPrepare('info', 'Tags: ' + this.selectedTagNames().join(', '));
         },
 
@@ -1227,6 +1248,7 @@
                 site_id: this.selectedSite?.id || null,
                 category_ids: this.preparedCategoryIds,
                 tag_ids: this.preparedTagIds,
+                publication_term_ids: Array.isArray(this.selectedSyndicationCats) ? this.selectedSyndicationCats.map((id) => Number(id)) : [],
                 featured_media_id: this.preparedFeaturedMediaId || null,
                 status: wpStatus,
                 date: this.publishAction === 'future' ? this.scheduleDate : null,

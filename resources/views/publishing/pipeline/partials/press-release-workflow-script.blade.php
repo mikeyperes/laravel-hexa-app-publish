@@ -855,6 +855,7 @@ function pressReleaseWorkflowMixin(config) {
                 if (!this.template_overrides) this.template_overrides = {};
                 this.template_overrides.article_type = 'press-release';
                 this.pressRelease = this.normalizePressReleaseState(data.press_release || {});
+                this.maybeApplySmartDraftTitle?.();
                 const importedAssets = this.rebuildPressReleasePhotoAssets();
                 const importedFeaturedUrl = this.toAbsoluteMediaUrl(this.pressRelease?.notion_episode?.featured_image_url || '');
                 const importedFeaturedAsset = importedAssets.find((asset) => importedFeaturedUrl && asset.url === importedFeaturedUrl)
@@ -925,6 +926,7 @@ function pressReleaseWorkflowMixin(config) {
                 if (!this.template_overrides) this.template_overrides = {};
                 this.template_overrides.article_type = 'press-release';
                 this.pressRelease = this.normalizePressReleaseState(data.press_release || {});
+                this.maybeApplySmartDraftTitle?.();
                 this.clearPressReleaseFieldError('notion_book');
                 const importedAssets = this.rebuildPressReleasePhotoAssets();
                 const importedFeaturedUrl = this.toAbsoluteMediaUrl(this.pressRelease?.notion_book?.featured_image_url || '');

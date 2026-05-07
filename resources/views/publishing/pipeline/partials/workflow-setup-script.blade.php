@@ -439,6 +439,7 @@
             if (!text) return;
             // Add as a virtual source
             this.sources.push({ url: 'upload://' + (this.uploadedSourceDoc?.name || 'pasted-content'), title: this.uploadedSourceDoc?.name || 'Uploaded Content', status: 'ready', wordCount: text.split(/\s+/).filter(Boolean).length });
+            this.maybeApplySmartDraftTitle?.();
             // Store the text so the spin step can use it
             this.checkResults.push({ url: 'upload://', success: true, text: text, word_count: text.split(/\s+/).filter(Boolean).length, formatted_html: '<p>' + text.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>' });
             this.approvedSources.push(this.checkResults.length - 1);
@@ -478,6 +479,7 @@
             if (!this.sources.find(s => s.url === url)) {
                 this.sources.push({ url, title: title || '', status: 'pending', wordCount: 0 });
             }
+            this.maybeApplySmartDraftTitle?.();
             this.showNotification('success', 'Source added');
         },
 
@@ -723,6 +725,67 @@
                 return this.currentPrArticlePromptSlug(polish);
             }
             return null;
+        },
+
+        draftTitleLooksPlaceholder(value = null) {
+            const raw = String(value ?? this.articleTitle ?? '').trim();
+            if (!raw) return true;
+            if (/^untitled(?:\s+pipeline\s+draft)?$/i.test(raw)) return true;
+            if (this.isPrArticleMode && this.isPrArticleMode() && this.isWeakPrArticleTitle && this.isWeakPrArticleTitle(raw)) return true;
+            return false;
+        },
+
+        smartDraftTitleCandidate() {
+            const uploadedName = String(this.uploadedSourceDoc?.name || '').replace(/\.(docx?|pdf)$/i, '').trim();
+            const firstSourceTitle = String(((this.sources || []).find((source) => String(source?.title || '').trim())?.title) || '').trim();
+
+            if (this.currentArticleType === 'press-release') {
+                const method = String(this.pressRelease?.submit_method || '').trim();
+                const bookTitle = String(this.pressRelease?.notion_book?.title || '').trim();
+                const authorName = String(this.pressRelease?.notion_person?.name || this.pressRelease?.notion_book?.author || '').trim();
+                if (method === 'notion-book' && bookTitle) {
+                    return authorName && !bookTitle.toLowerCase().includes(authorName.toLowerCase()) ? (authorName + ' - ' + bookTitle) : bookTitle;
+                }
+
+                const episodeTitle = String(this.pressRelease?.notion_episode?.title || '').trim();
+                if (method === 'notion-podcast' && episodeTitle) {
+                    return episodeTitle;
+                }
+
+                const importedTitle = String(this.pressRelease?.public_url_title || this.pressRelease?.detected_title || '').trim();
+                if (importedTitle) return importedTitle;
+                if (uploadedName) return uploadedName;
+                if (firstSourceTitle) return firstSourceTitle;
+            }
+
+            if (this.isPrArticleMode && this.isPrArticleMode()) {
+                const contextTitle = String(this.prArticle?.expert_context_extracted?.title || '').trim();
+                if (contextTitle) return contextTitle;
+            }
+
+            if (uploadedName) return uploadedName;
+            if (firstSourceTitle) return firstSourceTitle;
+            return '';
+        },
+
+        maybeApplySmartDraftTitle() {
+            if (!this.draftTitleLooksPlaceholder(this.articleTitle)) {
+                return false;
+            }
+
+            const candidate = String(this.smartDraftTitleCandidate ? this.smartDraftTitleCandidate() : '').trim();
+            if (!candidate) return false;
+
+            const normalized = this.ensurePrArticleTitleSubject && this.isPrArticleMode && this.isPrArticleMode()
+                ? this.ensurePrArticleTitleSubject(candidate)
+                : candidate;
+
+            if (!normalized || normalized === String(this.articleTitle || '').trim()) {
+                return false;
+            }
+
+            this.articleTitle = normalized;
+            return true;
         },
 
         deriveArticleTitleFromHtml(html = '') {
@@ -2380,6 +2443,7 @@
                     throw new Error(data.message || 'Failed to import article context.');
                 }
                 this.prArticle.expert_context_extracted = data.context || {};
+                this.maybeApplySmartDraftTitle?.();
                 this.savePipelineState();
                 if (!quiet) {
                     this.showNotification('success', data.message || 'Article context imported.');
@@ -2655,6 +2719,9 @@
                         this.sources[i].wordCount = r.word_count;
                         if (r.title && !this.sources[i].title) {
                             this.sources[i].title = r.title;
+                        }
+                        if (r.title && i === 0) {
+                            this.maybeApplySmartDraftTitle?.();
                         }
                     }
                     const url = this.sources[i]?.url || 'unknown';

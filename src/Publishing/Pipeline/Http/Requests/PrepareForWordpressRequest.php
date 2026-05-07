@@ -11,6 +11,7 @@ class PrepareForWordpressRequest extends PipelineRequest
             'title' => 'nullable|string|max:500',
             'site_id' => 'required|integer|exists:publish_sites,id',
             'categories' => 'nullable|array',
+            'publication_term_ids' => 'nullable|array',
             'tags' => 'nullable|array',
             'pipeline_session_id' => 'nullable|string|max:100',
             'draft_id' => 'required|integer|exists:publish_articles,id',
