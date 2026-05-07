@@ -369,7 +369,7 @@
                     </div>
                 </div>
 
-                <div x-show="pressRelease.notion_person && pressRelease.notion_person.id" x-cloak class="rounded-xl border border-purple-200 bg-white overflow-hidden">
+                <div x-show="pressRelease.notion_person && pressRelease.notion_person.id" x-cloak x-data="{ showPersonAllFields: false }" class="rounded-xl border border-purple-200 bg-white overflow-hidden">
                     <div class="px-4 py-3 border-b border-purple-100 bg-purple-50 flex items-start justify-between gap-3">
                         <div>
                             <p class="text-sm font-semibold text-gray-900" x-text="pressRelease.notion_person.name || 'Selected person'"></p>
@@ -389,7 +389,7 @@
                         </div>
                     </div>
                     <div class="px-4 py-4 space-y-4 text-sm text-gray-700">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                             <div>
                                 <p class="text-xs uppercase tracking-wide text-gray-400">Primary author URL</p>
                                 <template x-if="pressRelease.notion_person?.person_url">
@@ -398,38 +398,98 @@
                                 <p x-show="!pressRelease.notion_person?.person_url" x-cloak class="mt-1 text-amber-700">Missing public author URL</p>
                             </div>
                             <div>
+                                <p class="text-xs uppercase tracking-wide text-gray-400">Job title</p>
+                                <p class="mt-1 font-medium text-gray-900" x-text="pressRelease.notion_person?.job_title || 'Not provided'"></p>
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase tracking-wide text-gray-400">Company</p>
+                                <template x-if="pressRelease.notion_person?.company_url">
+                                    <a :href="pressRelease.notion_person.company_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_person.company_name || pressRelease.notion_person.company_url"></a>
+                                </template>
+                                <p x-show="!pressRelease.notion_person?.company_url" x-cloak class="mt-1 font-medium text-gray-900" x-text="pressRelease.notion_person?.company_name || 'Not provided'"></p>
+                            </div>
+                            <div>
                                 <p class="text-xs uppercase tracking-wide text-gray-400">Related books</p>
                                 <p class="mt-1 font-medium text-gray-900" x-text="(pressRelease.notion_book_options || []).length + ' available'"></p>
                             </div>
                         </div>
-                        <div x-show="pressRelease.notion_person?.social_urls && Object.keys(pressRelease.notion_person.social_urls || {}).length > 0" x-cloak>
-                            <p class="text-xs uppercase tracking-wide text-gray-400">Social Links</p>
-                            <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-                                <template x-for="[network, url] in Object.entries(pressRelease.notion_person.social_urls || {})" :key="network">
-                                    <a :href="url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 break-all">
-                                        <span class="font-medium capitalize" x-text="network.replace('_', ' ') + ':'"></span>
-                                        <span x-text="' ' + url"></span>
-                                    </a>
-                                </template>
+                        <div x-show="pressRelease.notion_person?.bio" x-cloak class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+                            <p class="text-xs uppercase tracking-wide text-gray-400">Author bio</p>
+                            <p class="mt-2 text-sm text-gray-700 whitespace-pre-wrap break-words" x-text="pressRelease.notion_person.bio"></p>
+                        </div>
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                            <div x-show="pressRelease.notion_person?.social_urls && Object.keys(pressRelease.notion_person.social_urls || {}).length > 0" x-cloak>
+                                <p class="text-xs uppercase tracking-wide text-gray-400">Social Links</p>
+                                <div class="mt-2 grid grid-cols-1 gap-2">
+                                    <template x-for="[network, url] in Object.entries(pressRelease.notion_person.social_urls || {})" :key="network">
+                                        <a :href="url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 break-all">
+                                            <span class="font-medium capitalize" x-text="network.replace('_', ' ') + ':'"></span>
+                                            <span x-text="' ' + url"></span>
+                                        </a>
+                                    </template>
+                                </div>
+                            </div>
+                            <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+                                <div class="flex items-center justify-between gap-3">
+                                    <p class="text-xs uppercase tracking-wide text-gray-400">Personal photo assets</p>
+                                    <span class="text-[11px] text-gray-500" x-text="(pressRelease.notion_person?.photo_urls || []).length ? ((pressRelease.notion_person.photo_urls || []).length + ' direct URL(s)') : 'No direct URLs'"></span>
+                                </div>
+                                <div class="mt-2 space-y-2">
+                                    <template x-for="url in (pressRelease.notion_person?.photo_urls || [])" :key="url">
+                                        <a :href="url" target="_blank" rel="noopener noreferrer" class="block text-blue-600 hover:text-blue-800 break-all" x-text="url"></a>
+                                    </template>
+                                    <div x-show="pressRelease.notion_person?.drive_folder_url" x-cloak>
+                                        <p class="text-[11px] uppercase tracking-wide text-gray-500">Google Drive photos</p>
+                                        <a :href="pressRelease.notion_person.drive_folder_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_person.drive_folder_url"></a>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="space-y-2">
                             <div class="flex items-center justify-between gap-3">
-                                <p class="text-xs uppercase tracking-wide text-gray-400">Choose a related book</p>
-                                <p class="text-[11px] text-gray-500">The selected book becomes the PR source package.</p>
+                                <div>
+                                    <p class="text-xs uppercase tracking-wide text-gray-400">Choose a related book</p>
+                                    <p class="text-[11px] text-gray-500 mt-1">The selected book becomes the PR source package.</p>
+                                </div>
+                                <button x-show="(pressRelease.notion_source_fields?.person || []).length > 0" x-cloak @click="showPersonAllFields = !showPersonAllFields" type="button" class="text-xs text-gray-500 hover:text-purple-700" x-text="showPersonAllFields ? 'Hide all fields' : 'See all fields'"></button>
+                            </div>
+                            <div x-show="showPersonAllFields && (pressRelease.notion_source_fields?.person || []).length > 0" x-cloak>
+                                @include('app-publish::publishing.pipeline.partials.notion-field-panel', [
+                                    'heading' => 'Author Fields Pulled From Notion',
+                                    'rowsExpression' => 'pressRelease.notion_source_fields?.person || []',
+                                    'rowKey' => "'person-prefetch-' + (row.field || row.source_field || rowIdx)",
+                                    'labelExpression' => "notionAuditFieldLabel(row) || 'Field'",
+                                    'sourceExpression' => 'notionAuditSourceLabel(row, "Person Database")',
+                                    'valueExpression' => "row.value || ''",
+                                    'linkUrls' => true,
+                                    'panelClass' => 'rounded-lg border border-gray-200 bg-gray-50 p-3',
+                                ])
                             </div>
                             <div x-show="(pressRelease.notion_book_options || []).length > 0" x-cloak class="space-y-2">
                                 <template x-for="book in (pressRelease.notion_book_options || [])" :key="'book-option-' + book.id">
                                     <button type="button" @click="importPressReleaseNotionBook(book)"
                                         class="w-full text-left rounded-lg border px-4 py-3 transition-colors"
                                         :class="pressRelease.notion_book?.id === book.id ? 'border-purple-300 bg-purple-50' : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/40'">
-                                        <div class="flex items-start justify-between gap-3">
-                                            <div class="min-w-0 flex-1">
-                                                <p class="text-sm font-semibold text-gray-900 break-words" x-text="book.title"></p>
-                                                <p class="mt-1 text-xs text-gray-500 break-words" x-text="book.subtitle || 'Related book record'"></p>
-                                                <a x-show="book.book_url" x-cloak :href="book.book_url" target="_blank" rel="noopener noreferrer" class="mt-2 inline-block text-xs text-blue-600 hover:text-blue-800 break-all" x-text="book.book_url"></a>
+                                        <div class="flex items-start gap-4">
+                                            <div x-show="book.featured_image_url" x-cloak class="h-24 w-20 overflow-hidden rounded-md border border-gray-200 bg-white flex-shrink-0">
+                                                <img :src="book.featured_image_url" :alt="book.title" class="h-full w-full object-cover">
                                             </div>
-                                            <span class="text-xs text-purple-600 font-medium flex-shrink-0" x-text="pressReleaseImportingBookId === book.id ? 'Importing…' : (pressRelease.notion_book?.id === book.id ? 'Imported' : 'Import')"></span>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex items-start justify-between gap-3">
+                                                    <div class="min-w-0 flex-1">
+                                                        <p class="text-sm font-semibold text-gray-900 break-words" x-text="book.title"></p>
+                                                        <p class="mt-1 text-xs text-gray-500 break-words" x-text="book.subtitle || 'Related book record'"></p>
+                                                    </div>
+                                                    <span class="text-xs text-purple-600 font-medium flex-shrink-0" x-text="pressReleaseImportingBookId === book.id ? 'Importing…' : (pressRelease.notion_book?.id === book.id ? 'Imported' : 'Import')"></span>
+                                                </div>
+                                                <p x-show="book.description" x-cloak class="mt-2 text-xs text-gray-600 whitespace-pre-wrap break-words" x-text="book.description"></p>
+                                                <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                                                    <a x-show="book.book_url" x-cloak :href="book.book_url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 break-all" x-text="book.book_url"></a>
+                                                    <a x-show="book.google_books_url && book.google_books_url !== book.book_url" x-cloak :href="book.google_books_url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 break-all" x-text="book.google_books_url"></a>
+                                                    <a x-show="book.drive_folder_url" x-cloak :href="book.drive_folder_url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 break-all" x-text="book.drive_folder_url"></a>
+                                                    <p class="text-gray-500" x-text="(book.asset_urls || []).length ? ((book.asset_urls || []).length + ' asset link(s)') : 'No asset links found'"></p>
+                                                </div>
+                                            </div>
                                         </div>
                                     </button>
                                 </template>
@@ -455,10 +515,17 @@
                         </a>
                     </div>
                     <div class="px-4 py-4 space-y-3 text-sm text-gray-700">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                             <div>
                                 <p class="text-xs uppercase tracking-wide text-gray-400">Author</p>
                                 <p class="mt-1 font-medium text-gray-900" x-text="pressRelease.notion_person?.name || 'No linked person found'"></p>
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase tracking-wide text-gray-400">Author URL</p>
+                                <template x-if="pressRelease.notion_person?.person_url">
+                                    <a :href="pressRelease.notion_person.person_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_person.person_url"></a>
+                                </template>
+                                <p x-show="!pressRelease.notion_person?.person_url" x-cloak class="mt-1 text-amber-700">Missing author URL</p>
                             </div>
                             <div>
                                 <p class="text-xs uppercase tracking-wide text-gray-400">Primary book URL</p>
@@ -466,6 +533,52 @@
                                     <a :href="pressRelease.notion_book.book_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_book.book_url"></a>
                                 </template>
                                 <p x-show="!pressRelease.notion_book?.book_url" x-cloak class="mt-1 text-amber-700">Missing public book URL</p>
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase tracking-wide text-gray-400">Book asset folder</p>
+                                <template x-if="pressRelease.notion_book?.drive_folder_url">
+                                    <a :href="pressRelease.notion_book.drive_folder_url" target="_blank" rel="noopener noreferrer" class="mt-1 block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_book.drive_folder_url"></a>
+                                </template>
+                                <p x-show="!pressRelease.notion_book?.drive_folder_url" x-cloak class="mt-1 text-amber-700">Missing Drive asset folder</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 xl:grid-cols-[220px_minmax(0,1fr)] gap-4">
+                            <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                <p class="text-xs uppercase tracking-wide text-gray-400">Book cover</p>
+                                <div x-show="pressRelease.notion_book?.featured_image_url" x-cloak class="mt-3 overflow-hidden rounded-lg border border-gray-200 bg-white">
+                                    <img :src="pressRelease.notion_book.featured_image_url" :alt="pressRelease.notion_book.title || 'Book cover'" class="w-full object-cover">
+                                </div>
+                                <a x-show="pressRelease.notion_book?.featured_image_url" x-cloak :href="pressRelease.notion_book.featured_image_url" target="_blank" rel="noopener noreferrer" class="mt-2 block text-xs text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_book.featured_image_url"></a>
+                                <p x-show="!pressRelease.notion_book?.featured_image_url" x-cloak class="mt-2 text-amber-700">Missing book cover</p>
+                            </div>
+                            <div class="space-y-3">
+                                <div x-show="pressRelease.notion_person?.bio" x-cloak class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+                                    <p class="text-xs uppercase tracking-wide text-gray-400">Author bio</p>
+                                    <p class="mt-2 text-sm text-gray-700 whitespace-pre-wrap break-words" x-text="pressRelease.notion_person.bio"></p>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <p class="text-[11px] uppercase tracking-wide text-gray-500">Canonical book links</p>
+                                        <div class="mt-2 space-y-2 text-xs">
+                                            <a x-show="pressRelease.notion_book?.google_books_url" x-cloak :href="pressRelease.notion_book.google_books_url" target="_blank" rel="noopener noreferrer" class="block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_book.google_books_url"></a>
+                                            <a x-show="pressRelease.notion_book?.amazon_url" x-cloak :href="pressRelease.notion_book.amazon_url" target="_blank" rel="noopener noreferrer" class="block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_book.amazon_url"></a>
+                                            <a x-show="pressRelease.notion_book?.goodreads_url" x-cloak :href="pressRelease.notion_book.goodreads_url" target="_blank" rel="noopener noreferrer" class="block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_book.goodreads_url"></a>
+                                            <a x-show="pressRelease.notion_book?.book_pdf_url" x-cloak :href="pressRelease.notion_book.book_pdf_url" target="_blank" rel="noopener noreferrer" class="block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_book.book_pdf_url"></a>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p class="text-[11px] uppercase tracking-wide text-gray-500">Imported photo inputs</p>
+                                        <div class="mt-2 space-y-2 text-xs">
+                                            <a x-show="pressRelease.notion_person?.inline_photo_url" x-cloak :href="pressRelease.notion_person.inline_photo_url" target="_blank" rel="noopener noreferrer" class="block text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_person.inline_photo_url"></a>
+                                            <template x-for="url in (pressRelease.notion_person?.photo_urls || [])" :key="'person-photo-' + url">
+                                                <a :href="url" target="_blank" rel="noopener noreferrer" class="block text-blue-600 hover:text-blue-800 break-all" x-text="url"></a>
+                                            </template>
+                                            <template x-for="url in (pressRelease.notion_book?.asset_urls || [])" :key="'book-asset-' + url">
+                                                <a :href="url" target="_blank" rel="noopener noreferrer" class="block text-blue-600 hover:text-blue-800 break-all" x-text="url"></a>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="rounded-lg border border-blue-200 bg-blue-50/70 px-3 py-3 space-y-4">

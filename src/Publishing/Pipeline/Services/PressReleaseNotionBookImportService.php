@@ -338,6 +338,24 @@ class PressReleaseNotionBookImportService
 
         $personPage = $personParsed['page'] ?? [];
         $personProperties = $personPage['properties'] ?? [];
+        $personPhotoUrls = $this->personPhotoUrls($personProperties);
+        $personDriveFolderUrl = $this->firstDriveFolderUrl($personPhotoUrls);
+        $personSourceFields = $this->extractSourceFieldEntries($personProperties, [
+            'Full Name',
+            'Title / Job Title',
+            'Business/Company Name',
+            'Official Website',
+            'Personal LinkedIn URL',
+            'Personal Twitter URL',
+            'Personal Instagram URL',
+            'Personal Facebook URL',
+            'YouTube URL',
+            'Biography (Short)',
+            'Biography (Full)',
+            'Description',
+            'Personal Photos',
+            'Featured Image URL',
+        ], 'Person Database');
         $relationProperty = $this->bookRelationProperty();
         $bookIds = array_values(array_filter(array_map(
             fn ($relation) => is_array($relation) ? (string) ($relation['id'] ?? '') : '',
@@ -363,13 +381,21 @@ class PressReleaseNotionBookImportService
                 'id' => $personPageId,
                 'name' => $this->displayTitle($personPage),
                 'record_url' => $personPage['url'] ?? null,
+                'bio' => $this->personBio([$personPage]),
+                'job_title' => $this->personJobTitle([$personPage]),
                 'person_url' => $this->preferredPersonUrl([$personPage]),
                 'company_name' => $this->personCompanyName([$personPage]),
                 'company_url' => $this->preferredCompanyUrl([$personPage]),
                 'social_urls' => $this->personSocialLinks($personProperties),
+                'photo_urls' => $personPhotoUrls,
+                'drive_folder_url' => $personDriveFolderUrl,
+                'source_fields' => $personSourceFields,
                 'book_count' => count($records),
             ],
             'records' => $records,
+            'source_fields' => [
+                'person' => $personSourceFields,
+            ],
         ];
     }
 
@@ -536,6 +562,7 @@ class PressReleaseNotionBookImportService
                 'inline_photo_source_field' => (string) ($inlinePersonImage['field'] ?? ''),
                 'drive_folder_url' => $personDriveFolderUrl,
                 'drive_photo_count' => count($personDrivePhotos),
+                'photo_urls' => $personPhotoUrls,
                 'social_urls' => $this->personSocialLinks($personProperties),
             ],
             'selected_book' => [
@@ -548,8 +575,10 @@ class PressReleaseNotionBookImportService
                 'goodreads_url' => $bookLinks['goodreads_url'] ?? '',
                 'book_pdf_url' => $bookLinks['book_pdf_url'] ?? '',
                 'drive_folder_url' => $bookDriveFolderUrl,
+                'asset_urls' => $bookAssetUrls,
                 'featured_image_url' => $bookFeaturedImageUrl,
                 'featured_image_source_field' => (string) ($bookFeaturedImage['field'] ?? ''),
+                'description' => trim((string) ($this->firstValue($bookProperties, ['Description', 'Additional Information']) ?: '')),
             ],
             'missing_fields' => $missing,
         ];
@@ -629,17 +658,39 @@ class PressReleaseNotionBookImportService
 
         $bookLinks = $this->bookLinks($properties);
         $featured = $this->preferredBookCoverImage($properties, []);
+        $assetUrls = $this->bookAssetUrls($properties);
 
         return [
             'id' => $page['id'] ?? null,
             'title' => $this->preferredBookTitle($properties, $page),
             'subtitle' => $this->buildBookSubtitle($properties),
             'url' => $page['url'] ?? null,
+            'record_url' => $page['url'] ?? null,
             'last_edited_time' => $page['last_edited_time'] ?? null,
             'book_url' => $bookLinks['primary'] ?? '',
             'google_books_url' => $bookLinks['google_books_url'] ?? '',
             'amazon_url' => $bookLinks['amazon_url'] ?? '',
+            'goodreads_url' => $bookLinks['goodreads_url'] ?? '',
+            'book_pdf_url' => $bookLinks['book_pdf_url'] ?? '',
             'featured_image_url' => (string) ($featured['url'] ?? ''),
+            'drive_folder_url' => $this->firstDriveFolderUrl($assetUrls),
+            'asset_urls' => $assetUrls,
+            'description' => trim((string) ($this->firstValue($properties, ['Description', 'Additional Information']) ?: '')),
+            'source_fields' => $this->extractSourceFieldEntries($properties, [
+                'Proposed Titles',
+                'Name',
+                'Google Book URL',
+                'Amazon URL',
+                'Good Reads URL',
+                'Book Cover URL',
+                'Google Drive Assets URL',
+                'Book Assets (GD URL)',
+                'Book URL (pdf format)',
+                'Description',
+                'Additional Information',
+                'ISBN',
+                'ASIN',
+            ], 'Book Database'),
         ];
     }
 

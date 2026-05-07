@@ -131,7 +131,7 @@ class PressReleaseWorkflowController extends Controller
         $pressRelease['google_drive_url'] = '';
         $pressRelease['notion_missing_fields'] = [];
         $pressRelease['notion_source_fields'] = [
-            'person' => [],
+            'person' => array_values(array_filter((array) ($result['source_fields']['person'] ?? []), 'is_array')),
             'book' => [],
             'episode' => [],
             'guest' => [],

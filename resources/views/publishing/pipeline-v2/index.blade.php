@@ -403,11 +403,11 @@
                         </div>
                     </div>
 
-                    <div x-show="pressReleaseImportingEpisodeId" x-cloak class="absolute inset-0 z-30 flex items-center justify-center rounded-xl bg-white/85">
+                    <div x-show="pressReleaseImportingEpisodeId || pressReleaseImportingBookId || pressReleaseLoadingPersonBooks" x-cloak class="absolute inset-0 z-30 flex items-center justify-center rounded-xl bg-white/85">
                         <div class="flex flex-col items-center gap-3 rounded-xl border border-purple-200 bg-white px-6 py-5 shadow-lg">
                             <svg class="h-8 w-8 animate-spin text-purple-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                            <p class="text-sm font-semibold text-purple-900">Importing podcast episode from Notion…</p>
-                            <p class="text-center text-xs text-gray-500">Pulling guest, host, episode metadata, photos and Drive assets.</p>
+                            <p class="text-sm font-semibold text-purple-900" x-text="pressReleaseImportingEpisodeId ? 'Importing podcast episode from Notion…' : (pressReleaseImportingBookId ? 'Importing book from Notion…' : 'Loading author and related books from Notion…')"></p>
+                            <p class="text-center text-xs text-gray-500" x-text="pressReleaseImportingEpisodeId ? 'Pulling guest, host, episode metadata, photos and Drive assets.' : (pressReleaseImportingBookId ? 'Pulling author, book metadata, photos and Drive assets.' : 'Pulling author profile, biography, related books, covers and asset links.')"></p>
                         </div>
                     </div>
                 </div>
