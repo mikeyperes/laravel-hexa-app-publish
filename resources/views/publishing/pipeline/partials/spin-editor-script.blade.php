@@ -224,8 +224,13 @@
 
             const editor = this._getSpinEditorInstance();
             if (this._spinEditorConfigured && editor) {
-                if (this._safeSetSpinEditorContent(editor, content)) return;
+                if (this._spinEditorHasMountedUi() && this._safeSetSpinEditorContent(editor, content)) return;
                 this._spinEditorConfigured = false;
+                this._logSpin('warn', 'Recovering TinyMCE after detached Create Article editor UI');
+                try {
+                    if (typeof editor.remove === 'function') editor.remove();
+                    else if (typeof editor.destroy === 'function') editor.destroy();
+                } catch (error) {}
             }
 
             this._ensureSpinEditorConfigured(content);

@@ -239,6 +239,13 @@
             this.promptLoading = false;
         },
 
+        cancelSpin() {
+            if (!this._spinAbortController) return;
+            try {
+                this._spinAbortController.abort();
+            } catch (error) {}
+        },
+
         async spinArticle() {
             this.spinning = true;
             this.spinError = '';
@@ -275,9 +282,13 @@
             try {
                 const requestStartedAt = Date.now();
                 this._startSpinRequestWatchdog();
+                if (this._spinAbortController) { try { this._spinAbortController.abort(); } catch (error) {} }
+                const controller = new AbortController();
+                this._spinAbortController = controller;
                 const resp = await fetch('{{ route('publish.pipeline.spin') }}', {
                     method: 'POST',
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
+                    signal: controller.signal,
                     body: JSON.stringify({
                         draft_id: this.draftId || null,
                         source_texts: sourceTexts,
@@ -403,9 +414,16 @@
                 }
             } catch (e) {
                 this._stopSpinRequestWatchdog();
-                this.spinError = 'Network error during spinning.';
-                this._logSpin('error', 'Network error: ' + (e.message || 'Request failed'));
+                if (e?.name === 'AbortError') {
+                    this.spinError = 'Spin cancelled.';
+                    this._logSpin('warning', 'Spin cancelled by user.');
+                    this.showNotification?.('warning', 'Spin cancelled.');
+                } else {
+                    this.spinError = 'Network error during spinning.';
+                    this._logSpin('error', 'Network error: ' + (e.message || 'Request failed'));
+                }
             }
+            this._spinAbortController = null;
             this.spinning = false;
         },
 
@@ -440,9 +458,13 @@
             try {
                 const requestStartedAt = Date.now();
                 this._startSpinRequestWatchdog();
+                if (this._spinAbortController) { try { this._spinAbortController.abort(); } catch (error) {} }
+                const controller = new AbortController();
+                this._spinAbortController = controller;
                 const resp = await fetch('{{ route('publish.pipeline.spin') }}', {
                     method: 'POST',
                     headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
+                    signal: controller.signal,
                     body: JSON.stringify({
                         draft_id: this.draftId || null,
                         source_texts: [currentContent],
@@ -465,12 +487,29 @@
                     this.tokenUsage = data.usage;
                     this.spinDiagnostics = data.diagnostics || null;
                     this.setSpinEditor(data.html);
+                    this.extractArticleLinks(data.html);
                     this.lastAiCall = { user_name: data.user_name, model: data.model, provider: data.provider, usage: data.usage, cost: data.cost, ip: data.ip, timestamp_utc: data.timestamp_utc };
                     this.spinChangeRequest = '';
                     this.showChangeInput = false;
                     this.appliedSmartEdits = [];
                     this.showNotification('success', 'Changes applied.');
                     this._recordSpinDiagnostics(data.diagnostics, elapsedMs);
+
+                    const hasPrSubjectPhotoAssets = this.isPrArticleMode() && this.selectedPrPhotoAssets(1).length > 0;
+                    const hasImportedPressReleaseAssets = this.currentArticleType === 'press-release'
+                        && this.isPressReleaseNotionImport?.()
+                        && this.pressReleasePhotoAssets.length > 0;
+
+                    if (this.isPrArticleMode()) {
+                        this.$nextTick(() => this.hydratePrArticleSelectedMedia());
+                    }
+                    if (hasImportedPressReleaseAssets) {
+                        this.$nextTick(() => this.applyNotionPressReleaseMediaDefaults({ injectInline: true, notify: false }));
+                    }
+
+                    this.syncDeferredEnrichmentState('spin_change_success');
+                    this.queueInlinePhotoAutoHydration('spin_change_success');
+                    this.queueFeaturedImageAutoHydration('spin_change_success');
                     this.queueAutoSaveDraft(300);
                     this._hasSpunThisSession = true;
 
@@ -483,8 +522,15 @@
                 }
             } catch (e) {
                 this._stopSpinRequestWatchdog();
-                this.spinError = 'Network error.';
+                if (e?.name === 'AbortError') {
+                    this.spinError = 'Spin cancelled.';
+                    this._logSpin('warning', 'Spin change request cancelled by user.');
+                    this.showNotification?.('warning', 'Spin cancelled.');
+                } else {
+                    this.spinError = 'Network error.';
+                }
             }
+            this._spinAbortController = null;
             this.spinning = false;
         },
 

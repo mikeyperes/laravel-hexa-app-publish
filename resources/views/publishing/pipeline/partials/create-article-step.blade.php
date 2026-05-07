@@ -708,6 +708,9 @@
                         <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                         Re-spin
                     </button>
+                    <button x-show="spinning" x-cloak @click="cancelSpin()" type="button" class="bg-red-100 text-red-700 px-4 py-2 rounded-lg text-sm hover:bg-red-200 inline-flex items-center gap-2">
+                        Cancel
+                    </button>
                     <button @click="showChangeInput = !showChangeInput; loadSmartEdits()" class="bg-blue-100 text-blue-700 px-5 py-2 rounded-lg text-sm hover:bg-blue-200 inline-flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
                         Request Changes
@@ -735,10 +738,15 @@
                 </div>
                 <label class="block text-sm font-medium text-blue-800 mb-2">What changes do you want?</label>
                 <textarea x-model="spinChangeRequest" rows="4" class="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Make it more formal, add a conclusion paragraph, rewrite the intro..."></textarea>
-                <button @click="requestSpinChanges()" :disabled="spinning || !spinChangeRequest.trim()" class="mt-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
-                    <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="spinning ? 'Processing...' : 'Send to AI'"></span>
-                </button>
+                <div class="mt-2 flex items-center gap-2">
+                    <button @click="requestSpinChanges()" :disabled="spinning || !spinChangeRequest.trim()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
+                        <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        <span x-text="spinning ? 'Processing...' : 'Send to AI'"></span>
+                    </button>
+                    <button x-show="spinning" x-cloak @click="cancelSpin()" type="button" class="bg-red-100 text-red-700 px-4 py-2 rounded-lg text-sm hover:bg-red-200 inline-flex items-center gap-2">
+                        Cancel
+                    </button>
+                </div>
             </div>
 
             {{-- AI call cost report — very bottom --}}

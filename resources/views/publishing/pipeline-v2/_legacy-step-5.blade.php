@@ -32,6 +32,9 @@
                     <svg x-show="spinning" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     <span x-text="spinning ? (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Polishing...' : 'Spinning...') : (_hasSpunThisSession ? (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Re-polish' : 'Re-spin') : (currentArticleType === 'press-release' && pressRelease.polish_only ? 'Polish Content' : 'Spin Article'))"></span>
                 </button>
+                <button x-show="spinning" x-cloak @click="cancelSpin()" type="button" class="bg-red-100 text-red-700 px-4 py-2 rounded-lg text-sm hover:bg-red-200 inline-flex items-center gap-2">
+                    Cancel
+                </button>
                 <p x-show="_hasSpunThisSession && !spinning" x-cloak class="text-sm text-green-600 inline-flex items-center gap-1">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                     Article spun successfully<span x-show="Number(spunWordCount || 0) > 0"> — <span x-text="spunWordCount + ' words'"></span></span>

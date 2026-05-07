@@ -141,6 +141,7 @@ function publishPipeline() {
 
         // Step 7 — Spin
         spinning: false,
+        _spinAbortController: null,
         _hasSpunThisSession: false,
         spinWebResearch: true,
         spunContent: '',

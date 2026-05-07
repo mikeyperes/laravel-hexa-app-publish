@@ -368,6 +368,9 @@ function pressReleaseWorkflowMixin(config) {
             const union = {};
             const featuredKey = String(this.pressRelease?.featured_photo_key || '').trim();
             const inlineKeys = this.normalizePressReleaseSelectionMap(this.pressRelease?.inline_photo_keys || {});
+            if (featuredKey && inlineKeys[featuredKey]) {
+                delete inlineKeys[featuredKey];
+            }
             if (featuredKey) {
                 union[featuredKey] = true;
             }
@@ -416,9 +419,17 @@ function pressReleaseWorkflowMixin(config) {
             if (!this.pressRelease.inline_photo_keys || typeof this.pressRelease.inline_photo_keys !== 'object') {
                 this.pressRelease.inline_photo_keys = {};
             }
+            const featuredKey = String(this.pressRelease?.featured_photo_key || '').trim();
             const nextValue = options.force === null || typeof options.force === 'undefined'
                 ? !this.pressRelease.inline_photo_keys[key]
                 : !!options.force;
+            if (nextValue && featuredKey && featuredKey === key) {
+                this.syncPressReleaseSelectedPhotoKeys();
+                if (options.save !== false) {
+                    this.savePipelineState();
+                }
+                return;
+            }
             if (nextValue) {
                 this.pressRelease.inline_photo_keys[key] = true;
             } else {
@@ -1439,9 +1450,13 @@ function pressReleaseWorkflowMixin(config) {
             const featuredUrl = this.isPressReleaseNotionBookImport()
                 ? (this.pressRelease?.notion_book?.featured_image_url || '')
                 : (this.pressRelease?.notion_episode?.featured_image_url || '');
+            const explicitFeaturedKey = String(this.pressRelease?.featured_photo_key || '').trim();
+            const currentFeaturedUrl = this.toAbsoluteMediaUrl(this.featuredPhoto?.url_large || this.featuredPhoto?.url || '');
             const assets = ((this.pressReleasePhotoAssets || []).length ? this.pressReleasePhotoAssets : this.rebuildPressReleasePhotoAssets())
                 .map((asset) => ({ ...asset }));
-            const match = assets.find((asset) => featuredUrl && asset.url === this.toAbsoluteMediaUrl(featuredUrl))
+            const match = assets.find((asset) => explicitFeaturedKey && this.pressReleaseAssetKey(asset) === explicitFeaturedKey)
+                || assets.find((asset) => currentFeaturedUrl && this.toAbsoluteMediaUrl(this.pressReleaseSourceUploadUrl(asset) || asset.url || '') === currentFeaturedUrl)
+                || assets.find((asset) => featuredUrl && this.toAbsoluteMediaUrl(asset.url || '') === this.toAbsoluteMediaUrl(featuredUrl))
                 || assets.find((asset) => asset.role === 'featured')
                 || assets.find((asset) => asset.source === 'notion-book-cover')
                 || assets.find((asset) => asset.source === 'notion-episode-media')
@@ -1456,16 +1471,20 @@ function pressReleaseWorkflowMixin(config) {
 
         selectedPressReleaseInlineAssets(limit = null) {
             const rawSelectionCount = Object.keys(this.pressRelease?.inline_photo_keys || {}).filter((key) => this.pressRelease?.inline_photo_keys?.[key]).length;
-            const featuredUrl = this.toAbsoluteMediaUrl(
-                this.isPressReleaseNotionBookImport()
-                    ? (this.pressRelease?.notion_book?.featured_image_url || '')
-                    : (this.pressRelease?.notion_episode?.featured_image_url || '')
-            );
+            const featuredKey = String(this.pressRelease?.featured_photo_key || '').trim();
+            const featuredUrl = this.toAbsoluteMediaUrl(this.featuredPhoto?.url_large || this.featuredPhoto?.url || '');
             const selectedInlineKeys = Object.keys(this.normalizePressReleaseSelectionMap(this.pressRelease?.inline_photo_keys || {}));
             const selectedInlineKeySet = new Set(selectedInlineKeys);
             let assets = ((this.pressReleasePhotoAssets || []).length ? this.pressReleasePhotoAssets : this.rebuildPressReleasePhotoAssets())
                 .map((asset) => ({ ...asset }))
-                .filter((asset) => this.toAbsoluteMediaUrl(asset.url || '') && this.toAbsoluteMediaUrl(asset.url || '') !== featuredUrl);
+                .filter((asset) => {
+                    const assetKey = this.pressReleaseAssetKey(asset);
+                    const assetUrl = this.toAbsoluteMediaUrl(asset.url || '');
+                    if (!assetUrl) return false;
+                    if (featuredKey && assetKey === featuredKey) return false;
+                    if (featuredUrl && assetUrl === featuredUrl) return false;
+                    return true;
+                });
             if (this.pressReleaseShouldFilterLegacyGuestMedia(assets)) {
                 assets = assets.filter((asset) => !this.pressReleaseAssetIsLegacyGuestMedia(asset));
             }
@@ -1755,12 +1774,13 @@ function pressReleaseWorkflowMixin(config) {
 
             const opts = { injectInline: false, notify: false, ...options };
             this.rebuildPressReleasePhotoAssets();
+            const explicitFeaturedSelection = !!String(this.pressRelease?.featured_photo_key || '').trim();
             const featuredAsset = this.preferredPressReleaseFeaturedAsset();
             if (featuredAsset) {
                 this.setPressReleaseFeaturedPhoto(featuredAsset, { notify: opts.notify, save: false });
                 this.featuredImageSearch = '';
                 this.featuredSearchPending = false;
-            } else if (!this.featuredPhoto && (this.pressReleasePhotoAssets || []).length > 0) {
+            } else if (!explicitFeaturedSelection && !this.featuredPhoto && (this.pressReleasePhotoAssets || []).length > 0) {
                 this.setPressReleaseFeaturedPhoto({ ...(this.pressReleasePhotoAssets[0] || {}) }, { notify: opts.notify, save: false });
                 this.featuredImageSearch = '';
                 this.featuredSearchPending = false;
@@ -1827,6 +1847,9 @@ function pressReleaseWorkflowMixin(config) {
             const key = this.pressReleaseAssetKey(asset);
             if (key) {
                 this.pressRelease.featured_photo_key = key;
+                if (this.pressRelease?.inline_photo_keys?.[key]) {
+                    delete this.pressRelease.inline_photo_keys[key];
+                }
             }
             this.syncPressReleaseSelectedPhotoKeys();
             if (options.save !== false) {
