@@ -203,6 +203,53 @@
             this.overlayMetaLoading = false;
         },
 
+        copyResolvedPrompt() {
+            if (!this.resolvedPrompt) return;
+
+            const markCopied = () => {
+                this.promptCopied = true;
+                if (this._promptCopiedTimer) {
+                    clearTimeout(this._promptCopiedTimer);
+                }
+                this._promptCopiedTimer = setTimeout(() => {
+                    this.promptCopied = false;
+                }, 1800);
+            };
+
+            const fallbackCopy = () => {
+                const textarea = document.createElement("textarea");
+                textarea.value = this.resolvedPrompt;
+                textarea.setAttribute("readonly", "readonly");
+                textarea.style.position = "fixed";
+                textarea.style.opacity = "0";
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                let copied = false;
+                try {
+                    copied = document.execCommand("copy");
+                } catch (error) {}
+                document.body.removeChild(textarea);
+                if (copied) {
+                    markCopied();
+                }
+                return copied;
+            };
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(this.resolvedPrompt)
+                    .then(() => {
+                        markCopied();
+                    })
+                    .catch(() => {
+                        fallbackCopy();
+                    });
+                return;
+            }
+
+            fallbackCopy();
+        },
+
         async refreshPromptPreview(options = {}) {
             if (this._restoring) return;
             if (!options.force && !this.shouldAutoLoadPromptPreview()) {

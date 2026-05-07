@@ -277,6 +277,8 @@ function publishPipeline() {
         promptLogOpen: false,
         promptLoading: false,
         promptPreviewDirty: true,
+        promptCopied: false,
+        _promptCopiedTimer: null,
         articleDescription: '',
         titleEditing: false,
         titleEditValue: '',

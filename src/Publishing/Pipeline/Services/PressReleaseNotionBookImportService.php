@@ -1035,6 +1035,12 @@ This is a Hexa PR Wire press release about a book and its author. Lead with the 
 ", array_map(fn (string $url) => '- ' . $url, $bookAssetUrls));
         }
 
+        $parts[] = "=== Validated Details ===
+Date: " . ($details['date'] ?? '') . "
+Location: " . ($details['location'] ?? '') . "
+Contact: " . ($details['contact'] ?? '') . "
+Contact URL: " . ($details['contact_url'] ?? '');
+
         $parts[] = "=== Canonical Link Targets ===
 Person Name: " . ($linkTargets['person_name'] ?? '') . "
 Person URL: " . ($linkTargets['person_url'] ?? '') . "
@@ -1055,11 +1061,17 @@ Contact URL: " . ($linkTargets['contact_url'] ?? '');
 - Use this exact dateline verbatim at the start of the first paragraph: {$details['location']} (Hexa PR Wire - {$details['date']}) -
 - Keep the article in formal third-person press-release style.
 - Never use em dashes or en dashes anywhere in the article, title options, SEO description, categories, or tags.
-- The first mention of the author must link to the Person URL when provided.
-- The first mention of the book title must link to the Book URL when provided.
+- The article title and every generated title option must explicitly include the word book.
+- The first plain-text mention of the author in the opening body must link to the Person URL when provided.
+- The first plain-text mention of the book title in the opening body must link to the Book URL when provided.
 - Use the Book Cover URL as the featured image. Do not substitute a generic stock image when a real cover is available.
 - Include exactly one inline author image in the body when a preferred inline author image URL is provided.
 - Build the opening around the author, the book, the core topic or promise of the book, and why the release matters.
+- The opening body must be broken into 3 to 5 short paragraphs before the About sections.
+- No paragraph may exceed 2 sentences or 75 words.
+- Do not repeat the dateline, release header, or location/date line anywhere after the opening paragraph.
+- The About {$personName} section must be one concise paragraph grounded in the imported person record and must not start with a dateline.
+- The About the Book section must be one concise paragraph grounded in the imported book record and must not restate the release lead.
 - After the opening body, include these exact H2 sections in this order: About {$personName}, About the Book, Contact Information.
 - If Google Books, Amazon, Goodreads, or PDF URLs are present above, use them naturally where relevant. Do not invent or guess links.
 - Do not mention Notion, internal fields, raw property names, or source systems.";

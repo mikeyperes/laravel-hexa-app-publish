@@ -722,14 +722,28 @@ class ArticleGenerationService
         }
 
         $details = $this->extractValidatedDetails($sourceTexts);
-        $targets = $this->extractPodcastPressReleaseTargets($sourceTexts);
-        $content = $this->normalizePressReleaseYoutubeEmbed($content, $targets);
-        $content = $this->ensurePodcastPressReleaseYoutubeEmbed($content, $targets);
-        $content = $this->ensurePodcastPressReleaseFirstMentionLinks($content, $targets);
-        if (!$this->hasSelectedPressReleaseInlineMedia($sourceTexts)) {
+        $targets = $this->extractPressReleaseTargets($sourceTexts);
+        $flattenedSources = $this->flattenSourceTexts($sourceTexts);
+        $isPodcast = str_contains($flattenedSources, '=== Podcast Press Release Mission ===');
+        $isBook = str_contains($flattenedSources, '=== Book Press Release Mission ===');
+
+        if ($isPodcast) {
+            $content = $this->normalizePressReleaseYoutubeEmbed($content, $targets);
+            $content = $this->ensurePodcastPressReleaseYoutubeEmbed($content, $targets);
+        }
+
+        $content = $this->normalizePressReleaseDateline($content, $details);
+        $content = $this->stripRepeatedPressReleaseDatelines($content, $details);
+        $content = $this->normalizePressReleaseParagraphLengths($content);
+        $content = $this->ensurePressReleaseFirstMentionLinks($content, $targets);
+
+        if ($isPodcast && !$this->hasSelectedPressReleaseInlineMedia($sourceTexts)) {
             $content = $this->ensurePodcastPressReleaseInlineGuestImage($content, $targets);
         }
-        $content = $this->normalizePressReleaseDateline($content, $details);
+
+        if ($isBook) {
+            $metadata = $this->ensureBookPressReleaseMetadata($metadata, $targets);
+        }
 
         return [$content, $metadata];
     }
@@ -797,10 +811,10 @@ class ArticleGenerationService
         return $content;
     }
 
-    private function extractPodcastPressReleaseTargets(array $sourceTexts): array
+    private function extractPressReleaseTargets(array $sourceTexts): array
     {
         $combined = $this->flattenSourceTexts($sourceTexts);
-        if ($combined === '' || !str_contains($combined, '=== Podcast Press Release Mission ===')) {
+        if ($combined === '') {
             return [];
         }
 
@@ -823,8 +837,15 @@ class ArticleGenerationService
             'episode_url' => $extract('Episode URL'),
             'youtube_url' => $extract('YouTube URL'),
             'youtube_embed_url' => $extract('YouTube Embed URL'),
-            'featured_image_url' => $extract('Featured Image URL'),
+            'book_title' => $extract('Book Title'),
+            'book_url' => $extract('Book URL'),
+            'google_books_url' => $extract('Google Books URL'),
+            'amazon_url' => $extract('Amazon URL'),
+            'goodreads_url' => $extract('Goodreads URL'),
+            'book_pdf_url' => $extract('Book PDF URL'),
+            'featured_image_url' => $extract('Featured Image URL') ?: $extract('Book Cover URL'),
             'inline_guest_image_url' => $extract('Preferred Inline Guest Image URL'),
+            'inline_person_image_url' => $extract('Preferred Inline Author Image URL'),
             'contact_url' => $extract('Contact URL'),
         ];
     }
@@ -873,7 +894,7 @@ class ArticleGenerationService
         return $content . $iframe;
     }
 
-    private function ensurePodcastPressReleaseFirstMentionLinks(string $content, array $targets): string
+    private function ensurePressReleaseFirstMentionLinks(string $content, array $targets): string
     {
         $content = $this->linkFirstPlainTextOccurrence(
             $content,
@@ -881,11 +902,42 @@ class ArticleGenerationService
             trim((string) ($targets['person_url'] ?? ''))
         );
 
-        return $this->linkFirstPlainTextOccurrence(
+        $content = $this->linkFirstPlainTextOccurrence(
             $content,
             trim((string) ($targets['company_name'] ?? '')),
             trim((string) ($targets['company_url'] ?? ''))
         );
+
+        $bookUrl = trim((string) (($targets['book_url'] ?? '') ?: ($targets['google_books_url'] ?? '') ?: ($targets['amazon_url'] ?? '') ?: ($targets['goodreads_url'] ?? '') ?: ($targets['book_pdf_url'] ?? '')));
+        if ($bookUrl !== '') {
+            $content = $this->linkFirstPlainTextOccurrence(
+                $content,
+                trim((string) ($targets['book_title'] ?? '')),
+                $bookUrl
+            );
+        }
+
+        return $content;
+    }
+
+    private function ensureBookPressReleaseMetadata(array $metadata, array $targets): array
+    {
+        $personName = trim((string) ($targets['person_name'] ?? ''));
+        $bookTitle = trim((string) ($targets['book_title'] ?? ''));
+        if ($personName === '' || $bookTitle === '') {
+            return $metadata;
+        }
+
+        $preferredTitle = $this->normalizeTitleText($personName . ' Unveils New Book: ' . $bookTitle);
+        $titles = array_values(array_filter(array_map(fn ($title) => $this->normalizeTitleText((string) $title), (array) ($metadata['titles'] ?? []))));
+        if ($preferredTitle !== '') {
+            array_unshift($titles, $preferredTitle);
+        }
+
+        $titles = array_values(array_unique(array_filter($titles, static fn ($title) => preg_match('/\bbook\b/i', (string) $title) === 1)));
+        $metadata['titles'] = array_slice($titles, 0, 10);
+
+        return $metadata;
     }
 
     private function ensurePodcastPressReleaseInlineGuestImage(string $content, array $targets): string
@@ -1018,6 +1070,8 @@ class ArticleGenerationService
             $patterns = [
                 '/^\s*(?:<strong>|<b>)?\s*' . preg_quote($leadText, '/') . '\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/iu',
                 '/^\s*(?:<strong>|<b>)?\s*(?:Location:\s*)?[^<\n]{0,180}?\(\s*Hexa PR Wire(?:\s*[-–—]\s*[^)]*)?\)\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/u',
+                '/^\s*(?:<strong>|<b>)?\s*(?:Location:\s*)?(?:[A-Z][A-Za-z. ]+,\s*[A-Za-z. ]+)\s*[-–—]\s*(?:Date:\s*)?(?:\[[^\]]+\]|[A-Za-z]+\s+\d{1,2},\s+\d{4})\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/iu',
+                '/^\s*(?:<strong>|<b>)?\s*(?:Location:\s*)?(?:[A-Z][A-Za-z. ]+,\s*[A-Za-z. ]+)(?:\s*,\s*(?:[A-Za-z]+\s+\d{1,2},\s+\d{4}))?\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/iu',
                 '/^\s*(?:<strong>|<b>)?\s*(?:Location:\s*)?(?:[A-Z][A-Za-z. ]+,\s*){1,3}(?:Date:\s*)?(?:\[[^\]]+\]|[A-Za-z]+\s+\d{1,2},\s+\d{4})\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/u',
                 '/^\s*(?:<strong>|<b>)?\s*FOR IMMEDIATE RELEASE(?:\s*[:\-–—]\s*)?/iu',
             ];
@@ -1040,7 +1094,118 @@ class ArticleGenerationService
                 . substr($content, $paragraphOffset + strlen($firstParagraph));
         }
 
-        return $leadHtml . $stripDateline($content);
+        return $leadHtml . $this->stripPressReleaseDatelinePrefix($content, $details);
+    }
+
+    private function stripRepeatedPressReleaseDatelines(string $content, array $details): string
+    {
+        $seenFirstParagraph = false;
+
+        return preg_replace_callback('/<p\b([^>]*)>(.*?)<\/p>/is', function (array $match) use ($details, &$seenFirstParagraph) {
+            if (!$seenFirstParagraph) {
+                $seenFirstParagraph = true;
+                return $match[0];
+            }
+
+            $attrs = (string) ($match[1] ?? '');
+            $inner = (string) ($match[2] ?? '');
+            $clean = $this->stripPressReleaseDatelinePrefix($inner, $details);
+
+            return '<p' . $attrs . '>' . $clean . '</p>';
+        }, $content) ?? $content;
+    }
+
+    private function stripPressReleaseDatelinePrefix(string $text, array $details = []): string
+    {
+        $leadText = '';
+        $date = trim((string) ($details['date'] ?? ''));
+        $location = trim((string) ($details['location'] ?? ''));
+        if ($date !== '' && $location !== '') {
+            $leadText = $location . ' (Hexa PR Wire - ' . $date . ')';
+        }
+
+        $patterns = [];
+        if ($leadText !== '') {
+            $patterns[] = '/^\s*(?:<strong>|<b>)?\s*' . preg_quote($leadText, '/') . '\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/iu';
+        }
+        $patterns[] = '/^\s*(?:<strong>|<b>)?\s*(?:Location:\s*)?[^<\n]{0,180}?\(\s*Hexa PR Wire(?:\s*[-–—]\s*[^)]*)?\)\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/u';
+        $patterns[] = '/^\s*(?:<strong>|<b>)?\s*(?:Location:\s*)?(?:[A-Z][A-Za-z. ]+,\s*[A-Za-z. ]+)(?:\s*,\s*(?:[A-Za-z]+\s+\d{1,2},\s+\d{4}))?\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/iu';
+        $patterns[] = '/^\s*(?:<strong>|<b>)?\s*(?:Location:\s*)?(?:[A-Z][A-Za-z. ]+,\s*){1,3}(?:Date:\s*)?(?:\[[^\]]+\]|[A-Za-z]+\s+\d{1,2},\s+\d{4})\s*(?:<\/strong>|<\/b>)?\s*[-–—]\s*/u';
+        $patterns[] = '/^\s*(?:<strong>|<b>)?\s*FOR IMMEDIATE RELEASE(?:\s*[:\-–—]\s*)?/iu';
+
+        $updated = $text;
+        foreach ($patterns as $pattern) {
+            $updated = preg_replace($pattern, '', $updated, 1) ?? $updated;
+        }
+
+        return ltrim($updated);
+    }
+
+    private function normalizePressReleaseParagraphLengths(string $content, int $maxWords = 75, int $maxSentences = 2): string
+    {
+        return preg_replace_callback('/<p\b([^>]*)>(.*?)<\/p>/is', function (array $match) use ($maxWords, $maxSentences) {
+            $attrs = (string) ($match[1] ?? '');
+            $innerHtml = trim((string) ($match[2] ?? ''));
+            if ($innerHtml === '' || preg_match('/<(?:img|figure|iframe|table|ul|ol|blockquote)\b/i', $innerHtml)) {
+                return $match[0];
+            }
+
+            $plain = trim((string) preg_replace('/\s+/', ' ', strip_tags($innerHtml)));
+            $wordCount = str_word_count($plain);
+            $sentenceCount = preg_match_all('/[.!?](?:\s|$)/u', $plain, $dummy);
+            if ($wordCount <= $maxWords && $sentenceCount <= $maxSentences) {
+                return $match[0];
+            }
+
+            $paragraphs = $this->splitLongPressReleaseParagraphInnerHtml($innerHtml, $maxWords, $maxSentences);
+            if (count($paragraphs) <= 1) {
+                return $match[0];
+            }
+
+            return implode(chr(10), array_map(fn (string $paragraph) => '<p' . $attrs . '>' . $paragraph . '</p>', $paragraphs));
+        }, $content) ?? $content;
+    }
+
+    private function splitLongPressReleaseParagraphInnerHtml(string $innerHtml, int $maxWords = 90, int $maxSentences = 3): array
+    {
+        $clean = trim($innerHtml);
+        if ($clean === '') {
+            return [$innerHtml];
+        }
+
+        $sentences = preg_split('/(?<=[.!?])\s+(?=(?:<[^>]+>\s*)*[A-Z0-9<])/u', $clean) ?: [$clean];
+        $sentences = array_values(array_filter(array_map('trim', $sentences), static fn ($sentence) => $sentence !== ''));
+        if (count($sentences) <= 1) {
+            return [$clean];
+        }
+
+        $paragraphs = [];
+        $current = [];
+        $currentWords = 0;
+        $currentSentences = 0;
+
+        foreach ($sentences as $sentence) {
+            $sentenceWords = str_word_count(trim(strip_tags($sentence)));
+            $wouldExceedWords = $currentWords > 0 && ($currentWords + $sentenceWords) > $maxWords;
+            $wouldExceedSentences = $currentSentences > 0 && ($currentSentences + 1) > $maxSentences;
+
+            if (($wouldExceedWords || $wouldExceedSentences) && $current !== []) {
+                $paragraphs[] = implode(' ', $current);
+                $current = [];
+                $currentWords = 0;
+                $currentSentences = 0;
+            }
+
+            $current[] = $sentence;
+            $currentWords += $sentenceWords;
+            $currentSentences += 1;
+        }
+
+        if ($current !== []) {
+            $paragraphs[] = implode(' ', $current);
+        }
+
+        return $paragraphs !== [] ? $paragraphs : [$clean];
     }
 
     /**
@@ -1097,9 +1262,11 @@ class ArticleGenerationService
             ->values()
             ->all();
 
+        $requireBookMention = $articleType === 'press-release' && str_contains($this->flattenSourceTexts($sourceTexts), '=== Book Press Release Mission ===');
+
         $validTitles = [];
         foreach ($normalizedTitles as $candidate) {
-            if ($this->titleMatchesArticleType($candidate, $articleType, $sourceTitles)) {
+            if ($this->titleMatchesArticleType($candidate, $articleType, $sourceTitles, $requireBookMention)) {
                 $validTitles[] = $candidate;
             }
         }
@@ -1151,7 +1318,7 @@ class ArticleGenerationService
         return trim($truncated, " \t\n\r\0\x0B,;:-");
     }
 
-    private function titleMatchesArticleType(string $title, ?string $articleType, array $sourceTitles): bool
+    private function titleMatchesArticleType(string $title, ?string $articleType, array $sourceTitles, bool $requireBookMention = false): bool
     {
         if ($title === '') {
             return false;
@@ -1166,6 +1333,10 @@ class ArticleGenerationService
         }
 
         if (preg_match('/\b(source|sources|round-?up|live updates?)\b/i', $title)) {
+            return false;
+        }
+
+        if ($requireBookMention && preg_match('/\bbook\b/i', $title) !== 1) {
             return false;
         }
 
@@ -1254,20 +1425,40 @@ class ArticleGenerationService
             ->values()
             ->all();
 
+        $flattenedSources = $this->flattenSourceTexts($sourceTexts);
+        $isBookPressRelease = $articleType === 'press-release' && str_contains($flattenedSources, '=== Book Press Release Mission ===');
+
         $rules = [
             'Generate exactly 10 distinct headline options.',
             'Do not use em dashes or en dashes. Use commas, periods, colons, or a standard hyphen only.',
-            'Do not use first-person phrasing such as I, I\'m, I\'ve, my, we, our, or us.',
+            "Do not use first-person phrasing such as I, I'm, I've, my, we, our, or us.",
             'Keep every headline in third person unless the workflow explicitly requests a first-person essay.',
             'Do not copy or lightly paraphrase the source headlines.',
             'Keep the headlines specific, publication-ready, and SEO-friendly.',
             'Return JSON only in the form {"titles":["title1","title2",...]}',
         ];
 
-        return "Article type: " . ($articleType ?: 'general') . "\n\n"
-            . "Rules:\n- " . implode("\n- ", $rules) . "\n\n"
-            . ($sourceTitles !== [] ? "Source headlines to avoid:\n- " . implode("\n- ", $sourceTitles) . "\n\n" : '')
-            . "Article body:\n" . mb_substr(strip_tags($content), 0, 5000);
+        if ($isBookPressRelease) {
+            $rules[] = 'Every headline must explicitly include the word book.';
+            $rules[] = 'Keep the release angle obvious: the author is unveiling, releasing, announcing, or introducing a book.';
+            $rules[] = 'Use the imported book title naturally where relevant, but do not make every option identical.';
+        }
+
+        return 'Article type: ' . ($articleType ?: 'general') . "
+
+"
+            . "Rules:
+- " . implode("
+- ", $rules) . "
+
+"
+            . ($sourceTitles !== [] ? "Source headlines to avoid:
+- " . implode("
+- ", $sourceTitles) . "
+
+" : '')
+            . "Article body:
+" . mb_substr(strip_tags($content), 0, 5000);
     }
 
     private function titlesAreTooSimilar(string $left, string $right): bool
@@ -1321,10 +1512,10 @@ class ArticleGenerationService
             return $content;
         }
 
-        if (preg_match('/^\s*<h2[^>]*>(.*?)<\/h2>\s*/is', $content, $match)) {
+        if (preg_match('/^\s*<h[1-3][^>]*>(.*?)<\/h[1-3]>\s*/is', $content, $match)) {
             $headingText = trim(html_entity_decode(strip_tags($match[1]), ENT_QUOTES, 'UTF-8'));
             if ($headingText !== '' && Str::lower($headingText) === Str::lower($title)) {
-                $content = preg_replace('/^\s*<h2[^>]*>.*?<\/h2>\s*/is', '', $content, 1) ?? $content;
+                $content = preg_replace('/^\s*<h[1-3][^>]*>.*?<\/h[1-3]>\s*/is', '', $content, 1) ?? $content;
             }
         }
 

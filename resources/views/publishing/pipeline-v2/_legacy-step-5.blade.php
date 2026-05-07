@@ -71,6 +71,7 @@
                     <span class="text-xs text-gray-500 font-medium">Resolved Prompt</span>
                     <div class="flex items-center gap-2">
                         <button type="button" @click="refreshPromptPreview({ force: true, reason: 'manual_button' })" :disabled="promptLoading" class="text-[11px] text-blue-500 hover:text-blue-700 disabled:opacity-50">Refresh</button>
+                        <button type="button" @click="copyResolvedPrompt()" :disabled="!resolvedPrompt" class="text-[11px] text-purple-500 hover:text-purple-700 disabled:opacity-40" x-text="promptCopied ? 'Copied to CB' : 'Copy to Clipboard'"></button>
                         <span x-show="promptLoading" x-cloak class="text-xs text-blue-400 inline-flex items-center gap-1">
                             <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             Updating...
