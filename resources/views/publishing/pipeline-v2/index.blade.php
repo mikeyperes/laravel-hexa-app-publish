@@ -329,6 +329,13 @@
                     </span>
                     <span class="v2-pill v2-pill-gray" x-text="masterActivityLog.length || ''"></span>
                 </button>
+                <button type="button" data-email-drawer-toggle @click="emailDrawerOpen = !emailDrawerOpen">
+                    <span class="flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                        Email
+                    </span>
+                    <span x-show="approvalEmailLogs && approvalEmailLogs.length > 0" x-cloak class="v2-pill v2-pill-gray" x-text="approvalEmailLogs.length"></span>
+                </button>
                 <a href="{{ route('publish.pipeline.legacy', ['id' => $draftId]) }}">
                     <span class="flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
@@ -527,6 +534,12 @@
         <div class="flex-1 overflow-y-auto p-4">
             @include('app-publish::publishing.pipeline.partials.master-activity-log')
         </div>
+    </aside>
+
+    {{-- ═══════════════════ EMAIL DRAWER ═══════════════════ --}}
+    <div x-cloak class="v2-drawer-overlay" x-bind:style="emailDrawerOpen ? 'display:block;' : 'display:none;'" @click="emailDrawerOpen = false"></div>
+    <aside x-cloak data-email-drawer x-bind:style="emailDrawerOpen ? 'display:flex;' : 'display:none;'" class="v2-drawer">
+        @include('app-publish::publishing.pipeline-v2._email-drawer')
     </aside>
 
     {{-- ═══════════════════ EXISTING PARTIALS (overlays + mixins, untouched) ═══════════════════ --}}

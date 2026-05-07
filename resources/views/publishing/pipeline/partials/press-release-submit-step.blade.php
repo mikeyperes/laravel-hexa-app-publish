@@ -472,7 +472,7 @@
                                         :class="pressRelease.notion_book?.id === book.id ? 'border-purple-300 bg-purple-50' : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/40'">
                                         <div class="flex items-start gap-4">
                                             <div x-show="book.featured_image_url" x-cloak class="h-24 w-20 overflow-hidden rounded-md border border-gray-200 bg-white flex-shrink-0">
-                                                <img :src="book.featured_image_url" :alt="book.title" class="h-full w-full object-cover">
+                                                <img :src="pressReleaseEditorPreviewUrl({ url: book.featured_image_url }) || book.featured_image_url" :alt="book.title" class="h-full w-full object-cover">
                                             </div>
                                             <div class="min-w-0 flex-1">
                                                 <div class="flex items-start justify-between gap-3">
@@ -546,7 +546,7 @@
                             <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
                                 <p class="text-xs uppercase tracking-wide text-gray-400">Book cover</p>
                                 <div x-show="pressRelease.notion_book?.featured_image_url" x-cloak class="mt-3 overflow-hidden rounded-lg border border-gray-200 bg-white">
-                                    <img :src="pressRelease.notion_book.featured_image_url" :alt="pressRelease.notion_book.title || 'Book cover'" class="w-full object-cover">
+                                    <img :src="pressReleaseEditorPreviewUrl({ url: pressRelease.notion_book.featured_image_url }) || pressRelease.notion_book.featured_image_url" :alt="pressRelease.notion_book.title || 'Book cover'" class="w-full object-cover">
                                 </div>
                                 <a x-show="pressRelease.notion_book?.featured_image_url" x-cloak :href="pressRelease.notion_book.featured_image_url" target="_blank" rel="noopener noreferrer" class="mt-2 block text-xs text-blue-600 hover:text-blue-800 break-all" x-text="pressRelease.notion_book.featured_image_url"></a>
                                 <p x-show="!pressRelease.notion_book?.featured_image_url" x-cloak class="mt-2 text-amber-700">Missing book cover</p>

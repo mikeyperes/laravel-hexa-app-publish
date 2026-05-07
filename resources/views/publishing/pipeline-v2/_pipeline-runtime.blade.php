@@ -302,8 +302,24 @@ function publishPipeline() {
         preset_schema: @json($presetSchema ?? []),
         ...presetFieldsMethods,
         savingDraft: false,
+        saveError: '',
         _draftSaveTimer: null,
         filenamePattern: @json($filenamePattern ?? 'hexa_{draft_id}_{seo_name}'),
+
+        publicationNotificationTemplates: @json($publicationNotificationTemplates ?? []),
+        publicationNotificationDefaults: @json($publicationNotificationDefaults ?? []),
+        publicationNotificationShortcodes: @json(config('hws-publish.shortcodes', [])),
+        publicationNotificationTemplateId: @json(($publicationNotificationDefaults['template_id'] ?? '')),
+        publicationNotificationFromName: @json(($publicationNotificationDefaults['from_name'] ?? '')),
+        publicationNotificationFromEmail: @json(($publicationNotificationDefaults['from_email'] ?? '')),
+        publicationNotificationReplyTo: @json(($publicationNotificationDefaults['reply_to'] ?? '')),
+        publicationNotificationCc: @json(($publicationNotificationDefaults['cc'] ?? '')),
+        publicationNotificationTo: '',
+        publicationNotificationSubject: @json(($publicationNotificationDefaults['subject'] ?? '')),
+        publicationNotificationBody: @json(($publicationNotificationDefaults['body'] ?? '')),
+        publicationNotificationSending: false,
+        publicationNotificationStatus: '',
+        publicationNotificationResult: null,
 
         // Notification
         notification: { show: false, type: 'success', message: '' },
@@ -312,6 +328,8 @@ function publishPipeline() {
         masterActivityLog: [],
         masterActivityLogOpen: false,
         masterActivityAutoScroll: true,
+        emailDrawerOpen: false,
+        emailDrawerTab: 'approval',
         activityRunHistory: [],
         activityRunHistoryLoading: false,
         selectedActivityRunTrace: '',
@@ -384,6 +402,78 @@ function publishPipeline() {
 
         get legacyPipelineStateKey() {
             return 'publishPipelineState:' + String(this.draftId || 'new');
+        },
+
+        formatLabel(value) {
+            return String(value || '').replace(/[-_]/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+        },
+
+        linkedValueHtml(value) {
+            const raw = String(value ?? '');
+            if (!raw.trim()) return '';
+            const escapeHtml = (input) => String(input || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+            const pattern = /https?:\/\/[^\s<>'"]+/gi;
+            let html = '';
+            let lastIndex = 0;
+            raw.replace(pattern, (match, offset) => {
+                html += escapeHtml(raw.slice(lastIndex, offset)).replace(/\n/g, '<br>');
+                const safeUrl = escapeHtml(match);
+                html += '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200 underline-offset-2 break-all">' + safeUrl + '</a>';
+                lastIndex = offset + match.length;
+                return match;
+            });
+            html += escapeHtml(raw.slice(lastIndex)).replace(/\n/g, '<br>');
+            return html;
+        },
+
+        prFieldHasError(field) {
+            return !!this.prValidationErrors?.[field];
+        },
+
+        prInputBorderClass(field) {
+            return this.prFieldHasError(field)
+                ? 'border border-red-400 ring-2 ring-red-100 focus:ring-red-200 focus:border-red-400'
+                : 'border border-gray-300 focus:ring-2 focus:ring-blue-400 focus:border-blue-400';
+        },
+
+        prCardBorderClass(field) {
+            return this.prFieldHasError(field)
+                ? 'border-red-300 bg-red-50/40 ring-1 ring-red-100'
+                : 'border-blue-200 bg-blue-50/60';
+        },
+
+        prSelectedContextEntries() {
+            const items = [];
+            for (const profile of (this.selectedPrProfiles || [])) {
+                const pd = this.prSubjectData?.[profile.id] || null;
+                if (!pd?.selectedEntries) continue;
+                for (const relation of (pd.relations || [])) {
+                    for (const entry of (relation.entries || [])) {
+                        if (!pd.selectedEntries?.[entry.id]) continue;
+                        items.push({ profile, relation, entry });
+                    }
+                }
+            }
+            return items;
+        },
+
+        hasSelectedPrContextEntries() {
+            return this.prSelectedContextEntries().length > 0;
+        },
+
+        currentPrContextStatusLabel() {
+            if (this.hasSelectedPrContextEntries()) {
+                return 'Notion context selected';
+            }
+            if (String(this.prArticle?.expert_context_extracted?.title || this.prArticle?.expert_context_extracted?.text || '').trim() || String(this.prArticle?.expert_context_url || '').trim()) {
+                return 'External article imported';
+            }
+            return 'Context article required';
         },
 
         startTitleEditing() {

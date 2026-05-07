@@ -528,10 +528,29 @@
             headers.set('X-Pipeline-Run-Trace', this._clientSessionTraceId || this._buildClientTrace('session'));
             if (this.pipelineDebugEnabled) headers.set('X-Pipeline-Debug', '1');
 
-            const finalInit = { ...(init || {}), headers };
+            const finalInit = {
+                ...(init || {}),
+                headers,
+                credentials: init?.credentials || 'same-origin',
+            };
             delete finalInit.__skipActivityTracking;
 
-            return originalFetch(input, finalInit);
+            let response = await originalFetch(input, finalInit);
+            if (response.status === 419) {
+                const refreshedToken = document.querySelector('meta[name="csrf-token"]')?.content || this.csrfToken || '';
+                if (refreshedToken) {
+                    headers.set('X-CSRF-TOKEN', refreshedToken);
+                }
+                response = await originalFetch(input, { ...finalInit, headers, credentials: 'same-origin' });
+                if (response.status === 419) {
+                    this.saveError = 'CSRF token mismatch. Refresh the page and try again.';
+                    if (typeof this.showNotification === 'function') {
+                        this.showNotification('error', this.saveError);
+                    }
+                }
+            }
+
+            return response;
         },
 
         _buildClientTrace(scope = 'trace') {
