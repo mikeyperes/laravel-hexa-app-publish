@@ -13,6 +13,7 @@ use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineState;
 use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineRun;
 use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineOperation;
 use hexa_app_publish\Publishing\Articles\Models\PublishArticleActivity;
+use hexa_app_publish\Publishing\Articles\Models\PublishArticleApprovalEmail;
 use hexa_app_publish\Publishing\Prompts\Models\PublishPrompt;
 use hexa_app_publish\Publishing\Settings\Models\PublishMasterSetting;
 use hexa_app_publish\Discovery\Sources\Models\PublishUsedSource;
@@ -157,6 +158,17 @@ class PublishArticle extends Model
     public function activities(): HasMany
     {
         return $this->hasMany(PublishArticleActivity::class, 'publish_article_id');
+    }
+
+
+    public function approvalEmails(): HasMany
+    {
+        return $this->hasMany(PublishArticleApprovalEmail::class, 'publish_article_id');
+    }
+
+    public function latestApprovalEmail(): HasOne
+    {
+        return $this->hasOne(PublishArticleApprovalEmail::class, 'publish_article_id')->latestOfMany();
     }
 
     /**

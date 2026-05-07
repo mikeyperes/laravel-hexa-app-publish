@@ -21,7 +21,7 @@ class DraftController extends Controller
 
     public function index(Request $request): View|JsonResponse
     {
-        $query = $this->access->articleQuery($request->user())->with(['creator', 'site']);
+        $query = $this->access->articleQuery($request->user())->with(['creator', 'site', 'latestApprovalEmail.sender'])->withCount('approvalEmails');
 
         if ($request->filled('user_id')) {
             $userId = (int) $request->input('user_id');
@@ -86,13 +86,14 @@ class DraftController extends Controller
     public function show(Request $request, int $id): View|JsonResponse
     {
         $draft = $this->access->resolveArticleOrFail($request->user(), $id);
+        $draft->loadMissing(['creator', 'site', 'latestApprovalEmail.sender'])->loadCount('approvalEmails');
 
         if ($request->wantsJson()) {
             return response()->json(['success' => true, 'article' => $draft]);
         }
 
         return view('app-publish::publishing.articles.drafts.index', [
-            'drafts' => $this->access->articleQuery($request->user())->orderByDesc('updated_at')->paginate(100),
+            'drafts' => $this->access->articleQuery($request->user())->with(['creator', 'site', 'latestApprovalEmail.sender'])->withCount('approvalEmails')->orderByDesc('updated_at')->paginate(100),
             'editDraft' => $draft,
         ]);
     }
@@ -100,6 +101,7 @@ class DraftController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $draft = $this->access->resolveArticleOrFail($request->user(), $id);
+        $draft->loadMissing(['creator', 'site', 'latestApprovalEmail.sender'])->loadCount('approvalEmails');
 
         $validated = $request->validate([
             'title'      => 'required|string|max:500',

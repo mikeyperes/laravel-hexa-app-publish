@@ -126,17 +126,33 @@
     <header class="v2-header">
         <div class="px-6 py-3 flex items-center justify-between gap-4">
             <div class="flex items-center gap-3 min-w-0">
-                <a href="{{ route('publish.articles.index') }}" class="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 flex-shrink-0">
+                <a href="{{ route('publish.drafts.index') }}" class="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 flex-shrink-0">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
                     Articles
                 </a>
                 <span class="font-mono text-xs text-gray-400 flex-shrink-0">#{{ $draftId }}</span>
-                <span class="font-semibold text-gray-900 truncate" x-text="(articleTitle || draftState?.articleTitle || 'Untitled')"></span>
+                <div class="min-w-0 flex items-center gap-2">
+                    <template x-if="!titleEditing">
+                        <button type="button" @click="startTitleEditing()" class="min-w-0 truncate rounded px-1 py-0.5 text-left font-semibold text-gray-900 hover:bg-gray-100" :title="articleTitle || draftState?.articleTitle || 'Untitled'">
+                            <span x-text="(articleTitle || draftState?.articleTitle || 'Untitled')"></span>
+                        </button>
+                    </template>
+                    <template x-if="titleEditing">
+                        <input x-ref="articleTitleInput" type="text" x-model="titleEditValue" @keydown.enter.prevent="commitTitleEditing()" @keydown.escape.prevent="cancelTitleEditing()" @blur="commitTitleEditing()" class="min-w-[240px] max-w-[520px] rounded border border-blue-300 px-2 py-1 text-sm font-semibold text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200">
+                    </template>
+                    <button type="button" @click="startTitleEditing()" x-show="!titleEditing" x-cloak class="v2-btn v2-btn-ghost p-1 text-gray-400 hover:text-gray-700" aria-label="Edit draft title">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    </button>
+                </div>
                 <span x-show="currentArticleType" x-cloak class="v2-pill v2-pill-blue flex-shrink-0" x-text="formatLabel ? formatLabel(currentArticleType) : currentArticleType"></span>
                 <span x-show="selectedSite?.name" x-cloak class="text-xs text-gray-500 flex-shrink-0">→ <span x-text="selectedSite?.name"></span></span>
             </div>
             <div class="flex items-center gap-3 flex-shrink-0">
                 <x-hexa-save-status channel="publish-pipeline-v2" label="Draft" />
+                <button type="button" @click="saveDraftNow()" :disabled="savingDraft" class="v2-btn v2-btn-secondary">
+                    <svg x-show="savingDraft" x-cloak class="v2-spinner" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    <span x-text="savingDraft ? 'Saving…' : 'Save Draft'"></span>
+                </button>
                 <div class="relative" x-data="{open: false}" @click.outside="open = false">
                     <button type="button" @click="open = !open" class="v2-btn v2-btn-ghost p-2" aria-label="More actions">
                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg>

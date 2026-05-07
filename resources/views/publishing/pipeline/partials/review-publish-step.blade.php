@@ -362,6 +362,18 @@
                 </a>
             </div>
 
+            <div class="mt-6 bg-white border border-gray-200 rounded-xl p-5 space-y-4" x-init="approvalEmailEnsureLoaded()">
+                <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                        <h6 class="text-sm font-semibold text-gray-800">Draft Approval Email</h6>
+                        <p class="mt-1 text-xs text-gray-500">Send the full draft inline for review before publication, with preview, review tracking, and full per-draft email logging.</p>
+                    </div>
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-700">Draft-level approval flow</span>
+                </div>
+
+                @include('app-publish::publishing.articles.partials.draft-approval-email-panel-body')
+            </div>
+
             <div x-show="(publishResult?.post_url || existingWpPostUrl) && publishAction !== 'draft_local'" x-cloak class="mt-6 bg-white border border-gray-200 rounded-xl p-5 space-y-4">
                 <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                     <div>

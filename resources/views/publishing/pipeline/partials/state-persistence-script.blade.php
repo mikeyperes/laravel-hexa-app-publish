@@ -1183,6 +1183,13 @@
                 'publicationNotificationTo',
                 'publicationNotificationSubject',
                 'publicationNotificationBody',
+                'approvalEmailTo',
+                'approvalEmailCc',
+                'approvalEmailFromName',
+                'approvalEmailFromEmail',
+                'approvalEmailReplyTo',
+                'approvalEmailSubject',
+                'approvalEmailImageMode',
             ];
         },
 
@@ -1353,6 +1360,19 @@
             this.existingWpAdminUrl = '';
             this.publishing = false;
             this.publishResult = null;
+            this.approvalEmailTo = '';
+            this.approvalEmailCc = '';
+            this.approvalEmailFromName = 'Scale My Publication';
+            this.approvalEmailFromEmail = 'no-reply@scalemypublication.com';
+            this.approvalEmailReplyTo = 'support@scalemypublication.com';
+            this.approvalEmailSubject = '';
+            this.approvalEmailImageMode = 'links';
+            this.approvalEmailPreviewHtml = '';
+            this.approvalEmailWarnings = [];
+            this.approvalEmailHeaders = {};
+            this.approvalEmailSnapshot = {};
+            this.approvalEmailLogs = [];
+            this.approvalEmailStatus = '';
             this.publishError = '';
             this.preparing = false;
             this.prepareComplete = false;

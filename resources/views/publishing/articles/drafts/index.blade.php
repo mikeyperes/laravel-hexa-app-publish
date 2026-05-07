@@ -165,6 +165,9 @@
                     <a href="{{ route('publish.pipeline', ['id' => $draft->id]) }}" class="p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Open in Pipeline">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     </a>
+                    <button @click="openApprovalEmail({{ $draft->id }})" class="p-1.5 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Approval Email">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8m-16 8h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+                    </button>
                     @if($draft->wp_post_url)
                         <a href="{{ $draft->wp_post_url }}" target="_blank" rel="noopener" class="p-1.5 rounded text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors" title="View on WordPress">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
@@ -195,6 +198,23 @@
         @endforelse
     </div>
 
+    <div x-show="approvalEmailOpen" x-cloak class="fixed inset-0 z-40 bg-black/40" @click="approvalEmailOpen = false"></div>
+    <aside x-show="approvalEmailOpen" x-cloak class="fixed right-0 top-0 bottom-0 z-50 flex w-full max-w-3xl flex-col bg-white shadow-2xl">
+        <div class="flex items-start justify-between gap-4 border-b border-gray-200 px-6 py-5">
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">Draft Approval Email</p>
+                <h2 class="mt-1 text-lg font-semibold text-gray-900" x-text="approvalEmailArticle?.title || 'Draft Approval Email'"></h2>
+                <p class="mt-1 text-sm text-gray-500">Send the full draft inline for review, preview the exact email, and inspect the full article-level send log.</p>
+            </div>
+            <button type="button" @click="approvalEmailOpen = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-6">
+            @include('app-publish::publishing.articles.partials.draft-approval-email-panel-body')
+        </div>
+    </aside>
+
     {{-- Pagination --}}
     @if($drafts->hasPages())
     <div class="flex justify-between items-center text-sm text-gray-500 pt-2">
@@ -205,11 +225,13 @@
 </div>
 
 @push('scripts')
+@include('app-publish::publishing.articles.partials.draft-approval-email-script')
 <script>
 function articlesList() {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
     return {
+        ...draftApprovalEmailMixin(),
         searchQuery: new URLSearchParams(window.location.search).get('q') || '',
         searching: false,
         totalCount: {{ $drafts->total() }},
@@ -244,6 +266,12 @@ function articlesList() {
         toggleSelect(id) {
             const idx = this.selectedIds.indexOf(id);
             if (idx === -1) this.selectedIds.push(id); else this.selectedIds.splice(idx, 1);
+        },
+
+        async openApprovalEmail(id) {
+            this.approvalEmailTargetId = id;
+            this.approvalEmailOpen = true;
+            await this.approvalEmailLoad(id, { preserveFilled: false, open: false });
         },
 
         async deleteSingle(id) {

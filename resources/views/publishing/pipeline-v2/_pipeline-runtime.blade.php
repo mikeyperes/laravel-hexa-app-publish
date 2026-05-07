@@ -1,4 +1,5 @@
 @include('app-publish::publishing.pipeline.partials.press-release-workflow-script')
+@include('app-publish::publishing.articles.partials.draft-approval-email-script')
 @php
     $pipelinePayloadSanitized = json_decode(json_encode($pipelinePayload ?? []), true) ?: [];
     if (isset($pipelinePayloadSanitized['selectedUser']) && is_array($pipelinePayloadSanitized['selectedUser'])) {
@@ -16,6 +17,7 @@
 <script>
 function publishPipeline() {
     return {
+        ...draftApprovalEmailMixin({ articleId: {{ $draftId }} }),
         ...pressReleaseWorkflowMixin({
             workflowDefinitions: @json($workflowDefinitions ?? []),
             pipelinePayload: @json($pipelinePayloadSanitized ?? []),
@@ -275,6 +277,8 @@ function publishPipeline() {
         promptLoading: false,
         promptPreviewDirty: true,
         articleDescription: '',
+        titleEditing: false,
+        titleEditValue: '',
         spinLog: [],
         photoSuggestionsPending: false,
 
@@ -377,6 +381,36 @@ function publishPipeline() {
 
         get legacyPipelineStateKey() {
             return 'publishPipelineState:' + String(this.draftId || 'new');
+        },
+
+        startTitleEditing() {
+            this.titleEditValue = String(this.articleTitle || this.draftState?.articleTitle || 'Untitled').trim() || 'Untitled';
+            this.titleEditing = true;
+            this.$nextTick(() => this.$refs.articleTitleInput?.focus());
+        },
+
+        cancelTitleEditing() {
+            this.titleEditing = false;
+            this.titleEditValue = String(this.articleTitle || this.draftState?.articleTitle || 'Untitled').trim() || 'Untitled';
+        },
+
+        commitTitleEditing() {
+            const nextTitle = String(this.titleEditValue || '').trim() || 'Untitled';
+            this.titleEditing = false;
+            if (nextTitle === String(this.articleTitle || '').trim()) {
+                return;
+            }
+
+            this.articleTitle = nextTitle;
+            this.queuePipelineStateSave?.(50);
+            this.queueAutoSaveDraft?.(150);
+            if (typeof this._logActivity === 'function') {
+                this._logActivity('draft', 'info', 'Draft title updated', {
+                    stage: 'draft',
+                    substage: 'title_update',
+                    title: nextTitle,
+                });
+            }
         },
 
         @include('app-publish::publishing.pipeline.partials.activity-log-script')

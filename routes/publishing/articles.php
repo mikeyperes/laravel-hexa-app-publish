@@ -2,6 +2,7 @@
 
 use hexa_app_publish\Publishing\Articles\Http\Controllers\ArticleController;
 use hexa_app_publish\Publishing\Articles\Http\Controllers\DraftController;
+use hexa_app_publish\Publishing\Articles\Http\Controllers\DraftApprovalEmailController;
 use hexa_app_publish\Publishing\Articles\Http\Controllers\BookmarkController;
 
 // Published articles
@@ -35,6 +36,12 @@ Route::get('/article/articles/{id}', [DraftController::class, 'show'])->name('pu
 Route::put('/article/articles/{id}', [DraftController::class, 'update'])->name('publish.drafts.update');
 Route::delete('/article/articles/{id}', [DraftController::class, 'destroy'])->name('publish.drafts.destroy');
 Route::post('/article/articles/bulk-delete', [DraftController::class, 'bulkDestroy'])->name('publish.drafts.bulk-destroy');
+
+
+Route::get('/article/articles/{id}/approval-email', [DraftApprovalEmailController::class, 'show'])->name('publish.drafts.approval.show');
+Route::post('/article/articles/{id}/approval-email/preview', [DraftApprovalEmailController::class, 'preview'])->name('publish.drafts.approval.preview');
+Route::post('/article/articles/{id}/approval-email/send', [DraftApprovalEmailController::class, 'send'])->name('publish.drafts.approval.send');
+Route::get('/article/articles/{id}/approval-email/logs', [DraftApprovalEmailController::class, 'logs'])->name('publish.drafts.approval.logs');
 
 // Bookmarks
 Route::get('/article/bookmarks', [BookmarkController::class, 'index'])->name('publish.bookmarks.index');

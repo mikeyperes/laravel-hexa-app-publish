@@ -10,6 +10,10 @@
 use Illuminate\Support\Facades\Route;
 use hexa_package_user_roles\Http\Middleware\EnsureAdminAccess;
 
+Route::middleware(['web'])->group(function () {
+    require __DIR__ . '/publishing/public-approval.php';
+});
+
 Route::middleware(['web', 'auth', 'locked', 'system_lock', 'two_factor', 'role'])->group(function () {
     // Restricted publish workspace surfaces. These stay available to scoped publish users
     // and are further filtered by PublishAccessService route allowlists + query scoping.
