@@ -422,10 +422,19 @@ class PipelineStateService
 
     private function detectWorkflowType(array $payload): ?string
     {
-        $articleType = data_get($payload, 'template_overrides.article_type')
-            ?? data_get($payload, 'selectedTemplate.article_type')
-            ?? data_get($payload, 'pressRelease.article_type');
+        $articleType = trim((string) (
+            data_get($payload, "template_overrides.article_type")
+            ?? data_get($payload, "article_type")
+            ?? data_get($payload, "currentArticleType")
+            ?? data_get($payload, "selectedTemplate.article_type")
+            ?? data_get($payload, "pressRelease.article_type")
+            ?? ""
+        ));
 
-        return $articleType === 'press-release' ? 'press-release' : $articleType;
+        if ($articleType === "") {
+            return null;
+        }
+
+        return $articleType === "press-release" ? "press-release" : $articleType;
     }
 }

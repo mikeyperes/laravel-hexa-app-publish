@@ -379,7 +379,31 @@
             }
         },
 
+        syncTemplateSelectionForArticleType() {
+            const articleType = String(this.template_overrides?.article_type || '').trim();
+            const current = this.templates.find(t => String(t.id) === String(this.selectedTemplateId)) || this.selectedTemplate || null;
+            if (!current) return;
+
+            const currentType = String(current.article_type || '').trim();
+            if (!currentType || !articleType || currentType === articleType) return;
+
+            const replacement = this.templates.find(t => t.article_type === articleType && t.is_default)
+                || this.templates.find(t => t.article_type === articleType)
+                || null;
+
+            if (replacement) {
+                this.selectedTemplateId = String(replacement.id);
+                this.selectTemplate();
+                return;
+            }
+
+            this.selectedTemplateId = '';
+            this.selectedTemplate = null;
+            this.loadPresetFields('template', null, null);
+        },
+
         autoSelectPrSource() {
+            this.syncTemplateSelectionForArticleType();
             if (this.template_overrides?.article_type === 'press-release') {
                 this.autoSelectPressReleaseTemplate();
                 if (this.prSourceSites.length === 0) return;
@@ -727,19 +751,38 @@
             return null;
         },
 
-        handleArticleTypeChange() {
-            if (!this.template_dirty || typeof this.template_dirty !== "object") {
+        async handleArticleTypeChange(nextType = null) {
+            if (nextType !== null && nextType !== undefined) {
+                if (!this.template_overrides || typeof this.template_overrides !== 'object') {
+                    this.template_overrides = {};
+                }
+                this.template_overrides.article_type = String(nextType || '').trim();
+            }
+            await new Promise((resolve) => {
+                if (typeof this.$nextTick === 'function') {
+                    this.$nextTick(resolve);
+                    return;
+                }
+                resolve();
+            });
+            if (!this.template_dirty || typeof this.template_dirty !== 'object') {
                 this.template_dirty = {};
             }
             this.template_dirty.article_type = true;
+            this.syncTemplateSelectionForArticleType();
             this.autoSelectPrSource();
             this.syncPrArticleForCurrentArticleType({ force: false });
-            this.invalidatePromptPreview("article_type_changed");
-            this.$nextTick(() => this._ensureCreateArticleStepReady?.("article_type_changed"));
+            this.invalidatePromptPreview('article_type_changed');
+            this.$nextTick(() => this._ensureCreateArticleStepReady?.('article_type_changed'));
             this.savePipelineState();
-            this.flushPipelineStateNow?.();
-            if (!this._restoring) {
-                this.queueAutoSaveDraft?.(50);
+            const stateSaved = typeof this.flushPipelineStateNow === 'function'
+                ? await this.flushPipelineStateNow()
+                : true;
+            if (stateSaved === false || this._restoring) {
+                return;
+            }
+            if (typeof this.saveDraftNow === 'function') {
+                await this.saveDraftNow(true);
             }
         },
 

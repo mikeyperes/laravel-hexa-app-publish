@@ -477,7 +477,7 @@
                 web_research: this.spinWebResearch,
                 supporting_url_type: this.supportingUrlType || 'matching_content_type',
                 pr_subject_context: this.isPrArticleMode() ? this.buildPrSubjectContext() : null,
-                article_type: this.currentArticleType || null,
+                article_type: this.template_overrides?.article_type || this.currentArticleType || null,
             };
         },
 
@@ -601,6 +601,9 @@
                 const explicitRestoredArticleType = String(
                     this.template_overrides.article_type
                     || state?.template_overrides?.article_type
+                    || state?.article_type
+                    || state?.currentArticleType
+                    || draftState?.article_type
                     || ''
                 ).trim();
                 const resolvedRestoredArticleType = String(
@@ -937,7 +940,10 @@
                     }, 900),
                 });
 
-                this.$nextTick(() => this._restorePipelineOperations());
+                this.$nextTick(() => {
+                    this._restorePipelineOperations();
+                    this.restorePublishEmailQueryState?.();
+                });
             };
 
             if (this.selectedUser) {
@@ -1016,17 +1022,19 @@
                                 if (state.template_dirty) Object.assign(this.template_dirty, state.template_dirty);
                             }
                             // Sync article_type to standalone dropdown
-                            const restoredArticleType = this.selectedTemplate?.article_type
-                                || this.template_overrides?.article_type
+                            const restoredArticleType = this.template_overrides?.article_type
+                                || state?.template_overrides?.article_type
                                 || draftState.article_type
                                 || state?.article_type
                                 || serverState?.article_type
                                 || state?.pressRelease?.article_type
                                 || serverState?.pressRelease?.article_type
+                                || this.selectedTemplate?.article_type
                                 || null;
-                            if (restoredArticleType && !this.template_overrides?.article_type) {
+                            if (restoredArticleType) {
                                 this.template_overrides.article_type = restoredArticleType;
                             }
+                            this.syncTemplateSelectionForArticleType?.();
 
                             // Auto-select site from default preset if no site saved
                             if (this.selectedPreset?.default_site_id && !this.selectedSiteId) {
@@ -1102,9 +1110,22 @@
             });
             this.$watch('template_overrides.article_type', () => {
                 if (this._restoring) return;
+                this.syncTemplateSelectionForArticleType?.();
                 this.syncPrArticleForCurrentArticleType({ force: false });
                 this.invalidatePromptPreview('article_type_changed');
                 this.$nextTick(() => this._ensureCreateArticleStepReady?.('article_type_changed'));
+            });
+            this.$watch('emailDrawerOpen', () => {
+                if (this._restoring) return;
+                this.syncPublishEmailQueryState?.();
+            });
+            this.$watch('emailDrawerTab', () => {
+                if (this._restoring) return;
+                this.syncPublishEmailQueryState?.();
+            });
+            this.$watch('approvalEmailTargetId', () => {
+                if (this._restoring) return;
+                this.syncPublishEmailQueryState?.();
             });
             this.$watch('currentStep', step => {
                 if (this._restoring) return;
@@ -1187,8 +1208,11 @@
                 'publicationNotificationTo',
                 'publicationNotificationSubject',
                 'publicationNotificationBody',
+                'approvalEmailToTouched',
+                'approvalEmailCcTouched',
                 'approvalEmailTo',
                 'approvalEmailCc',
+                'approvalEmailTestTo',
                 'approvalEmailFromName',
                 'approvalEmailFromEmail',
                 'approvalEmailReplyTo',

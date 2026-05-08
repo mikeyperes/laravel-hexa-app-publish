@@ -13,6 +13,8 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         approvalEmailArticle: null,
         approvalEmailStatus: '',
         approvalEmailStatusType: 'info',
+        approvalEmailToTouched: false,
+        approvalEmailCcTouched: false,
         approvalEmailTo: '',
         approvalEmailCc: '',
         approvalEmailFromName: 'Scale My Publication',
@@ -28,29 +30,109 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         approvalEmailLogs: [],
         approvalEmailSuperAdminEmail: 'michael@mike-ro-tech.com',
         approvalEmailIntroEditorId: 'approval-email-intro-' + Math.random().toString(36).slice(2),
+        approvalEmailTestTo: "michael@mike-ro-tech.com",
         _approvalEmailTinyMcePromise: null,
 
         approvalEmailRequestHeaders(extra = {}) {
-            const base = typeof this.requestHeaders === 'function'
-                ? this.requestHeaders({ 'Content-Type': 'application/json' })
+            const base = typeof this.requestHeaders === "function"
+                ? this.requestHeaders({ "Content-Type": "application/json" })
                 : {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '',
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-CSRF-TOKEN": document.querySelector("meta[name=csrf-token]")?.content || this.csrfToken || "",
                 };
 
             return { ...base, ...extra };
         },
 
+        async approvalEmailRefreshCsrfToken() {
+            try {
+                const response = await fetch(window.location.href, {
+                    method: "GET",
+                    credentials: "same-origin",
+                    headers: { "X-Requested-With": "XMLHttpRequest" },
+                });
+                const html = await response.text();
+                const match = html.match(/<meta\s+name=\"csrf-token\"\s+content=\"([^\"]+)\"/i);
+                const token = match?.[1] || document.querySelector("meta[name=csrf-token]")?.content || "";
+                if (token) {
+                    const meta = document.querySelector("meta[name=csrf-token]");
+                    if (meta) meta.setAttribute("content", token);
+                }
+                return token;
+            } catch (error) {
+                return document.querySelector("meta[name=csrf-token]")?.content || this.csrfToken || "";
+            }
+        },
+
+        async approvalEmailFetchJson(url, init = {}, options = {}) {
+            const fetcher = typeof this._rawPipelineFetch === "function"
+                ? this._rawPipelineFetch.bind(this)
+                : window.fetch.bind(window);
+            let response = await fetcher(url, {
+                credentials: "same-origin",
+                ...init,
+                headers: this.approvalEmailRequestHeaders(init.headers || {}),
+            });
+            if (response.status === 419 && options.retryOn419 !== false) {
+                await this.approvalEmailRefreshCsrfToken();
+                response = await fetcher(url, {
+                    credentials: "same-origin",
+                    ...init,
+                    headers: this.approvalEmailRequestHeaders(init.headers || {}),
+                });
+            }
+            const data = await response.json().catch(() => ({}));
+            return { response, data };
+        },
+
+        syncPublishEmailQueryState() {
+            try {
+                if (!String(window.location.pathname || "").includes("/article/publish")) return;
+                const url = new URL(window.location.href);
+                if (this.emailDrawerOpen) {
+                    url.searchParams.set("email", this.emailDrawerTab === "notification" ? "notification" : "approval");
+                    const articleId = Number(this.approvalEmailTargetId || this.draftId || 0) || 0;
+                    if (articleId) {
+                        url.searchParams.set("email_article", String(articleId));
+                    } else {
+                        url.searchParams.delete("email_article");
+                    }
+                } else {
+                    url.searchParams.delete("email");
+                    url.searchParams.delete("email_article");
+                }
+                window.history.replaceState({}, "", url.toString());
+            } catch (error) {}
+        },
+
+        restorePublishEmailQueryState() {
+            try {
+                if (!String(window.location.pathname || "").includes("/article/publish")) return;
+                const url = new URL(window.location.href);
+                const panel = String(url.searchParams.get("email") || "").trim();
+                if (!["approval", "notification"].includes(panel)) return;
+                const articleId = Number(url.searchParams.get("email_article") || this.approvalEmailTargetId || this.draftId || 0) || 0;
+                this.emailDrawerTab = panel;
+                this.emailDrawerOpen = true;
+                if (articleId) {
+                    this.approvalEmailTargetId = articleId;
+                }
+                if (panel === "approval") {
+                    this.approvalEmailEnsureLoaded?.(true);
+                }
+            } catch (error) {}
+        },
+
         approvalEmailStatusClass() {
-            switch (String(this.approvalEmailStatusType || 'info')) {
-                case 'success':
-                    return 'border border-green-200 bg-green-50 text-green-700';
-                case 'info':
-                    return 'border border-blue-200 bg-blue-50 text-blue-700';
+            switch (String(this.approvalEmailStatusType || "info")) {
+                case "success":
+                    return "border border-green-200 bg-green-50 text-green-700";
+                case "info":
+                    return "border border-blue-200 bg-blue-50 text-blue-700";
                 default:
-                    return 'border border-red-200 bg-red-50 text-red-700';
+                    return "border border-red-200 bg-red-50 text-red-700";
             }
         },
 
@@ -270,28 +352,29 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
 
             this.approvalEmailTargetId = targetId;
             this.approvalEmailLoading = true;
-            this.approvalEmailSetStatus('info', '');
+            this.approvalEmailSetStatus("info", "");
 
             try {
-                const response = await fetch('/article/articles/' + targetId + '/approval-email', {
-                    method: 'GET',
-                    headers: this.approvalEmailRequestHeaders(),
-                });
-                const data = await response.json().catch(() => ({}));
+                const { response, data } = await this.approvalEmailFetchJson("/article/articles/" + targetId + "/approval-email", {
+                    method: "GET",
+                }, { retryOn419: false });
                 if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Failed to load draft approval email state.');
+                    throw new Error(data.message || "Failed to load draft approval email state.");
                 }
 
                 this.approvalEmailArticle = data.article || null;
                 this.approvalEmailLogs = Array.isArray(data.logs) ? data.logs : [];
                 this.approvalEmailLoadedDraftId = targetId;
                 this.approvalEmailApplyComposer(data.composer || {}, { preserveFilled: !!options.preserveFilled });
+                if (!String(this.approvalEmailTestTo || "").trim()) {
+                    this.approvalEmailTestTo = this.approvalEmailSuperAdminEmail;
+                }
                 await this.approvalEmailEnsureIntroEditor();
                 this.approvalEmailSyncIntroEditor();
                 if (options.open !== false) this.approvalEmailOpen = true;
                 return true;
             } catch (error) {
-                this.approvalEmailSetStatus('error', error?.message || 'Failed to load draft approval email state.');
+                this.approvalEmailSetStatus("error", error?.message || "Failed to load draft approval email state.");
                 return false;
             } finally {
                 this.approvalEmailLoading = false;
@@ -311,18 +394,16 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
 
             this.approvalEmailLogsLoading = true;
             try {
-                const response = await fetch('/article/articles/' + targetId + '/approval-email/logs', {
-                    method: 'GET',
-                    headers: this.approvalEmailRequestHeaders(),
-                });
-                const data = await response.json().catch(() => ({}));
+                const { response, data } = await this.approvalEmailFetchJson("/article/articles/" + targetId + "/approval-email/logs", {
+                    method: "GET",
+                }, { retryOn419: false });
                 if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Failed to refresh approval email logs.');
+                    throw new Error(data.message || "Failed to refresh approval email logs.");
                 }
                 this.approvalEmailLogs = Array.isArray(data.logs) ? data.logs : [];
                 return true;
             } catch (error) {
-                this.approvalEmailSetStatus('error', error?.message || 'Failed to refresh approval email logs.');
+                this.approvalEmailSetStatus("error", error?.message || "Failed to refresh approval email logs.");
                 return false;
             } finally {
                 this.approvalEmailLogsLoading = false;
@@ -332,34 +413,32 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         async approvalEmailPreview() {
             const targetId = Number(this.approvalEmailTargetId || this.draftId || 0) || 0;
             if (!targetId) return;
-            if (typeof this.flushPipelineStateNow === 'function') {
+            if (typeof this.flushPipelineStateNow === "function") {
                 const saved = await this.flushPipelineStateNow();
                 if (!saved) {
-                    this.approvalEmailSetStatus('error', 'Draft state failed to save before preview.');
+                    this.approvalEmailSetStatus("error", "Draft state failed to save before preview.");
                     return;
                 }
             }
 
             this.approvalEmailPreviewLoading = true;
-            this.approvalEmailSetStatus('info', 'Rendering approval email preview…');
+            this.approvalEmailSetStatus("info", "Rendering approval email preview…");
             try {
-                const response = await fetch('/article/articles/' + targetId + '/approval-email/preview', {
-                    method: 'POST',
-                    headers: this.approvalEmailRequestHeaders(),
+                const { response, data } = await this.approvalEmailFetchJson("/article/articles/" + targetId + "/approval-email/preview", {
+                    method: "POST",
                     body: JSON.stringify(this.approvalEmailPayload()),
                 });
-                const data = await response.json().catch(() => ({}));
                 if (!response.ok || !data.success) {
-                    throw new Error(data.message || Object.values(data.errors || {}).flat().join(' ') || 'Preview failed.');
+                    throw new Error(data.message || Object.values(data.errors || {}).flat().join(" ") || "Preview failed.");
                 }
                 this.approvalEmailApplyComposer(data.composer || {}, { preserveFilled: false });
-                this.approvalEmailPreviewHtml = data.preview_html || '';
+                this.approvalEmailPreviewHtml = data.preview_html || "";
                 this.approvalEmailWarnings = Array.isArray(data.warnings) ? data.warnings : [];
                 this.approvalEmailHeaders = data.headers || {};
                 this.approvalEmailSnapshot = data.snapshot || {};
-                this.approvalEmailSetStatus('success', 'Approval email preview rendered.');
+                this.approvalEmailSetStatus("success", "Approval email preview rendered.");
             } catch (error) {
-                this.approvalEmailSetStatus('error', error?.message || 'Approval email preview failed.');
+                this.approvalEmailSetStatus("error", error?.message || "Approval email preview failed.");
             } finally {
                 this.approvalEmailPreviewLoading = false;
             }
@@ -367,32 +446,35 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
 
         async approvalEmailSendTest() {
             const targetId = Number(this.approvalEmailTargetId || this.draftId || 0) || 0;
+            const testTo = String(this.approvalEmailTestTo || this.approvalEmailSuperAdminEmail || "").trim();
             if (!targetId) return;
-            if (typeof this.flushPipelineStateNow === 'function') {
+            if (!testTo) {
+                this.approvalEmailSetStatus("error", "Enter a valid test recipient email address.");
+                return;
+            }
+            if (typeof this.flushPipelineStateNow === "function") {
                 const saved = await this.flushPipelineStateNow();
                 if (!saved) {
-                    this.approvalEmailSetStatus('error', 'Draft state failed to save before test send.');
+                    this.approvalEmailSetStatus("error", "Draft state failed to save before test send.");
                     return;
                 }
             }
 
             this.approvalEmailTestSending = true;
-            this.approvalEmailSetStatus('info', 'Sending test email to ' + this.approvalEmailSuperAdminEmail + '…');
+            this.approvalEmailSetStatus("info", "Sending test email to " + testTo + "…");
             try {
-                const response = await fetch('/article/articles/' + targetId + '/approval-email/send', {
-                    method: 'POST',
-                    headers: this.approvalEmailRequestHeaders(),
-                    body: JSON.stringify({ ...this.approvalEmailPayload(), test_mode: true }),
+                const { response, data } = await this.approvalEmailFetchJson("/article/articles/" + targetId + "/approval-email/send", {
+                    method: "POST",
+                    body: JSON.stringify({ ...this.approvalEmailPayload(), test_mode: true, test_to: testTo }),
                 });
-                const data = await response.json().catch(() => ({}));
                 if (!response.ok || !data.success) {
-                    throw new Error(data.message || Object.values(data.errors || {}).flat().join(' ') || 'Test send failed.');
+                    throw new Error(data.message || Object.values(data.errors || {}).flat().join(" ") || "Test send failed.");
                 }
                 this.approvalEmailLogs = Array.isArray(data.logs) ? data.logs : this.approvalEmailLogs;
                 if (data.email?.preview_html) this.approvalEmailPreviewHtml = data.email.preview_html;
-                this.approvalEmailSetStatus('success', data.message || 'Draft approval test email sent.');
+                this.approvalEmailSetStatus("success", data.message || "Draft approval test email sent.");
             } catch (error) {
-                this.approvalEmailSetStatus('error', error?.message || 'Draft approval test email failed.');
+                this.approvalEmailSetStatus("error", error?.message || "Draft approval test email failed.");
             } finally {
                 this.approvalEmailTestSending = false;
             }
@@ -401,31 +483,29 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         async approvalEmailSend() {
             const targetId = Number(this.approvalEmailTargetId || this.draftId || 0) || 0;
             if (!targetId) return;
-            if (typeof this.flushPipelineStateNow === 'function') {
+            if (typeof this.flushPipelineStateNow === "function") {
                 const saved = await this.flushPipelineStateNow();
                 if (!saved) {
-                    this.approvalEmailSetStatus('error', 'Draft state failed to save before sending.');
+                    this.approvalEmailSetStatus("error", "Draft state failed to save before sending.");
                     return;
                 }
             }
 
             this.approvalEmailSending = true;
-            this.approvalEmailSetStatus('info', 'Sending draft approval email…');
+            this.approvalEmailSetStatus("info", "Sending draft approval email…");
             try {
-                const response = await fetch('/article/articles/' + targetId + '/approval-email/send', {
-                    method: 'POST',
-                    headers: this.approvalEmailRequestHeaders(),
+                const { response, data } = await this.approvalEmailFetchJson("/article/articles/" + targetId + "/approval-email/send", {
+                    method: "POST",
                     body: JSON.stringify(this.approvalEmailPayload()),
                 });
-                const data = await response.json().catch(() => ({}));
                 if (!response.ok || !data.success) {
-                    throw new Error(data.message || Object.values(data.errors || {}).flat().join(' ') || 'Send failed.');
+                    throw new Error(data.message || Object.values(data.errors || {}).flat().join(" ") || "Send failed.");
                 }
                 this.approvalEmailLogs = Array.isArray(data.logs) ? data.logs : this.approvalEmailLogs;
                 if (data.email?.preview_html) this.approvalEmailPreviewHtml = data.email.preview_html;
-                this.approvalEmailSetStatus('success', data.message || 'Draft approval email sent.');
+                this.approvalEmailSetStatus("success", data.message || "Draft approval email sent.");
             } catch (error) {
-                this.approvalEmailSetStatus('error', error?.message || 'Draft approval email failed.');
+                this.approvalEmailSetStatus("error", error?.message || "Draft approval email failed.");
             } finally {
                 this.approvalEmailSending = false;
             }

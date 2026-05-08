@@ -1377,9 +1377,14 @@ function pressReleaseWorkflowMixin(config) {
             ).trim();
             if (resolvedArticleType) {
                 state.template_overrides.article_type = resolvedArticleType;
+                state.article_type = resolvedArticleType;
+                state.currentArticleType = resolvedArticleType;
                 if (state.pressRelease && typeof state.pressRelease === 'object') {
                     state.pressRelease.article_type = resolvedArticleType;
                 }
+            } else {
+                state.article_type = null;
+                state.currentArticleType = null;
             }
 
             const titleLooksPlaceholder = !state.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test(String(state.articleTitle || '').trim());

@@ -537,7 +537,22 @@
 
             let response = await originalFetch(input, finalInit);
             if (response.status === 419) {
-                const refreshedToken = document.querySelector('meta[name="csrf-token"]')?.content || this.csrfToken || '';
+                let refreshedToken = '';
+                try {
+                    const tokenResponse = await originalFetch(window.location.href, {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    });
+                    const html = await tokenResponse.text();
+                    const match = html.match(/<meta\s+name="csrf-token"\s+content="([^"]+)"/i);
+                    refreshedToken = match?.[1] || '';
+                    if (refreshedToken) {
+                        const meta = document.querySelector('meta[name="csrf-token"]');
+                        if (meta) meta.setAttribute('content', refreshedToken);
+                    }
+                } catch (error) {}
+                refreshedToken = refreshedToken || document.querySelector('meta[name="csrf-token"]')?.content || this.csrfToken || '';
                 if (refreshedToken) {
                     headers.set('X-CSRF-TOKEN', refreshedToken);
                 }

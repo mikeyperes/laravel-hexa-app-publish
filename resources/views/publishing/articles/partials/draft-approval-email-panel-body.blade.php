@@ -5,18 +5,23 @@
         <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500">Recipients</h4>
         <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">To</label>
-            <input type="email" x-model="approvalEmailTo" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="client@example.com">
-            <p class="mt-1.5 text-xs text-gray-500">Defaults to the creator contact email when available, otherwise the creator login email.</p>
+            <input type="email" x-model="approvalEmailTo" @input.debounce.300ms="approvalEmailToTouched = true; savePipelineState?.()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="client@example.com">
+            <p class="mt-1.5 text-xs text-gray-500">Defaults to the creator account email.</p>
         </div>
         <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">CC</label>
-            <input type="text" x-model="approvalEmailCc" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="team@example.com, account@example.com">
+            <input type="text" x-model="approvalEmailCc" @input.debounce.300ms="approvalEmailCcTouched = true; savePipelineState?.()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="team@example.com, account@example.com">
             <div class="mt-2 flex flex-wrap items-center gap-2">
                 <button type="button" @click="approvalEmailAppendCcAddress(approvalEmailSuperAdminEmail)" class="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
                     Add super admin email
                 </button>
                 <span class="text-xs text-gray-500">Loads creator additional contact emails by default when they exist.</span>
             </div>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Test recipient</label>
+            <input type="email" x-model="approvalEmailTestTo" @input.debounce.300ms="savePipelineState?.()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="michael@mike-ro-tech.com">
+            <p class="mt-1.5 text-xs text-gray-500">Used only by <span class="font-medium">Send test email</span>. It does not overwrite the main To or CC recipients.</p>
         </div>
     </section>
 
@@ -44,7 +49,7 @@
         <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500">Content</h4>
         <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">Subject</label>
-            <input type="text" x-model="approvalEmailSubject" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <input type="text" x-model="approvalEmailSubject" @input.debounce.300ms="savePipelineState?.()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
         </div>
         <div>
             <div class="flex items-center gap-1.5 mb-1">
@@ -55,6 +60,7 @@
                 x-ref="approvalEmailIntroEditor"
                 :id="approvalEmailIntroEditorId"
                 x-model="approvalEmailIntroHtml"
+                @input.debounce.300ms="savePipelineState?.()"
                 rows="8"
                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Optional note that appears above the draft body."></textarea>
@@ -65,7 +71,7 @@
                 <label class="text-xs font-medium text-gray-700">Image handling</label>
                 <x-hexa-tooltip mode="hover" label="?" widthClass="w-72" position="bottom">How images render in the email body. Links + captions is safest for inboxes; embed forces direct attachment; WordPress-hosted uses already-uploaded media.</x-hexa-tooltip>
             </div>
-            <select x-model="approvalEmailImageMode" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <select x-model="approvalEmailImageMode" @change="savePipelineState?.()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                 <option value="links">Clickable image links + captions</option>
                 <option value="embed">Embed images directly</option>
                 <option value="wordpress">Use prepared WordPress-hosted images</option>

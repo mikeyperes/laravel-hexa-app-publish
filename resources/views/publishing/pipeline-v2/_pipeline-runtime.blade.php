@@ -30,10 +30,10 @@ function publishPipeline() {
         completedSteps: [],
         get persistedArticleType() {
             return this.template_overrides?.article_type
-                ?? this.selectedTemplate?.article_type
                 ?? this.draftState?.article_type
                 ?? this.draftState?.publish_template?.article_type
                 ?? this.pressRelease?.article_type
+                ?? this.selectedTemplate?.article_type
                 ?? null;
         },
         get isGenerateMode() {

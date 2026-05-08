@@ -38,7 +38,7 @@
                 site_id: this.selectedSite?.id || null,
                 preset_id: this.selectedPresetId || null,
                 template_id: this.selectedTemplateId || null,
-                article_type: this.currentArticleType || null,
+                article_type: this.template_overrides?.article_type || this.currentArticleType || null,
                 ai_model: this.aiModel,
                 author: this.publishAuthor || null,
                 publish_action: this.publishAction || null,

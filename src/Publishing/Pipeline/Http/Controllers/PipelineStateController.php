@@ -50,9 +50,24 @@ class PipelineStateController extends Controller
 
         $state = $this->stateService->save(
             $draft,
-            $validated['payload'],
-            $validated['workflow_type'] ?? null
+            $validated["payload"],
+            $validated["workflow_type"] ?? null
         );
+
+        $resolvedArticleType = trim((string) (
+            data_get($validated, "payload.template_overrides.article_type")
+            ?? data_get($validated, "payload.article_type")
+            ?? data_get($validated, "payload.currentArticleType")
+            ?? data_get($validated, "payload.selectedTemplate.article_type")
+            ?? data_get($validated, "payload.pressRelease.article_type")
+            ?? $state->workflow_type
+            ?? ""
+        ));
+
+        if ($resolvedArticleType !== "" && $draft->article_type !== $resolvedArticleType) {
+            $draft->forceFill(["article_type" => $resolvedArticleType])->save();
+        }
+
         $this->draftSession->claim($draft, $tabId, auth()->id(), [
             'source' => 'pipeline_state',
             'client_trace' => $clientTrace,

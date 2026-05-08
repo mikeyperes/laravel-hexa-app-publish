@@ -56,7 +56,8 @@ class DraftApprovalEmailService
         ];
 
         if ($isTest) {
-            $config['to'] = $this->testRecipientAddress();
+            $testRecipient = trim((string) Arr::get($options, 'test_to', ''));
+            $config['to'] = $testRecipient !== '' ? $testRecipient : $this->testRecipientAddress();
             $config['cc'] = '';
             $config['cc_list'] = [];
         }
@@ -444,14 +445,14 @@ HTML;
 
     private function resolveDefaultRecipient(array $snapshot): string
     {
-        $contactEmail = trim((string) ($snapshot['creator_contact_email'] ?? ''));
-        if ($contactEmail !== '' && filter_var($contactEmail, FILTER_VALIDATE_EMAIL)) {
-            return $contactEmail;
-        }
-
         $loginEmail = trim((string) ($snapshot['creator_login_email'] ?? ''));
         if ($loginEmail !== '' && filter_var($loginEmail, FILTER_VALIDATE_EMAIL)) {
             return $loginEmail;
+        }
+
+        $contactEmail = trim((string) ($snapshot['creator_contact_email'] ?? ''));
+        if ($contactEmail !== '' && filter_var($contactEmail, FILTER_VALIDATE_EMAIL)) {
+            return $contactEmail;
         }
 
         return '';

@@ -346,7 +346,7 @@
                         custom_prompt: this.customPrompt || null,
                         supporting_url_type: this.supportingUrlType || 'matching_content_type',
                         pr_subject_context: this.isPrArticleMode() ? this.buildPrSubjectContext() : null,
-                        article_type: this.currentArticleType || null,
+                        article_type: this.template_overrides?.article_type || this.currentArticleType || null,
                         web_research: this.spinWebResearch,
                     })
                 });
@@ -521,7 +521,7 @@
                         model: this.aiModel,
                         change_request: this.spinChangeRequest,
                         pr_subject_context: this.isPrArticleMode() ? this.buildPrSubjectContext() : null,
-                        article_type: this.currentArticleType || null,
+                        article_type: this.template_overrides?.article_type || this.currentArticleType || null,
                     })
                 });
                 const data = await resp.json();

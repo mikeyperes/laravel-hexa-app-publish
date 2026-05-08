@@ -1271,7 +1271,7 @@
                 template_id: this.selectedTemplateId || null,
                 preset_id: this.selectedPresetId || null,
                 user_id: this.selectedUser?.id || null,
-                article_type: this.currentArticleType || null,
+                article_type: this.template_overrides?.article_type || this.currentArticleType || null,
             };
         },
 
