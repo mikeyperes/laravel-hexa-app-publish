@@ -42,6 +42,7 @@ class DraftApprovalEmailController extends Controller
             'from_email' => 'nullable|string|max:255',
             'reply_to' => 'nullable|string|max:255',
             'subject' => 'nullable|string|max:255',
+            'intro_html' => 'nullable|string|max:50000',
             'image_mode' => 'nullable|string|max:40',
         ]);
 
@@ -57,7 +58,8 @@ class DraftApprovalEmailController extends Controller
                 'from_email' => (string) ($input['from_email'] ?? $preview['config']['from_email'] ?? ''),
                 'reply_to' => (string) ($input['reply_to'] ?? $preview['config']['reply_to'] ?? ''),
                 'subject' => (string) ($input['subject'] ?? $preview['config']['subject'] ?? ''),
-                'image_mode' => (string) ($input['image_mode'] ?? $preview['config']['image_mode'] ?? 'links'),
+                'intro_html' => (string) ($input['intro_html'] ?? $preview['config']['intro_html'] ?? ''),
+                'image_mode' => (string) ($input['image_mode'] ?? $preview['config']['image_mode'] ?? 'embed'),
             ]),
             'preview_html' => $preview['preview_html'],
             'warnings' => $preview['warnings'],
@@ -70,23 +72,28 @@ class DraftApprovalEmailController extends Controller
     {
         $article = $this->resolveArticle($request, $id);
         $input = $request->validate([
-            'to' => 'required|string|max:255',
+            'to' => 'nullable|string|max:255',
             'cc' => 'nullable|string|max:1000',
             'from_name' => 'nullable|string|max:255',
             'from_email' => 'nullable|string|max:255',
             'reply_to' => 'nullable|string|max:255',
             'subject' => 'nullable|string|max:255',
+            'intro_html' => 'nullable|string|max:50000',
             'image_mode' => 'nullable|string|max:40',
+            'test_mode' => 'nullable|boolean',
         ]);
 
+        $isTest = (bool) ($input['test_mode'] ?? false);
         $this->persistComposerState($article, $input);
-        $email = $this->approvalEmails->send($article, $input, $request->user());
+        $email = $this->approvalEmails->send($article, $input, $request->user(), [
+            'is_test' => $isTest,
+        ]);
 
         return response()->json([
             'success' => $email->status === 'sent',
             'message' => $email->status === 'sent'
-                ? 'Draft approval email sent.'
-                : ($email->error ?: 'Draft approval email failed.'),
+                ? ($isTest ? 'Draft approval test email sent to michael@mike-ro-tech.com.' : 'Draft approval email sent.')
+                : ($email->error ?: ($isTest ? 'Draft approval test email failed.' : 'Draft approval email failed.')),
             'email' => $this->serializeLog($email),
             'logs' => $this->serializeLogs($article),
         ], $email->status === 'sent' ? 200 : 422);
@@ -121,6 +128,7 @@ class DraftApprovalEmailController extends Controller
             'from_email' => 'approvalEmailFromEmail',
             'reply_to' => 'approvalEmailReplyTo',
             'subject' => 'approvalEmailSubject',
+            'intro_html' => 'approvalEmailIntroHtml',
             'image_mode' => 'approvalEmailImageMode',
         ];
 
@@ -144,7 +152,8 @@ class DraftApprovalEmailController extends Controller
         $payload['approvalEmailFromEmail'] = trim((string) ($input['from_email'] ?? ($payload['approvalEmailFromEmail'] ?? '')));
         $payload['approvalEmailReplyTo'] = trim((string) ($input['reply_to'] ?? ($payload['approvalEmailReplyTo'] ?? '')));
         $payload['approvalEmailSubject'] = trim((string) ($input['subject'] ?? ($payload['approvalEmailSubject'] ?? '')));
-        $payload['approvalEmailImageMode'] = trim((string) ($input['image_mode'] ?? ($payload['approvalEmailImageMode'] ?? 'links')));
+        $payload['approvalEmailIntroHtml'] = (string) ($input['intro_html'] ?? ($payload['approvalEmailIntroHtml'] ?? ''));
+        $payload['approvalEmailImageMode'] = trim((string) ($input['image_mode'] ?? ($payload['approvalEmailImageMode'] ?? 'embed')));
         $this->pipelineState->save($article, $payload);
     }
 
@@ -156,9 +165,40 @@ class DraftApprovalEmailController extends Controller
             'title' => $article->title,
             'status' => $article->status,
             'article_type' => $article->article_type,
+            'featured_image_url' => $this->resolveFeaturedImage($article),
             'approval_emails_count' => $article->approval_emails_count ?? $article->approvalEmails()->count(),
             'latest_approval_email' => $article->latestApprovalEmail ? $this->serializeLog($article->latestApprovalEmail) : null,
         ];
+    }
+
+    private function resolveFeaturedImage(PublishArticle $article): ?string
+    {
+        $wp = $article->wp_images;
+        if (is_array($wp) && !empty($wp)) {
+            $featured = collect($wp)->firstWhere('is_featured', true) ?? collect($wp)->first();
+            if (is_array($featured)) {
+                return $featured['sizes']['medium']
+                    ?? $featured['sizes']['thumbnail']
+                    ?? $featured['media_url']
+                    ?? null;
+            }
+        }
+        $photos = $article->photos;
+        if (is_array($photos) && !empty($photos)) {
+            $first = collect($photos)->first();
+            if (is_array($first)) {
+                return $first['sizes']['medium']
+                    ?? $first['sizes']['thumbnail']
+                    ?? $first['url']
+                    ?? $first['src']
+                    ?? $first['thumb']
+                    ?? null;
+            }
+            if (is_string($first)) {
+                return $first;
+            }
+        }
+        return null;
     }
 
     private function serializeLogs(PublishArticle $article): array
@@ -166,7 +206,6 @@ class DraftApprovalEmailController extends Controller
         return $article->approvalEmails()
             ->with('sender')
             ->latest('id')
-            ->limit(25)
             ->get()
             ->map(fn (PublishArticleApprovalEmail $email) => $this->serializeLog($email))
             ->values()

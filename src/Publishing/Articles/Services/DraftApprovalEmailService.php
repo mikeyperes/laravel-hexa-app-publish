@@ -45,10 +45,22 @@ class DraftApprovalEmailService
         ];
     }
 
-    public function send(PublishArticle $article, array $input, ?User $actor = null): PublishArticleApprovalEmail
+    public function send(PublishArticle $article, array $input, ?User $actor = null, array $options = []): PublishArticleApprovalEmail
     {
         $snapshot = $this->resolveSnapshot($article);
-        $config = $this->normalizeComposerInput($snapshot, $input, true);
+        $isTest = (bool) Arr::get($options, 'is_test', false);
+        $config = $this->normalizeComposerInput($snapshot, $input, !$isTest);
+        $intendedRecipients = [
+            'to' => $config['to'],
+            'cc' => $config['cc_list'],
+        ];
+
+        if ($isTest) {
+            $config['to'] = $this->testRecipientAddress();
+            $config['cc'] = '';
+            $config['cc_list'] = [];
+        }
+
         $publicToken = Str::random(48);
         $message = $this->buildMessage($snapshot, $config, $publicToken, true);
         $smtpMeta = $this->resolveSmtpMeta();
@@ -57,7 +69,7 @@ class DraftApprovalEmailService
             'publish_article_id' => $article->id,
             'created_by' => $actor?->id,
             'smtp_account_id' => $smtpMeta['id'],
-            'context' => 'draft-approval',
+            'context' => $isTest ? 'draft-approval-test' : 'draft-approval',
             'status' => 'queued',
             'image_mode' => $config['image_mode'],
             'to_recipients' => [$config['to']],
@@ -73,6 +85,8 @@ class DraftApprovalEmailService
             'diagnostics' => [
                 'smtp_account' => $smtpMeta,
                 'warnings' => $message['warnings'],
+                'is_test' => $isTest,
+                'intended_recipients' => $intendedRecipients,
             ],
             'snapshot' => $message['snapshot_summary'],
             'public_token' => $publicToken,
@@ -109,19 +123,25 @@ class DraftApprovalEmailService
             article: $article,
             actor: $actor,
             email: $record,
-            activityType: $success ? 'email_sent' : 'email_failed',
-            message: (string) ($result['message'] ?? ($success ? 'Approval email sent' : 'Approval email failed')),
+            activityType: $isTest
+                ? ($success ? 'email_test_sent' : 'email_test_failed')
+                : ($success ? 'email_sent' : 'email_failed'),
+            message: (string) ($result['message'] ?? ($success
+                ? ($isTest ? 'Approval test email sent' : 'Approval email sent')
+                : ($isTest ? 'Approval test email failed' : 'Approval email failed'))),
             meta: [
                 'headers' => $message['headers'],
                 'warnings' => $message['warnings'],
                 'smtp_account' => $smtpMeta,
                 'timing_ms' => $elapsedMs,
                 'preview_html' => $message['preview_html'],
+                'is_test' => $isTest,
+                'intended_recipients' => $intendedRecipients,
             ],
             success: $success,
         );
 
-        return $record->fresh();
+        return $record->fresh(['sender']);
     }
 
     public function markViewed(PublishArticleApprovalEmail $email, string $method = 'page'): PublishArticleApprovalEmail
@@ -165,9 +185,13 @@ class DraftApprovalEmailService
     public function serializeLog(PublishArticleApprovalEmail $email): array
     {
         $smtpMeta = Arr::get($email->diagnostics ?? [], 'smtp_account', []);
+        $sender = $email->relationLoaded('sender') ? $email->sender : $email->sender()->first();
+        $isTest = $email->context === 'draft-approval-test' || (bool) Arr::get($email->diagnostics ?? [], 'is_test', false);
 
         return [
             'id' => $email->id,
+            'context' => $email->context,
+            'is_test' => $isTest,
             'status' => $email->status,
             'status_label' => $email->statusLabel(),
             'to' => implode(', ', $email->to_recipients ?? []),
@@ -191,6 +215,11 @@ class DraftApprovalEmailService
             'snapshot' => $email->snapshot,
             'review_payload' => $email->review_payload,
             'smtp_account' => $smtpMeta,
+            'sender' => $sender ? [
+                'id' => $sender->id,
+                'name' => $sender->name,
+                'email' => $sender->email,
+            ] : null,
             'public_review_url' => route('publish.drafts.approval.public.show', ['token' => $email->public_token]),
         ];
     }
@@ -198,13 +227,14 @@ class DraftApprovalEmailService
     private function defaultComposerConfigFromSnapshot(array $snapshot): array
     {
         return [
-            'to' => '',
-            'cc' => '',
+            'to' => $this->resolveDefaultRecipient($snapshot),
+            'cc' => $this->resolveDefaultCc($snapshot),
             'from_name' => 'Scale My Publication',
             'from_email' => 'no-reply@scalemypublication.com',
             'reply_to' => 'support@scalemypublication.com',
             'subject' => $this->defaultSubject($snapshot),
-            'image_mode' => 'links',
+            'intro_html' => '',
+            'image_mode' => 'embed',
         ];
     }
 
@@ -212,14 +242,15 @@ class DraftApprovalEmailService
     {
         $defaults = $this->defaultComposerConfigFromSnapshot($snapshot);
         $to = trim((string) ($input['to'] ?? $defaults['to']));
-        $cc = trim((string) ($input['cc'] ?? $defaults['cc']));
+        $cc = $this->normalizeEmailListString((string) ($input['cc'] ?? $defaults['cc']));
         $fromName = trim((string) ($input['from_name'] ?? $defaults['from_name'])) ?: $defaults['from_name'];
         $fromEmail = trim((string) ($input['from_email'] ?? $defaults['from_email'])) ?: $defaults['from_email'];
         $replyTo = trim((string) ($input['reply_to'] ?? $defaults['reply_to'])) ?: $defaults['reply_to'];
         $subject = trim((string) ($input['subject'] ?? $defaults['subject'])) ?: $defaults['subject'];
-        $imageMode = trim((string) ($input['image_mode'] ?? $defaults['image_mode'])) ?: 'links';
+        $introHtml = (string) ($input['intro_html'] ?? $defaults['intro_html']);
+        $imageMode = trim((string) ($input['image_mode'] ?? $defaults['image_mode'])) ?: 'embed';
 
-        if ($requireRecipient && !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        if (($requireRecipient || $to !== '') && !filter_var($to, FILTER_VALIDATE_EMAIL)) {
             throw ValidationException::withMessages(['to' => 'Enter a valid recipient email address.']);
         }
 
@@ -233,7 +264,7 @@ class DraftApprovalEmailService
             throw ValidationException::withMessages(['image_mode' => 'Choose a valid image mode.']);
         }
 
-        $ccList = array_values(array_filter(array_map('trim', explode(',', $cc)), static fn ($value) => $value !== ''));
+        $ccList = $this->parseEmailList($cc);
         foreach ($ccList as $ccEmail) {
             if (!filter_var($ccEmail, FILTER_VALIDATE_EMAIL)) {
                 throw ValidationException::withMessages(['cc' => 'One or more CC email addresses are invalid.']);
@@ -248,6 +279,7 @@ class DraftApprovalEmailService
             'from_email' => $fromEmail,
             'reply_to' => $replyTo,
             'subject' => $subject,
+            'intro_html' => $introHtml,
             'image_mode' => $imageMode,
         ];
     }
@@ -277,6 +309,7 @@ class DraftApprovalEmailService
         $excerpt = trim((string) ($payload['articleDescription'] ?? $article->excerpt ?? ''));
         $siteUrl = trim((string) ($article->site?->url ?? Arr::get($payload, 'selectedSite.url', '')));
         $featuredPhoto = is_array($payload['featuredPhoto'] ?? null) ? $payload['featuredPhoto'] : [];
+        $creator = $article->creator;
 
         return [
             'article_id' => $article->id,
@@ -288,7 +321,10 @@ class DraftApprovalEmailService
             'prepared_html' => $preparedHtml,
             'site_url' => $siteUrl,
             'site_name' => trim((string) ($article->site?->name ?? Arr::get($payload, 'selectedSite.name', ''))),
-            'creator_name' => trim((string) ($article->creator?->name ?? '')),
+            'creator_name' => trim((string) ($creator?->name ?? '')),
+            'creator_login_email' => trim((string) ($creator?->email ?? '')),
+            'creator_contact_email' => trim((string) ($creator?->contact_email ?? '')),
+            'creator_additional_contact_emails' => trim((string) ($creator?->additional_contact_emails ?? '')),
             'featured_url' => trim((string) ($featuredPhoto['url_full'] ?? $featuredPhoto['url_large'] ?? $featuredPhoto['url'] ?? $featuredPhoto['url_thumb'] ?? '')),
             'featured_alt' => trim((string) ($featuredPhoto['alt'] ?? 'Featured image')),
             'featured_caption' => trim((string) ($payload['featuredCaption'] ?? '')),
@@ -298,7 +334,9 @@ class DraftApprovalEmailService
 
     private function buildMessage(array $snapshot, array $config, ?string $publicToken, bool $includeTracking): array
     {
+        [$introHtml, $introWarnings] = $this->buildFragmentHtmlForMode((string) ($config['intro_html'] ?? ''), $snapshot, $config['image_mode']);
         [$articleHtml, $warnings] = $this->buildArticleHtmlForMode($snapshot, $config['image_mode']);
+        $warnings = array_values(array_filter(array_merge($introWarnings, $warnings)));
         if (trim(strip_tags($articleHtml)) === '') {
             $warnings[] = 'The draft body is currently empty.';
         }
@@ -308,6 +346,9 @@ class DraftApprovalEmailService
         $featuredHtml = $this->renderFeaturedImage($snapshot, $config['image_mode']);
         $excerptHtml = $snapshot['excerpt'] !== ''
             ? '<p style="margin:0 0 18px; font-size:15px; line-height:1.6; color:#4b5563;">' . $this->escapeHtml($snapshot['excerpt']) . '</p>'
+            : '';
+        $introBlock = trim(strip_tags($introHtml)) !== ''
+            ? '<div style="margin:0 0 18px; font-size:15px; line-height:1.7; color:#111827;">' . $introHtml . '</div>'
             : '';
         $trackingMarkup = $includeTracking && $trackingUrl
             ? '<img src="' . $this->escapeAttribute($trackingUrl) . '" alt="" width="1" height="1" style="display:none;" />'
@@ -321,6 +362,7 @@ class DraftApprovalEmailService
     <p style="margin:0 0 12px; font-size:14px; line-height:1.6; color:#475569;">This draft is ready for review. Use the hosted review page to confirm you’ve seen it and mark it reviewed.</p>
     <p style="margin:0;"><a href="{$this->escapeAttribute($reviewUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:10px 14px;border-radius:8px;font-size:14px;font-weight:600;">Open review page</a></p>
   </div>
+  {$introBlock}
   {$featuredHtml}
   <article style="font-size:15px; line-height:1.7; color:#111827;">
     <h1 style="font-size:30px; line-height:1.2; margin:0 0 12px;">{$this->escapeHtml($snapshot['title'])}</h1>
@@ -356,13 +398,19 @@ HTML;
                 'site_url' => $snapshot['site_url'],
                 'has_prepared_html' => $snapshot['prepared_html'] !== '',
                 'has_featured_image' => ($snapshot['featured_url'] !== '' || $snapshot['featured_wp_url'] !== ''),
+                'has_intro_html' => trim(strip_tags((string) ($config['intro_html'] ?? ''))) !== '',
             ],
         ];
     }
 
     private function buildArticleHtmlForMode(array $snapshot, string $imageMode): array
     {
-        $html = trim((string) $snapshot['body_html']);
+        return $this->buildFragmentHtmlForMode((string) ($snapshot['body_html'] ?? ''), $snapshot, $imageMode);
+    }
+
+    private function buildFragmentHtmlForMode(string $html, array $snapshot, string $imageMode): array
+    {
+        $html = trim((string) $html);
         $html = preg_replace("/<span class=\"photo-(?:view|confirm|change|remove)\"[^>]*>.*?<\\/span>/si", "", $html);
         $html = preg_replace("/<div class=\"photo-placeholder\"([^>]*)style=\"[^\"]*\"([^>]*)>/i", "<div$1$2>", $html);
         $html = preg_replace("/\\scontenteditable=\"false\"/i", "", $html);
@@ -371,10 +419,10 @@ HTML;
 
         if ($imageMode === 'wordpress') {
             $html = trim((string) ($snapshot['prepared_html'] ?: $html));
-        $html = preg_replace("/<span class=\"photo-(?:view|confirm|change|remove)\"[^>]*>.*?<\\/span>/si", "", $html);
-        $html = preg_replace("/<div class=\"photo-placeholder\"([^>]*)style=\"[^\"]*\"([^>]*)>/i", "<div$1$2>", $html);
-        $html = preg_replace("/\\scontenteditable=\"false\"/i", "", $html);
-        $html = preg_replace("/\\sdata-[a-z0-9_-]+=\"[^\"]*\"/i", "", $html);
+            $html = preg_replace("/<span class=\"photo-(?:view|confirm|change|remove)\"[^>]*>.*?<\\/span>/si", "", $html);
+            $html = preg_replace("/<div class=\"photo-placeholder\"([^>]*)style=\"[^\"]*\"([^>]*)>/i", "<div$1$2>", $html);
+            $html = preg_replace("/\\scontenteditable=\"false\"/i", "", $html);
+            $html = preg_replace("/\\sdata-[a-z0-9_-]+=\"[^\"]*\"/i", "", $html);
             $html = $this->absolutizeHtmlUrls($html, $snapshot['site_url']);
             if ($this->hasNonWordpressImages($html, $snapshot['site_url'])) {
                 throw ValidationException::withMessages([
@@ -392,6 +440,55 @@ HTML;
         }
 
         return [$this->transformImagesToLinks($html), $warnings];
+    }
+
+    private function resolveDefaultRecipient(array $snapshot): string
+    {
+        $contactEmail = trim((string) ($snapshot['creator_contact_email'] ?? ''));
+        if ($contactEmail !== '' && filter_var($contactEmail, FILTER_VALIDATE_EMAIL)) {
+            return $contactEmail;
+        }
+
+        $loginEmail = trim((string) ($snapshot['creator_login_email'] ?? ''));
+        if ($loginEmail !== '' && filter_var($loginEmail, FILTER_VALIDATE_EMAIL)) {
+            return $loginEmail;
+        }
+
+        return '';
+    }
+
+    private function resolveDefaultCc(array $snapshot): string
+    {
+        return implode(', ', $this->parseEmailList((string) ($snapshot['creator_additional_contact_emails'] ?? '')));
+    }
+
+    private function normalizeEmailListString(string $value): string
+    {
+        return implode(', ', $this->parseEmailList($value));
+    }
+
+    private function parseEmailList(string $value): array
+    {
+        $normalized = preg_replace('/[;\r\n]+/', ',', (string) $value);
+        $items = array_filter(array_map('trim', explode(',', (string) $normalized)), static fn ($item) => $item !== '');
+        $seen = [];
+        $result = [];
+
+        foreach ($items as $item) {
+            $key = strtolower($item);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $result[] = $item;
+        }
+
+        return $result;
+    }
+
+    private function testRecipientAddress(): string
+    {
+        return 'michael@mike-ro-tech.com';
     }
 
     private function renderFeaturedImage(array $snapshot, string $imageMode): string

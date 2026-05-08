@@ -1192,6 +1192,7 @@
                 'approvalEmailFromEmail',
                 'approvalEmailReplyTo',
                 'approvalEmailSubject',
+                'approvalEmailIntroHtml',
                 'approvalEmailImageMode',
             ];
         },
@@ -1369,7 +1370,8 @@
             this.approvalEmailFromEmail = 'no-reply@scalemypublication.com';
             this.approvalEmailReplyTo = 'support@scalemypublication.com';
             this.approvalEmailSubject = '';
-            this.approvalEmailImageMode = 'links';
+            this.approvalEmailIntroHtml = '';
+            this.approvalEmailImageMode = 'embed';
             this.approvalEmailPreviewHtml = '';
             this.approvalEmailWarnings = [];
             this.approvalEmailHeaders = {};

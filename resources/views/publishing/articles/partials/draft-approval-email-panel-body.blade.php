@@ -1,72 +1,110 @@
-<div class="space-y-5">
-    <div class="grid gap-4 lg:grid-cols-2">
-        <div class="space-y-4">
-            <div>
-                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">To</label>
-                <input type="email" x-model="approvalEmailTo" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="client@example.com">
-            </div>
-            <div>
-                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">CC</label>
-                <input type="text" x-model="approvalEmailCc" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="team@example.com, account@example.com">
-            </div>
-            <div class="grid gap-3 sm:grid-cols-2">
-                <div>
-                    <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">From name</label>
-                    <input type="text" x-model="approvalEmailFromName" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">From email</label>
-                    <input type="email" x-model="approvalEmailFromEmail" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
-                </div>
-            </div>
-            <div>
-                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Reply-To</label>
-                <input type="email" x-model="approvalEmailReplyTo" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
-            </div>
-            <div>
-                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Subject</label>
-                <input type="text" x-model="approvalEmailSubject" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+<div class="space-y-5" x-init="approvalEmailMountComposer()">
+
+    {{-- ─── Recipients ─── --}}
+    <section class="space-y-3">
+        <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500">Recipients</h4>
+        <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">To</label>
+            <input type="email" x-model="approvalEmailTo" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="client@example.com">
+            <p class="mt-1.5 text-xs text-gray-500">Defaults to the creator contact email when available, otherwise the creator login email.</p>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">CC</label>
+            <input type="text" x-model="approvalEmailCc" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="team@example.com, account@example.com">
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+                <button type="button" @click="approvalEmailAppendCcAddress(approvalEmailSuperAdminEmail)" class="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                    Add super admin email
+                </button>
+                <span class="text-xs text-gray-500">Loads creator additional contact emails by default when they exist.</span>
             </div>
         </div>
+    </section>
 
-        <div class="space-y-4">
+    {{-- ─── Sender ─── --}}
+    <section class="space-y-3">
+        <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500">Sender</h4>
+        <div class="grid gap-3 sm:grid-cols-2">
             <div>
-                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Image handling</label>
-                <select x-model="approvalEmailImageMode" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white">
-                    <option value="links">Clickable image links + captions</option>
-                    <option value="embed">Embed images directly</option>
-                    <option value="wordpress">Use prepared WordPress-hosted images</option>
-                </select>
-                <p class="mt-2 text-xs text-gray-500" x-text="approvalEmailImageModeHelp()"></p>
+                <label class="block text-xs font-medium text-gray-700 mb-1">From name</label>
+                <input type="text" x-model="approvalEmailFromName" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
             </div>
-
-            <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 space-y-2 text-xs text-gray-600">
-                <p class="font-semibold text-gray-700">Draft email defaults</p>
-                <p><span class="font-medium text-gray-700">From:</span> <span x-text="approvalEmailFromName || 'Scale My Publication'"></span> &lt;<span x-text="approvalEmailFromEmail || 'no-reply@scalemypublication.com'"></span>&gt;</p>
-                <p><span class="font-medium text-gray-700">Reply-To:</span> <span x-text="approvalEmailReplyTo || 'support@scalemypublication.com'"></span></p>
-                <p><span class="font-medium text-gray-700">Mode:</span> <span x-text="approvalEmailImageMode"></span></p>
+            <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">From email</label>
+                <input type="email" x-model="approvalEmailFromEmail" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="no-reply@example.com">
             </div>
-
-            <div class="flex flex-wrap items-center gap-3">
-                <button type="button" @click="approvalEmailLoad(approvalEmailTargetId || draftId, { preserveFilled: true, open: false })" :disabled="approvalEmailLoading" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                    Refresh Draft Data
-                </button>
-                <button type="button" @click="approvalEmailPreview()" :disabled="approvalEmailPreviewLoading || approvalEmailSending" class="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50">
-                    <svg x-show="approvalEmailPreviewLoading" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="approvalEmailPreviewLoading ? 'Rendering Preview…' : 'Preview Email'"></span>
-                </button>
-                <button type="button" @click="approvalEmailSend()" :disabled="approvalEmailSending || approvalEmailPreviewLoading" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-                    <svg x-show="approvalEmailSending" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    <span x-text="approvalEmailSending ? 'Sending…' : 'Send Draft Email'"></span>
-                </button>
-            </div>
-
-            <div x-show="approvalEmailStatus" x-cloak class="rounded-lg px-3 py-2 text-sm" :class="approvalEmailStatusType === 'success' ? 'border border-green-200 bg-green-50 text-green-700' : 'border border-red-200 bg-red-50 text-red-700'" x-text="approvalEmailStatus"></div>
         </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Reply-to</label>
+            <input type="email" x-model="approvalEmailReplyTo" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+        </div>
+    </section>
+
+    {{-- ─── Content ─── --}}
+    <section class="space-y-3">
+        <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500">Content</h4>
+        <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Subject</label>
+            <input type="text" x-model="approvalEmailSubject" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+        </div>
+        <div>
+            <div class="flex items-center gap-1.5 mb-1">
+                <label class="text-xs font-medium text-gray-700">Append text at top of email body</label>
+                <x-hexa-tooltip mode="hover" label="?" widthClass="w-72" position="bottom">This content is inserted above the featured image and article body. Use it for a short note, approval instructions, or account context.</x-hexa-tooltip>
+            </div>
+            <textarea
+                x-ref="approvalEmailIntroEditor"
+                :id="approvalEmailIntroEditorId"
+                x-model="approvalEmailIntroHtml"
+                rows="8"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Optional note that appears above the draft body."></textarea>
+            <p class="mt-1.5 text-xs text-gray-500">TinyMCE loads here automatically. If the editor library is blocked, this falls back to a normal HTML textarea.</p>
+        </div>
+        <div>
+            <div class="flex items-center gap-1.5 mb-1">
+                <label class="text-xs font-medium text-gray-700">Image handling</label>
+                <x-hexa-tooltip mode="hover" label="?" widthClass="w-72" position="bottom">How images render in the email body. Links + captions is safest for inboxes; embed forces direct attachment; WordPress-hosted uses already-uploaded media.</x-hexa-tooltip>
+            </div>
+            <select x-model="approvalEmailImageMode" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <option value="links">Clickable image links + captions</option>
+                <option value="embed">Embed images directly</option>
+                <option value="wordpress">Use prepared WordPress-hosted images</option>
+            </select>
+            <p class="mt-1.5 text-xs text-gray-500" x-text="approvalEmailImageModeHelp()"></p>
+        </div>
+    </section>
+
+    {{-- ─── Action row ─── --}}
+    <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
+        <button type="button" @click="approvalEmailLoad(approvalEmailTargetId || draftId, { preserveFilled: true, open: false })" :disabled="approvalEmailLoading" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            <svg x-show="approvalEmailLoading" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <svg x-show="!approvalEmailLoading" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span class="hidden sm:inline">Refresh draft data</span>
+        </button>
+        <div class="flex-1"></div>
+        <button type="button" @click="approvalEmailPreview()" :disabled="approvalEmailPreviewLoading || approvalEmailSending || approvalEmailTestSending" class="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50">
+            <svg x-show="approvalEmailPreviewLoading" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <svg x-show="!approvalEmailPreviewLoading" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            <span x-text="approvalEmailPreviewLoading ? 'Rendering…' : 'Preview'"></span>
+        </button>
+        <button type="button" @click="approvalEmailSendTest()" :disabled="approvalEmailSending || approvalEmailPreviewLoading || approvalEmailTestSending" class="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
+            <svg x-show="approvalEmailTestSending" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <svg x-show="!approvalEmailTestSending" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            <span x-text="approvalEmailTestSending ? 'Sending test…' : 'Send test email'"></span>
+        </button>
+        <button type="button" @click="approvalEmailSend()" :disabled="approvalEmailSending || approvalEmailPreviewLoading || approvalEmailTestSending" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 shadow-sm">
+            <svg x-show="approvalEmailSending" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <svg x-show="!approvalEmailSending" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+            <span x-text="approvalEmailSending ? 'Sending…' : 'Send draft email'"></span>
+        </button>
     </div>
 
-    <div x-show="approvalEmailWarnings.length > 0" x-cloak class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        <p class="font-semibold mb-2">Preview Warnings</p>
+    {{-- Send result --}}
+    <div x-show="approvalEmailStatus" x-cloak class="rounded-lg px-3 py-2 text-sm" :class="approvalEmailStatusClass()" x-text="approvalEmailStatus"></div>
+
+    {{-- Preview warnings --}}
+    <div x-show="approvalEmailWarnings.length > 0" x-cloak class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <p class="font-semibold mb-1">Preview warnings</p>
         <ul class="list-disc space-y-1 pl-5">
             <template x-for="warning in approvalEmailWarnings" :key="warning">
                 <li x-text="warning"></li>
@@ -74,67 +112,65 @@
         </ul>
     </div>
 
-    <div x-show="approvalEmailPreviewHtml" x-cloak class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-        <div class="border-b border-gray-200 bg-gray-50 px-4 py-3 flex items-center justify-between gap-3">
-            <div>
-                <p class="text-sm font-semibold text-gray-800">Email Preview</p>
-                <p class="text-xs text-gray-500">Header debug + rendered email body exactly as it will be sent.</p>
-            </div>
-            <span class="inline-flex items-center rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600" x-text="approvalEmailImageMode"></span>
+    {{-- Inline preview --}}
+    <div x-show="approvalEmailPreviewHtml" x-cloak class="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div class="border-b border-gray-200 bg-gray-50 px-4 py-2.5 flex items-center justify-between gap-3">
+            <p class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Preview</p>
+            <span class="inline-flex items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600" x-text="approvalEmailImageMode"></span>
         </div>
         <div class="p-4 max-w-none prose prose-sm" x-html="approvalEmailPreviewHtml"></div>
     </div>
 
-    <div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-        <div class="border-b border-gray-200 bg-gray-50 px-4 py-3 flex items-center justify-between gap-3">
+    {{-- Send log --}}
+    <details class="rounded-lg border border-gray-200 bg-white" x-show="approvalEmailLogs.length > 0" x-cloak>
+        <summary class="cursor-pointer px-4 py-3 flex items-center justify-between gap-3 text-sm">
             <div>
-                <p class="text-sm font-semibold text-gray-800">Approval Email Log</p>
-                <p class="text-xs text-gray-500">Per-draft send history, headers, provider account, review status, and body snapshots.</p>
+                <span class="font-semibold text-gray-800">Send history</span>
+                <span class="ml-2 text-xs text-gray-500" x-text="approvalEmailLogs.length + (approvalEmailLogs.length === 1 ? ' email' : ' emails')"></span>
             </div>
-            <button type="button" @click="approvalEmailRefreshLogs()" :disabled="approvalEmailLogsLoading" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                <svg x-show="approvalEmailLogsLoading" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                Refresh Logs
+            <button type="button" @click.prevent.stop="approvalEmailRefreshLogs()" :disabled="approvalEmailLogsLoading" class="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                <svg x-show="approvalEmailLogsLoading" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                Refresh
             </button>
-        </div>
-
-        <div class="divide-y divide-gray-200" x-show="approvalEmailLogs.length > 0" x-cloak>
+        </summary>
+        <div class="divide-y divide-gray-100 border-t border-gray-200">
             <template x-for="log in approvalEmailLogs" :key="log.id">
-                <details class="group px-4 py-4">
+                <details class="group px-4 py-3">
                     <summary class="cursor-pointer list-none">
-                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                            <div class="space-y-2">
-                                <div class="flex flex-wrap items-center gap-2 text-sm">
-                                    <span class="font-semibold text-gray-900" x-text="log.subject"></span>
-                                    <span class="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium" :class="approvalEmailLogStatusClass(log.status)" x-text="log.status_label || log.status"></span>
-                                </div>
-                                <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-                                    <span><span class="font-medium text-gray-700">To:</span> <span x-text="log.to || '—'"></span></span>
-                                    <span><span class="font-medium text-gray-700">CC:</span> <span x-text="log.cc || '—'"></span></span>
-                                    <span><span class="font-medium text-gray-700">Sent:</span> <span x-text="log.sent_at || 'Not sent'"></span></span>
-                                    <span><span class="font-medium text-gray-700">Viewed:</span> <span x-text="log.viewed_at || 'Not viewed'"></span></span>
-                                    <span><span class="font-medium text-gray-700">Reviewed:</span> <span x-text="log.reviewed_at || 'Not reviewed'"></span></span>
-                                </div>
+                        <div class="flex flex-col gap-2">
+                            <div class="flex flex-wrap items-center gap-2 text-sm">
+                                <span class="font-semibold text-gray-900 truncate" x-text="log.subject"></span>
+                                <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium" :class="approvalEmailLogStatusClass(log.status)" x-text="log.status_label || log.status"></span>
+                                <span x-show="log.is_test" x-cloak class="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-700">Test email</span>
                             </div>
-                            <div class="flex flex-wrap items-center gap-2 text-xs">
-                                <a :href="log.public_review_url" target="_blank" class="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 font-medium text-blue-700 hover:bg-blue-100">Open Review Page</a>
+                            <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-gray-500">
+                                <span><span class="font-medium text-gray-700">To:</span> <span x-text="log.to || '—'"></span></span>
+                                <span><span class="font-medium text-gray-700">Sent:</span> <span x-text="log.sent_at || 'Not sent'"></span></span>
+                                <span><span class="font-medium text-gray-700">Created:</span> <span x-text="log.created_at || '—'"></span></span>
+                                <span x-show="log.viewed_at" x-cloak><span class="font-medium text-gray-700">Viewed:</span> <span x-text="log.viewed_at"></span></span>
+                                <span x-show="log.reviewed_at" x-cloak><span class="font-medium text-gray-700">Reviewed:</span> <span x-text="log.reviewed_at"></span></span>
                             </div>
+                            <a :href="log.public_review_url" target="_blank" class="inline-flex w-fit items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100">Open review page</a>
                         </div>
                     </summary>
-                    <div class="mt-4 space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                        <div class="grid gap-3 md:grid-cols-2 text-xs text-gray-600">
-                            <div class="space-y-1">
+                    <div class="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                        <div class="grid gap-2 md:grid-cols-2 text-[11px] text-gray-600">
+                            <div class="space-y-0.5">
                                 <p><span class="font-semibold text-gray-700">From:</span> <span x-text="(log.from_name || '') + ' <' + (log.from_email || '—') + '>'"></span></p>
-                                <p><span class="font-semibold text-gray-700">Reply-To:</span> <span x-text="log.reply_to || '—'"></span></p>
+                                <p><span class="font-semibold text-gray-700">Reply-to:</span> <span x-text="log.reply_to || '—'"></span></p>
                                 <p><span class="font-semibold text-gray-700">Image mode:</span> <span x-text="log.image_mode"></span></p>
-                                <p><span class="font-semibold text-gray-700">SMTP account:</span> <span x-text="log.smtp_account?.name || log.email_log?.smtp_account_id || 'Default' "></span></p>
+                                <p><span class="font-semibold text-gray-700">Type:</span> <span x-text="log.context || 'draft-approval'"></span></p>
+                                <p><span class="font-semibold text-gray-700">Triggered by:</span> <span x-text="log.sender ? ((log.sender.name || 'Unknown') + (log.sender.email ? ' <' + log.sender.email + '>' : '')) : 'System'"></span></p>
+                                <p><span class="font-semibold text-gray-700">SMTP:</span> <span x-text="log.smtp_account?.name || log.email_log?.smtp_account_id || 'Default'"></span></p>
                             </div>
-                            <div class="space-y-1">
-                                <p><span class="font-semibold text-gray-700">Email log context:</span> <span class="font-mono break-all" x-text="log.email_log_context"></span></p>
-                                <p><span class="font-semibold text-gray-700">Provider log status:</span> <span x-text="log.email_log?.status || '—'"></span></p>
+                            <div class="space-y-0.5">
+                                <p><span class="font-semibold text-gray-700">Provider status:</span> <span x-text="log.email_log?.status || '—'"></span></p>
                                 <p><span class="font-semibold text-gray-700">Provider error:</span> <span x-text="log.email_log?.error || log.error || '—'"></span></p>
+                                <p><span class="font-semibold text-gray-700">Email log id:</span> <span x-text="log.email_log?.id || '—'"></span></p>
+                                <p class="break-all"><span class="font-semibold text-gray-700">Log context:</span> <span class="font-mono" x-text="log.email_log_context"></span></p>
                             </div>
                         </div>
-                        <div x-show="log.review_payload" x-cloak class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600 space-y-1">
+                        <div x-show="log.review_payload" x-cloak class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] text-gray-600 space-y-0.5">
                             <p class="font-semibold text-gray-700">Review response</p>
                             <p><span class="font-medium">Decision:</span> <span x-text="log.review_payload?.decision || '—'"></span></p>
                             <p><span class="font-medium">Reviewer:</span> <span x-text="log.review_payload?.reviewer_name || '—'"></span></p>
@@ -142,10 +178,23 @@
                             <p><span class="font-medium">Note:</span> <span x-text="log.review_payload?.note || '—'"></span></p>
                         </div>
                         <details class="rounded-lg border border-gray-200 bg-white">
-                            <summary class="cursor-pointer px-3 py-2 text-xs font-semibold text-gray-700">Preview + body debug</summary>
+                            <summary class="cursor-pointer px-3 py-2 text-[11px] font-semibold text-gray-700">Headers + diagnostics</summary>
+                            <div class="border-t border-gray-200 p-3 grid gap-3 lg:grid-cols-2">
+                                <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-600">
+                                    <p class="font-semibold text-gray-700 mb-1">Headers</p>
+                                    <pre class="whitespace-pre-wrap font-mono" x-text="JSON.stringify(log.headers || {}, null, 2)"></pre>
+                                </div>
+                                <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-600">
+                                    <p class="font-semibold text-gray-700 mb-1">Diagnostics</p>
+                                    <pre class="whitespace-pre-wrap font-mono" x-text="JSON.stringify(log.diagnostics || {}, null, 2)"></pre>
+                                </div>
+                            </div>
+                        </details>
+                        <details class="rounded-lg border border-gray-200 bg-white">
+                            <summary class="cursor-pointer px-3 py-2 text-[11px] font-semibold text-gray-700">Body + preview</summary>
                             <div class="border-t border-gray-200 p-3 space-y-3">
                                 <div class="max-w-none prose prose-sm" x-html="log.preview_html"></div>
-                                <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                                <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-600">
                                     <p class="font-semibold text-gray-700 mb-1">Plain text body</p>
                                     <pre class="whitespace-pre-wrap font-mono" x-text="log.body_text || ''"></pre>
                                 </div>
@@ -155,7 +204,7 @@
                 </details>
             </template>
         </div>
+    </details>
 
-        <div x-show="approvalEmailLogs.length === 0" x-cloak class="px-4 py-6 text-sm text-gray-500">No draft approval emails have been sent for this draft yet.</div>
-    </div>
+    <p x-show="approvalEmailLogs.length === 0" x-cloak class="text-xs text-gray-400 text-center pt-2">No drafts have been sent yet — fill the form above and click <span class="font-medium">Send draft email</span>.</p>
 </div>

@@ -6,6 +6,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         approvalEmailLoading: false,
         approvalEmailPreviewLoading: false,
         approvalEmailSending: false,
+        approvalEmailTestSending: false,
         approvalEmailLogsLoading: false,
         approvalEmailLoadedDraftId: null,
         approvalEmailTargetId: Number(config.articleId || 0) || null,
@@ -18,12 +19,16 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         approvalEmailFromEmail: 'no-reply@scalemypublication.com',
         approvalEmailReplyTo: 'support@scalemypublication.com',
         approvalEmailSubject: '',
-        approvalEmailImageMode: 'links',
+        approvalEmailIntroHtml: '',
+        approvalEmailImageMode: 'embed',
         approvalEmailPreviewHtml: '',
         approvalEmailWarnings: [],
         approvalEmailHeaders: {},
         approvalEmailSnapshot: {},
         approvalEmailLogs: [],
+        approvalEmailSuperAdminEmail: 'michael@mike-ro-tech.com',
+        approvalEmailIntroEditorId: 'approval-email-intro-' + Math.random().toString(36).slice(2),
+        _approvalEmailTinyMcePromise: null,
 
         approvalEmailRequestHeaders(extra = {}) {
             const base = typeof this.requestHeaders === 'function'
@@ -32,13 +37,25 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '',
                 };
 
             return { ...base, ...extra };
         },
 
+        approvalEmailStatusClass() {
+            switch (String(this.approvalEmailStatusType || 'info')) {
+                case 'success':
+                    return 'border border-green-200 bg-green-50 text-green-700';
+                case 'info':
+                    return 'border border-blue-200 bg-blue-50 text-blue-700';
+                default:
+                    return 'border border-red-200 bg-red-50 text-red-700';
+            }
+        },
+
         approvalEmailPayload() {
+            this.approvalEmailPullIntroEditorHtml();
             return {
                 to: String(this.approvalEmailTo || '').trim(),
                 cc: String(this.approvalEmailCc || '').trim(),
@@ -46,7 +63,8 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 from_email: String(this.approvalEmailFromEmail || '').trim(),
                 reply_to: String(this.approvalEmailReplyTo || '').trim(),
                 subject: String(this.approvalEmailSubject || '').trim(),
-                image_mode: String(this.approvalEmailImageMode || 'links').trim() || 'links',
+                intro_html: String(this.approvalEmailIntroHtml || ''),
+                image_mode: String(this.approvalEmailImageMode || 'embed').trim() || 'embed',
             };
         },
 
@@ -59,7 +77,8 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 approvalEmailFromEmail: config.from_email ?? 'no-reply@scalemypublication.com',
                 approvalEmailReplyTo: config.reply_to ?? 'support@scalemypublication.com',
                 approvalEmailSubject: config.subject ?? '',
-                approvalEmailImageMode: config.image_mode ?? 'links',
+                approvalEmailIntroHtml: config.intro_html ?? '',
+                approvalEmailImageMode: config.image_mode ?? 'embed',
             };
 
             Object.entries(fields).forEach(([key, value]) => {
@@ -68,18 +87,25 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 }
                 this[key] = String(value ?? '');
             });
+
+            if (typeof this.$nextTick === 'function') {
+                this.$nextTick(() => {
+                    this.approvalEmailEnsureIntroEditor();
+                    this.approvalEmailSyncIntroEditor();
+                });
+            }
         },
 
         approvalEmailSetStatus(type, message) {
             this.approvalEmailStatusType = type;
             this.approvalEmailStatus = message || '';
             if (typeof this.showNotification === 'function' && message) {
-                this.showNotification(type === 'success' ? 'success' : 'error', message);
+                this.showNotification(type === 'success' ? 'success' : (type === 'info' ? 'info' : 'error'), message);
             }
         },
 
         approvalEmailImageModeHelp() {
-            switch (String(this.approvalEmailImageMode || 'links')) {
+            switch (String(this.approvalEmailImageMode || 'embed')) {
                 case 'embed':
                     return 'Embed the featured image and inline images directly in the email body.';
                 case 'wordpress':
@@ -99,6 +125,145 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             }
         },
 
+        approvalEmailMountComposer() {
+            if (typeof this.$nextTick === 'function') {
+                this.$nextTick(() => {
+                    this.approvalEmailEnsureIntroEditor();
+                    this.approvalEmailSyncIntroEditor();
+                });
+            }
+        },
+
+        approvalEmailIntroTextarea() {
+            return this.$refs?.approvalEmailIntroEditor || document.getElementById(this.approvalEmailIntroEditorId);
+        },
+
+        async approvalEmailEnsureTinyMceLoaded() {
+            if (window.tinymce) return true;
+            if (this._approvalEmailTinyMcePromise) return this._approvalEmailTinyMcePromise;
+
+            const tinyKey = @json(config('services.tinymce.api_key') ?: 'no-api-key');
+            const sources = [
+                'https://cdn.tiny.cloud/1/' + tinyKey + '/tinymce/7/tinymce.min.js',
+                'https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js',
+            ];
+
+            this._approvalEmailTinyMcePromise = new Promise((resolve) => {
+                const trySource = (index) => {
+                    if (window.tinymce) {
+                        resolve(true);
+                        return;
+                    }
+                    if (index >= sources.length) {
+                        resolve(false);
+                        return;
+                    }
+                    const src = sources[index];
+                    const existing = Array.from(document.querySelectorAll('script[data-approval-email-tinymce=1]')).find((node) => node.src === src);
+                    if (existing) {
+                        existing.addEventListener('load', () => resolve(!!window.tinymce), { once: true });
+                        existing.addEventListener('error', () => trySource(index + 1), { once: true });
+                        return;
+                    }
+                    const script = document.createElement('script');
+                    script.src = src;
+                    script.referrerPolicy = 'origin';
+                    script.dataset.approvalEmailTinymce = '1';
+                    script.onload = () => resolve(!!window.tinymce);
+                    script.onerror = () => trySource(index + 1);
+                    document.head.appendChild(script);
+                };
+                trySource(0);
+            }).finally(() => {
+                this._approvalEmailTinyMcePromise = null;
+            });
+
+            return this._approvalEmailTinyMcePromise;
+        },
+
+        async approvalEmailEnsureIntroEditor() {
+            const textarea = this.approvalEmailIntroTextarea();
+            if (!textarea) return false;
+            const ready = await this.approvalEmailEnsureTinyMceLoaded();
+            if (!ready || !window.tinymce) {
+                textarea.value = String(this.approvalEmailIntroHtml || '');
+                return false;
+            }
+
+            const existing = window.tinymce.get(this.approvalEmailIntroEditorId);
+            if (existing) {
+                this.approvalEmailSyncIntroEditor();
+                return true;
+            }
+
+            await window.tinymce.init({
+                target: textarea,
+                menubar: false,
+                branding: false,
+                promotion: false,
+                height: 220,
+                plugins: 'link lists code autoresize',
+                toolbar: 'undo redo | blocks | bold italic underline | bullist numlist | link | removeformat | code',
+                block_formats: 'Paragraph=p;Heading 2=h2;Heading 3=h3',
+                autoresize_bottom_margin: 12,
+                setup: (editor) => {
+                    editor.on('init', () => {
+                        editor.setContent(String(this.approvalEmailIntroHtml || ''));
+                    });
+                    const sync = () => {
+                        this.approvalEmailIntroHtml = editor.getContent({ format: 'html' }) || '';
+                    };
+                    editor.on('change input undo redo keyup setcontent', sync);
+                },
+            });
+
+            this.approvalEmailSyncIntroEditor();
+            return true;
+        },
+
+        approvalEmailPullIntroEditorHtml() {
+            const editor = window.tinymce?.get(this.approvalEmailIntroEditorId);
+            if (editor) {
+                this.approvalEmailIntroHtml = editor.getContent({ format: 'html' }) || '';
+                return this.approvalEmailIntroHtml;
+            }
+            const textarea = this.approvalEmailIntroTextarea();
+            if (textarea) {
+                this.approvalEmailIntroHtml = textarea.value || '';
+            }
+            return this.approvalEmailIntroHtml;
+        },
+
+        approvalEmailSyncIntroEditor() {
+            const next = String(this.approvalEmailIntroHtml || '');
+            const editor = window.tinymce?.get(this.approvalEmailIntroEditorId);
+            if (editor) {
+                const current = editor.getContent({ format: 'html' }) || '';
+                if (current !== next) {
+                    editor.setContent(next);
+                }
+                return;
+            }
+            const textarea = this.approvalEmailIntroTextarea();
+            if (textarea && textarea.value !== next) {
+                textarea.value = next;
+            }
+        },
+
+        approvalEmailAppendCcAddress(email) {
+            const candidate = String(email || '').trim();
+            if (!candidate) return;
+            const list = String(this.approvalEmailCc || '')
+                .split(',')
+                .map((value) => value.trim())
+                .filter((value) => value !== '');
+            const lower = list.map((value) => value.toLowerCase());
+            if (!lower.includes(candidate.toLowerCase())) {
+                list.push(candidate);
+                this.approvalEmailCc = list.join(', ');
+            }
+        },
+
         async approvalEmailLoad(articleId = null, options = {}) {
             const targetId = Number(articleId || this.approvalEmailTargetId || this.draftId || 0) || 0;
             if (!targetId) return false;
@@ -108,7 +273,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             this.approvalEmailSetStatus('info', '');
 
             try {
-                const response = await fetch(`/article/articles/${targetId}/approval-email`, {
+                const response = await fetch('/article/articles/' + targetId + '/approval-email', {
                     method: 'GET',
                     headers: this.approvalEmailRequestHeaders(),
                 });
@@ -121,6 +286,8 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 this.approvalEmailLogs = Array.isArray(data.logs) ? data.logs : [];
                 this.approvalEmailLoadedDraftId = targetId;
                 this.approvalEmailApplyComposer(data.composer || {}, { preserveFilled: !!options.preserveFilled });
+                await this.approvalEmailEnsureIntroEditor();
+                this.approvalEmailSyncIntroEditor();
                 if (options.open !== false) this.approvalEmailOpen = true;
                 return true;
             } catch (error) {
@@ -144,7 +311,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
 
             this.approvalEmailLogsLoading = true;
             try {
-                const response = await fetch(`/article/articles/${targetId}/approval-email/logs`, {
+                const response = await fetch('/article/articles/' + targetId + '/approval-email/logs', {
                     method: 'GET',
                     headers: this.approvalEmailRequestHeaders(),
                 });
@@ -176,7 +343,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             this.approvalEmailPreviewLoading = true;
             this.approvalEmailSetStatus('info', 'Rendering approval email preview…');
             try {
-                const response = await fetch(`/article/articles/${targetId}/approval-email/preview`, {
+                const response = await fetch('/article/articles/' + targetId + '/approval-email/preview', {
                     method: 'POST',
                     headers: this.approvalEmailRequestHeaders(),
                     body: JSON.stringify(this.approvalEmailPayload()),
@@ -198,6 +365,39 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             }
         },
 
+        async approvalEmailSendTest() {
+            const targetId = Number(this.approvalEmailTargetId || this.draftId || 0) || 0;
+            if (!targetId) return;
+            if (typeof this.flushPipelineStateNow === 'function') {
+                const saved = await this.flushPipelineStateNow();
+                if (!saved) {
+                    this.approvalEmailSetStatus('error', 'Draft state failed to save before test send.');
+                    return;
+                }
+            }
+
+            this.approvalEmailTestSending = true;
+            this.approvalEmailSetStatus('info', 'Sending test email to ' + this.approvalEmailSuperAdminEmail + '…');
+            try {
+                const response = await fetch('/article/articles/' + targetId + '/approval-email/send', {
+                    method: 'POST',
+                    headers: this.approvalEmailRequestHeaders(),
+                    body: JSON.stringify({ ...this.approvalEmailPayload(), test_mode: true }),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || Object.values(data.errors || {}).flat().join(' ') || 'Test send failed.');
+                }
+                this.approvalEmailLogs = Array.isArray(data.logs) ? data.logs : this.approvalEmailLogs;
+                if (data.email?.preview_html) this.approvalEmailPreviewHtml = data.email.preview_html;
+                this.approvalEmailSetStatus('success', data.message || 'Draft approval test email sent.');
+            } catch (error) {
+                this.approvalEmailSetStatus('error', error?.message || 'Draft approval test email failed.');
+            } finally {
+                this.approvalEmailTestSending = false;
+            }
+        },
+
         async approvalEmailSend() {
             const targetId = Number(this.approvalEmailTargetId || this.draftId || 0) || 0;
             if (!targetId) return;
@@ -212,7 +412,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             this.approvalEmailSending = true;
             this.approvalEmailSetStatus('info', 'Sending draft approval email…');
             try {
-                const response = await fetch(`/article/articles/${targetId}/approval-email/send`, {
+                const response = await fetch('/article/articles/' + targetId + '/approval-email/send', {
                     method: 'POST',
                     headers: this.approvalEmailRequestHeaders(),
                     body: JSON.stringify(this.approvalEmailPayload()),
