@@ -1104,6 +1104,7 @@
                 if (this._restoring) return;
                 this.syncPrArticleForCurrentArticleType({ force: false });
                 this.invalidatePromptPreview('article_type_changed');
+                this.$nextTick(() => this._ensureCreateArticleStepReady?.('article_type_changed'));
             });
             this.$watch('currentStep', step => {
                 if (this._restoring) return;

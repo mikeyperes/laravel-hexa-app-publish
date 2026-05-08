@@ -894,6 +894,77 @@
             return resolved;
         },
 
+        _ensureCreateArticleStepReady(reason = '') {
+            const candidateHtml = this.normalizeHostedMediaHtml(
+                this._resolveCanonicalArticleHtml({ preferPrepared: false, hydrateState: false })
+                || this.editorContent
+                || this.spunContent
+                || this.lastNonEmptyDraftBody
+                || this.draftState?.body
+                || this.latestCompletedPrepareHtml
+                || ''
+            );
+
+            if (candidateHtml) {
+                this.spunContent = candidateHtml;
+                this.editorContent = candidateHtml;
+                this.spunWordCount = this.countWordsFromHtml(candidateHtml);
+                this.rememberDraftBody(candidateHtml);
+                this.extractArticleLinks(candidateHtml);
+                this.$nextTick(() => this.setSpinEditor(candidateHtml));
+            }
+
+            if (!this.articleDescription && this.draftState?.articleDescription) {
+                this.articleDescription = this.draftState.articleDescription;
+            }
+
+            if (this.featuredPhoto) {
+                this.featuredPhoto = this.sanitizePhotoAssetForPersistence
+                    ? this.sanitizePhotoAssetForPersistence(this.featuredPhoto)
+                    : this.featuredPhoto;
+                this.featuredResults = this.featuredPhoto ? [this.featuredPhoto] : [];
+                this.featuredSearchPending = false;
+            }
+
+            if (!this.featuredImageSearch) {
+                const fallbackFeaturedLabel = String(
+                    this.draftState?.featuredImageSearch
+                    || this.featuredAlt
+                    || this.featuredPhoto?.alt
+                    || this.featuredFilename
+                    || this.featuredPhoto?.filename
+                    || this.featuredPhoto?.label
+                    || ''
+                ).trim();
+                if (fallbackFeaturedLabel) {
+                    this.featuredImageSearch = fallbackFeaturedLabel;
+                }
+            }
+
+            if (!this.featuredPhoto && this.currentArticleType !== 'press-release' && this.isPressReleaseNotionImport?.()) {
+                const importedAssets = (this.pressReleasePhotoAssets || []).length
+                    ? this.pressReleasePhotoAssets
+                    : (this.rebuildPressReleasePhotoAssets?.() || []);
+                const featuredAsset = this.preferredPressReleaseFeaturedAsset?.()
+                    || importedAssets.find((asset) => asset?.role === 'featured')
+                    || importedAssets[0]
+                    || null;
+                if (featuredAsset) {
+                    this.setPressReleaseFeaturedPhoto({ ...featuredAsset }, { notify: false, save: false });
+                    if (!this.featuredImageSearch) {
+                        this.featuredImageSearch = String(featuredAsset.alt_text || featuredAsset.label || this.featuredFilename || 'Featured image').trim();
+                    }
+                }
+            }
+
+            if (this.spunContent || this.editorContent) {
+                if (!this.completedSteps.includes(5)) this.completedSteps.push(5);
+                if (!this.completedSteps.includes(6)) this.completedSteps.push(6);
+            }
+
+            this.scheduleThumbStateReconcile?.(reason || 'create_article_ready');
+        },
+
         resetGeneratedArticleStateForSpin() {
             this.suggestedTitles = [];
             this.suggestedCategories = [];

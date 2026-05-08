@@ -241,7 +241,7 @@
             </div>
 
             {{-- Featured Image — same card layout as inline photos --}}
-            <div x-show="featuredImageSearch" x-cloak class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4" x-data="{ featuredExpanded: false }">
+            <div x-show="featuredImageSearch || featuredPhoto" x-cloak class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4" x-data="{ featuredExpanded: false }">
                 <h5 class="text-sm font-semibold text-gray-700 mb-3">Featured Image</h5>
                 <div class="border rounded-lg overflow-hidden" :class="featuredPhoto ? 'border-green-300 bg-green-50' : 'border-purple-200 bg-white'">
                     <div class="p-3">
@@ -265,7 +265,7 @@
                             </div>
                             {{-- Info + metadata --}}
                             <div class="flex-1 min-w-0 space-y-1.5">
-                                <p class="text-sm font-medium text-purple-700 break-words" x-text="featuredImageSearch"></p>
+                                <p class="text-sm font-medium text-purple-700 break-words" x-text="featuredImageSearch || featuredAlt || featuredPhoto?.alt || featuredFilename || 'Featured image selected'"></p>
                                 <p x-show="!featuredPhoto && featuredSearching" x-cloak class="text-[11px] text-amber-600">Loading suggestions...</p>
                                 <p x-show="!featuredPhoto && !featuredSearching && featuredSearchPending" x-cloak class="text-[11px] text-amber-600">Suggestions load automatically while Create Article is open.</p>
                                 <p x-show="featuredLoadError" x-cloak class="text-[11px] text-red-500" x-text="featuredLoadError"></p>
