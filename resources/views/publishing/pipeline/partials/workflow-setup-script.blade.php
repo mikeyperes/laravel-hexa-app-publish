@@ -751,6 +751,70 @@
             return null;
         },
 
+
+        resolvePrArticleTypeFromState(explicitType = '', state = null) {
+            const snapshot = state && typeof state === 'object' ? state : {};
+            const templateOverrides = snapshot.template_overrides && typeof snapshot.template_overrides === 'object'
+                ? snapshot.template_overrides
+                : (this.template_overrides && typeof this.template_overrides === 'object' ? this.template_overrides : {});
+            const pressReleaseState = this.normalizePressReleaseState(
+                snapshot.pressRelease && typeof snapshot.pressRelease === 'object'
+                    ? snapshot.pressRelease
+                    : (this.pressRelease || {})
+            );
+            const prArticleState = snapshot.prArticle && typeof snapshot.prArticle === 'object'
+                ? snapshot.prArticle
+                : (this.prArticle && typeof this.prArticle === 'object' ? this.prArticle : {});
+            const prSubjectData = snapshot.prSubjectData && typeof snapshot.prSubjectData === 'object'
+                ? snapshot.prSubjectData
+                : (this.prSubjectData && typeof this.prSubjectData === 'object' ? this.prSubjectData : {});
+            const selectedPrProfiles = Array.isArray(snapshot.selectedPrProfiles)
+                ? snapshot.selectedPrProfiles
+                : (Array.isArray(this.selectedPrProfiles) ? this.selectedPrProfiles : []);
+            const validTypes = new Set(['editorial', 'opinion', 'news-report', 'local-news', 'expert-article', 'pr-full-feature', 'press-release', 'listicle']);
+            const candidates = [
+                explicitType,
+                templateOverrides.article_type,
+                snapshot.article_type,
+                snapshot.currentArticleType,
+                pressReleaseState.article_type,
+                prArticleState.article_type,
+                this.template_overrides?.article_type,
+                this.pressRelease?.article_type,
+                this.currentArticleType,
+            ].map((value) => String(value || '').trim()).filter(Boolean);
+
+            for (const candidate of candidates) {
+                if (validTypes.has(candidate)) {
+                    return candidate;
+                }
+            }
+
+            const hasPrSubjects = selectedPrProfiles.length > 0
+                || Number(prArticleState.main_subject_id || this.prArticle?.main_subject_id || 0) > 0
+                || Object.keys(prSubjectData || {}).length > 0;
+            if (hasPrSubjects) {
+                return 'pr-full-feature';
+            }
+
+            const hasPressReleaseContent = !!(
+                pressReleaseState.submit_method
+                || pressReleaseState.content_dump
+                || pressReleaseState.public_url
+                || (Array.isArray(pressReleaseState.document_files) && pressReleaseState.document_files.length > 0)
+                || pressReleaseState.notion_book?.id
+                || pressReleaseState.notion_person?.name
+                || pressReleaseState.notion_episode?.id
+                || pressReleaseState.notion_guest?.name
+                || (Array.isArray(pressReleaseState.detected_photos) && pressReleaseState.detected_photos.length > 0)
+            );
+            if (hasPressReleaseContent) {
+                return 'press-release';
+            }
+
+            return '';
+        },
+
         async handleArticleTypeChange(nextType = null) {
             if (nextType !== null && nextType !== undefined) {
                 if (!this.template_overrides || typeof this.template_overrides !== 'object') {
