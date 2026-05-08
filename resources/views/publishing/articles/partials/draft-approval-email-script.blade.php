@@ -241,7 +241,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                         return;
                     }
                     const src = sources[index];
-                    const existing = Array.from(document.querySelectorAll('script[data-approval-email-tinymce=1]')).find((node) => node.src === src);
+                    const existing = Array.from(document.querySelectorAll('script[data-approval-email-tinymce="1"]')).find((node) => node.src === src);
                     if (existing) {
                         existing.addEventListener('load', () => resolve(!!window.tinymce), { once: true });
                         existing.addEventListener('error', () => trySource(index + 1), { once: true });
@@ -444,6 +444,26 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             }
         },
 
+        approvalEmailTestPromptOpen: false,
+
+        approvalEmailOpenTestPrompt() {
+            if (!this.approvalEmailTestTo || String(this.approvalEmailTestTo).trim() === "") {
+                this.approvalEmailTestTo = this.approvalEmailSuperAdminEmail || "michael@mike-ro-tech.com";
+            }
+            this.approvalEmailTestPromptOpen = true;
+            this.$nextTick(() => {
+                if (this.$refs.approvalEmailTestInput) {
+                    this.$refs.approvalEmailTestInput.focus();
+                    this.$refs.approvalEmailTestInput.select();
+                }
+            });
+        },
+
+        async approvalEmailSubmitTest() {
+            const ok = await this.approvalEmailSendTest();
+            if (ok) this.approvalEmailTestPromptOpen = false;
+        },
+
         async approvalEmailSendTest() {
             const targetId = Number(this.approvalEmailTargetId || this.draftId || 0) || 0;
             const testTo = String(this.approvalEmailTestTo || this.approvalEmailSuperAdminEmail || "").trim();
@@ -473,8 +493,10 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 this.approvalEmailLogs = Array.isArray(data.logs) ? data.logs : this.approvalEmailLogs;
                 if (data.email?.preview_html) this.approvalEmailPreviewHtml = data.email.preview_html;
                 this.approvalEmailSetStatus("success", data.message || "Draft approval test email sent.");
+                return true;
             } catch (error) {
                 this.approvalEmailSetStatus("error", error?.message || "Draft approval test email failed.");
+                return false;
             } finally {
                 this.approvalEmailTestSending = false;
             }

@@ -18,11 +18,6 @@
                 <span class="text-xs text-gray-500">Loads creator additional contact emails by default when they exist.</span>
             </div>
         </div>
-        <div>
-            <label class="block text-xs font-medium text-gray-700 mb-1">Test recipient</label>
-            <input type="email" x-model="approvalEmailTestTo" @input.debounce.300ms="savePipelineState?.()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="michael@mike-ro-tech.com">
-            <p class="mt-1.5 text-xs text-gray-500">Used only by <span class="font-medium">Send test email</span>. It does not overwrite the main To or CC recipients.</p>
-        </div>
     </section>
 
     {{-- ─── Sender ─── --}}
@@ -93,7 +88,7 @@
             <svg x-show="!approvalEmailPreviewLoading" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
             <span x-text="approvalEmailPreviewLoading ? 'Rendering…' : 'Preview'"></span>
         </button>
-        <button type="button" @click="approvalEmailSendTest()" :disabled="approvalEmailSending || approvalEmailPreviewLoading || approvalEmailTestSending" class="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
+        <button type="button" @click="approvalEmailOpenTestPrompt()" :disabled="approvalEmailSending || approvalEmailPreviewLoading || approvalEmailTestSending" :class="approvalEmailTestPromptOpen ? 'border-indigo-400 bg-indigo-100 ring-1 ring-indigo-300' : 'border-indigo-200 bg-indigo-50'" class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
             <svg x-show="approvalEmailTestSending" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
             <svg x-show="!approvalEmailTestSending" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
             <span x-text="approvalEmailTestSending ? 'Sending test…' : 'Send test email'"></span>
@@ -103,6 +98,26 @@
             <svg x-show="!approvalEmailSending" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
             <span x-text="approvalEmailSending ? 'Sending…' : 'Send draft email'"></span>
         </button>
+    </div>
+
+    {{-- Send test prompt — appears when "Send test email" is clicked --}}
+    <div x-show="approvalEmailTestPromptOpen" x-cloak class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3">
+        <div class="flex items-center justify-between gap-2 mb-2">
+            <label class="text-[11px] font-semibold uppercase tracking-wider text-indigo-700">Where should the test go?</label>
+            <button type="button" @click="approvalEmailTestPromptOpen = false" class="text-indigo-400 hover:text-indigo-700" aria-label="Cancel">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <input type="email" x-ref="approvalEmailTestInput" x-model="approvalEmailTestTo" @input.debounce.300ms="savePipelineState?.()" @keydown.enter.prevent="approvalEmailSubmitTest()" @keydown.escape="approvalEmailTestPromptOpen = false" placeholder="michael@mike-ro-tech.com" class="flex-1 rounded-lg border border-indigo-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <button type="button" @click="approvalEmailTestPromptOpen = false" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+            <button type="button" @click="approvalEmailSubmitTest()" :disabled="approvalEmailTestSending || !approvalEmailTestTo" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 inline-flex items-center gap-2">
+                <svg x-show="approvalEmailTestSending" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                <svg x-show="!approvalEmailTestSending" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <span x-text="approvalEmailTestSending ? 'Sending…' : 'Send test'"></span>
+            </button>
+        </div>
+        <p class="mt-2 text-[11px] text-indigo-700/80">Defaults to the super admin email. The test does not affect the main To or CC recipients.</p>
     </div>
 
     {{-- Send result --}}
