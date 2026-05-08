@@ -118,13 +118,16 @@
         </ul>
     </div>
 
-    {{-- Inline preview --}}
-    <div x-show="approvalEmailPreviewHtml" x-cloak class="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
-        <div class="border-b border-gray-200 bg-gray-50 px-4 py-2.5 flex items-center justify-between gap-3">
-            <p class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Preview</p>
-            <span class="inline-flex items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600" x-text="approvalEmailImageMode"></span>
+    {{-- Inline preview — inbox-style --}}
+    <div x-show="approvalEmailPreviewHtml" x-cloak class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div class="border-b border-gray-200 bg-gradient-to-b from-gray-50 to-white px-4 py-2 flex items-center justify-between gap-3">
+            <p class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 uppercase tracking-wider">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                Inbox preview
+            </p>
+            <span class="inline-flex items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500" x-text="'Image mode: ' + approvalEmailImageMode"></span>
         </div>
-        <div class="p-4 max-w-none prose prose-sm" x-html="approvalEmailPreviewHtml"></div>
+        <div x-html="approvalEmailPreviewHtml"></div>
     </div>
 
     {{-- Send log --}}

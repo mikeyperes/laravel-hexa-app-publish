@@ -521,28 +521,74 @@ HTML;
 
     private function renderPreviewHtml(array $headers, string $bodyHtml, array $warnings, string $reviewUrl, ?string $trackingUrl): string
     {
+        $fromRaw = (string) ($headers['From'] ?? '');
+        $fromName = $fromRaw;
+        $fromEmail = '';
+        if (preg_match('/^(.*?)\s*<([^>]+)>\s*$/', $fromRaw, $m)) {
+            $fromName = trim($m[1]);
+            $fromEmail = trim($m[2]);
+        }
+        $initials = '';
+        if ($fromName !== '') {
+            foreach (preg_split('/\s+/', $fromName) as $word) {
+                if ($word !== '' && $initials === '') {
+                    $initials .= mb_strtoupper(mb_substr($word, 0, 1));
+                } elseif ($word !== '' && mb_strlen($initials) < 2) {
+                    $initials .= mb_strtoupper(mb_substr($word, 0, 1));
+                }
+            }
+        }
+        if ($initials === '') { $initials = 'SP'; }
+
+        $subject = (string) ($headers['Subject'] ?? '(no subject)');
+        $to = (string) ($headers['To'] ?? '');
+        $cc = (string) ($headers['Cc'] ?? '');
+        $replyTo = (string) ($headers['Reply-To'] ?? '');
+        $imageMode = (string) ($headers['Image Mode'] ?? '');
+
+        // Inbox-style metadata strip
+        $metaStrip = '<div class="border-b border-gray-200 px-4 py-3 bg-white">'
+            . '<div class="flex items-start gap-3">'
+            . '<div class="w-9 h-9 rounded-full bg-blue-50 text-blue-700 font-semibold flex items-center justify-center text-sm flex-shrink-0">' . $this->escapeHtml($initials) . '</div>'
+            . '<div class="flex-1 min-w-0">'
+            . '<div class="flex items-baseline gap-2 flex-wrap">'
+            . '<span class="font-semibold text-gray-900 text-sm">' . $this->escapeHtml($fromName !== '' ? $fromName : 'Unknown sender') . '</span>'
+            . ($fromEmail !== '' ? '<span class="text-gray-500 text-xs">&lt;' . $this->escapeHtml($fromEmail) . '&gt;</span>' : '')
+            . '</div>'
+            . '<p class="mt-1 text-gray-900 font-semibold text-[15px] break-words">' . $this->escapeHtml($subject) . '</p>'
+            . '<div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-gray-500">'
+            . ($to !== '' ? '<span><span class="font-medium text-gray-600">To:</span> ' . $this->escapeHtml($to) . '</span>' : '')
+            . ($cc !== '' ? '<span><span class="font-medium text-gray-600">Cc:</span> ' . $this->escapeHtml($cc) . '</span>' : '')
+            . ($replyTo !== '' ? '<span><span class="font-medium text-gray-600">Reply-to:</span> ' . $this->escapeHtml($replyTo) . '</span>' : '')
+            . '</div>'
+            . '</div>'
+            . '</div>'
+            . '</div>';
+
+        // Email body — rendered, edge to edge
+        $body = '<div class="px-4 py-5 bg-white"><div class="max-w-none prose prose-sm">' . $bodyHtml . '</div></div>';
+
+        // Warnings inline above body if any
         $warningList = '';
         if ($warnings !== []) {
             $warningItems = collect($warnings)->map(fn ($warning) => '<li>' . $this->escapeHtml($warning) . '</li>')->implode('');
-            $warningList = '<div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"><p class="font-semibold mb-2">Warnings</p><ul class="list-disc pl-5 space-y-1">' . $warningItems . '</ul></div>';
+            $warningList = '<div class="border-t border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"><p class="font-semibold mb-1">Preview warnings</p><ul class="list-disc pl-5 space-y-0.5">' . $warningItems . '</ul></div>';
         }
 
-        $rows = '';
-        foreach ($headers as $label => $value) {
-            if ($value === '') {
-                continue;
-            }
-            $rows .= '<div class="grid grid-cols-[120px,1fr] gap-3 py-1 text-sm"><dt class="font-semibold text-gray-600">' . $this->escapeHtml($label) . '</dt><dd class="text-gray-900 break-words">' . $this->escapeHtml((string) $value) . '</dd></div>';
+        // Technical send details — collapsed, low contrast
+        $detailsRows = '';
+        if ($imageMode !== '') {
+            $detailsRows .= '<p><span class="font-medium text-gray-600">Image mode:</span> ' . $this->escapeHtml($imageMode) . '</p>';
         }
+        $detailsRows .= '<p><span class="font-medium text-gray-600">Hosted review URL:</span> ' . $this->escapeHtml($reviewUrl === '#' ? 'Generated on send' : $reviewUrl) . '</p>';
+        $detailsRows .= '<p><span class="font-medium text-gray-600">Tracking pixel:</span> ' . $this->escapeHtml($trackingUrl ?: 'Generated on send') . '</p>';
 
-        $linksBlock = '<div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500 space-y-1"><p><span class="font-semibold text-gray-700">Hosted review URL:</span> ' . $this->escapeHtml($reviewUrl === '#' ? 'Generated on send' : $reviewUrl) . '</p>' . ($trackingUrl ? '<p><span class="font-semibold text-gray-700">Tracking pixel:</span> ' . $this->escapeHtml($trackingUrl) . '</p>' : '<p><span class="font-semibold text-gray-700">Tracking pixel:</span> Generated on send</p>') . '</div>';
+        $detailsBlock = '<details class="border-t border-gray-100 bg-gray-50">'
+            . '<summary class="cursor-pointer px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500 hover:bg-gray-100 select-none">Send details</summary>'
+            . '<div class="px-4 pb-3 pt-1 space-y-0.5 text-[11px] text-gray-500 break-all">' . $detailsRows . '</div>'
+            . '</details>';
 
-        return '<div class="space-y-4">'
-            . '<div class="rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-sm"><h4 class="text-sm font-semibold text-gray-900 mb-3">Email Preview</h4>' . $rows . '</div>'
-            . $linksBlock
-            . $warningList
-            . '<div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"><div class="px-4 py-2 border-b border-gray-200 text-xs font-semibold uppercase tracking-wide text-gray-500 bg-gray-50">Rendered email body</div><div class="p-4 max-w-none prose prose-sm">' . $bodyHtml . '</div></div>'
-            . '</div>';
+        return $metaStrip . $body . $warningList . $detailsBlock;
     }
 
     private function styleEmbeddedHtml(string $html): string

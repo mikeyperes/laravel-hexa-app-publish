@@ -330,6 +330,13 @@ function publishPipeline() {
         masterActivityAutoScroll: true,
         emailDrawerOpen: false,
         emailDrawerTab: 'approval',
+        emailDrawerWidth: (typeof localStorage !== 'undefined' && localStorage.getItem('emailDrawerWidth')) || 'M',
+        cycleEmailDrawerWidth() {
+            const order = ['M', 'L', 'XL'];
+            const next = order[(order.indexOf(this.emailDrawerWidth) + 1) % order.length];
+            this.emailDrawerWidth = next;
+            try { localStorage.setItem('emailDrawerWidth', next); } catch (e) {}
+        },
         activityRunHistory: [],
         activityRunHistoryLoading: false,
         selectedActivityRunTrace: '',

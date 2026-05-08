@@ -189,7 +189,7 @@
     </div>
 
     <div x-show="approvalEmailOpen" x-cloak class="fixed inset-0 z-40 bg-black/40" @click="approvalEmailOpen = false"></div>
-    <aside x-show="approvalEmailOpen" x-cloak class="fixed right-0 top-0 bottom-0 z-50 flex w-full max-w-3xl flex-col bg-white shadow-2xl">
+    <aside x-show="approvalEmailOpen" x-cloak class="fixed right-0 top-0 bottom-0 z-50 flex w-full flex-col bg-white shadow-2xl transition-[max-width] duration-200" :class="{ 'max-w-3xl': approvalEmailWidth === 'M', 'max-w-5xl': approvalEmailWidth === 'L', 'max-w-[1280px]': approvalEmailWidth === 'XL' }">
         <div class="flex items-start gap-4 border-b border-gray-200 px-6 py-5">
             {{-- Featured image --}}
             <div class="flex-shrink-0 w-20 h-20 rounded-md bg-gray-100 overflow-hidden">
@@ -208,6 +208,10 @@
                 <h2 class="mt-1 text-lg font-semibold text-gray-900 break-words" x-text="approvalEmailArticle?.title || 'Draft Approval Email'"></h2>
                 <p class="mt-1 text-sm text-gray-500">Send the full draft inline for review, preview the exact email, and inspect the full article-level send log.</p>
             </div>
+            <button type="button" @click="cycleApprovalEmailWidth()" class="rounded-lg px-2 py-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium" :title="'Panel width: ' + approvalEmailWidth + ' — click to cycle (M → L → XL)'" aria-label="Cycle panel width">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7L4 12l4 5M16 7l4 5-4 5"/></svg>
+                <span x-text="approvalEmailWidth"></span>
+            </button>
             <button type="button" @click="approvalEmailOpen = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 flex-shrink-0">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
@@ -241,6 +245,14 @@ function articlesList() {
         deletingId: null,
         deleteLog: [],
         bulkDeleting: false,
+        approvalEmailWidth: (typeof localStorage !== 'undefined' && localStorage.getItem('approvalEmailWidth')) || 'M',
+
+        cycleApprovalEmailWidth() {
+            const order = ['M', 'L', 'XL'];
+            const next = order[(order.indexOf(this.approvalEmailWidth) + 1) % order.length];
+            this.approvalEmailWidth = next;
+            try { localStorage.setItem('approvalEmailWidth', next); } catch (e) {}
+        },
 
         init() {
             const params = new URLSearchParams(window.location.search);

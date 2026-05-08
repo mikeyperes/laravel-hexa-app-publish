@@ -538,7 +538,7 @@
 
     {{-- ═══════════════════ EMAIL DRAWER ═══════════════════ --}}
     <div x-cloak class="v2-drawer-overlay" x-bind:style="emailDrawerOpen ? 'display:block;' : 'display:none;'" @click="emailDrawerOpen = false"></div>
-    <aside x-cloak data-email-drawer x-bind:style="emailDrawerOpen ? 'display:flex;' : 'display:none;'" class="v2-drawer">
+    <aside x-cloak data-email-drawer x-bind:style="(emailDrawerOpen ? 'display:flex;' : 'display:none;') + (emailDrawerWidth === 'L' ? ' width: min(880px, 92vw);' : emailDrawerWidth === 'XL' ? ' width: min(1280px, 96vw);' : '')" class="v2-drawer" :class="{ 'v2-drawer--wide': emailDrawerWidth === 'L', 'v2-drawer--full': emailDrawerWidth === 'XL' }">
         @include('app-publish::publishing.pipeline-v2._email-drawer')
     </aside>
 

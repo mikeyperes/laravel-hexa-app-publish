@@ -21,6 +21,10 @@
             <h3 class="font-semibold text-gray-900 text-base truncate" x-text="approvalEmailArticle?.title || 'Email'"></h3>
             <p class="text-xs text-gray-500">Approval drafts and live notifications.</p>
         </div>
+        <button type="button" @click="cycleEmailDrawerWidth()" class="v2-btn v2-btn-ghost px-2 py-1.5 flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium" :title="'Drawer width: ' + emailDrawerWidth + ' — click to cycle (M → L → XL)'" aria-label="Cycle drawer width">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7L4 12l4 5M16 7l4 5-4 5"/></svg>
+            <span x-text="emailDrawerWidth"></span>
+        </button>
         <button type="button" @click="emailDrawerOpen = false" class="v2-btn v2-btn-ghost p-1.5 flex-shrink-0" aria-label="Close email drawer">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>

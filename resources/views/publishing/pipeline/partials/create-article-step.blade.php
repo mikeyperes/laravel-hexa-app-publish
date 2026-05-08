@@ -26,7 +26,7 @@
             <div class="mb-3">
                 <label class="block text-xs text-gray-500 mb-1">Article Title</label>
                 <div x-show="metadataLoading && !articleTitle" class="w-full border border-gray-200 rounded-lg px-4 py-3 bg-gray-50 animate-pulse h-[60px]"></div>
-                <textarea x-show="!metadataLoading || articleTitle" x-model="articleTitle" rows="2" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-lg font-bold resize-none overflow-hidden" placeholder="Enter article title..." @input="$el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px'"></textarea>
+                <textarea x-show="!metadataLoading || articleTitle" x-model="articleTitle" rows="2" style="field-sizing: content; min-height: 3.75rem;" x-init="$watch('articleTitle', () => $nextTick(() => { $el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px'; })); $watch('metadataLoading', () => $nextTick(() => { $el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px'; })); $nextTick(() => { $el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px'; });" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-lg font-bold resize-none overflow-hidden" placeholder="Enter article title..." @input="$el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px'"></textarea>
             </div>
 
             {{-- Article Description / Excerpt --}}
