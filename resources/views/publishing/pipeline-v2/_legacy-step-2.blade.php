@@ -21,7 +21,7 @@
                     Loading...
                 </div>
                 <select x-show="!templatesLoading" id="article-type-select" x-model="template_overrides.article_type"
-                    @change="$data.template_dirty.article_type = true; autoSelectPrSource()"
+                    @change="handleArticleTypeChange()"
                     class="w-full md:w-1/2 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">— Select article type —</option>
                     @foreach(config('hws-publish.article_types', []) as $type)

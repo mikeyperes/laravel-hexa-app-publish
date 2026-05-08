@@ -727,6 +727,22 @@
             return null;
         },
 
+        handleArticleTypeChange() {
+            if (!this.template_dirty || typeof this.template_dirty !== "object") {
+                this.template_dirty = {};
+            }
+            this.template_dirty.article_type = true;
+            this.autoSelectPrSource();
+            this.syncPrArticleForCurrentArticleType({ force: false });
+            this.invalidatePromptPreview("article_type_changed");
+            this.$nextTick(() => this._ensureCreateArticleStepReady?.("article_type_changed"));
+            this.savePipelineState();
+            this.flushPipelineStateNow?.();
+            if (!this._restoring) {
+                this.queueAutoSaveDraft?.(50);
+            }
+        },
+
         draftTitleLooksPlaceholder(value = null) {
             const raw = String(value ?? this.articleTitle ?? '').trim();
             if (!raw) return true;
