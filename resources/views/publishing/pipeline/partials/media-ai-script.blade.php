@@ -842,7 +842,9 @@
         _resolveCanonicalArticleHtml({ preferPrepared = false, hydrateState = false } = {}) {
             const candidates = [];
             const pushCandidate = (value) => {
-                const content = String(value || '').trim();
+                const content = this.normalizeHostedMediaHtml
+                    ? this.normalizeHostedMediaHtml(value)
+                    : String(value || '').trim();
                 if (!content) return;
 
                 const textOnly = content
@@ -878,7 +880,9 @@
             pushCandidate(this.lastNonEmptyDraftBody);
             pushCandidate(this.latestCompletedPrepareHtml);
 
-            const resolved = candidates[0] || '';
+            const resolved = this.normalizeHostedMediaHtml
+                ? this.normalizeHostedMediaHtml(candidates[0] || '')
+                : (candidates[0] || '');
 
             if (hydrateState && resolved) {
                 this.spunContent = resolved;

@@ -15,6 +15,7 @@ class PipelineStateService
     public function __construct(
         private PressReleaseWorkflowService $pressReleaseWorkflow,
         private PrArticleWorkflowService $prArticleWorkflow,
+        private PipelineHtmlSanitizer $htmlSanitizer,
     ) {}
 
     public function load(PublishArticle $article): ?PublishPipelineState

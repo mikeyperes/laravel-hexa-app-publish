@@ -485,11 +485,14 @@ class ArticleGenerationService
         }
 
         $str = "Below are the source articles to spin into a new unique article:\n";
-        foreach ($sourceTexts as $i => $src) {
-            $num = $i + 1;
-            $title = is_array($src) ? ($src['title'] ?? '') : '';
-            $url = is_array($src) ? ($src['url'] ?? '') : '';
-            $text = is_array($src) ? ($src['text'] ?? $src) : $src;
+        $num = 0;
+        foreach ($sourceTexts as $src) {
+            $num++;
+            $title = is_array($src) ? (string) ($src['title'] ?? '') : '';
+            $url = is_array($src) ? (string) ($src['url'] ?? '') : '';
+            $text = is_array($src)
+                ? trim((string) ($src['text'] ?? $src['content'] ?? $src['body'] ?? ''))
+                : trim((string) $src);
             $str .= "\n=== Source {$num} ===\n";
             if ($title) $str .= "Title: {$title}\n";
             if ($url) $str .= "Source URL: {$url}\n";
@@ -527,10 +530,13 @@ class ArticleGenerationService
             'editorial', 'opinion', 'expert-article', 'pr-full-feature', 'press-release' => 'VOICE RULES: Write in third person only. Do not use first-person pronouns in the headline or narrative body unless they appear inside a direct quote copied from the source material.',
             default => 'VOICE RULES: Do not use first-person pronouns in headline options unless the workflow explicitly requests a first-person essay. Prefer third person in narrative copy.',
         };
+        $quoteRule = "QUOTE RULES: Never fabricate quotes or present paraphrases as quoted speech. Use quotation marks only for language copied verbatim from the supplied sources. If the sources do not contain a suitable quote, do not add one just to satisfy the brief.";
 
         return "TITLE AND METADATA RULES: Return at least {$titleCount} distinct headline options in the METADATA block. Do not return a single headline. Every headline must avoid em dashes and en dashes. Use commas, periods, colons, or a standard hyphen instead. Headline options must not use first-person phrasing such as I, I'm, I've, my, we, our, or us."
             . "\n"
-            . $voiceRule;
+            . $voiceRule
+            . "\n"
+            . $quoteRule;
     }
 
     private function h2NotationInstruction(?string $notation): string
@@ -550,7 +556,7 @@ class ArticleGenerationService
             'news-report' => 'This article must read as straight news reporting. The title and opening paragraph must center on the concrete development, identify what happened, and avoid feature-style thesis language or opinion framing.',
             'local-news' => 'This article must read as local news. The headline and lede must clearly ground the story in the place, people, and immediate development. Avoid generic national-analysis framing.',
             'expert-article' => 'This article must read as expert analysis. The title should signal expertise and a clear angle. The body should explain, interpret, and advise rather than merely summarize sources.',
-            'press-release' => 'This article must read as a formal press release with announcement framing, not as an editorial or news digest.',
+            'press-release' => 'This article must read as a formal press release with neutral wire framing, not as an editorial or news digest. Never make Hexa PR Wire the acting subject of the lead. After the dateline, the first sentence must identify the real subject and the actual development. Avoid promotional adjectives such as groundbreaking, exciting, visionary, remarkable, celebrated, or renowned unless the supplied source package explicitly supports them. If the source package does not contain a verbatim human quote, do not create quoted speech or quote blocks.',
             'pr-full-feature' => 'This article must read as a polished feature with a coherent narrative arc, not as a stitched source summary.',
             default => '',
         };
@@ -717,6 +723,9 @@ class ArticleGenerationService
 
     private function postProcessGeneratedOutput(string $content, array $metadata, ?string $articleType, array $sourceTexts): array
     {
+        $content = $this->stripCaptionLikeParagraphsBeforeHeadings($content);
+        $content = $this->normalizeGeneratedHeadingTags($content);
+
         if ($articleType !== 'press-release') {
             return [$content, $metadata];
         }
@@ -736,6 +745,7 @@ class ArticleGenerationService
         $content = $this->stripRepeatedPressReleaseDatelines($content, $details);
         $content = $this->normalizePressReleaseParagraphLengths($content);
         $content = $this->ensurePressReleaseFirstMentionLinks($content, $targets);
+        $content = $this->stripUnsupportedPressReleaseQuotes($content, $sourceTexts);
 
         if ($isPodcast && !$this->hasSelectedPressReleaseInlineMedia($sourceTexts)) {
             $content = $this->ensurePodcastPressReleaseInlineGuestImage($content, $targets);
@@ -746,6 +756,134 @@ class ArticleGenerationService
         }
 
         return [$content, $metadata];
+    }
+
+    private function stripCaptionLikeParagraphsBeforeHeadings(string $content): string
+    {
+        $content = preg_replace_callback("/<p>(.*?)<\/p>/is", function ($matches) {
+            $raw = str_ireplace(["<br>", "<br/>", "<br />"], "\n", $matches[1]);
+            $text = html_entity_decode(strip_tags($raw), ENT_QUOTES | ENT_HTML5, "UTF-8");
+            $parts = preg_split("/\n{2,}/", $text) ?: [];
+            $parts = array_values(array_filter(array_map("trim", $parts), fn ($part) => $part !== ""));
+
+            if (count($parts) >= 2) {
+                $first = $parts[0];
+                $second = $parts[1];
+                $firstNormalized = trim((string) preg_replace("/\s+/", " ", $first));
+                $firstWordCount = str_word_count($firstNormalized);
+                $firstIsCaption = $firstWordCount <= 9
+                    && !preg_match("/[.!?]$/", $firstNormalized)
+                    && (preg_match("/^(image of|photo of)\b/i", $firstNormalized)
+                        || preg_match("/^[A-Z][A-Za-z0-9 ,&\/-]{2,80}$/", $firstNormalized));
+                $firstIsUtility = (bool) preg_match("/^(learn more|read more|watch|listen|click here|loading photo)\b/i", $firstNormalized);
+
+                $secondIsHeading = (bool) preg_match("/^[A-Z][A-Za-z0-9 ,&\/-]{4,}$/", $second) && str_word_count($second) <= 12;
+                if ($secondIsHeading) {
+                    $body = trim(implode("\n\n", array_slice($parts, 2)));
+                    $heading = $this->normalizeGeneratedHeadingText($second);
+                    if ($firstIsCaption || $firstIsUtility || $firstWordCount <= 9) {
+                        return $body !== ""
+                            ? "<h2>" . e($heading) . "</h2><p>" . nl2br(e($body)) . "</p>"
+                            : "<h2>" . e($heading) . "</h2>";
+                    }
+                    return $body !== ""
+                        ? "<p>" . nl2br(e($first)) . "</p><h2>" . e($heading) . "</h2><p>" . nl2br(e($body)) . "</p>"
+                        : "<p>" . nl2br(e($first)) . "</p><h2>" . e($heading) . "</h2>";
+                }
+
+
+                if ((bool) preg_match("/^[A-Z][A-Za-z0-9 ,&\/-]{4,}$/", $first) && str_word_count($first) <= 12) {
+                    $body = trim(implode("\n\n", array_slice($parts, 1)));
+                    if ($body !== "") {
+                        $heading = $this->normalizeGeneratedHeadingText($first);
+                        return "<h2>" . e($heading) . "</h2><p>" . nl2br(e($body)) . "</p>";
+                    }
+                }
+            }
+
+            return $matches[0];
+        }, $content) ?? $content;
+
+        return preg_replace_callback("/(<p>\s*)(.*?)(\s*<\/p>)(\s*<(h2|h3)\b)/is", function ($matches) {
+            $paragraphText = trim(html_entity_decode(strip_tags($matches[2]), ENT_QUOTES | ENT_HTML5, "UTF-8"));
+            if ($paragraphText === "") {
+                return $matches[4];
+            }
+
+            $wordCount = str_word_count($paragraphText);
+            $hasTerminalPunctuation = (bool) preg_match("/[.!?]$/", $paragraphText);
+            $hasLink = stripos($matches[2], "<a " ) !== false;
+            $looksLikeCaption = preg_match("/^(image of|photo of)\b/i", $paragraphText)
+                || preg_match("/^[A-Z][A-Za-z0-9 ,&\/-]{2,80}$/", $paragraphText);
+
+            if ($wordCount <= 9 && !$hasTerminalPunctuation && !$hasLink && $looksLikeCaption) {
+                return $matches[4];
+            }
+
+            return $matches[0];
+        }, $content) ?? $content;
+    }
+
+    private function normalizeGeneratedHeadingText(string $heading): string
+    {
+        $heading = strtolower(trim($heading));
+        return preg_replace_callback("/\b[a-z]/", fn ($match) => strtoupper($match[0]), $heading) ?? trim($heading);
+    }
+
+    private function normalizeGeneratedHeadingTags(string $content): string
+    {
+        return preg_replace_callback("#<(h2|h3)([^>]*)>(.*?)</\\1>#is", function (array $match) {
+            $plain = trim(html_entity_decode(strip_tags((string) ($match[3] ?? "")), ENT_QUOTES | ENT_HTML5, "UTF-8"));
+            if ($plain === "" || preg_match("#[a-z]#", $plain)) {
+                return $match[0];
+            }
+
+            $heading = $this->normalizeGeneratedHeadingText($plain);
+            return "<" . $match[1] . $match[2] . ">" . e($heading) . "</" . $match[1] . ">";
+        }, $content) ?? $content;
+    }
+
+    private function sourceHasVerbatimPressReleaseQuote(array $sourceTexts): bool
+    {
+        $combined = $this->flattenSourceTexts($sourceTexts);
+        if ($combined === "") {
+            return false;
+        }
+
+        $patterns = [
+            "#[\"“][^\"”]{40,}[\"”]#u",
+            "#[\"“](?:[^\"”]*\\s){8,}[^\"”]*[\"”]#u",
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $combined)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function stripUnsupportedPressReleaseQuotes(string $content, array $sourceTexts): string
+    {
+        if ($content === "" || $this->sourceHasVerbatimPressReleaseQuote($sourceTexts)) {
+            return $content;
+        }
+
+        return preg_replace_callback("#<p\\b([^>]*)>(.*?)</p>#is", function (array $match) {
+            $plain = trim(html_entity_decode(strip_tags((string) ($match[2] ?? "")), ENT_QUOTES | ENT_HTML5, "UTF-8"));
+            if ($plain === "") {
+                return $match[0];
+            }
+
+            $hasLongQuote = preg_match("#[\"“][^\"”]{25,}[\"”]#u", $plain) === 1;
+            $hasAttribution = preg_match("#\\b(said|says|stated|explained|noted|according to|adds|added)\\b#iu", $plain) === 1;
+            if (!$hasLongQuote || !$hasAttribution) {
+                return $match[0];
+            }
+
+            return "";
+        }, $content) ?? $content;
     }
 
     private function extractValidatedDetails(array $sourceTexts): array

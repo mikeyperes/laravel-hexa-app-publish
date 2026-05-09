@@ -780,6 +780,8 @@ class CampaignExecutionService
             'success' => true,
             'message' => 'Campaign run complete.',
             'log' => $log,
+            'article_id' => $article->id,
+            'public_article_id' => $article->article_id,
             'article' => $article->fresh(),
         ];
     }

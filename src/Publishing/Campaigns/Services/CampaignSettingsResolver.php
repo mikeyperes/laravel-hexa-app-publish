@@ -106,6 +106,9 @@ class CampaignSettingsResolver
         }
 
         return collect((array) $terms)
+            ->flatMap(function ($term) {
+                return preg_split("/[\r\n,]+/", (string) $term) ?: [];
+            })
             ->map(fn ($term) => trim((string) $term))
             ->filter()
             ->unique()

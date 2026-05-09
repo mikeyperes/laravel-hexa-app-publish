@@ -35,22 +35,27 @@ class SourceAccessStrategyService
                 $attempts,
                 $noteMethod ?: $requestedMethod,
                 $noteUserAgent ?: $requestedUserAgent,
-                'domain-note',
-                'Domain note'
+                "domain-note",
+                "Domain note"
             );
         }
 
-        if ($bestMethod || $bestUserAgent) {
+        $this->pushAttempt($attempts, $requestedMethod, $requestedUserAgent, "requested", "Requested");
+
+        if (
+            ($bestMethod || $bestUserAgent)
+            && (($bestMethod && $bestMethod !== $requestedMethod) || ($bestUserAgent && $bestUserAgent !== $requestedUserAgent))
+        ) {
             $this->pushAttempt(
                 $attempts,
                 $bestMethod ?: $requestedMethod,
                 $bestUserAgent ?: $requestedUserAgent,
-                'recent-success',
-                'Recent success'
+                "recent-success-fallback",
+                "Recent success fallback"
             );
         }
 
-        $this->pushAttempt($attempts, $requestedMethod, $requestedUserAgent, 'requested', 'Requested');
+
 
         $escalationUserAgents = $this->preferredEscalationUserAgents($health, $requestedUserAgent, $bestUserAgent, $noteUserAgent);
         $methodFallbacks = $this->preferredMethodFallbacks($requestedMethod, $health);

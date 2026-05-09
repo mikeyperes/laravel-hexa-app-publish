@@ -491,6 +491,13 @@ function pressReleaseWorkflowMixin(config) {
                         'Never substitute another city, state, or date.',
                         'Ignore any other dateline, city, state, or publication date found in transcript, source material, or prior examples.'
                     ].join("\n"));
+                    blocks.push([
+                        "=== Press Release Guardrails ===",
+                        "Never make Hexa PR Wire the acting subject of the lead.",
+                        "After the dateline, identify the real subject and the actual development in neutral wire style.",
+                        "Do not use promotional adjectives such as groundbreaking, exciting, visionary, remarkable, celebrated, or renowned unless the source explicitly supports them.",
+                        "If the supplied material does not contain a verbatim human quote, do not create quoted speech or quote blocks."
+                    ].join("\n"));
                 }
             }
 
@@ -1626,6 +1633,9 @@ function pressReleaseWorkflowMixin(config) {
             let cleaned = String(html || '');
             const selectedAssets = Array.isArray(assets) ? assets : this.selectedPressReleaseInlineAssets();
             cleaned = cleaned.replace(/<figure\b[^>]*class="[^"]*(?:press-release-inline-photo|podcast-inline-guest-photo)[^"]*"[^>]*>[\s\S]*?<\/figure>/gi, '');
+            cleaned = cleaned.replace(/<div[^>]*class="[^"]*photo-placeholder[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
+            cleaned = cleaned.replace(/<span[^>]*class="[^"]*photo-(?:view|confirm|change|remove)[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '');
+            cleaned = cleaned.replace(/(?:View|Confirm|Change|Remove){2,}/g, '');
             const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             selectedAssets.forEach((asset) => {
                 [this.pressReleaseSourceUploadUrl(asset), this.pressReleaseEditorPreviewUrl(asset)].forEach((candidate) => {

@@ -59,7 +59,7 @@
             @endforeach
         </select>
 
-        <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Campaigns only support editorial article presets. PR, expert, and press-release templates are excluded here.</p>
+        <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Campaigns only support the configured editorial-style article presets. PR, expert, press-release, and other unsupported templates are excluded here.</p>
 
         <div x-show="selectedTemplate()" x-cloak class="rounded-lg border border-gray-100 bg-gray-50 p-4 text-xs text-gray-700 space-y-1">
             <p x-show="selectedTemplate()?.article_type"><span class="text-gray-500">Type:</span> <span x-text="formatLabel(selectedTemplate()?.article_type)"></span></p>

@@ -651,7 +651,7 @@
                     </select>
                 </div>
                 <div class="hx-field">
-                    <label class="hx-label">Article type <span class="text-gray-400 normal-case font-normal">— campaigns are editorial-only</span></label>
+                    <label class="hx-label">Article type <span class="text-gray-400 normal-case font-normal">— campaigns support editorial, news report, and local news</span></label>
                     <select x-model="form.article_type" class="hx-select">
                         <option value="editorial">Editorial</option>
                         @foreach($articleTypes as $at)
@@ -664,7 +664,7 @@
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <p class="font-medium">Article preset edits here are campaign-only overrides.</p>
-                        <p class="mt-1 text-fuchsia-800/90">Use this section to tune how this single campaign writes. Campaigns stay editorial-only even if the source preset supports promotional types. To change the underlying preset itself, open the preset in a new tab.</p>
+                        <p class="mt-1 text-fuchsia-800/90">Use this section to tune how this single campaign writes. Campaigns stay within the supported editorial-style types even if the source preset supports promotional or unsupported types. To change the underlying preset itself, open the preset in a new tab.</p>
                     </div>
                     <div class="text-xs font-semibold uppercase tracking-wide text-fuchsia-700" x-text="articlePresetOverrideCount + ' override' + (articlePresetOverrideCount === 1 ? '' : 's')"></div>
                 </div>

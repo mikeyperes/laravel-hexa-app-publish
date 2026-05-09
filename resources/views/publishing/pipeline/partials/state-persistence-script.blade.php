@@ -291,8 +291,18 @@
                 .replace('/storage/publish/', '/publish/');
         },
 
-        normalizeHostedMediaHtml(html = '') {
+        sanitizePersistedArticleHtml(html = '') {
             return String(html || '')
+                .replace(/<div[^>]*class="[^"]*photo-placeholder[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+                .replace(/<span[^>]*class="[^"]*photo-(?:view|confirm|change|remove)[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '')
+                .replace(/<(?:(?:p)|(?:div))\b[^>]*>\s*(?:&nbsp;|<br\s*\/?>|\s)*<\\/(?:p|div)>/gi, '')
+                .replace(/(?:View|Confirm|Change|Remove){2,}/g, '')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+        },
+
+        normalizeHostedMediaHtml(html = '') {
+            return this.sanitizePersistedArticleHtml(String(html || ''))
                 .replace(/https?:\/\/[^\s"']+\/storage\/publish\//gi, (match) => this.normalizeHostedMediaUrl(match))
                 .replace(/(["'(])\/storage\/publish\//gi, '$1/publish/');
         },

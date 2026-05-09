@@ -20,6 +20,7 @@ use hexa_app_publish\Publishing\Presets\Models\PublishPreset;
 use hexa_app_publish\Publishing\Pipeline\Jobs\PreparePipelineOperationJob;
 use hexa_app_publish\Publishing\Pipeline\Jobs\PublishPipelineOperationJob;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineStateService;
+use hexa_app_publish\Publishing\Pipeline\Services\PipelineHtmlSanitizer;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineDraftSessionService;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineOperationExecutor;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineOperationService;
@@ -55,6 +56,7 @@ class PipelineController extends Controller
     protected SourceExtractionService $sourceExtraction;
     protected NewsDiscoveryOptionsService $newsOptions;
     protected PipelineStateService $pipelineState;
+    protected PipelineHtmlSanitizer $htmlSanitizer;
     protected PipelineDraftSessionService $draftSession;
     protected PipelineWorkflowRegistry $workflowRegistry;
     protected ArticleActivityService $articleActivity;
@@ -67,6 +69,7 @@ class PipelineController extends Controller
         SourceExtractionService $sourceExtraction,
         NewsDiscoveryOptionsService $newsOptions,
         PipelineStateService $pipelineState,
+        PipelineHtmlSanitizer $htmlSanitizer,
         PipelineDraftSessionService $draftSession,
         PipelineWorkflowRegistry $workflowRegistry,
         ArticleActivityService $articleActivity,
@@ -76,6 +79,7 @@ class PipelineController extends Controller
         $this->sourceExtraction = $sourceExtraction;
         $this->newsOptions = $newsOptions;
         $this->pipelineState = $pipelineState;
+        $this->htmlSanitizer = $htmlSanitizer;
         $this->draftSession = $draftSession;
         $this->workflowRegistry = $workflowRegistry;
         $this->articleActivity = $articleActivity;

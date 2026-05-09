@@ -2344,6 +2344,7 @@
                 'Quote target: ' + (this.prArticle.quote_count || 0) + ' quote(s)',
                 'Headline guidance: ' + (this.prArticle.include_subject_name_in_title ? 'Include the main subject name naturally.' : 'Subject name is optional in the headline.'),
                 'Voice rule: Write in third person. Never use first-person phrasing in the headline or body except inside direct quotes copied from source material.',
+                "Quote rule: Use direct quotes only when they appear verbatim in the supplied material. If no suitable quote exists, use zero quotes instead of inventing one.",
             ];
 
             if (this.prArticle.focus_instructions) {
@@ -2420,6 +2421,7 @@
                 parts.push('Headline instruction: ' + (this.prArticle.include_subject_name_in_title ? 'include the main subject name in the headline' : 'subject name optional in the headline'));
             }
             parts.push('Voice rule: third person only for the headline and narrative body, except direct quotes copied from source material.');
+            parts.push("Quote rule: Use direct quotes only when they appear verbatim in the supplied material. If no suitable quote exists, use zero quotes instead of inventing one.");
             parts.push('');
 
             if (photoAssets.length > 0) {
