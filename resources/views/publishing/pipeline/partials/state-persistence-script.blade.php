@@ -295,7 +295,7 @@
             return String(html || '')
                 .replace(/<div[^>]*class="[^"]*photo-placeholder[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
                 .replace(/<span[^>]*class="[^"]*photo-(?:view|confirm|change|remove)[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '')
-                .replace(/<(?:(?:p)|(?:div))\b[^>]*>\s*(?:&nbsp;|<br\s*\/?>|\s)*<\\/(?:p|div)>/gi, '')
+                .replace(/<(?:(?:p)|(?:div))\b[^>]*>\s*(?:&nbsp;|<br\s*\/?>|\s)*<\/(?:p|div)>/gi, '')
                 .replace(/(?:View|Confirm|Change|Remove){2,}/g, '')
                 .replace(/\n{3,}/g, '\n\n')
                 .trim();
