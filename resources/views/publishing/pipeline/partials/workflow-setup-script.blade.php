@@ -634,7 +634,11 @@
                     const term = this.aiSearchTopic.trim();
                     if (term) {
                         this.aiSearchHistory = [term, ...this.aiSearchHistory.filter(t => t !== term)].slice(0, 20);
-                        localStorage.setItem('hws_search_history', JSON.stringify(this.aiSearchHistory));
+                        try {
+                            localStorage.setItem('hws_search_history', JSON.stringify(this.aiSearchHistory));
+                        } catch (storageError) {
+                            this._logAi('info', 'Recent search history was not saved because browser storage is full.');
+                        }
                     }
 
                     // Log each article
