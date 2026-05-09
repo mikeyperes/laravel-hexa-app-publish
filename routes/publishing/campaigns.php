@@ -24,4 +24,5 @@ Route::post('/campaigns/{id}/start-operation', [CampaignController::class, 'star
 Route::post('/campaigns/{id}/run-now', [CampaignController::class, 'runNow'])->name('campaigns.run-now');
 Route::post('/campaigns/{id}/operations/{operation}/stop', [CampaignController::class, 'stopOperation'])->name('campaigns.operations.stop');
 Route::get('/campaigns/{id}/authors/search', [CampaignController::class, 'searchAuthors'])->name('campaigns.authors.search');
+Route::get('/campaigns/{id}/integrity-report', [CampaignController::class, 'integrityReport'])->name('campaigns.integrity-report');
 Route::delete('/campaigns/{id}', [CampaignController::class, 'destroy'])->name('campaigns.destroy');

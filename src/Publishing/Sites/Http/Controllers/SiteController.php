@@ -318,8 +318,9 @@ class SiteController extends Controller
         $result = $this->wptoolkit->wpCliTestWriteAccess($resolved['server'], $site->wordpress_install_id);
 
         $authors = [];
+        $authorsResult = null;
         if ($result['success']) {
-            $authorsResult = $this->wptoolkit->wpCliListAdminUsers($resolved['server'], (int) $site->wordpress_install_id);
+            $authorsResult = $this->wptoolkit->wpCliListAdminUsers($resolved['server'], (int) $site->wordpress_install_id, true);
             $authors = $authorsResult['success'] ? ($authorsResult['authors'] ?? []) : [];
         }
 
@@ -339,6 +340,10 @@ class SiteController extends Controller
 
         $result['authors'] = $authors;
         $result['default_author'] = $site->default_author;
+        $result['last_connected_at'] = $site->last_connected_at?->toIso8601String();
+        $result['cache_hit'] = $authorsResult['cache_hit'] ?? null;
+        $result['cached_at'] = $authorsResult['cached_at'] ?? null;
+        $result['expires_at'] = $authorsResult['expires_at'] ?? null;
         return response()->json($result);
     }
 
@@ -348,7 +353,7 @@ class SiteController extends Controller
      * @param int $id
      * @return JsonResponse
      */
-    public function getAuthors(int $id): JsonResponse
+    public function getAuthors(Request $request, int $id): JsonResponse
     {
         $site = PublishSite::findOrFail($id);
         $resolved = $this->resolveServer($site);
@@ -356,8 +361,9 @@ class SiteController extends Controller
             return response()->json(['success' => false, 'authors' => [], 'message' => 'Server not configured.']);
         }
 
-        $result = $this->wptoolkit->wpCliListAdminUsers($resolved['server'], (int) $site->wordpress_install_id);
+        $result = $this->wptoolkit->wpCliListAdminUsers($resolved['server'], (int) $site->wordpress_install_id, $request->boolean('force'));
         $result['default_author'] = $site->default_author;
+        $result['last_connected_at'] = $site->last_connected_at?->toIso8601String();
 
         return response()->json($result);
     }

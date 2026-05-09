@@ -128,6 +128,66 @@
     </div>
 
     {{-- ───────────────────────────────────────────────
+         INTEGRITY REPORT
+         ─────────────────────────────────────────────── --}}
+    <div class="hx-card">
+        <div class="hx-card-header">
+            <div class="hx-card-title-block">
+                <div class="hx-card-icon red">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <div>
+                    <h3 class="hx-card-title">Campaign Integrity Report</h3>
+                    <p class="hx-card-subtitle">Checks coherence across presets, WordPress connection state, author resolution, delivery rules, and the historical article record.</p>
+                </div>
+            </div>
+            <div class="hx-card-header-right flex-wrap justify-end">
+                <span class="hx-tag" :class="integrityReport?.summary?.status === 'error' ? 'red' : (integrityReport?.summary?.status === 'warning' ? 'amber' : 'green')" x-text="integritySummaryLabel()"></span>
+                <button @click="runIntegrityReport(false)" :disabled="integrityRunning" class="hx-btn hx-btn-secondary">
+                    <span x-text="integrityRunning ? 'Running…' : 'Run Full Integrity Report'"></span>
+                </button>
+                <button @click="refreshAuthorsFromSource()" :disabled="integrityRunning || !form.publish_site_id" class="hx-btn hx-btn-secondary">Refresh Authors From Source</button>
+            </div>
+        </div>
+        <div class="hx-card-body">
+            <div class="hx-grid-3 mb-4">
+                <div class="rounded-xl border border-gray-200 px-4 py-3 bg-gray-50">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">WordPress connection</div>
+                    <div class="mt-2 text-sm text-gray-900" x-text="siteConnectionSummary()"></div>
+                </div>
+                <div class="rounded-xl border border-gray-200 px-4 py-3 bg-gray-50">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Author cache</div>
+                    <div class="mt-2 text-sm text-gray-900" x-text="authorCacheSummary()"></div>
+                </div>
+                <div class="rounded-xl border border-gray-200 px-4 py-3 bg-gray-50">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Last report</div>
+                    <div class="mt-2 text-sm text-gray-900" x-text="integrityReport?.generated_at ? formatDateTime(integrityReport.generated_at) : 'Not run yet'"></div>
+                </div>
+            </div>
+
+            <div x-show="(integrityReport?.issues || []).length === 0" x-cloak class="rounded-xl border border-green-200 bg-green-50 px-4 py-4 text-sm text-green-800">
+                No blocking or warning issues were detected. This campaign currently looks coherent.
+            </div>
+
+            <div x-show="(integrityReport?.issues || []).length > 0" x-cloak class="space-y-3">
+                <template x-for="(issue, idx) in integrityReport.issues" :key="issue.code + '-' + idx">
+                    <div class="rounded-xl border px-4 py-4" :class="issue.severity === 'error' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div class="text-sm font-semibold" :class="issue.severity === 'error' ? 'text-red-900' : 'text-amber-900'" x-text="issue.title"></div>
+                                <p class="mt-1 text-sm" :class="issue.severity === 'error' ? 'text-red-800' : 'text-amber-800'" x-text="issue.message"></p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="hx-tag" :class="issue.severity === 'error' ? 'red' : 'amber'" x-text="issue.blocking ? 'Blocking' : formatLabel(issue.severity)"></span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    {{-- ───────────────────────────────────────────────
          LIVE RUN CHECKLIST
          ─────────────────────────────────────────────── --}}
     <div class="hx-card" x-ref="liveChecklistCard">
@@ -714,14 +774,15 @@
             </div>
             <div class="hx-grid-3">
                 <div class="hx-field"
-                    @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-author') form.author = $event.detail.item.display_name || $event.detail.item.name || $event.detail.item.username || ''"
+                    @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-author') form.author = $event.detail.item.username || $event.detail.item.user_login || $event.detail.item.slug || $event.detail.item.display_name || $event.detail.item.name || ''"
                     @hexa-search-cleared.window="if ($event.detail.component_id === 'campaign-author') form.author = ''">
                     @php
-                        $selectedAuthor = $campaign->author ? [
-                            'id' => $campaign->author,
-                            'name' => $campaign->author,
-                            'display_name' => $campaign->author,
-                            'username' => $campaign->author,
+                        $selectedAuthor = !empty($effectiveCampaignAuthor) ? [
+                            'id' => $effectiveCampaignAuthor,
+                            'name' => $effectiveCampaignAuthor,
+                            'display_name' => $effectiveCampaignAuthor,
+                            'username' => $effectiveCampaignAuthor,
+                            'user_login' => $effectiveCampaignAuthor,
                             'email' => '',
                         ] : null;
                     @endphp
@@ -738,7 +799,11 @@
                         :min-chars="0"
                         :debounce="250"
                     />
-                    <p class="hx-field-hint mt-1">Results are cached server-side for 10 minutes per campaign. Retest the site connection to warm the cache.</p>
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                        <button type="button" @click="refreshAuthorsFromSource()" :disabled="integrityRunning || !form.publish_site_id" class="hx-link text-xs">Refresh authors from source</button>
+                        <span class="text-xs text-gray-400" x-text="authorCacheSummary()"></span>
+                    </div>
+                    <p class="hx-field-hint mt-1">The stored value is the real WordPress login, not the display name. Cached authors stay warm until you explicitly retest or refresh them.</p>
                 </div>
                 <div class="hx-field">
                     <label class="hx-label">Delivery mode</label>
@@ -768,16 +833,33 @@
             $activeOperationArticle['article_record_id'] ?? null,
             $staleOperationArticle['article_record_id'] ?? null,
         ])->filter()->map(fn ($id) => (int) $id)->all();
-
-        $visibleCampaignArticles = $campaign->articles->reject(function ($article) use ($transientArticleIds) {
+        $campaignArticleFlags = (array) ($integrityReport['article_flags'] ?? []);
+        $campaignArticlePool = $campaign->articles->reject(function ($article) use ($transientArticleIds) {
             if (in_array((int) $article->id, $transientArticleIds, true)) {
                 return true;
             }
 
             return trim((string) ($article->title ?? '')) === 'Campaign run starting...';
         })->values();
+        $exceptionCampaignArticles = $campaignArticlePool->filter(function ($article) use ($campaignArticleFlags) {
+            $flags = (array) ($campaignArticleFlags[(string) $article->id] ?? []);
+            foreach ($flags as $flag) {
+                $severity = strtolower((string) ($flag['severity'] ?? ''));
+                $label = strtolower((string) ($flag['label'] ?? ''));
+                if ($severity === 'error' && in_array($label, ['type drift', 'site drift'], true)) {
+                    return true;
+                }
+                if ($label === 'stale pipeline') {
+                    return true;
+                }
+            }
 
-        $hiddenCampaignArticleCount = max(0, $campaign->articles->count() - $visibleCampaignArticles->count());
+            return false;
+        })->values();
+        $exceptionCampaignArticleIds = $exceptionCampaignArticles->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $visibleCampaignArticles = $campaignArticlePool->reject(fn ($article) => in_array((int) $article->id, $exceptionCampaignArticleIds, true))->values();
+
+        $hiddenCampaignArticleCount = max(0, $campaign->articles->count() - $campaignArticlePool->count());
     @endphp
     <div class="hx-card" x-data="{open: true}">
         <div class="hx-card-header hx-clickable" @click="open = !open">
@@ -791,7 +873,10 @@
                 </div>
             </div>
             <div class="hx-card-header-right">
-                <span class="hx-tag slate">{{ $visibleCampaignArticles->count() }} visible</span>
+                <span class="hx-tag green">{{ $visibleCampaignArticles->count() }} clean visible</span>
+                @if($exceptionCampaignArticles->count() > 0)
+                    <span class="hx-tag red">{{ $exceptionCampaignArticles->count() }} integrity exception{{ $exceptionCampaignArticles->count() === 1 ? '' : 's' }}</span>
+                @endif
                 @if($hiddenCampaignArticleCount > 0)
                     <span class="hx-tag amber">{{ $hiddenCampaignArticleCount }} transient hidden</span>
                 @endif
@@ -800,12 +885,45 @@
         </div>
         <div x-show="open" x-cloak class="hx-card-body">
             @forelse($visibleCampaignArticles as $article)
-                @include('app-publish::publishing.articles.partials.article-card', ['article' => $article, 'campaign' => $campaign])
+                @include('app-publish::publishing.articles.partials.article-card', [
+                    'article' => $article,
+                    'campaign' => $campaign,
+                    'integrityFlags' => $campaignArticleFlags[(string) $article->id] ?? [],
+                ])
             @empty
                 <div class="rounded-xl border border-dashed border-gray-200 px-4 py-10 text-center text-sm text-gray-400">This campaign has not produced any completed or reopenable articles yet.</div>
             @endforelse
         </div>
     </div>
+
+    @if($exceptionCampaignArticles->count() > 0)
+        <div class="hx-card" x-data="{open: true}">
+            <div class="hx-card-header hx-clickable" @click="open = !open">
+                <div class="hx-card-title-block">
+                    <div class="hx-card-icon red">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"/></svg>
+                    </div>
+                    <div>
+                        <h3 class="hx-card-title">Integrity Exceptions</h3>
+                        <p class="hx-card-subtitle">These article records no longer match this campaign cleanly. They are separated here so they do not masquerade as normal editorial campaign output.</p>
+                    </div>
+                </div>
+                <div class="hx-card-header-right">
+                    <span class="hx-tag red">{{ $exceptionCampaignArticles->count() }} exception{{ $exceptionCampaignArticles->count() === 1 ? '' : 's' }}</span>
+                    <svg class="w-4 h-4 hx-chev" :class="{ 'open': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </div>
+            </div>
+            <div x-show="open" x-cloak class="hx-card-body">
+                @foreach($exceptionCampaignArticles as $article)
+                    @include('app-publish::publishing.articles.partials.article-card', [
+                        'article' => $article,
+                        'campaign' => $campaign,
+                        'integrityFlags' => $campaignArticleFlags[(string) $article->id] ?? [],
+                    ])
+                @endforeach
+            </div>
+        </div>
+    @endif
 
     {{-- ───────────────────────────────────────────────
          ACTIVITY / RUNS LOG (expandable, collapsed by default)
@@ -865,6 +983,7 @@ function campaignDashboard() {
     const staleOperation       = @json($staleOperation ?? null);
     const staleOperationArticle = @json($staleOperationArticle ?? null);
     const checklistDefinitions = @json($checklistDefinitions ?? []);
+    const initialIntegrityReport = @json($integrityReport ?? []);
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
 
@@ -915,6 +1034,8 @@ function campaignDashboard() {
         staleOperationArticle: staleOperationArticle,
         campaignChecklistByMode: checklistDefinitions,
         campaignChecklist: [],
+        integrityReport: initialIntegrityReport || { summary: { status: 'pass', errors: 0, warnings: 0, blocking_errors: 0 }, issues: [], site: {} },
+        integrityRunning: false,
         _saveTimer: null,
         _skipCount: 0,
 
@@ -999,6 +1120,47 @@ function campaignDashboard() {
             const date = new Date(value);
             if (Number.isNaN(date.getTime())) return value;
             return date.toLocaleString();
+        },
+
+        integritySummaryLabel() {
+            const summary = this.integrityReport?.summary || {};
+            if ((summary.errors || 0) > 0) {
+                return summary.errors + ' error' + (summary.errors === 1 ? '' : 's');
+            }
+            if ((summary.warnings || 0) > 0) {
+                return summary.warnings + ' warning' + (summary.warnings === 1 ? '' : 's');
+            }
+            return 'Integrity clean';
+        },
+
+        siteConnectionSummary() {
+            const site = this.integrityReport?.site || {};
+            if (!this.form.publish_site_id) return 'No site selected.';
+            if (site.last_connected_relative) {
+                return 'Connection since ' + site.last_connected_relative + '.';
+            }
+            return 'Connection has not been verified yet.';
+        },
+
+        authorCacheSummary() {
+            const site = this.integrityReport?.site || {};
+            const parts = [];
+            if (typeof site.author_count === 'number' && site.author_count > 0) {
+                parts.push(site.author_count + ' author' + (site.author_count === 1 ? '' : 's') + ' cached');
+            }
+            if (site.author_cache_hit === true) {
+                parts.push('served from cache');
+            } else if (site.author_cache_hit === false) {
+                parts.push('fresh from source');
+            }
+            if (site.authors_cached_at) {
+                parts.push('cached ' + this.formatDateTime(site.authors_cached_at));
+            }
+            return parts.length ? parts.join(' · ') : 'Author cache status not available.';
+        },
+
+        hasBlockingIntegrityIssues() {
+            return Number(this.integrityReport?.summary?.blocking_errors || 0) > 0;
         },
 
         operationModeLabel(mode) {
@@ -1302,6 +1464,46 @@ function campaignDashboard() {
                 cacheKey: 'campaignSiteConnection_' + this.editId,
                 onSuccess: (d) => { if (d.default_author && !this.form.author) this.form.author = d.default_author; },
             });
+            await this.runIntegrityReport(true);
+        },
+
+        async refreshAuthorsFromSource() {
+            if (!this.form.publish_site_id) return;
+            this.integrityRunning = true;
+            try {
+                await this.loadSiteAuthors(this.form.publish_site_id, {
+                    cacheKey: 'campaignSiteConnection_' + this.editId,
+                    force: true,
+                });
+                await this.runIntegrityReport(true);
+                this.runSuccess = true;
+                this.runState = 'info';
+                this.runResult = 'WordPress authors refreshed from source.';
+            } catch (e) {
+                this.runSuccess = false;
+                this.runState = 'error';
+                this.runResult = 'Author refresh failed: ' + e.message;
+            } finally {
+                this.integrityRunning = false;
+            }
+        },
+
+        async runIntegrityReport(forceAuthors = false) {
+            this.integrityRunning = true;
+            try {
+                const query = forceAuthors ? '?force_authors=1' : '';
+                const response = await fetch('/campaigns/' + this.editId + '/integrity-report' + query, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Integrity report failed.');
+                }
+                this.integrityReport = data.report || this.integrityReport;
+                return this.integrityReport;
+            } finally {
+                this.integrityRunning = false;
+            }
         },
 
         async startOperation(mode, label) {
@@ -1311,6 +1513,17 @@ function campaignDashboard() {
                 this.runResult = 'Force stop the stale run before spawning another article from this campaign.';
                 this.$nextTick(() => {
                     this.$refs.liveChecklistCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+                return;
+            }
+            await this.autoSave();
+            await this.runIntegrityReport(false);
+            if (this.hasBlockingIntegrityIssues()) {
+                this.runSuccess = false;
+                this.runState = 'error';
+                this.runResult = 'Fix the blocking integrity issues before running this campaign.';
+                this.$nextTick(() => {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                 });
                 return;
             }
@@ -1334,6 +1547,9 @@ function campaignDashboard() {
                 const r = await fetch(@json(route('campaigns.start-operation', $campaign->id)), { method: 'POST', headers, body: JSON.stringify({ mode }) });
                 const d = await r.json();
                 if (!r.ok || !d.success) {
+                    if (d.report) {
+                        this.integrityReport = d.report;
+                    }
                     throw new Error(d.message || 'Failed to start campaign operation');
                 }
                 this.campaignChecklist = d.checklist || this.campaignChecklist;

@@ -11,6 +11,10 @@
         $showCampaignSite — bool: show the site chip (default true)
 --}}
 
+@php
+    $integrityFlags = $integrityFlags ?? [];
+@endphp
+
 @once
 <style>
     .hx-article-row { display:flex; flex-direction:column; border:1px solid #e5e7eb; border-radius:14px; background:#fff; overflow:hidden; transition:border-color 0.12s, box-shadow 0.12s; margin-bottom:14px; }
@@ -144,6 +148,9 @@
 
             <div class="hx-article-pills">
                 <span class="hx-tag {{ $pipelineTone }}" title="Internal pipeline generation state">Pipeline · {{ $pipelineLabel }}</span>
+                @if($article->article_type)
+                    <span class="hx-tag slate" title="Article type">{{ ucwords(str_replace('-', ' ', (string) $article->article_type)) }}</span>
+                @endif
                 @if($article->wp_status)
                     @if($wpLink)
                         <a href="{{ $wpLink }}" target="_blank" rel="noopener" class="hx-tag {{ $wpTone }}" title="{{ $wpLinkLabel }} on {{ $siteName ?: 'WordPress' }}">WordPress · {{ ucfirst($article->wp_status) }} ↗</a>
@@ -154,6 +161,9 @@
                 @if($showSiteChip && $siteName)
                     <a href="{{ $siteUrl ?: '#' }}" target="_blank" rel="noopener" class="hx-tag blue" title="Open {{ $siteName }}">{{ $siteName }} ↗</a>
                 @endif
+                @foreach(array_slice((array) $integrityFlags, 0, 3) as $flag)
+                    <span class="hx-tag {{ ($flag['severity'] ?? '') === 'error' ? 'red' : 'amber' }}" title="{{ $flag['message'] ?? '' }}">{{ $flag['label'] ?? 'Integrity' }}</span>
+                @endforeach
             </div>
 
             <div class="hx-article-meta">

@@ -24,6 +24,9 @@
                 log: [],
                 defaultAuthor: null,
                 lastVerifiedAt: null,
+                authorsCacheHit: null,
+                authorsCachedAt: null,
+                authorsExpiresAt: null,
             },
 
             /**
@@ -43,6 +46,9 @@
                 this.siteConn.authors = [];
                 this.siteConn.defaultAuthor = null;
                 this.siteConn.lastVerifiedAt = null;
+                this.siteConn.authorsCacheHit = null;
+                this.siteConn.authorsCachedAt = null;
+                this.siteConn.authorsExpiresAt = null;
 
                 const time = () => new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 this.siteConn.log.push({ type: 'info', message: 'Testing WordPress connection...', time: time() });
@@ -67,6 +73,18 @@
                     if (d.default_author) {
                         this.siteConn.defaultAuthor = d.default_author;
                     }
+                    if (Object.prototype.hasOwnProperty.call(d, 'last_connected_at')) {
+                        this.siteConn.lastVerifiedAt = d.last_connected_at || null;
+                    }
+                    if (Object.prototype.hasOwnProperty.call(d, 'cache_hit')) {
+                        this.siteConn.authorsCacheHit = d.cache_hit;
+                    }
+                    if (Object.prototype.hasOwnProperty.call(d, 'cached_at')) {
+                        this.siteConn.authorsCachedAt = d.cached_at || null;
+                    }
+                    if (Object.prototype.hasOwnProperty.call(d, 'expires_at')) {
+                        this.siteConn.authorsExpiresAt = d.expires_at || null;
+                    }
 
                     if (d.success) {
                         this.siteConn.lastVerifiedAt = new Date().toISOString();
@@ -85,14 +103,21 @@
 
                 // Cache if key provided
                 if (options.cacheKey) {
-                    localStorage.setItem(options.cacheKey, JSON.stringify({
-                        site_id: siteId,
-                        status: this.siteConn.status,
-                        message: this.siteConn.message,
-                        authors: this.siteConn.authors,
-                        default_author: this.siteConn.defaultAuthor,
-                        verified_at: this.siteConn.lastVerifiedAt,
-                    }));
+                    try {
+                        localStorage.setItem(options.cacheKey, JSON.stringify({
+                            site_id: siteId,
+                            status: this.siteConn.status,
+                            message: this.siteConn.message,
+                            authors: this.siteConn.authors,
+                            default_author: this.siteConn.defaultAuthor,
+                            verified_at: this.siteConn.lastVerifiedAt,
+                            cache_hit: this.siteConn.authorsCacheHit,
+                            cached_at: this.siteConn.authorsCachedAt,
+                            expires_at: this.siteConn.authorsExpiresAt,
+                        }));
+                    } catch (e) {
+                        console.warn('Site connection cache was not saved:', e);
+                    }
                 }
             },
 
@@ -125,6 +150,9 @@
                     this.siteConn.authors = Array.isArray(conn.authors) ? conn.authors : [];
                     this.siteConn.defaultAuthor = conn.default_author || null;
                     this.siteConn.lastVerifiedAt = conn.verified_at || null;
+                    this.siteConn.authorsCacheHit = Object.prototype.hasOwnProperty.call(conn, 'cache_hit') ? conn.cache_hit : null;
+                    this.siteConn.authorsCachedAt = conn.cached_at || null;
+                    this.siteConn.authorsExpiresAt = conn.expires_at || null;
                     return true;
                 } catch (e) {
                     return false;
@@ -149,7 +177,8 @@
                 }
 
                 try {
-                    const resp = await fetch('/publish/sites/' + siteId + '/authors', {
+                    const query = options.force ? '?force=1' : '';
+                    const resp = await fetch('/publish/sites/' + siteId + '/authors' + query, {
                         headers: { 'Accept': 'application/json' }
                     });
                     const data = await resp.json();
@@ -158,10 +187,22 @@
                     if (data.default_author) {
                         this.siteConn.defaultAuthor = data.default_author;
                     }
+                    if (Object.prototype.hasOwnProperty.call(data, 'last_connected_at')) {
+                        this.siteConn.lastVerifiedAt = data.last_connected_at || this.siteConn.lastVerifiedAt;
+                    }
+                    if (Object.prototype.hasOwnProperty.call(data, 'cache_hit')) {
+                        this.siteConn.authorsCacheHit = data.cache_hit;
+                    }
+                    if (Object.prototype.hasOwnProperty.call(data, 'cached_at')) {
+                        this.siteConn.authorsCachedAt = data.cached_at || null;
+                    }
+                    if (Object.prototype.hasOwnProperty.call(data, 'expires_at')) {
+                        this.siteConn.authorsExpiresAt = data.expires_at || null;
+                    }
                     if (data.success !== false && this.siteConn.authors.length > 0) {
                         this.siteConn.status = true;
                         this.siteConn.message = 'Connected';
-                        this.siteConn.lastVerifiedAt = new Date().toISOString();
+                        this.siteConn.lastVerifiedAt = this.siteConn.lastVerifiedAt || new Date().toISOString();
                         if (this.selectedSite && String(this.selectedSite.id || '') === String(siteId)) {
                             this.selectedSite.status = 'connected';
                         }
@@ -174,14 +215,21 @@
                             || (typeof this.siteConnectionCacheKey === 'function' ? this.siteConnectionCacheKey(siteId) : null);
 
                         if (cacheKey) {
-                            localStorage.setItem(cacheKey, JSON.stringify({
-                                site_id: siteId,
-                                status: true,
-                                message: this.siteConn.message,
-                                authors: this.siteConn.authors,
-                                default_author: this.siteConn.defaultAuthor,
-                                verified_at: this.siteConn.lastVerifiedAt,
-                            }));
+                            try {
+                                localStorage.setItem(cacheKey, JSON.stringify({
+                                    site_id: siteId,
+                                    status: true,
+                                    message: this.siteConn.message,
+                                    authors: this.siteConn.authors,
+                                    default_author: this.siteConn.defaultAuthor,
+                                    verified_at: this.siteConn.lastVerifiedAt,
+                                    cache_hit: this.siteConn.authorsCacheHit,
+                                    cached_at: this.siteConn.authorsCachedAt,
+                                    expires_at: this.siteConn.authorsExpiresAt,
+                                }));
+                            } catch (e) {
+                                console.warn('Site author cache was not saved:', e);
+                            }
                         }
                     }
 

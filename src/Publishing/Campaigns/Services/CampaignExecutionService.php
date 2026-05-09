@@ -31,6 +31,7 @@ class CampaignExecutionService
         protected ArticleGenerationService $articleGeneration,
         protected ArticlePersistenceService $persistence,
         protected CampaignSettingsResolver $settingsResolver,
+        protected CampaignIntegrityReportService $integrityReportService,
         protected CampaignDiscoveryService $discoveryService,
         protected CampaignScheduleService $scheduleService,
         protected CampaignModeResolver $modeResolver,
@@ -129,6 +130,32 @@ class CampaignExecutionService
             'stage' => 'settings',
             'substage' => 'start',
         ]);
+
+        $integrity = $this->integrityReportService->build($campaign);
+        if ((int) data_get($integrity, 'summary.blocking_errors', 0) > 0) {
+            $blockingTitles = collect((array) data_get($integrity, 'issues', []))
+                ->filter(fn ($issue) => (bool) ($issue['blocking'] ?? false))
+                ->map(fn ($issue) => trim((string) ($issue['title'] ?? '')))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+            $blockingMessage = !empty($blockingTitles)
+                ? implode(' | ', $blockingTitles)
+                : 'Campaign integrity check failed.';
+
+            $emit('error', 'Campaign integrity check failed.', [
+                'stage' => 'integrity',
+                'substage' => 'preflight',
+                'details' => $blockingMessage,
+            ]);
+
+            if ($article) {
+                $this->persistence->markFailed($article);
+            }
+
+            return $this->failure($log, $article, 'integrity', $blockingMessage);
+        }
 
         try {
             $resolved = $this->settingsResolver->resolve($campaign);
