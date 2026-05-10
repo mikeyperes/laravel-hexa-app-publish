@@ -202,7 +202,7 @@ class CampaignController extends Controller
 
         $validated['campaign_id'] = PublishCampaign::generateCampaignId();
         $validated['status'] = 'draft';
-        $validated['article_type'] = $validated['article_type'] ?: 'editorial';
+        $validated['article_type'] = $validated['article_type'] ?? 'editorial';
         $validated['created_by'] = auth()->id();
         $validated['auto_publish'] = ($validated['delivery_mode'] ?? 'draft-local') === 'auto-publish';
         $validated['delivery_mode'] = $this->modeResolver->normalizeDeliveryMode($validated['delivery_mode'] ?? 'draft-local');
@@ -1068,7 +1068,7 @@ class CampaignController extends Controller
             $validated['auto_publish'] = $validated['delivery_mode'] === 'auto-publish';
         }
 
-        $validated['article_type'] = $validated['article_type'] ?: ($campaign->article_type ?: 'editorial');
+        $validated['article_type'] = $validated['article_type'] ?? ($campaign->article_type ?: 'editorial');
 
         $validated['timezone'] = $this->resolveCampaignTimezone(
             $validated['user_id'] ?? $campaign->user_id,
