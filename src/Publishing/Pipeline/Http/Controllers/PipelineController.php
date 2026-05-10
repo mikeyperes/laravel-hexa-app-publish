@@ -114,6 +114,8 @@ class PipelineController extends Controller
 
             if (!$draft) {
                 $draft = $this->createFreshPipelineDraft();
+            } else {
+                $draft = $this->resetReusablePipelineDraft($draft);
             }
 
             return redirect()->route('publish.pipeline', ['id' => $draft->id]);
@@ -2366,6 +2368,25 @@ class PipelineController extends Controller
             'created_by' => auth()->id(),
             'user_id' => auth()->id(),
         ]);
+    }
+
+    private function resetReusablePipelineDraft(PublishArticle $draft): PublishArticle
+    {
+        $draft->forceFill([
+            'title' => 'Untitled',
+            'body' => null,
+            'article_type' => 'editorial',
+            'publish_site_id' => null,
+            'publish_account_id' => null,
+            'author' => null,
+            'wp_post_id' => null,
+            'wp_status' => null,
+            'wp_post_url' => null,
+        ])->save();
+
+        $draft->pipelineState()?->delete();
+
+        return $draft->fresh(['pipelineState', 'site', 'creator']);
     }
 
     private function serializePipelineOperation(?PublishPipelineOperation $operation): ?array
