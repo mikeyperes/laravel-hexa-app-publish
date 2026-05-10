@@ -192,6 +192,11 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             }
         },
 
+        approvalEmailClearTransientStatus() {
+            this.approvalEmailStatusType = 'info';
+            this.approvalEmailStatus = '';
+        },
+
         approvalEmailStatusNeedsSmtpSettings() {
             const message = String(this.approvalEmailStatus || '').toLowerCase();
             return this.approvalEmailStatusType === 'error'
@@ -392,7 +397,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
 
             this.approvalEmailTargetId = targetId;
             this.approvalEmailLoading = true;
-            this.approvalEmailSetStatus("info", "");
+            this.approvalEmailClearTransientStatus();
 
             try {
                 const { response, data } = await this.approvalEmailFetchJson("/article/articles/" + targetId + "/approval-email", {
@@ -424,7 +429,10 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         async approvalEmailEnsureLoaded(preserveFilled = true) {
             const targetId = Number(this.approvalEmailTargetId || this.draftId || 0) || 0;
             if (!targetId) return false;
-            if (this.approvalEmailLoadedDraftId === targetId) return true;
+            if (this.approvalEmailLoadedDraftId === targetId) {
+                this.approvalEmailClearTransientStatus();
+                return true;
+            }
             return this.approvalEmailLoad(targetId, { preserveFilled, open: false });
         },
 
