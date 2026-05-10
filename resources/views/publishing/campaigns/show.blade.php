@@ -711,8 +711,10 @@
                     </select>
                 </div>
                 <div class="hx-field">
+                    @php
+                        $campaignArticleTypeOptions = collect($articleTypes ?? [])->filter()->values();
+                    @endphp
                     <label class="hx-label">Article type <span class="text-gray-400 normal-case font-normal">— campaigns support editorial, news report, and local news</span></label>
-                    @php($campaignArticleTypeOptions = collect($articleTypes ?? [])->filter()->values())
                     <select x-model="form.article_type" class="hx-select">
                         @forelse($campaignArticleTypeOptions as $at)
                             <option value="{{ $at }}">{{ ucwords(str_replace('-', ' ', $at)) }}</option>
