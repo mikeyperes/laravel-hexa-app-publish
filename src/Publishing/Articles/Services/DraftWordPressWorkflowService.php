@@ -153,6 +153,10 @@ class DraftWordPressWorkflowService
         ]);
 
         $payload = $this->pipelineStateService->payload($article);
+        $payload['category_ids'] = array_values(array_filter(array_map('intval', (array) ($result['category_ids'] ?? []))));
+        $payload['tag_ids'] = array_values(array_filter(array_map('intval', (array) ($result['tag_ids'] ?? []))));
+        $payload['publication_term_ids'] = array_values(array_filter(array_map('intval', (array) $data['publication_term_ids'])));
+        $payload['featured_media_id'] = isset($result['featured_media_id']) ? (int) $result['featured_media_id'] : ($payload['featured_media_id'] ?? null);
         $payload['preparedFeaturedMediaId'] = $result['featured_media_id'] ?? ($payload['preparedFeaturedMediaId'] ?? null);
         $payload['preparedFeaturedWpUrl'] = $result['featured_wp_url'] ?? ($payload['preparedFeaturedWpUrl'] ?? '');
         $payload['uploadedImages'] = $this->buildExistingUploadMap($result['wp_images'] ?? []);

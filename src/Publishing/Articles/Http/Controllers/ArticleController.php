@@ -15,6 +15,7 @@ use hexa_app_publish\Publishing\Articles\Http\Requests\StoreArticleRequest;
 use hexa_app_publish\Publishing\Articles\Http\Requests\UpdateArticleRequest;
 use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Publishing\Articles\Services\ArticlePersistenceService;
+use hexa_app_publish\Publishing\Pipeline\Services\PipelineStateService;
 use hexa_app_publish\Discovery\Sources\Services\SourceDiscoveryService;
 use hexa_app_publish\Discovery\Sources\Services\SourceExtractionService;
 use hexa_app_publish\Discovery\Media\Services\MediaSearchService;
@@ -271,13 +272,19 @@ class ArticleController extends Controller
      */
     public function publish(Request $request, int $id): JsonResponse
     {
-        $article = $this->findArticle($id, ['site']);
+        $article = $this->findArticle($id, ['site', 'pipelineState']);
         $site = $article->site;
         $requestedStatus = trim((string) $request->input('status', ''));
         $wpStatus = in_array($requestedStatus, ['draft', 'publish'], true)
             ? $requestedStatus
             : (($article->delivery_mode === 'draft-wordpress') ? 'draft' : 'publish');
         $hasExistingPost = !empty($article->wp_post_id);
+        $payload = app(PipelineStateService::class)->payload($article);
+        $articleType = (string) ($article->article_type ?: ($payload['currentArticleType'] ?? $payload['article_type'] ?? 'editorial'));
+        $featuredMediaId = $payload['featured_media_id'] ?? $payload['preparedFeaturedMediaId'] ?? null;
+        $publicationTermIds = $payload['publication_term_ids'] ?? $payload['selectedSyndicationCats'] ?? [];
+        $categoryIds = array_values(array_filter(array_map('intval', (array) ($payload['category_ids'] ?? []))));
+        $tagIds = array_values(array_filter(array_map('intval', (array) ($payload['tag_ids'] ?? []))));
 
         if (!$site) {
             return response()->json([
@@ -287,13 +294,18 @@ class ArticleController extends Controller
         }
 
         $delivery = app(\hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService::class);
+        $options = [
+            'author' => $article->author ?? $site?->default_author ?? null,
+            'excerpt' => $article->excerpt ?? null,
+            'category_ids' => $categoryIds,
+            'tag_ids' => $tagIds,
+            'publication_term_ids' => array_values(array_filter(array_map('intval', (array) $publicationTermIds))),
+            'featured_media_id' => $featuredMediaId ? (int) $featuredMediaId : null,
+            'article_type' => $articleType,
+        ];
         $result = $hasExistingPost
-            ? $delivery->updatePost($site, (int) $article->wp_post_id, $article->title, $article->body ?? '', $wpStatus, [
-                'author' => $article->author ?? $site?->default_author ?? null,
-            ])
-            : $delivery->createPost($site, $article->title, $article->body ?? '', $wpStatus, [
-                'author' => $article->author ?? $site?->default_author ?? null,
-            ]);
+            ? $delivery->updatePost($site, (int) $article->wp_post_id, $article->title, $article->body ?? '', $wpStatus, $options)
+            : $delivery->createPost($site, $article->title, $article->body ?? '', $wpStatus, $options);
 
         if (!$result['success']) {
             app(ArticlePersistenceService::class)->markFailed($article);
