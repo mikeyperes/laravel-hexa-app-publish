@@ -445,14 +445,14 @@ HTML;
 
     private function resolveDefaultRecipient(array $snapshot): string
     {
-        $loginEmail = trim((string) ($snapshot['creator_login_email'] ?? ''));
-        if ($loginEmail !== '' && filter_var($loginEmail, FILTER_VALIDATE_EMAIL)) {
-            return $loginEmail;
-        }
-
         $contactEmail = trim((string) ($snapshot['creator_contact_email'] ?? ''));
         if ($contactEmail !== '' && filter_var($contactEmail, FILTER_VALIDATE_EMAIL)) {
             return $contactEmail;
+        }
+
+        $loginEmail = trim((string) ($snapshot['creator_login_email'] ?? ''));
+        if ($loginEmail !== '' && filter_var($loginEmail, FILTER_VALIDATE_EMAIL)) {
+            return $loginEmail;
         }
 
         return '';

@@ -166,9 +166,14 @@ class DraftApprovalEmailController extends Controller
             $config[$configKey] = $value;
         }
 
+        $creatorContact = trim((string) ($article->creator?->contact_email ?? ""));
         $creatorLogin = trim((string) ($article->creator?->email ?? ""));
-        if ($creatorLogin !== "" && filter_var($creatorLogin, FILTER_VALIDATE_EMAIL) && !$toTouched) {
-            $config["to"] = $creatorLogin;
+        if (!$toTouched) {
+            if ($creatorContact !== "" && filter_var($creatorContact, FILTER_VALIDATE_EMAIL)) {
+                $config["to"] = $creatorContact;
+            } elseif ($creatorLogin !== "" && filter_var($creatorLogin, FILTER_VALIDATE_EMAIL)) {
+                $config["to"] = $creatorLogin;
+            }
         }
 
         $config["additional_ccs"] = trim((string) ($article->creator?->additional_contact_emails ?? ""));
