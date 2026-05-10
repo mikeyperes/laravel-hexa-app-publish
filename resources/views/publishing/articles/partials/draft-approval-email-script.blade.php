@@ -143,6 +143,8 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             return {
                 to: String(this.approvalEmailTo || '').trim(),
                 cc: String(this.approvalEmailCc || '').trim(),
+                to_touched: !!this.approvalEmailToTouched,
+                cc_touched: !!this.approvalEmailCcTouched,
                 from_name: String(this.approvalEmailFromName || '').trim(),
                 from_email: String(this.approvalEmailFromEmail || '').trim(),
                 reply_to: String(this.approvalEmailReplyTo || '').trim(),
@@ -357,6 +359,8 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             if (!lower.includes(candidate.toLowerCase())) {
                 list.push(candidate);
                 this.approvalEmailCc = list.join(', ');
+                this.approvalEmailCcTouched = true;
+                this.savePipelineState?.();
             }
         },
 
@@ -378,6 +382,8 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 }
             }
             this.approvalEmailCc = list.join(', ');
+            this.approvalEmailCcTouched = true;
+            this.savePipelineState?.();
         },
 
         async approvalEmailLoad(articleId = null, options = {}) {

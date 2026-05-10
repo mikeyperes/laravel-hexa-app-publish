@@ -38,6 +38,8 @@ class DraftApprovalEmailController extends Controller
         $input = $request->validate([
             "to" => "nullable|string|max:255",
             "cc" => "nullable|string|max:1000",
+            "to_touched" => "nullable|boolean",
+            "cc_touched" => "nullable|boolean",
             "from_name" => "nullable|string|max:255",
             "from_email" => "nullable|string|max:255",
             "reply_to" => "nullable|string|max:255",
@@ -74,6 +76,8 @@ class DraftApprovalEmailController extends Controller
         $input = $request->validate([
             "to" => "nullable|string|max:255",
             "cc" => "nullable|string|max:1000",
+            "to_touched" => "nullable|boolean",
+            "cc_touched" => "nullable|boolean",
             "from_name" => "nullable|string|max:255",
             "from_email" => "nullable|string|max:255",
             "reply_to" => "nullable|string|max:255",
@@ -186,12 +190,12 @@ class DraftApprovalEmailController extends Controller
     {
         $payload = $this->pipelineState->payload($article);
         $payload["approvalEmailTo"] = trim((string) ($input["to"] ?? ($payload["approvalEmailTo"] ?? "")));
-        if (array_key_exists("to", $input)) {
-            $payload["approvalEmailToTouched"] = trim((string) ($input["to"] ?? "")) !== "";
+        if (array_key_exists("to_touched", $input)) {
+            $payload["approvalEmailToTouched"] = (bool) $input["to_touched"];
         }
         $payload["approvalEmailCc"] = trim((string) ($input["cc"] ?? ($payload["approvalEmailCc"] ?? "")));
-        if (array_key_exists("cc", $input)) {
-            $payload["approvalEmailCcTouched"] = trim((string) ($input["cc"] ?? "")) !== "";
+        if (array_key_exists("cc_touched", $input)) {
+            $payload["approvalEmailCcTouched"] = (bool) $input["cc_touched"];
         }
         $payload["approvalEmailFromName"] = trim((string) ($input["from_name"] ?? ($payload["approvalEmailFromName"] ?? "")));
         $payload["approvalEmailFromEmail"] = trim((string) ($input["from_email"] ?? ($payload["approvalEmailFromEmail"] ?? "")));
