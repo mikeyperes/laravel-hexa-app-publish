@@ -98,6 +98,11 @@ class PipelineController extends Controller
                 $draft = PublishArticle::where('created_by', auth()->id())
                     ->where('status', 'drafting')
                     ->where(function ($q) {
+                        $q->whereNull('article_type')
+                            ->orWhere('article_type', '')
+                            ->orWhere('article_type', 'editorial');
+                    })
+                    ->where(function ($q) {
                         $q->whereNull('body')->orWhere('body', '');
                     })
                     ->where(function ($q) {
@@ -143,13 +148,37 @@ class PipelineController extends Controller
         $initialUserPresets = $draftUserId ? $this->pipelineBootstrapPresetsForUser((int) $draftUserId) : [];
         $initialUserTemplates = $draftUserId ? $this->pipelineBootstrapTemplatesForUser((int) $draftUserId) : [];
         $pipelinePayload = $this->pipelineState->payload($draft);
+        $bootArticleType = trim((string) (
+            data_get($pipelinePayload, 'template_overrides.article_type')
+            ?? data_get($pipelinePayload, 'article_type')
+            ?? data_get($pipelinePayload, 'currentArticleType')
+            ?? data_get($pipelinePayload, 'selectedTemplate.article_type')
+            ?? $draft->article_type
+            ?? 'editorial'
+        )) ?: 'editorial';
+        $bootSiteId = (string) (
+            data_get($pipelinePayload, 'selectedSiteId')
+            ?? data_get($pipelinePayload, 'selectedSite.id')
+            ?? $draft->publish_site_id
+            ?? ''
+        );
+        $bootSite = $bootSiteId !== ''
+            ? ($sites->firstWhere('id', (int) $bootSiteId) ?: (($draftSite && (string) $draftSite->id === $bootSiteId) ? $draftSite : null))
+            : $draftSite;
+        $canReuseExistingWpBinding = $draft->wp_post_id
+            && (string) ($draft->publish_site_id ?: '') !== ''
+            && (string) $draft->publish_site_id === $bootSiteId
+            && !($bootArticleType === 'press-release' && !($bootSite?->is_press_release_source));
         $latestCompletedPrepareHtml = PublishPipelineOperation::query()
             ->where('publish_article_id', $draft->id)
             ->where('operation_type', PublishPipelineOperation::TYPE_PREPARE)
             ->where('status', PublishPipelineOperation::STATUS_COMPLETED)
             ->latest('id')
             ->value('result_payload->html');
+        $selectedBootSite = $bootSite ?: $draftSite;
+
         $draftState = [
+            'article_type' => $draft->article_type ?: 'editorial',
             'selectedUser' => $draftUser ? [
                 'id' => $draftUser->id,
                 'name' => $draftUser->name,
@@ -157,19 +186,20 @@ class PipelineController extends Controller
             ] : null,
             'selectedPresetId' => $draft->preset_id ? (string) $draft->preset_id : '',
             'selectedTemplateId' => $draft->publish_template_id ? (string) $draft->publish_template_id : '',
-            'selectedSiteId' => $draftSite?->id ? (string) $draftSite->id : '',
-            'selectedSite' => $draftSite ? [
-                'id' => $draftSite->id,
-                'name' => $draftSite->name,
-                'url' => $draftSite->url,
-                'status' => $draftSite->status,
-                'default_author' => $draftSite->default_author,
-                'wp_username' => $draftSite->wp_username,
-                'connection_type' => $draftSite->connection_type,
+            'selectedSiteId' => $selectedBootSite?->id ? (string) $selectedBootSite->id : '',
+            'selectedSite' => $selectedBootSite ? [
+                'id' => $selectedBootSite->id,
+                'name' => $selectedBootSite->name,
+                'url' => $selectedBootSite->url,
+                'status' => $selectedBootSite->status,
+                'default_author' => $selectedBootSite->default_author,
+                'is_press_release_source' => (bool) $selectedBootSite->is_press_release_source,
+                'wp_username' => $selectedBootSite->wp_username,
+                'connection_type' => $selectedBootSite->connection_type,
             ] : null,
-            'publishAuthor' => $draft->author ?: ($draftSite?->default_author ?? ''),
-            'siteConnStatus' => $draftSite
-                ? match ($draftSite->status) {
+            'publishAuthor' => $draft->author ?: ($selectedBootSite?->default_author ?? ''),
+            'siteConnStatus' => $selectedBootSite
+                ? match ($selectedBootSite->status) {
                     'connected' => true,
                     'error' => false,
                     default => null,
@@ -189,11 +219,11 @@ class PipelineController extends Controller
                     default => 'draft_local',
                 },
             'scheduleDate' => $draft->scheduled_for?->format('Y-m-d\TH:i') ?: '',
-            'existingWpPostId' => $draft->wp_post_id ?: null,
-            'existingWpStatus' => $draft->wp_status ?: '',
-            'existingWpPostUrl' => $draft->wp_post_url ?: '',
-            'existingWpAdminUrl' => ($draftSite && $draft->wp_post_id)
-                ? rtrim((string) $draftSite->url, '/') . '/wp-admin/post.php?post=' . $draft->wp_post_id . '&action=edit'
+            'existingWpPostId' => $canReuseExistingWpBinding ? ($draft->wp_post_id ?: null) : null,
+            'existingWpStatus' => $canReuseExistingWpBinding ? ($draft->wp_status ?: '') : '',
+            'existingWpPostUrl' => $canReuseExistingWpBinding ? ($draft->wp_post_url ?: '') : '',
+            'existingWpAdminUrl' => ($canReuseExistingWpBinding && $selectedBootSite && $draft->wp_post_id)
+                ? rtrim((string) $selectedBootSite->url, '/') . '/wp-admin/post.php?post=' . $draft->wp_post_id . '&action=edit'
                 : '',
             'photoSuggestions' => $draft->photo_suggestions ?? [],
             'featuredImageSearch' => $draft->featured_image_search ?: '',
@@ -2305,6 +2335,7 @@ class PipelineController extends Controller
         return PublishArticle::create([
             'article_id' => PublishArticle::generateArticleId(),
             'title' => 'Untitled',
+            'article_type' => 'editorial',
             'status' => 'drafting',
             'created_by' => auth()->id(),
             'user_id' => auth()->id(),

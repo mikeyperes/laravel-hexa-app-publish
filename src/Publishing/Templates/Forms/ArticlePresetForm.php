@@ -144,6 +144,7 @@ class ArticlePresetForm
                     ->default(fn () => self::defaultSearchPrimary())
                     ->rules(['nullable', 'string', 'max:100'])
                     ->options(fn () => self::allProviderModelOptions())
+                    ->help(self::searchPrimaryHelp())
                     ->meta(['empty_label' => 'Select model...', 'section' => 'research'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
@@ -151,6 +152,7 @@ class ArticlePresetForm
                     ->default(fn () => self::defaultSearchFallback())
                     ->rules(['nullable', 'string', 'max:100'])
                     ->options(fn () => self::allProviderModelOptions())
+                    ->help(self::searchFallbackHelp())
                     ->meta(['empty_label' => 'Select model...', 'section' => 'research'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
@@ -158,7 +160,7 @@ class ArticlePresetForm
                     ->default(fn () => self::defaultSearchPrimary())
                     ->rules(['nullable', 'string', 'max:100'])
                     ->options(fn () => self::allProviderModelOptions())
-                    ->help('PHP auto extraction always runs first. This model is only used after local extraction fails.')
+                    ->help(self::scrapePrimaryHelp())
                     ->meta(['empty_label' => 'Select model...', 'section' => 'research'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
@@ -166,6 +168,7 @@ class ArticlePresetForm
                     ->default(fn () => self::defaultSearchFallback())
                     ->rules(['nullable', 'string', 'max:100'])
                     ->options(fn () => self::allProviderModelOptions())
+                    ->help(self::scrapeFallbackHelp())
                     ->meta(['empty_label' => 'Select model...', 'section' => 'research'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
@@ -173,6 +176,7 @@ class ArticlePresetForm
                     ->default(fn () => self::defaultSpinPrimary())
                     ->rules(['nullable', 'string', 'max:100'])
                     ->options(fn () => self::allProviderModelOptions())
+                    ->help(self::spinPrimaryHelp())
                     ->meta(['empty_label' => 'Select model...', 'section' => 'research'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
@@ -180,6 +184,7 @@ class ArticlePresetForm
                     ->default(fn () => self::defaultSpinFallback())
                     ->rules(['nullable', 'string', 'max:100'])
                     ->options(fn () => self::allProviderModelOptions())
+                    ->help(self::spinFallbackHelp())
                     ->meta(['empty_label' => 'Select model...', 'section' => 'research'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
@@ -212,7 +217,7 @@ class ArticlePresetForm
                     ->rules(['nullable', 'array'])
                     ->options(fn () => self::photoSourceOptions())
                     ->columns('md:col-span-2')
-                    ->help('Choose which image sources are allowed for inline and featured photos.')
+                    ->help('Choose which image sources are allowed for inline and featured photos. Pexels/Unsplash/Pixabay are the safe stock defaults. SerpAPI and Serper add Google-image discovery for harder subjects, but they are paid and should be enabled only when campaign imagery really needs them.')
                     ->meta(['section' => 'media'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
@@ -380,7 +385,16 @@ class ArticlePresetForm
 
     protected static function photoSourceOptions(): array
     {
-        return self::labelMap(config('hws-publish.photo_sources', []), fn (string $value) => ucfirst($value));
+        return collect((array) config('hws-publish.photo_sources', []))
+            ->mapWithKeys(function (string $value): array {
+                return [$value => match ($value) {
+                    'serpapi' => 'SerpAPI Google Images',
+                    'serper' => 'Serper Google Images',
+                    'google-cse' => 'Google Custom Search Images',
+                    default => ucfirst($value),
+                }];
+            })
+            ->all();
     }
 
     protected static function defaultCompany(): string
@@ -431,6 +445,36 @@ class ArticlePresetForm
         $primary = $catalog->defaultSpinModel();
 
         return $catalog->defaultSpinFallbackModel($primary) ?: $primary;
+    }
+
+    protected static function searchPrimaryHelp(): string
+    {
+        return 'Recommended order: 1. Gemini 2.5 Flash for fast, cheap broad web search. 2. Claude Haiku 4.5 for cleaner judgment on noisy sources. 3. GPT-4o Mini for balanced recall and formatting. Use Grok when you want more aggressive trend finding, not as the first default.';
+    }
+
+    protected static function searchFallbackHelp(): string
+    {
+        return 'Choose a different provider from the primary model so a weak first-pass result gets a real second opinion. Best fallbacks after Gemini are usually Claude Haiku 4.5, GPT-4o Mini, or Grok 3 Mini.';
+    }
+
+    protected static function scrapePrimaryHelp(): string
+    {
+        return 'PHP/local extraction always runs first. This model is only used after local extraction fails. Best choices: 1. Gemini 2.5 Flash for cheap cleanup. 2. Claude Haiku 4.5 for stronger structure judgment. 3. GPT-4o Mini for balanced extraction on messy pages.';
+    }
+
+    protected static function scrapeFallbackHelp(): string
+    {
+        return 'Pick a different provider than the primary scrape model. Claude Haiku 4.5 and GPT-4o Mini are the safest rescue options after Gemini when extraction is ambiguous or blocked.';
+    }
+
+    protected static function spinPrimaryHelp(): string
+    {
+        return 'Recommended editorial writing order: 1. Grok 3 for strong voice and framing. 2. Claude Sonnet 4.6 for the cleanest structure and safest journalistic tone. 3. Gemini 2.5 Pro for dense synthesis. GPT-4o stays a solid neutral backup.';
+    }
+
+    protected static function spinFallbackHelp(): string
+    {
+        return 'Use a fallback that complements the primary. Claude Sonnet 4.6 is the best structural rescue after Grok. Gemini 2.5 Pro is the strongest synthesis fallback after Claude. GPT-4o is a dependable neutral backup.';
     }
 
     protected static function listItemOptions(string $category): array

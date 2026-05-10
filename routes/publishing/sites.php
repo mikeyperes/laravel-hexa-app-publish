@@ -18,4 +18,5 @@ Route::middleware([EnsureAdminAccess::class])->group(function () {
     Route::get('/publish/sites/{id}/authors', [SiteController::class, 'getAuthors'])->name('publish.sites.authors');
     Route::get('/publish/sites/{id}/categories', [SiteController::class, 'getCategories'])->name('publish.sites.categories');
     Route::post('/publish/sites/{id}/set-author', [SiteController::class, 'setDefaultAuthor'])->name('publish.sites.set-author');
+    Route::post('/publish/sites/{id}/set-author-cast', [SiteController::class, 'setAuthorCast'])->name('publish.sites.set-author-cast');
 });

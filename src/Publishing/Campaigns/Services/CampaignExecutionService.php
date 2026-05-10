@@ -198,12 +198,17 @@ class CampaignExecutionService
             return $this->failure($log, $article, 'site', 'Site not found.');
         }
 
+        $resolvedAuthorMeta = $this->resolveCampaignAuthor($campaign, $site, $resolved);
+        $resolved['author'] = $resolvedAuthorMeta['author'];
+
         $emit('success', "Site ready: {$site->name} ({$site->url})", [
             'stage' => 'site',
             'substage' => 'resolved',
             'details' => implode(' | ', array_filter([
                 'connection=' . ($site->connection_type ?: 'wptoolkit'),
                 'author=' . ($resolved['author'] ?: ($site->default_author ?: 'default')),
+                'author_source=' . ($resolvedAuthorMeta['source'] ?? 'default'),
+                !empty($resolvedAuthorMeta['pool_count']) ? ('pool=' . $resolvedAuthorMeta['pool_count']) : null,
             ])),
         ]);
 
@@ -663,7 +668,7 @@ class CampaignExecutionService
         $isWpAction = in_array($executionMode, ['publish', 'wp-draft'], true);
         if ($isWpAction) {
             $article->update(['status' => 'drafting']);
-            $postStatus = $executionMode === 'wp-draft' ? 'draft' : ($resolved['post_status'] ?? 'draft');
+            $postStatus = $resolved['post_status'] ?? ($executionMode === 'publish' ? 'publish' : 'draft');
             $deliveryOptions = [];
 
             if ($scheduledFor && $postStatus === 'publish') {
@@ -862,11 +867,49 @@ class CampaignExecutionService
 
     private function resolveRequestedPostStatus(string $deliveryMode, ?string $postStatus): string
     {
-        return match ($deliveryMode) {
-            'auto-publish' => 'publish',
-            'draft-wordpress' => 'draft',
-            default => $postStatus ?: 'draft',
-        };
+        if ($deliveryMode === 'draft-local') {
+            return 'draft';
+        }
+
+        return $postStatus ?: ($deliveryMode === 'auto-publish' ? 'publish' : 'draft');
+    }
+
+    /**
+     * @param array<string, mixed> $resolved
+     * @return array{author: string, source: string, pool_count: int}
+     */
+    private function resolveCampaignAuthor(PublishCampaign $campaign, PublishSite $site, array $resolved): array
+    {
+        $explicitAuthor = trim((string) ($campaign->author ?: ($resolved['author'] ?? '')));
+        if ($explicitAuthor !== '') {
+            return [
+                'author' => $explicitAuthor,
+                'source' => 'campaign',
+                'pool_count' => count((array) ($site->author_cast ?? [])),
+            ];
+        }
+
+        $authorCast = collect((array) ($resolved['author_cast'] ?? $site->author_cast ?? []))
+            ->map(fn ($author) => trim((string) $author))
+            ->filter()
+            ->unique(fn ($author) => mb_strtolower($author))
+            ->values()
+            ->all();
+
+        if (!empty($authorCast)) {
+            $index = count($authorCast) === 1 ? 0 : random_int(0, count($authorCast) - 1);
+            return [
+                'author' => (string) $authorCast[$index],
+                'source' => 'site_author_pool',
+                'pool_count' => count($authorCast),
+            ];
+        }
+
+        return [
+            'author' => trim((string) ($resolved['default_author'] ?? $site->default_author ?? '')),
+            'source' => 'site_default',
+            'pool_count' => 0,
+        ];
     }
 
     /**

@@ -118,6 +118,7 @@
             <div x-show="siteConn.authors.length === 0">
                 <input type="text" x-model="form.author" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm max-w-md" placeholder="WordPress author username">
             </div>
+            <p class="mt-2 text-xs text-gray-400">Leave this blank to rotate through the site's saved author pool when one exists. Otherwise Publish falls back to the site's default author.</p>
         </div>
     </div>
 
@@ -150,10 +151,11 @@
         <div class="max-w-md">
             <label class="block text-xs text-gray-500 mb-1">Default Run Mode</label>
             <select x-model="form.delivery_mode" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                @foreach($deliveryModes as $mode)
-                    <option value="{{ $mode }}">{{ ucwords(str_replace('-', ' ', $mode)) }}</option>
-                @endforeach
+                <option value="draft-local">Local only</option>
+                <option value="draft-wordpress">WordPress delivery</option>
+                <option value="auto-publish">WordPress auto-publish</option>
             </select>
+            <p class="mt-2 text-xs text-gray-400" x-text="deliveryModeHint(form.delivery_mode)"></p>
         </div>
     </div>
 
@@ -250,7 +252,7 @@ function campaignCreate() {
         form: initialForm,
         termsText: (initialForm.keywords || []).join('\n'),
         _saveTimer: null,
-        _skipCount: 0,
+        _autosaveReady: false,
 
         init() {
             this.$watch('termsText', value => {
@@ -258,8 +260,7 @@ function campaignCreate() {
             });
 
             this.$watch('form', () => {
-                this._skipCount++;
-                if (this._skipCount <= 2) return;
+                if (!this._autosaveReady) return;
                 clearTimeout(this._saveTimer);
                 this._saveTimer = setTimeout(() => this.autoSave(), 500);
             }, { deep: true });
@@ -277,6 +278,9 @@ function campaignCreate() {
                     this.siteConn.message = 'Click "Test" to verify site access.';
                 }
             }
+            this.$nextTick(() => {
+                this._autosaveReady = true;
+            });
         },
 
         parseTerms(value) {
@@ -288,6 +292,16 @@ function campaignCreate() {
 
         formatLabel(value) {
             return (value || '').replace(/[-_]/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+        },
+
+        deliveryModeHint(value) {
+            if (value === 'draft-wordpress') {
+                return 'Creates or updates a WordPress post. Post status on the campaign controls whether it stays draft, goes pending review, or publishes.';
+            }
+            if (value === 'auto-publish') {
+                return 'Publishes to WordPress automatically when a run succeeds.';
+            }
+            return 'Keeps the article inside Publish only. No WordPress draft or live post is created.';
         },
 
         selectedPreset() {
@@ -367,7 +381,7 @@ function campaignCreate() {
             await this.testSiteConnection(this.form.publish_site_id, csrf, {
                 cacheKey: 'campaignSiteConnection_' + (this.editId || 'new'),
                 onSuccess(d) {
-                    if (d.default_author && !this.form.author) this.form.author = d.default_author;
+                    if (d.default_author && !this.form.author && !(Array.isArray(d.author_cast) && d.author_cast.length)) this.form.author = d.default_author;
                 },
             });
         },

@@ -79,6 +79,7 @@ class UserProfileDataService
             'name' => $s->name,
             'url' => $s->url,
             'default_author' => $s->default_author,
+            'author_cast' => array_values(array_filter((array) ($s->author_cast ?? []), fn ($value) => filled($value))),
             'status' => $s->status,
             'connection_type' => $s->connection_type,
             'wp_username' => $s->wp_username,

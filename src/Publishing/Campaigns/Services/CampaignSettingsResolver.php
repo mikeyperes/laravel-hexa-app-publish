@@ -44,6 +44,12 @@ class CampaignSettingsResolver
         $spinFallback = $templateValues['spin_model_fallback'] ?? $template?->spin_model_fallback ?: ($this->catalog->defaultSpinFallbackModel($spinPrimary) ?: $spinPrimary);
         $inlinePhotoMin = max(1, (int) ($templateValues['inline_photo_min'] ?? $template?->inline_photo_min ?: 2));
         $inlinePhotoMax = max($inlinePhotoMin, (int) ($templateValues['inline_photo_max'] ?? $template?->inline_photo_max ?: max(3, $inlinePhotoMin)));
+        $authorCast = collect((array) ($campaign->site?->author_cast ?? []))
+            ->map(fn ($author) => trim((string) $author))
+            ->filter()
+            ->unique(fn ($author) => mb_strtolower($author))
+            ->values()
+            ->all();
 
         $resolved = [
             'article_type' => $articleType,
@@ -70,7 +76,9 @@ class CampaignSettingsResolver
             'featured_image_must_be_landscape' => $templateValues['featured_image_must_be_landscape'] ?? $template?->featured_image_must_be_landscape ?? true,
             'publish_template_id' => $campaign->publish_template_id ?: $template?->id,
             'post_status' => $this->resolvePostStatus($normalizedDeliveryMode, $campaign->post_status),
-            'author' => $campaign->author ?: $campaign->site?->default_author,
+            'author' => trim((string) ($campaign->author ?? '')),
+            'default_author' => trim((string) ($campaign->site?->default_author ?? '')),
+            'author_cast' => $authorCast,
             'ai_instructions' => $this->combineInstructions(
                 $campaignPresetValues['campaign_instructions'] ?? null,
                 $campaignPresetValues['ai_instructions'] ?? null,
@@ -206,11 +214,11 @@ class CampaignSettingsResolver
 
     private function resolvePostStatus(string $deliveryMode, ?string $postStatus): string
     {
-        return match ($deliveryMode) {
-            'auto-publish' => 'publish',
-            'draft-wordpress' => 'draft',
-            default => $postStatus ?: 'draft',
-        };
+        if ($deliveryMode === 'draft-local') {
+            return 'draft';
+        }
+
+        return $postStatus ?: ($deliveryMode === 'auto-publish' ? 'publish' : 'draft');
     }
 
     /**

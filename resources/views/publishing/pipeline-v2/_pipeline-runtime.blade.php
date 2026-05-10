@@ -32,9 +32,8 @@ function publishPipeline() {
             return this.template_overrides?.article_type
                 ?? this.draftState?.article_type
                 ?? this.draftState?.publish_template?.article_type
-                ?? this.pressRelease?.article_type
                 ?? this.selectedTemplate?.article_type
-                ?? null;
+                ?? 'editorial';
         },
         get isGenerateMode() {
             const genTypes = ['press-release', 'listicle', 'expert-article', 'pr-full-feature'];

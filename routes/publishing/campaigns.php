@@ -6,6 +6,7 @@ use hexa_app_publish\Publishing\Campaigns\Http\Controllers\CampaignPresetControl
 Route::get('/campaigns', [CampaignController::class, 'index'])->name('campaigns.index');
 Route::get('/campaigns/create', [CampaignController::class, 'create'])->name('campaigns.create');
 Route::post('/campaigns', [CampaignController::class, 'store'])->name('campaigns.store');
+Route::post('/campaigns/bulk-delete', [CampaignController::class, 'bulkDestroy'])->name('campaigns.bulk-destroy');
 // Campaign Presets (before {id} wildcard)
 Route::get('/campaigns/presets', [CampaignPresetController::class, 'index'])->name('campaigns.presets.index');
 Route::post('/campaigns/presets', [CampaignPresetController::class, 'store'])->name('campaigns.presets.store');

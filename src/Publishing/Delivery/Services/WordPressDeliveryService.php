@@ -262,6 +262,12 @@ class WordPressDeliveryService
             return $options;
         }
 
+        $articleType = trim((string) ($options['article_type'] ?? ''));
+        if ($articleType !== 'press-release' || !$site->is_press_release_source) {
+            unset($options['publication_term_ids'], $options['publication_taxonomy']);
+            return $options;
+        }
+
         $taxonomyInfo = $this->resolveSyndicationTaxonomy($site);
         $taxonomy = (string) ($taxonomyInfo['taxonomy'] ?? 'publication');
         $options['publication_taxonomy'] = $taxonomy;

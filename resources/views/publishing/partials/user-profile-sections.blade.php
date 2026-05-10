@@ -129,7 +129,7 @@
             <template x-if="enabledSites.length > 0">
                 <div class="border border-gray-200 rounded-lg divide-y divide-gray-100">
                     <template x-for="site in enabledSites" :key="site.id">
-                        <div class="px-4 py-3 hover:bg-gray-50" x-data="{ testingWrite: false, writeResult: null, removing: false, loadingAuthors: false, authorsLoaded: false, authors: [], selectedAuthor: site.default_author || '', authorSaved: false, authorError: '' }">
+                        <div class="px-4 py-3 hover:bg-gray-50" x-data="{ testingWrite: false, writeResult: null, removing: false, loadingAuthors: false, authorsLoaded: false, authors: [], selectedAuthor: site.default_author || '', selectedAuthorCast: Array.isArray(site.author_cast) ? site.author_cast : [], authorSaved: false, authorError: '', castSaved: false, castError: '' }">
                             <div class="flex items-center justify-between">
                                 <div class="flex-1 min-w-0">
                                     <p class="text-sm font-medium text-gray-900 break-words" x-text="site.name"></p>
@@ -180,7 +180,7 @@
                                 <button x-show="!authorsLoaded && !loadingAuthors" x-cloak @click="
                                     loadingAuthors = true;
                                     fetch('/publish/sites/' + site.id + '/authors', { headers: { 'Accept': 'application/json' } })
-                                        .then(r => r.json()).then(d => { authors = d.authors || []; if (d.default_author) selectedAuthor = d.default_author; authorsLoaded = true; loadingAuthors = false; $dispatch('site-log', { type: 'info', message: site.name + ': ' + (d.authors?.length || 0) + ' authors loaded' }); })
+                                        .then(r => r.json()).then(d => { authors = d.authors || []; if (d.default_author) selectedAuthor = d.default_author; if (Array.isArray(d.author_cast)) selectedAuthorCast = d.author_cast; authorsLoaded = true; loadingAuthors = false; $dispatch('site-log', { type: 'info', message: site.name + ': ' + (d.authors?.length || 0) + ' authors loaded' }); })
                                         .catch(e => { loadingAuthors = false; $dispatch('site-log', { type: 'error', message: site.name + ': Failed to load authors — ' + e.message }); });
                                 " class="text-[11px] text-purple-500 hover:text-purple-700 border border-purple-200 px-2 py-0.5 rounded">Load Authors</button>
                                 <svg x-show="loadingAuthors" x-cloak class="w-3 h-3 animate-spin text-purple-500 flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -199,6 +199,67 @@
                                 <span x-show="authorsLoaded && authors.length === 0" x-cloak class="text-xs text-gray-400">No authors found</span>
                                 <span x-show="authorSaved" x-cloak x-transition class="text-xs text-green-600 font-medium">Saved</span>
                                 <span x-show="authorError" x-cloak class="text-xs text-red-600" x-text="authorError"></span>
+                            </div>
+                            <div class="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+                                <div class="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <svg class="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9a3 3 0 00-6 0v1H9a3 3 0 000 6h6a3 3 0 000-6h-1V9z"/></svg>
+                                            <label class="text-xs font-medium text-gray-700">Campaign Author Pool</label>
+                                        </div>
+                                        <p class="mt-1 text-[11px] text-gray-500">When a campaign leaves the author blank, Publish can rotate through this saved cast instead of always using the same exact byline.</p>
+                                        <p class="mt-1 text-[11px] text-gray-400" x-show="!authorsLoaded">Load authors first to choose the rotation pool. <span x-text="selectedAuthorCast.length ? selectedAuthorCast.length + ' saved' : 'No saved pool yet'"></span>.</p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <button x-show="authorsLoaded" x-cloak @click="
+                                            castSaved = false; castError = '';
+                                            fetch('/publish/sites/' + site.id + '/set-author-cast', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content },
+                                                body: JSON.stringify({ authors: selectedAuthorCast })
+                                            })
+                                            .then(r => r.json()).then(d => {
+                                                if (d.success) {
+                                                    site.author_cast = d.author_cast || [];
+                                                    selectedAuthorCast = d.author_cast || [];
+                                                    castSaved = true;
+                                                    setTimeout(() => castSaved = false, 2200);
+                                                    $dispatch('site-log', { type: 'success', message: site.name + ': ' + (d.message || 'Campaign author pool saved') });
+                                                } else {
+                                                    castError = d.message || 'Save failed';
+                                                }
+                                            })
+                                            .catch(e => { castError = e.message; });
+                                        " class="text-[11px] border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 rounded px-2 py-1">Save Pool</button>
+                                        <span x-show="castSaved" x-cloak class="text-xs text-green-600 font-medium">Saved</span>
+                                    </div>
+                                </div>
+                                <div x-show="authorsLoaded && authors.length > 0" x-cloak class="mt-3 max-h-40 overflow-auto rounded-md border border-gray-200 bg-white">
+                                    <template x-for="author in authors" :key="'pool-' + author.user_login">
+                                        <label class="flex items-center gap-2 px-3 py-2 text-xs text-gray-700 border-b border-gray-100 last:border-b-0">
+                                            <input
+                                                type="checkbox"
+                                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                :value="author.user_login"
+                                                :checked="selectedAuthorCast.includes(author.user_login)"
+                                                @change="
+                                                    if ($event.target.checked) {
+                                                        if (!selectedAuthorCast.includes(author.user_login)) selectedAuthorCast.push(author.user_login);
+                                                    } else {
+                                                        selectedAuthorCast = selectedAuthorCast.filter(value => value !== author.user_login);
+                                                    }
+                                                    castSaved = false;
+                                                    castError = '';
+                                                "
+                                            >
+                                            <span x-text="(author.display_name || author.user_login) + ' (' + author.user_login + ')'"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                                <div class="mt-2 text-[11px] text-gray-500" x-show="authorsLoaded" x-cloak>
+                                    <span x-text="selectedAuthorCast.length ? (selectedAuthorCast.length + ' author' + (selectedAuthorCast.length === 1 ? '' : 's') + ' selected for rotation') : 'No pooled authors selected yet.'"></span>
+                                </div>
+                                <span x-show="castError" x-cloak class="mt-2 block text-xs text-red-600" x-text="castError"></span>
                             </div>
                         </div>
                     </template>

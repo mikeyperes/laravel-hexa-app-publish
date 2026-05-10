@@ -340,6 +340,7 @@ class SiteController extends Controller
 
         $result['authors'] = $authors;
         $result['default_author'] = $site->default_author;
+        $result['author_cast'] = array_values(array_filter((array) ($site->author_cast ?? []), fn ($value) => filled($value)));
         $result['last_connected_at'] = $site->last_connected_at?->toIso8601String();
         $result['cache_hit'] = $authorsResult['cache_hit'] ?? null;
         $result['cached_at'] = $authorsResult['cached_at'] ?? null;
@@ -363,6 +364,7 @@ class SiteController extends Controller
 
         $result = $this->wptoolkit->wpCliListAdminUsers($resolved['server'], (int) $site->wordpress_install_id, $request->boolean('force'));
         $result['default_author'] = $site->default_author;
+        $result['author_cast'] = array_values(array_filter((array) ($site->author_cast ?? []), fn ($value) => filled($value)));
         $result['last_connected_at'] = $site->last_connected_at?->toIso8601String();
 
         return response()->json($result);
@@ -568,6 +570,44 @@ class SiteController extends Controller
         return response()->json([
             'success' => true,
             'message' => "Default author set to '{$validated['author']}'.",
+        ]);
+    }
+
+    /**
+     * Set the site author pool used for randomized campaign attribution.
+     *
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function setAuthorCast(Request $request, int $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'authors' => 'nullable|array',
+            'authors.*' => 'string|max:255',
+        ]);
+
+        $authors = collect((array) ($validated['authors'] ?? []))
+            ->map(fn ($author) => trim((string) $author))
+            ->filter()
+            ->unique(fn ($author) => mb_strtolower($author))
+            ->values()
+            ->all();
+
+        $site = PublishSite::findOrFail($id);
+        $site->update(['author_cast' => $authors]);
+
+        hexaLog('publish', 'site_author_cast_set', "Author pool saved for {$site->name}: " . count($authors) . ' author(s)', [
+            'site_id' => $site->id,
+            'authors' => $authors,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => count($authors) > 0
+                ? ('Saved ' . count($authors) . ' author' . (count($authors) === 1 ? '' : 's') . ' to the campaign author pool.')
+                : 'Cleared the campaign author pool.',
+            'author_cast' => $authors,
         ]);
     }
 

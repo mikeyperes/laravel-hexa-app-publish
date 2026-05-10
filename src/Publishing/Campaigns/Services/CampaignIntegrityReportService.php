@@ -45,6 +45,8 @@ class CampaignIntegrityReportService
             'site' => [
                 'name' => $campaign->site?->name,
                 'url' => $campaign->site?->url,
+                'default_author' => $campaign->site?->default_author,
+                'author_cast_count' => count(array_values(array_filter((array) ($campaign->site?->author_cast ?? []), fn ($value) => filled($value)))),
                 'last_connected_at' => $campaign->site?->last_connected_at?->toIso8601String(),
                 'last_connected_display' => $campaign->site?->last_connected_at?->setTimezone($campaign->timezone ?: config('app.timezone', 'America/New_York'))->format('M j, Y g:i A T'),
                 'last_connected_relative' => $campaign->site?->last_connected_at?->diffForHumans(),
@@ -71,6 +73,12 @@ class CampaignIntegrityReportService
         }
 
         $selectedAuthor = trim((string) ($resolved['author'] ?? ''));
+        $authorCast = collect((array) ($resolved['author_cast'] ?? $site->author_cast ?? []))
+            ->map(fn ($author) => trim((string) $author))
+            ->filter()
+            ->unique(fn ($author) => mb_strtolower($author))
+            ->values()
+            ->all();
         $authorResult = $this->loadSiteAuthors($site, $forceAuthorRefresh);
         $authors = $authorResult['authors'];
         $report['site']['author_count'] = count($authors);
@@ -119,36 +127,59 @@ class CampaignIntegrityReportService
                 'The selected author could not be verified against a WordPress author directory.',
                 'This site is not using the WP Toolkit author directory path, so author verification is advisory only.'
             );
+        } elseif (!empty($authorCast) && $authorResult['success'] && !empty($authors)) {
+            $missingPoolAuthors = collect($authorCast)
+                ->reject(fn ($author) => $this->findAuthor($authors, $author))
+                ->values()
+                ->all();
+
+            if (!empty($missingPoolAuthors)) {
+                $this->pushIssue(
+                    $report,
+                    'warning',
+                    'author-pool-partial',
+                    'Some pooled authors could not be verified on WordPress.',
+                    'These saved pool authors were not found on the target site: ' . implode(', ', array_slice($missingPoolAuthors, 0, 6))
+                );
+            }
+        } elseif (!empty($authorCast) && !$authorResult['success']) {
+            $this->pushIssue(
+                $report,
+                'warning',
+                'author-pool-unverified',
+                'The site author pool is configured, but WordPress author verification is currently unavailable.',
+                'The campaign can still randomize from the saved pool once the connection is healthy again.'
+            );
         } elseif (!$site->default_author) {
             $this->pushIssue(
                 $report,
                 'error',
                 'author-empty',
                 'No WordPress author is selected.',
-                'Set a campaign author or a default site author before running the campaign.',
+                'Set a campaign author, a default site author, or a site author pool before running the campaign.',
                 true
             );
         }
 
         $deliveryMode = (string) ($resolved['delivery_mode'] ?? $campaign->delivery_mode ?? '');
         $postStatus = (string) ($campaign->post_status ?: ($resolved['post_status'] ?? ''));
-        if ($deliveryMode === 'draft-wordpress' && $postStatus !== 'draft') {
+        if ($deliveryMode === 'draft-local' && $postStatus !== 'draft') {
             $this->pushIssue(
                 $report,
-                'error',
-                'delivery-status-mismatch',
-                'Delivery mode and post status conflict.',
-                'Draft WordPress delivery should use post status "draft", but this campaign is configured for "' . $postStatus . '".',
-                true
+                'warning',
+                'local-status-ignored',
+                'Local draft mode ignores the selected WordPress post status.',
+                'This campaign is configured for a local-only draft run, so the post status "' . $postStatus . '" will not be used until you switch delivery back to WordPress.',
+                false
             );
         }
-        if ($deliveryMode === 'auto-publish' && $postStatus !== 'publish') {
+        if (in_array($deliveryMode, ['draft-wordpress', 'auto-publish'], true) && !in_array($postStatus, ['draft', 'pending', 'publish', 'future'], true)) {
             $this->pushIssue(
                 $report,
                 'error',
-                'publish-status-mismatch',
-                'Auto-publish mode is not aligned with the post status.',
-                'Auto-publish should use post status "publish", but this campaign is configured for "' . $postStatus . '".',
+                'wordpress-status-missing',
+                'WordPress delivery is missing a valid post status.',
+                'Choose whether WordPress should save this campaign as draft, pending, or publish.',
                 true
             );
         }

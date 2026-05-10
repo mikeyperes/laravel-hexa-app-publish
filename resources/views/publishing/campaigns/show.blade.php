@@ -65,7 +65,7 @@
     [x-cloak] { display:none !important; }
 </style>
 
-<div class="max-w-6xl mx-auto pt-4" x-data="campaignDashboard()" x-init="init()">
+<div class="max-w-6xl mx-auto pt-4 flex flex-col" x-data="campaignDashboard()" x-init="init()">
 
     {{-- ───────────────────────────────────────────────
          HEADER CARD
@@ -745,8 +745,8 @@
     {{-- ───────────────────────────────────────────────
          PUBLISHING TARGET
          ─────────────────────────────────────────────── --}}
-    <div class="hx-card">
-        <div class="hx-card-header">
+    <div class="hx-card order-last" x-data="{open: false}">
+        <div class="hx-card-header hx-clickable" @click="open = !open">
             <div class="hx-card-title-block">
                 <div class="hx-card-icon green">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
@@ -756,8 +756,13 @@
                     <p class="hx-card-subtitle">WordPress site, author, delivery mode, and post status.</p>
                 </div>
             </div>
+            <div class="hx-card-header-right">
+                <span class="hx-tag slate" x-text="deliveryModeLabel(form.delivery_mode)"></span>
+                <span class="hx-tag gray" x-text="'Status · ' + formatLabel(form.post_status || 'draft')"></span>
+                <svg class="w-4 h-4 hx-chev" :class="{ 'open': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </div>
         </div>
-        <div class="hx-card-body">
+        <div x-show="open" x-cloak class="hx-card-body">
             <div class="hx-field">
                 <label class="hx-label">WordPress site</label>
                 <select x-model="form.publish_site_id" @change="doTestSite()" class="hx-select max-w-md">
@@ -777,12 +782,12 @@
                     @hexa-search-selected.window="if ($event.detail.component_id === 'campaign-author') form.author = $event.detail.item.username || $event.detail.item.user_login || $event.detail.item.slug || $event.detail.item.display_name || $event.detail.item.name || ''"
                     @hexa-search-cleared.window="if ($event.detail.component_id === 'campaign-author') form.author = ''">
                     @php
-                        $selectedAuthor = !empty($effectiveCampaignAuthor) ? [
-                            'id' => $effectiveCampaignAuthor,
-                            'name' => $effectiveCampaignAuthor,
-                            'display_name' => $effectiveCampaignAuthor,
-                            'username' => $effectiveCampaignAuthor,
-                            'user_login' => $effectiveCampaignAuthor,
+                        $selectedAuthor = !empty($campaignForm['author']) ? [
+                            'id' => $campaignForm['author'],
+                            'name' => $campaignForm['author'],
+                            'display_name' => $campaignForm['author'],
+                            'username' => $campaignForm['author'],
+                            'user_login' => $campaignForm['author'],
                             'email' => '',
                         ] : null;
                     @endphp
@@ -799,19 +804,24 @@
                         :min-chars="0"
                         :debounce="250"
                     />
-                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                <div class="mt-2 flex flex-wrap items-center gap-2">
                         <button type="button" @click="refreshAuthorsFromSource()" :disabled="integrityRunning || !form.publish_site_id" class="hx-link text-xs">Refresh authors from source</button>
                         <span class="text-xs text-gray-400" x-text="authorCacheSummary()"></span>
                     </div>
-                    <p class="hx-field-hint mt-1">The stored value is the real WordPress login, not the display name. Cached authors stay warm until you explicitly retest or refresh them.</p>
+                    <p class="hx-field-hint mt-1">The stored value is the real WordPress login, not the display name. Leave this blank to use the site's random author pool when one is configured, otherwise Publish falls back to the site's default author. Cached authors stay warm until you explicitly retest or refresh them.</p>
+                    <p class="hx-field-hint mt-1" x-show="integrityReport?.site?.default_author || integrityReport?.site?.author_cast_count" x-cloak>
+                        <span x-text="'Default: ' + (integrityReport?.site?.default_author || 'none')"></span>
+                        <span x-show="integrityReport?.site?.author_cast_count" x-cloak x-text="' · Pool: ' + integrityReport.site.author_cast_count + ' author' + (integrityReport.site.author_cast_count === 1 ? '' : 's')"></span>
+                    </p>
                 </div>
                 <div class="hx-field">
                     <label class="hx-label">Delivery mode</label>
                     <select x-model="form.delivery_mode" class="hx-select">
-                        @foreach($deliveryModes as $m)
-                            <option value="{{ $m }}">{{ ucwords(str_replace('-', ' ', $m)) }}</option>
-                        @endforeach
+                        <option value="draft-local">Local only</option>
+                        <option value="draft-wordpress">WordPress delivery</option>
+                        <option value="auto-publish">WordPress auto-publish</option>
                     </select>
+                    <p class="hx-field-hint mt-1" x-text="deliveryModeHint(form.delivery_mode)"></p>
                 </div>
                 <div class="hx-field">
                     <label class="hx-label">Post status</label>
@@ -820,6 +830,7 @@
                         <option value="pending">Pending</option>
                         <option value="publish">Publish</option>
                     </select>
+                    <p class="hx-field-hint mt-1">Use this only for WordPress delivery. Local-only runs ignore the WordPress post status.</p>
                 </div>
             </div>
         </div>
@@ -1037,7 +1048,7 @@ function campaignDashboard() {
         integrityReport: initialIntegrityReport || { summary: { status: 'pass', errors: 0, warnings: 0, blocking_errors: 0 }, issues: [], site: {} },
         integrityRunning: false,
         _saveTimer: null,
-        _skipCount: 0,
+        _autosaveReady: false,
 
         get campaignPresetEditUrl() {
             return this.form.campaign_preset_id
@@ -1061,8 +1072,7 @@ function campaignDashboard() {
             this._loadArticlePreset();
             this.$watch('termsText', v => { this.form.keywords = (v || '').split('\n').map(s => s.trim()).filter(Boolean); });
             const queueAutoSave = () => {
-                this._skipCount++;
-                if (this._skipCount <= 2) return;
+                if (!this._autosaveReady) return;
                 clearTimeout(this._saveTimer);
                 this._saveTimer = setTimeout(() => this.autoSave(), 600);
             };
@@ -1109,10 +1119,30 @@ function campaignDashboard() {
                     || 'draft-wordpress'
                 );
             }
+            this.$nextTick(() => {
+                this._autosaveReady = true;
+            });
         },
 
         formatLabel(value) {
             return (value || '').replace(/[-_]/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+        },
+
+        deliveryModeLabel(value) {
+            if (value === 'draft-wordpress') return 'WordPress delivery';
+            if (value === 'auto-publish') return 'WordPress auto-publish';
+            if (value === 'draft-local') return 'Local only';
+            return this.formatLabel(value || 'draft-wordpress');
+        },
+
+        deliveryModeHint(value) {
+            if (value === 'draft-wordpress') {
+                return 'Creates or updates a WordPress post. The post status controls whether it stays draft, goes pending review, or is ready to publish.';
+            }
+            if (value === 'auto-publish') {
+                return 'Sends the article straight to WordPress on successful runs. Use a publish-ready post status when you want it to go live automatically.';
+            }
+            return 'Keeps the article inside Publish only. Nothing is created or updated on WordPress.';
         },
 
         formatDateTime(value) {
@@ -1462,7 +1492,11 @@ function campaignDashboard() {
             if (!this.form.publish_site_id) return;
             await this.testSiteConnection(this.form.publish_site_id, csrf, {
                 cacheKey: 'campaignSiteConnection_' + this.editId,
-                onSuccess: (d) => { if (d.default_author && !this.form.author) this.form.author = d.default_author; },
+                onSuccess: (d) => {
+                    if (d.default_author && !this.form.author && !(Array.isArray(d.author_cast) && d.author_cast.length)) {
+                        this.form.author = d.default_author;
+                    }
+                },
             });
             await this.runIntegrityReport(true);
         },

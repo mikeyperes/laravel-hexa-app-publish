@@ -23,6 +23,8 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         approvalEmailSubject: '',
         approvalEmailIntroHtml: '',
         approvalEmailImageMode: 'embed',
+        approvalEmailAdditionalCcs: '',
+        approvalEmailSmtpSettingsUrl: @json(route('publish.settings.master')),
         approvalEmailPreviewHtml: '',
         approvalEmailWarnings: [],
         approvalEmailHeaders: {},
@@ -169,6 +171,8 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 }
                 this[key] = String(value ?? '');
             });
+            this.approvalEmailAdditionalCcs = String(config.additional_ccs ?? this.approvalEmailAdditionalCcs ?? '');
+            this.approvalEmailSmtpSettingsUrl = String(config.smtp_settings_url ?? this.approvalEmailSmtpSettingsUrl ?? '');
 
             if (typeof this.$nextTick === 'function') {
                 this.$nextTick(() => {
@@ -184,6 +188,12 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             if (typeof this.showNotification === 'function' && message) {
                 this.showNotification(type === 'success' ? 'success' : (type === 'info' ? 'info' : 'error'), message);
             }
+        },
+
+        approvalEmailStatusNeedsSmtpSettings() {
+            const message = String(this.approvalEmailStatus || '').toLowerCase();
+            return this.approvalEmailStatusType === 'error'
+                && (message.includes('smtp') || message.includes('mail'));
         },
 
         approvalEmailImageModeHelp() {
@@ -225,10 +235,10 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             if (this._approvalEmailTinyMcePromise) return this._approvalEmailTinyMcePromise;
 
             const tinyKey = @json(config('services.tinymce.api_key') ?: 'no-api-key');
-            const sources = [
-                'https://cdn.tiny.cloud/1/' + tinyKey + '/tinymce/7/tinymce.min.js',
-                'https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js',
-            ];
+            const sources = ['https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js'];
+            if (tinyKey && tinyKey !== 'no-api-key') {
+                sources.unshift('https://cdn.tiny.cloud/1/' + tinyKey + '/tinymce/7/tinymce.min.js');
+            }
 
             this._approvalEmailTinyMcePromise = new Promise((resolve) => {
                 const trySource = (index) => {
@@ -283,10 +293,14 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 menubar: false,
                 branding: false,
                 promotion: false,
-                height: 220,
+                min_height: 360,
+                height: 360,
                 plugins: 'link lists code autoresize',
                 toolbar: 'undo redo | blocks | bold italic underline | bullist numlist | link | removeformat | code',
                 block_formats: 'Paragraph=p;Heading 2=h2;Heading 3=h3',
+                resize: true,
+                autoresize_min_height: 360,
+                autoresize_max_height: 960,
                 autoresize_bottom_margin: 12,
                 setup: (editor) => {
                     editor.on('init', () => {
@@ -344,6 +358,26 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 list.push(candidate);
                 this.approvalEmailCc = list.join(', ');
             }
+        },
+
+        approvalEmailAppendCcList(value) {
+            const candidates = String(value || '')
+                .split(',')
+                .map((entry) => entry.trim())
+                .filter((entry) => entry !== '');
+            if (!candidates.length) return;
+            const list = String(this.approvalEmailCc || '')
+                .split(',')
+                .map((entry) => entry.trim())
+                .filter((entry) => entry !== '');
+            const lower = list.map((entry) => entry.toLowerCase());
+            for (const candidate of candidates) {
+                if (!lower.includes(candidate.toLowerCase())) {
+                    list.push(candidate);
+                    lower.push(candidate.toLowerCase());
+                }
+            }
+            this.approvalEmailCc = list.join(', ');
         },
 
         async approvalEmailLoad(articleId = null, options = {}) {

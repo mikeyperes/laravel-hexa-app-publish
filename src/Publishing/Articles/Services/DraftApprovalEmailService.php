@@ -547,6 +547,17 @@ HTML;
         $imageMode = (string) ($headers['Image Mode'] ?? '');
 
         // Inbox-style metadata strip
+        $recipientLines = '';
+        if ($to !== '') {
+            $recipientLines .= '<div><span class="font-medium text-gray-600">To:</span> ' . $this->escapeHtml($to) . '</div>';
+        }
+        if ($cc !== '') {
+            $recipientLines .= '<div><span class="font-medium text-gray-600">Cc:</span> ' . $this->escapeHtml($cc) . '</div>';
+        }
+        if ($replyTo !== '') {
+            $recipientLines .= '<div><span class="font-medium text-gray-600">Reply-to:</span> ' . $this->escapeHtml($replyTo) . '</div>';
+        }
+
         $metaStrip = '<div class="border-b border-gray-200 px-4 py-3 bg-white">'
             . '<div class="flex items-start gap-3">'
             . '<div class="w-9 h-9 rounded-full bg-blue-50 text-blue-700 font-semibold flex items-center justify-center text-sm flex-shrink-0">' . $this->escapeHtml($initials) . '</div>'
@@ -556,10 +567,8 @@ HTML;
             . ($fromEmail !== '' ? '<span class="text-gray-500 text-xs">&lt;' . $this->escapeHtml($fromEmail) . '&gt;</span>' : '')
             . '</div>'
             . '<p class="mt-1 text-gray-900 font-semibold text-[15px] break-words">' . $this->escapeHtml($subject) . '</p>'
-            . '<div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-gray-500">'
-            . ($to !== '' ? '<span><span class="font-medium text-gray-600">To:</span> ' . $this->escapeHtml($to) . '</span>' : '')
-            . ($cc !== '' ? '<span><span class="font-medium text-gray-600">Cc:</span> ' . $this->escapeHtml($cc) . '</span>' : '')
-            . ($replyTo !== '' ? '<span><span class="font-medium text-gray-600">Reply-to:</span> ' . $this->escapeHtml($replyTo) . '</span>' : '')
+            . '<div class="mt-1.5 space-y-0.5 text-[11px] text-gray-500">'
+            . $recipientLines
             . '</div>'
             . '</div>'
             . '</div>'
@@ -795,6 +804,53 @@ HTML;
 
     private function resolveSmtpMeta(): array
     {
+        $settingsHost = trim((string) (Setting::getValue('smtp_host', '') ?: ''));
+        $settingsUsername = trim((string) (Setting::getValue('smtp_username', '') ?: ''));
+        $settingsFromEmail = trim((string) ((Setting::getValue('smtp_from_email', '') ?: Setting::getValue('from_email', '')) ?: ''));
+        $settingsFromName = (string) ((Setting::getValue('smtp_from_name', '') ?: Setting::getValue('from_name', '')) ?: 'Scale My Publication');
+
+        $preferredAccount = null;
+        if ($settingsHost !== '' || $settingsUsername !== '' || $settingsFromEmail !== '') {
+            $preferredAccount = SmtpAccount::query()
+                ->where('is_active', true)
+                ->where(function ($query) use ($settingsHost, $settingsUsername, $settingsFromEmail) {
+                    if ($settingsHost !== '') {
+                        $query->orWhere('host', $settingsHost);
+                    }
+                    if ($settingsUsername !== '') {
+                        $query->orWhere('username', $settingsUsername);
+                    }
+                    if ($settingsFromEmail !== '') {
+                        $query->orWhere('from_email', $settingsFromEmail);
+                    }
+                })
+                ->orderByDesc('is_default')
+                ->orderByDesc('is_system_sender')
+                ->first();
+        }
+
+        if ($preferredAccount) {
+            return [
+                'id' => $preferredAccount->id,
+                'name' => $preferredAccount->name,
+                'from_email' => $preferredAccount->from_email,
+                'from_name' => $preferredAccount->from_name ?: $settingsFromName,
+                'host' => $preferredAccount->host,
+                'source' => 'smtp_account_match',
+            ];
+        }
+
+        if ($settingsHost !== '' || $settingsFromEmail !== '') {
+            return [
+                'id' => null,
+                'name' => $settingsFromName ?: 'Settings fallback',
+                'from_email' => $settingsFromEmail,
+                'from_name' => $settingsFromName,
+                'host' => $settingsHost,
+                'source' => 'settings',
+            ];
+        }
+
         $account = SmtpAccount::query()->where('is_default', true)->where('is_active', true)->first();
         if ($account) {
             return [
@@ -809,10 +865,10 @@ HTML;
 
         return [
             'id' => null,
-            'name' => (string) (Setting::getValue('smtp_from_name', 'Settings fallback') ?: 'Settings fallback'),
-            'from_email' => (string) (Setting::getValue('smtp_from_email', '') ?: ''),
-            'from_name' => (string) (Setting::getValue('smtp_from_name', 'Scale My Publication') ?: 'Scale My Publication'),
-            'host' => (string) (Setting::getValue('smtp_host', '') ?: ''),
+            'name' => $settingsFromName ?: 'Settings fallback',
+            'from_email' => $settingsFromEmail,
+            'from_name' => $settingsFromName,
+            'host' => $settingsHost,
             'source' => 'settings',
         ];
     }

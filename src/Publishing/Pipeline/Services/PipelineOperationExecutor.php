@@ -215,6 +215,7 @@ class PipelineOperationExecutor
                     'category_ids' => $payload['category_ids'] ?? [],
                     'tag_ids' => $payload['tag_ids'] ?? [],
                     'publication_term_ids' => $payload['publication_term_ids'] ?? [],
+                    'article_type' => $payload['article_type'] ?? null,
                     'date' => ($payload['status'] === 'future' && !empty($payload['date'])) ? $payload['date'] : null,
                     'featured_media_id' => $payload['featured_media_id'] ?? null,
                     'author' => $payload['author'] ?? null,

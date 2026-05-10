@@ -15,6 +15,9 @@
                 <button type="button" @click="approvalEmailAppendCcAddress(approvalEmailSuperAdminEmail)" class="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
                     Add super admin email
                 </button>
+                <button type="button" @click="approvalEmailAppendCcList(approvalEmailAdditionalCcs)" class="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                    Add CCs
+                </button>
                 <span class="text-xs text-gray-500">Loads creator additional contact emails by default when they exist.</span>
             </div>
         </div>
@@ -121,7 +124,19 @@
     </div>
 
     {{-- Send result --}}
-    <div x-show="approvalEmailStatus" x-cloak class="rounded-lg px-3 py-2 text-sm" :class="approvalEmailStatusClass()" x-text="approvalEmailStatus"></div>
+    <div x-show="approvalEmailStatus" x-cloak class="rounded-lg px-3 py-2 text-sm space-y-2" :class="approvalEmailStatusClass()">
+        <div x-text="approvalEmailStatus"></div>
+        <a
+            x-show="approvalEmailStatusNeedsSmtpSettings() && approvalEmailSmtpSettingsUrl"
+            x-cloak
+            :href="approvalEmailSmtpSettingsUrl"
+            target="_blank"
+            rel="noopener"
+            class="inline-flex items-center gap-2 rounded border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+        >
+            Open SMTP settings
+        </a>
+    </div>
 
     {{-- Preview warnings --}}
     <div x-show="approvalEmailWarnings.length > 0" x-cloak class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">

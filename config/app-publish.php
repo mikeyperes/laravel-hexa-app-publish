@@ -199,6 +199,8 @@ return [
         'unsplash',
         'pexels',
         'pixabay',
+        'serpapi',
+        'serper',
     ],
 
     /*

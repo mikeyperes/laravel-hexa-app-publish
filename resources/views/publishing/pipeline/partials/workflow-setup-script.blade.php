@@ -167,7 +167,13 @@
             }
 
             // Auto-select default AI template
-            const defaultTemplate = this.templates.find(t => t.is_default);
+            const preferredArticleType = String(this.template_overrides?.article_type || 'editorial').trim() || 'editorial';
+            const defaultTemplate = this.templates.find(t => t.is_default && t.article_type === preferredArticleType)
+                || this.templates.find(t => t.article_type === preferredArticleType)
+                || this.templates.find(t => t.is_default && t.article_type !== 'press-release')
+                || this.templates.find(t => t.article_type !== 'press-release')
+                || this.templates.find(t => t.is_default)
+                || null;
             if (defaultTemplate) {
                 this.selectedTemplateId = String(defaultTemplate.id);
                 this.selectTemplate();
@@ -271,7 +277,90 @@
             return normalized ? ('publishSiteConnection:' + normalized) : null;
         },
 
+        canUsePublicationSyndication(site = null, articleType = null) {
+            const resolvedSite = site || this.selectedSite || null;
+            const resolvedType = String(articleType || this.currentArticleType || '').trim();
+            return resolvedType === 'press-release' && !!resolvedSite?.is_press_release_source;
+        },
+
+        _resetPreparedWordPressState(reason = 'context_changed') {
+            this._resetPrepareOperationTracking?.({ clearLog: true });
+            this.prepareComplete = false;
+            this.prepareChecklist = [];
+            this.prepareIntegrityIssues = [];
+            this.preparedHtml = '';
+            this.preparedCategoryIds = [];
+            this.preparedTagIds = [];
+            this.preparedFeaturedMediaId = null;
+            this.preparedFeaturedWpUrl = null;
+            this.prepareTraceId = '';
+            this.prepareLastStage = '';
+            this.prepareLastMessage = '';
+            this._logDebug?.('publish', 'Reset prepared WordPress state', {
+                stage: 'publish',
+                substage: reason,
+            });
+        },
+
+        _invalidateWordPressBinding(reason = 'context_changed') {
+            const previousPostId = this.existingWpPostId;
+            const hadPublishResult = !!this.publishResult;
+
+            this.existingWpPostId = null;
+            this.existingWpStatus = '';
+            this.existingWpPostUrl = '';
+            this.existingWpAdminUrl = '';
+            this.publishResult = null;
+            this.publishError = '';
+            if (this.selectedSiteId) {
+                this.publishAction = 'draft_wp';
+            } else {
+                this.publishAction = 'draft_local';
+            }
+
+            this._logActivity?.('publish', 'warning', 'Reset WordPress draft/live binding after context change', {
+                stage: 'publish',
+                substage: reason,
+                details: this._summarizeValue?.({
+                    previous_post_id: previousPostId || null,
+                    had_publish_result: hadPublishResult,
+                    selected_site_id: this.selectedSiteId || null,
+                    article_type: this.currentArticleType || null,
+                }, 280),
+                debug_only: true,
+            });
+        },
+
+        syncPublishContextState({ previousSiteId = '', nextSiteId = '', previousArticleType = '', nextArticleType = '' } = {}) {
+            const priorSiteId = String(previousSiteId || '').trim();
+            const currentSiteId = String(nextSiteId || this.selectedSiteId || '').trim();
+            const priorType = String(previousArticleType || '').trim();
+            const currentType = String(nextArticleType || this.currentArticleType || '').trim();
+            const siteChanged = priorSiteId !== '' && currentSiteId !== '' && priorSiteId !== currentSiteId;
+            const typeChanged = priorType !== '' && currentType !== '' && priorType !== currentType;
+            const lostSyndication = !this.canUsePublicationSyndication(this.selectedSite, currentType);
+
+            if (lostSyndication) {
+                this.selectedSyndicationCats = [];
+                this.syndicationCategories = [];
+                this.syndicationCategoriesCacheMeta = null;
+                this._syndicationAutoRequested = false;
+                this._syndicationAutoSiteId = '';
+            } else if (currentSiteId && (siteChanged || this._syndicationAutoSiteId !== currentSiteId) && typeof this.loadSyndicationCategories === 'function') {
+                this.loadSyndicationCategories(false);
+            }
+
+            if (siteChanged || typeChanged) {
+                this._resetPreparedWordPressState(siteChanged ? 'site_changed' : 'article_type_changed');
+                if (this.existingWpPostId || this.publishResult || ['publish', 'future', 'draft_wp'].includes(String(this.publishAction || ''))) {
+                    this._invalidateWordPressBinding(siteChanged ? 'site_changed' : 'article_type_changed');
+                }
+            }
+        },
+
         selectSite() {
+            const previousSiteId = String(this.selectedSite?.id || this._previousSelectedSiteId || '').trim();
+            const previousArticleType = String(this.currentArticleType || '').trim();
             if (this.selectedSiteId) {
                 this.selectedSite = this.sites.find(s => s.id == this.selectedSiteId) || this.prSourceSites.find(s => s.id == this.selectedSiteId) || null;
                 if (this.selectedSite) {
@@ -304,9 +393,13 @@
                     if (!this.siteConn.authors.length) {
                         this.loadSiteAuthors(this.selectedSiteId, { cacheKey });
                     }
-                    if (this.currentArticleType === 'press-release' && this.selectedSite?.is_press_release_source && typeof this.loadSyndicationCategories === 'function') {
-                        this.loadSyndicationCategories(false);
-                    }
+                    this.syncPublishContextState({
+                        previousSiteId,
+                        nextSiteId: String(this.selectedSiteId || ''),
+                        previousArticleType,
+                        nextArticleType: String(this.currentArticleType || ''),
+                    });
+                    this._previousSelectedSiteId = String(this.selectedSiteId || '');
                     this._logActivity('site', this.siteConn.status === true ? 'success' : 'warning', 'Selected site ' + this.selectedSite.name, {
                         stage: 'selection',
                         substage: 'site',
@@ -316,7 +409,13 @@
                             author: this.publishAuthor || '',
                         }, 300),
                     });
-                    if (!this._restoring) this.autoSaveDraft();
+                    if (!this._restoring) {
+                        this.savePipelineState?.();
+                        if (typeof this.flushPipelineStateNow === 'function') {
+                            this.flushPipelineStateNow();
+                        }
+                        this.autoSaveDraft();
+                    }
                 }
             } else {
                 this.selectedSite = null;
@@ -325,10 +424,24 @@
                 this.siteConn.log = [];
                 this.siteConn.status = null;
                 this.siteConn.message = '';
+                this.syncPublishContextState({
+                    previousSiteId,
+                    nextSiteId: '',
+                    previousArticleType,
+                    nextArticleType: String(this.currentArticleType || ''),
+                });
+                this._previousSelectedSiteId = '';
                 this._logDebug('site', 'Cleared selected site', {
                     stage: 'selection',
                     substage: 'site_clear',
                 });
+                if (!this._restoring) {
+                    this.savePipelineState?.();
+                    if (typeof this.flushPipelineStateNow === 'function') {
+                        this.flushPipelineStateNow();
+                    }
+                    this.autoSaveDraft();
+                }
             }
         },
 
@@ -820,6 +933,8 @@
         },
 
         async handleArticleTypeChange(nextType = null) {
+            const previousArticleType = String(this.currentArticleType || '').trim();
+            const previousSiteId = String(this.selectedSiteId || this.selectedSite?.id || '').trim();
             if (nextType !== null && nextType !== undefined) {
                 if (!this.template_overrides || typeof this.template_overrides !== 'object') {
                     this.template_overrides = {};
@@ -840,6 +955,12 @@
             this.syncTemplateSelectionForArticleType();
             this.autoSelectPrSource();
             this.syncPrArticleForCurrentArticleType({ force: false });
+            this.syncPublishContextState({
+                previousSiteId,
+                nextSiteId: String(this.selectedSiteId || this.selectedSite?.id || ''),
+                previousArticleType,
+                nextArticleType: String(this.currentArticleType || ''),
+            });
             this.invalidatePromptPreview('article_type_changed');
             this.$nextTick(() => this._ensureCreateArticleStepReady?.('article_type_changed'));
             this.savePipelineState();

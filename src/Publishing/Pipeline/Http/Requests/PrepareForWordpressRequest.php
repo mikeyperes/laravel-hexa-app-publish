@@ -27,6 +27,7 @@ class PrepareForWordpressRequest extends PipelineRequest
             'featured_url' => 'nullable|string',
             'existing_uploads' => 'nullable|array',
             'existing_featured_media_id' => 'nullable|integer',
+            'article_type' => 'nullable|string|max:100',
         ];
     }
 }

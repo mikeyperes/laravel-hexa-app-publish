@@ -761,9 +761,20 @@
             if (!this.scheduleDate && draftState.scheduleDate) {
                 this.scheduleDate = draftState.scheduleDate;
             }
+            const draftArticleType = String(
+                draftState.article_type
+                || draftState.currentArticleType
+                || draftState?.template_overrides?.article_type
+                || ''
+            ).trim();
+            const currentArticleType = String(this.currentArticleType || '').trim();
+            const draftSiteIdForWp = draftState.selectedSiteId ? String(draftState.selectedSiteId) : '';
+            const currentSiteIdForWp = this.selectedSiteId ? String(this.selectedSiteId) : '';
             const draftWpPostId = draftState.existingWpPostId ? String(draftState.existingWpPostId) : '';
             const currentWpPostId = this.existingWpPostId ? String(this.existingWpPostId) : '';
-            const shouldSyncWpStateFromDraft = !!draftWpPostId && (
+            const wpBindingCompatible = (!draftArticleType || !currentArticleType || draftArticleType === currentArticleType)
+                && (!draftSiteIdForWp || !currentSiteIdForWp || draftSiteIdForWp === currentSiteIdForWp);
+            const shouldSyncWpStateFromDraft = wpBindingCompatible && !!draftWpPostId && (
                 !currentWpPostId
                 || currentWpPostId === draftWpPostId
                 || String(draftState.existingWpStatus || '').toLowerCase() === 'publish'
@@ -783,6 +794,9 @@
                     this.publishResult.post_status = draftState.existingWpStatus || this.publishResult.post_status || '';
                     this.publishResult.post_url = draftState.existingWpPostUrl || this.publishResult.post_url || '';
                 }
+            }
+            if (!this.canUsePublicationSyndication?.()) {
+                this.selectedSyndicationCats = [];
             }
             if ((!Array.isArray(this.suggestedCategories) || this.suggestedCategories.length === 0) && Array.isArray(draftState.categories) && draftState.categories.length > 0) {
                 this.suggestedCategories = this.normalizeUniqueTextList(draftState.categories, 10);

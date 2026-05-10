@@ -4,7 +4,7 @@
 @section('header', 'Campaigns')
 
 @section('content')
-<div class="space-y-4">
+<div class="space-y-4" x-data="campaignIndex()">
 
     <div class="flex flex-wrap items-center gap-3">
         <form method="GET" action="{{ route('campaigns.index') }}" class="flex flex-wrap items-center gap-2 flex-1">
@@ -25,10 +25,22 @@
             </select>
             <button type="submit" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300">Filter</button>
         </form>
+        <button
+            type="button"
+            @click="deleteSelected()"
+            :disabled="deleting || selectedIds.length === 0"
+            class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+            <span x-text="deleting ? 'Deleting…' : ('Delete Selected' + (selectedIds.length ? ' (' + selectedIds.length + ')' : ''))"></span>
+        </button>
         <a href="{{ route('campaigns.create') }}" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">+ New Campaign</a>
     </div>
 
     <p class="text-sm text-gray-500">{{ $campaigns->count() }} campaign(s)</p>
+    <div x-show="resultMessage" x-cloak class="rounded-lg px-4 py-2 text-sm border"
+         :class="resultSuccess ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'">
+        <span x-text="resultMessage"></span>
+    </div>
 
     @if($campaigns->isEmpty())
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
@@ -39,6 +51,9 @@
             <table class="w-full text-sm text-left">
                 <thead class="bg-gray-50 border-b border-gray-200">
                     <tr>
+                        <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase w-10">
+                            <input type="checkbox" class="rounded border-gray-300 text-blue-600" @change="toggleAll($event)" :checked="allSelected">
+                        </th>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Campaign</th>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Account</th>
                         <th class="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Site</th>
@@ -53,6 +68,14 @@
                 <tbody class="divide-y divide-gray-100">
                     @foreach($campaigns as $c)
                     <tr class="hover:bg-gray-50">
+                        <td class="px-5 py-3">
+                            <input
+                                type="checkbox"
+                                class="rounded border-gray-300 text-blue-600"
+                                :checked="selectedIds.includes({{ (int) $c->id }})"
+                                @change="toggleOne({{ (int) $c->id }}, $event.target.checked)"
+                            >
+                        </td>
                         <td class="px-5 py-3">
                             <a href="{{ route('campaigns.show', $c->id) }}" class="text-blue-600 hover:text-blue-800 font-medium break-words">{{ $c->name }}</a>
                             <p class="text-xs text-gray-400 font-mono">{{ $c->campaign_id }}</p>
@@ -99,3 +122,67 @@
     @endif
 </div>
 @endsection
+
+@push('scripts')
+<script>
+function campaignIndex() {
+    return {
+        selectedIds: [],
+        deleting: false,
+        resultMessage: '',
+        resultSuccess: true,
+        get allSelected() {
+            return this.selectedIds.length > 0 && this.selectedIds.length === {{ (int) $campaigns->count() }};
+        },
+        toggleOne(id, checked) {
+            const nextId = Number(id);
+            if (checked) {
+                if (!this.selectedIds.includes(nextId)) this.selectedIds.push(nextId);
+                return;
+            }
+            this.selectedIds = this.selectedIds.filter(value => Number(value) !== nextId);
+        },
+        toggleAll(event) {
+            if (event.target.checked) {
+                this.selectedIds = @json($campaigns->pluck('id')->map(fn ($id) => (int) $id)->values()->all());
+                return;
+            }
+            this.selectedIds = [];
+        },
+        async deleteSelected() {
+            if (this.selectedIds.length === 0 || this.deleting) return;
+            if (!confirm('Delete ' + this.selectedIds.length + ' selected campaign(s)?')) return;
+
+            this.deleting = true;
+            this.resultMessage = '';
+
+            try {
+                const response = await fetch('{{ route('campaigns.bulk-destroy') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '',
+                    },
+                    body: JSON.stringify({ campaign_ids: this.selectedIds }),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok && data.success) {
+                    this.resultSuccess = true;
+                    this.resultMessage = data.message || 'Campaigns deleted.';
+                    window.location.reload();
+                    return;
+                }
+                this.resultSuccess = false;
+                this.resultMessage = data.message || 'Bulk delete failed.';
+            } catch (error) {
+                this.resultSuccess = false;
+                this.resultMessage = error.message || 'Bulk delete failed.';
+            } finally {
+                this.deleting = false;
+            }
+        },
+    };
+}
+</script>
+@endpush

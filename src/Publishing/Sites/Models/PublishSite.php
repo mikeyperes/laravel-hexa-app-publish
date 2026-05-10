@@ -39,6 +39,7 @@ class PublishSite extends Model
         'status',
         'is_press_release_source',
         'default_author',
+        'author_cast',
         'last_error',
         'last_connected_at',
         'notes',
@@ -47,6 +48,7 @@ class PublishSite extends Model
     protected $casts = [
         'last_connected_at' => 'datetime',
         'is_press_release_source' => 'boolean',
+        'author_cast' => 'array',
     ];
 
     protected $hidden = [

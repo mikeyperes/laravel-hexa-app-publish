@@ -6,6 +6,7 @@ use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\SavePipelineStateRequest;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineDraftSessionService;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineStateService;
+use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_core\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 
@@ -64,8 +65,46 @@ class PipelineStateController extends Controller
             ?? ""
         ));
 
-        if ($resolvedArticleType !== "" && $draft->article_type !== $resolvedArticleType) {
-            $draft->forceFill(["article_type" => $resolvedArticleType])->save();
+        $previousArticleType = (string) ($draft->article_type ?: '');
+        $resolvedSiteId = (int) (
+            data_get($validated, "payload.selectedSiteId")
+            ?? data_get($validated, "payload.selectedSite.id")
+            ?? 0
+        );
+        $previousSiteId = (int) ($draft->publish_site_id ?: 0);
+        $articleTypeChanged = $resolvedArticleType !== '' && $resolvedArticleType !== $previousArticleType;
+        $siteChanged = $resolvedSiteId !== $previousSiteId;
+
+        if ($resolvedArticleType !== "" && $articleTypeChanged) {
+            $draft->article_type = $resolvedArticleType;
+        }
+
+        if ($resolvedSiteId > 0 && $previousSiteId !== $resolvedSiteId) {
+            $site = PublishSite::query()->select(['id', 'publish_account_id'])->find($resolvedSiteId);
+            $draft->publish_site_id = $site?->id ?: null;
+            $draft->publish_account_id = $site?->publish_account_id ?: null;
+        } elseif ($resolvedSiteId === 0 && $previousSiteId !== 0) {
+            $draft->publish_site_id = null;
+            $draft->publish_account_id = null;
+        }
+
+        $payloadAuthor = trim((string) (
+            data_get($validated, "payload.publishAuthor")
+            ?? data_get($validated, "payload.author")
+            ?? ''
+        ));
+        if ($payloadAuthor !== '' && $draft->author !== $payloadAuthor) {
+            $draft->author = $payloadAuthor;
+        }
+
+        if (($siteChanged || $articleTypeChanged) && ($draft->wp_post_id || $draft->wp_status || $draft->wp_post_url)) {
+            $draft->wp_post_id = null;
+            $draft->wp_status = null;
+            $draft->wp_post_url = null;
+        }
+
+        if ($draft->isDirty()) {
+            $draft->save();
         }
 
         $this->draftSession->claim($draft, $tabId, auth()->id(), [

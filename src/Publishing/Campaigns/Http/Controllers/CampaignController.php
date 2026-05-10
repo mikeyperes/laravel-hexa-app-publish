@@ -359,14 +359,14 @@ class CampaignController extends Controller
             'max_links_per_article' => $campaign->max_links_per_article ?? null,
             'delivery_mode' => $this->modeResolver->normalizeDeliveryMode($campaign->delivery_mode ?? 'draft-wordpress'),
             'article_type' => $campaign->article_type ?? '',
-            'author' => $effectiveAuthor,
+            'author' => $campaign->author ?? '',
             'articles_per_interval' => $campaign->articles_per_interval ?? 1,
             'interval_unit' => $campaign->interval_unit ?? 'daily',
             'run_at_time' => $campaign->run_at_time ?? '09:00',
             'drip_interval_minutes' => $campaign->drip_interval_minutes ?? 60,
         ];
 
-        $initialSiteAuthors = $this->loadInitialSiteAuthors($campaign->site, $effectiveAuthor);
+        $initialSiteAuthors = $this->loadInitialSiteAuthors($campaign->site, $campaign->author ?: null);
         $integrityReport = $this->integrityReportService->build($campaign);
 
         return view('app-publish::publishing.campaigns.show', [
@@ -416,6 +416,7 @@ class CampaignController extends Controller
             ],
             'initialSiteAuthors' => $initialSiteAuthors,
             'initialSiteDefaultAuthor' => $campaign->site?->default_author,
+            'initialSiteAuthorCast' => array_values(array_filter((array) ($campaign->site?->author_cast ?? []), fn ($value) => filled($value))),
             'integrityReport' => $integrityReport,
         ]);
     }
@@ -607,6 +608,7 @@ class CampaignController extends Controller
         return $this->appendMissingAuthorOptions($authors, array_filter([
             $selectedAuthor,
             $site?->default_author,
+            ...array_values(array_filter((array) ($site?->author_cast ?? []), fn ($value) => filled($value))),
         ]));
     }
 
@@ -714,6 +716,7 @@ class CampaignController extends Controller
                 'data' => [],
                 'meta' => [
                     'default_author' => $site?->default_author,
+                    'author_cast' => array_values(array_filter((array) ($site?->author_cast ?? []), fn ($value) => filled($value))),
                     'last_connected_at' => $site?->last_connected_at?->toIso8601String(),
                 ],
             ]);
@@ -727,6 +730,7 @@ class CampaignController extends Controller
                 'message' => 'No WP Toolkit server is linked to the selected site.',
                 'meta' => [
                     'default_author' => $site->default_author,
+                    'author_cast' => array_values(array_filter((array) ($site->author_cast ?? []), fn ($value) => filled($value))),
                     'last_connected_at' => $site->last_connected_at?->toIso8601String(),
                 ],
             ]);
@@ -786,6 +790,7 @@ class CampaignController extends Controller
             'message' => $result['message'] ?? null,
             'meta' => [
                 'default_author' => $site->default_author,
+                'author_cast' => array_values(array_filter((array) ($site->author_cast ?? []), fn ($value) => filled($value))),
                 'last_connected_at' => $site->last_connected_at?->toIso8601String(),
                 'cache_hit' => $result['cache_hit'] ?? null,
                 'cached_at' => $result['cached_at'] ?? null,
@@ -955,6 +960,45 @@ class CampaignController extends Controller
         hexaLog('campaigns', 'campaign_deleted', "Campaign deleted: {$name}");
 
         return response()->json(['success' => true, 'message' => "Campaign '{$name}' deleted."]);
+    }
+
+    /**
+     * Delete multiple campaigns in one request.
+     */
+    public function bulkDestroy(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'campaign_ids' => 'required|array|min:1',
+            'campaign_ids.*' => 'integer|exists:publish_campaigns,id',
+        ]);
+
+        $campaigns = PublishCampaign::query()
+            ->whereIn('id', array_values(array_unique(array_map('intval', $validated['campaign_ids']))))
+            ->get(['id', 'name']);
+
+        if ($campaigns->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No campaigns were found for deletion.',
+            ], 422);
+        }
+
+        $count = $campaigns->count();
+        $names = $campaigns->pluck('name')->filter()->values()->all();
+
+        PublishCampaign::query()->whereIn('id', $campaigns->pluck('id'))->delete();
+
+        hexaLog('campaigns', 'campaigns_bulk_deleted', 'Campaigns deleted in bulk', [
+            'campaign_ids' => $campaigns->pluck('id')->all(),
+            'campaign_names' => $names,
+            'deleted_count' => $count,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => $count . ' campaign' . ($count === 1 ? '' : 's') . ' deleted.',
+            'deleted_count' => $count,
+        ]);
     }
 
     /**

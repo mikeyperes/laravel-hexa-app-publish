@@ -23,6 +23,7 @@
                 authors: [],
                 log: [],
                 defaultAuthor: null,
+                authorCast: [],
                 lastVerifiedAt: null,
                 authorsCacheHit: null,
                 authorsCachedAt: null,
@@ -45,6 +46,7 @@
                 this.siteConn.log = [];
                 this.siteConn.authors = [];
                 this.siteConn.defaultAuthor = null;
+                this.siteConn.authorCast = [];
                 this.siteConn.lastVerifiedAt = null;
                 this.siteConn.authorsCacheHit = null;
                 this.siteConn.authorsCachedAt = null;
@@ -72,6 +74,9 @@
 
                     if (d.default_author) {
                         this.siteConn.defaultAuthor = d.default_author;
+                    }
+                    if (Array.isArray(d.author_cast)) {
+                        this.siteConn.authorCast = d.author_cast;
                     }
                     if (Object.prototype.hasOwnProperty.call(d, 'last_connected_at')) {
                         this.siteConn.lastVerifiedAt = d.last_connected_at || null;
@@ -110,6 +115,7 @@
                             message: this.siteConn.message,
                             authors: this.siteConn.authors,
                             default_author: this.siteConn.defaultAuthor,
+                            author_cast: this.siteConn.authorCast,
                             verified_at: this.siteConn.lastVerifiedAt,
                             cache_hit: this.siteConn.authorsCacheHit,
                             cached_at: this.siteConn.authorsCachedAt,
@@ -149,6 +155,7 @@
                     this.siteConn.message = conn.message || 'Connected';
                     this.siteConn.authors = Array.isArray(conn.authors) ? conn.authors : [];
                     this.siteConn.defaultAuthor = conn.default_author || null;
+                    this.siteConn.authorCast = Array.isArray(conn.author_cast) ? conn.author_cast : [];
                     this.siteConn.lastVerifiedAt = conn.verified_at || null;
                     this.siteConn.authorsCacheHit = Object.prototype.hasOwnProperty.call(conn, 'cache_hit') ? conn.cache_hit : null;
                     this.siteConn.authorsCachedAt = conn.cached_at || null;
@@ -187,6 +194,9 @@
                     if (data.default_author) {
                         this.siteConn.defaultAuthor = data.default_author;
                     }
+                    if (Array.isArray(data.author_cast)) {
+                        this.siteConn.authorCast = data.author_cast;
+                    }
                     if (Object.prototype.hasOwnProperty.call(data, 'last_connected_at')) {
                         this.siteConn.lastVerifiedAt = data.last_connected_at || this.siteConn.lastVerifiedAt;
                     }
@@ -222,6 +232,7 @@
                                     message: this.siteConn.message,
                                     authors: this.siteConn.authors,
                                     default_author: this.siteConn.defaultAuthor,
+                                    author_cast: this.siteConn.authorCast,
                                     verified_at: this.siteConn.lastVerifiedAt,
                                     cache_hit: this.siteConn.authorsCacheHit,
                                     cached_at: this.siteConn.authorsCachedAt,

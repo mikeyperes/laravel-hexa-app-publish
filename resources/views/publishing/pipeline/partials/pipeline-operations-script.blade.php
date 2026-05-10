@@ -50,6 +50,51 @@
             return this.preparing || ['queued', 'running'].includes(this.prepareOperationStatus);
         },
 
+        _normalizePipelineArticleType(value = null) {
+            return String(value || this.currentArticleType || this.article_type || 'editorial').trim().toLowerCase();
+        },
+
+        _pipelineOperationContextMatches(operation = {}) {
+            if (!operation || typeof operation !== 'object') return true;
+
+            const currentSiteId = String(
+                this.selectedSiteId
+                || this.selectedSite?.id
+                || this.draftState?.selectedSiteId
+                || ''
+            ).trim();
+            const currentArticleType = this._normalizePipelineArticleType();
+            const summary = operation.request_summary && typeof operation.request_summary === 'object'
+                ? operation.request_summary
+                : {};
+            const resultPayload = operation.result_payload && typeof operation.result_payload === 'object'
+                ? operation.result_payload
+                : {};
+
+            const operationSiteId = String(
+                summary.site_id
+                ?? summary.publish_site_id
+                ?? operation.publish_site_id
+                ?? resultPayload.site_id
+                ?? resultPayload.publish_site_id
+                ?? ''
+            ).trim();
+            if (currentSiteId && operationSiteId && currentSiteId !== operationSiteId) {
+                return false;
+            }
+
+            const operationArticleType = String(
+                summary.article_type
+                ?? resultPayload.article_type
+                ?? ''
+            ).trim().toLowerCase();
+            if (currentArticleType && operationArticleType && currentArticleType !== operationArticleType) {
+                return false;
+            }
+
+            return true;
+        },
+
         _isStalePipelineOperationSnapshot(type, operation = {}) {
             const incomingId = Number(operation?.id || 0);
             if (!incomingId) return false;
@@ -58,7 +103,11 @@
                 ? (this.prepareOperationId || 0)
                 : (this.publishOperationId || 0));
 
-            return currentId > 0 && incomingId < currentId;
+            if (currentId > 0 && incomingId < currentId) {
+                return true;
+            }
+
+            return !this._pipelineOperationContextMatches(operation);
         },
 
         _normalizePipelineOperationEvents(events) {
@@ -258,7 +307,8 @@
 
         _buildPrepareChecklist() {
             const activePhotos = this.photoSuggestions.filter(p => !p.removed && p.autoPhoto);
-            const selectedPublicationIds = Array.isArray(this.selectedSyndicationCats)
+            const allowSyndication = this.canUsePublicationSyndication?.();
+            const selectedPublicationIds = allowSyndication && Array.isArray(this.selectedSyndicationCats)
                 ? this.selectedSyndicationCats.map((id) => Number(id))
                 : [];
             const publicationNames = Array.isArray(this.syndicationCategories)
@@ -343,7 +393,7 @@
             if (this.publishAuthor) this._logPrepare('info', 'Author: ' + this.publishAuthor);
             this._logPrepare('info', 'Images: ' + activePhotos.length + ' inner + ' + (this.featuredPhoto ? '1 featured' : 'no featured'));
             this._logPrepare('info', 'Categories: ' + this.selectedCategoryNames().join(', '));
-            const publicationNames = Array.isArray(this.syndicationCategories)
+            const publicationNames = this.canUsePublicationSyndication?.() && Array.isArray(this.syndicationCategories)
                 ? this.syndicationCategories
                     .filter((cat) => (this.selectedSyndicationCats || []).map((id) => Number(id)).includes(Number(cat.id)))
                     .map((cat) => cat.label || cat.name || ('Publication #' + cat.id))
@@ -1216,14 +1266,18 @@
 
         _buildPrepareRequestPayload() {
             const html = this._resolveCanonicalArticleHtml({ preferPrepared: false, hydrateState: true });
+            const publicationTermIds = this.canUsePublicationSyndication?.()
+                ? (Array.isArray(this.selectedSyndicationCats) ? this.selectedSyndicationCats.map((id) => Number(id)) : [])
+                : [];
             return {
                 html,
                 title: this.articleTitle || 'article',
                 site_id: this.selectedSite?.id || null,
                 categories: this.selectedCategoryNames(),
-                publication_term_ids: Array.isArray(this.selectedSyndicationCats) ? this.selectedSyndicationCats.map((id) => Number(id)) : [],
+                publication_term_ids: publicationTermIds,
                 tags: this.selectedTagNames(),
                 draft_id: this.draftId,
+                article_type: this.template_overrides?.article_type || this.currentArticleType || null,
                 photo_meta: this.photoSuggestions.filter(p => !p.removed && p.autoPhoto).map((p, i) => ({
                     alt_text: p.alt_text || '',
                     caption: p.caption || '',
@@ -1242,13 +1296,16 @@
 
         _buildPublishRequestPayload(wpStatus) {
             const html = this._resolveCanonicalArticleHtml({ preferPrepared: true, hydrateState: true });
+            const publicationTermIds = this.canUsePublicationSyndication?.()
+                ? (Array.isArray(this.selectedSyndicationCats) ? this.selectedSyndicationCats.map((id) => Number(id)) : [])
+                : [];
             return {
                 html,
                 title: this.articleTitle || 'Untitled',
                 site_id: this.selectedSite?.id || null,
                 category_ids: this.preparedCategoryIds,
                 tag_ids: this.preparedTagIds,
-                publication_term_ids: Array.isArray(this.selectedSyndicationCats) ? this.selectedSyndicationCats.map((id) => Number(id)) : [],
+                publication_term_ids: publicationTermIds,
                 featured_media_id: this.preparedFeaturedMediaId || null,
                 status: wpStatus,
                 date: this.publishAction === 'future' ? this.scheduleDate : null,
