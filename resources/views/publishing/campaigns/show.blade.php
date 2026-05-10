@@ -712,11 +712,13 @@
                 </div>
                 <div class="hx-field">
                     <label class="hx-label">Article type <span class="text-gray-400 normal-case font-normal">— campaigns support editorial, news report, and local news</span></label>
+                    @php($campaignArticleTypeOptions = collect($articleTypes ?? [])->filter()->values())
                     <select x-model="form.article_type" class="hx-select">
-                        <option value="editorial">Editorial</option>
-                        @foreach($articleTypes as $at)
+                        @forelse($campaignArticleTypeOptions as $at)
                             <option value="{{ $at }}">{{ ucwords(str_replace('-', ' ', $at)) }}</option>
-                        @endforeach
+                        @empty
+                            <option value="editorial">Editorial</option>
+                        @endforelse
                     </select>
                 </div>
             </div>

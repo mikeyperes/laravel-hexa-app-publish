@@ -181,16 +181,20 @@ class PipelineController extends Controller
                     'wp_username' => $fallbackPrSite->wp_username,
                     'connection_type' => $fallbackPrSite->connection_type,
                 ];
-                $pipelinePayload['existingWpPostId'] = null;
-                $pipelinePayload['existingWpStatus'] = '';
-                $pipelinePayload['existingWpPostUrl'] = '';
-                $pipelinePayload['existingWpAdminUrl'] = '';
+                $pipelinePayload = $this->pipelineState->clearPublishContextState($pipelinePayload, true, 'draft_wp');
             }
         }
         $canReuseExistingWpBinding = $draft->wp_post_id
             && (string) ($draft->publish_site_id ?: '') !== ''
             && (string) $draft->publish_site_id === $bootSiteId
             && !($bootArticleType === 'press-release' && !($bootSite?->is_press_release_source));
+        if (!$canReuseExistingWpBinding) {
+            $pipelinePayload = $this->pipelineState->clearPublishContextState(
+                $pipelinePayload,
+                true,
+                $bootSiteId !== '' ? 'draft_wp' : 'draft_local'
+            );
+        }
         $latestCompletedPrepareHtml = PublishPipelineOperation::query()
             ->where('publish_article_id', $draft->id)
             ->where('operation_type', PublishPipelineOperation::TYPE_PREPARE)

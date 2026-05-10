@@ -13,6 +13,21 @@ class PipelineStateService
         '_saved_at',
     ];
 
+    private const WP_BINDING_KEYS = [
+        'existingWpPostId' => null,
+        'existingWpStatus' => '',
+        'existingWpPostUrl' => '',
+        'existingWpAdminUrl' => '',
+    ];
+
+    private const PREPARE_CONTEXT_KEYS = [
+        'preparedFeaturedMediaId' => null,
+        'preparedFeaturedWpUrl' => null,
+        'uploadedImages' => [],
+        'publishTraceId' => '',
+        'publishResult' => null,
+    ];
+
     public function __construct(
         private PressReleaseWorkflowService $pressReleaseWorkflow,
         private PrArticleWorkflowService $prArticleWorkflow,
@@ -112,6 +127,7 @@ class PipelineStateService
             ?? data_get($payload, 'selectedSite.id')
             ?? 0
         );
+        $initialSiteId = $siteId;
         $siteAllowsSyndication = (bool) (
             data_get($payload, 'selectedSite.is_press_release_source')
             ?? ($siteId > 0 ? PublishSite::query()->whereKey($siteId)->value('is_press_release_source') : false)
@@ -141,6 +157,28 @@ class PipelineStateService
         }
         if ($articleType !== 'press-release' || !$siteAllowsSyndication) {
             $payload['selectedSyndicationCats'] = [];
+        }
+        if ($siteId > 0 && $initialSiteId > 0 && $siteId !== $initialSiteId) {
+            $payload = $this->clearPublishContextState($payload, true, 'draft_wp');
+        }
+
+        return $payload;
+    }
+
+    public function clearPublishContextState(array $payload, bool $clearBinding = true, ?string $publishAction = null): array
+    {
+        foreach (self::PREPARE_CONTEXT_KEYS as $key => $value) {
+            $payload[$key] = $value;
+        }
+
+        if ($clearBinding) {
+            foreach (self::WP_BINDING_KEYS as $key => $value) {
+                $payload[$key] = $value;
+            }
+        }
+
+        if ($publishAction !== null) {
+            $payload['publishAction'] = $publishAction;
         }
 
         return $payload;

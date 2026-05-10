@@ -102,10 +102,11 @@ class PipelineStateController extends Controller
         }
 
         if ($siteChanged || $articleTypeChanged) {
-            $validated['payload']['existingWpPostId'] = null;
-            $validated['payload']['existingWpStatus'] = '';
-            $validated['payload']['existingWpPostUrl'] = '';
-            $validated['payload']['existingWpAdminUrl'] = '';
+            $validated['payload'] = $this->stateService->clearPublishContextState(
+                $validated['payload'],
+                true,
+                $resolvedSiteId > 0 ? 'draft_wp' : 'draft_local'
+            );
         }
 
         $state = $this->stateService->save(

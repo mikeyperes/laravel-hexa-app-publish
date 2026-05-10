@@ -293,6 +293,9 @@
             this.preparedTagIds = [];
             this.preparedFeaturedMediaId = null;
             this.preparedFeaturedWpUrl = null;
+            this.uploadedImages = {};
+            this.orphanedMedia = [];
+            this._previousUploadedImages = null;
             this.prepareTraceId = '';
             this.prepareLastStage = '';
             this.prepareLastMessage = '';
