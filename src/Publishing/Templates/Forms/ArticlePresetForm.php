@@ -217,7 +217,7 @@ class ArticlePresetForm
                     ->rules(['nullable', 'array'])
                     ->options(fn () => self::photoSourceOptions())
                     ->columns('md:col-span-2')
-                    ->help('Choose which image sources are allowed for inline and featured photos. Pexels/Unsplash/Pixabay are the safe stock defaults. SerpAPI and Serper add Google-image discovery for harder subjects, but they are paid and should be enabled only when campaign imagery really needs them.')
+                    ->help('Choose which image sources are allowed for inline and featured photos. Pexels/Unsplash/Pixabay stay checked by default as the safe stock set. SerpAPI, Serper, and Google CSE are available for harder subjects, but they should stay off unless you explicitly want paid Google-image discovery.')
                     ->meta(['section' => 'media'])
                     ->contexts(['create', 'edit', 'pipeline']),
 
@@ -385,7 +385,12 @@ class ArticlePresetForm
 
     protected static function photoSourceOptions(): array
     {
-        return collect((array) config('hws-publish.photo_sources', []))
+        return collect(array_merge(
+                (array) config('hws-publish.photo_sources', []),
+                ['unsplash', 'pexels', 'pixabay', 'serpapi', 'serper', 'google-cse']
+            ))
+            ->filter(fn ($value) => filled($value))
+            ->unique()
             ->mapWithKeys(function (string $value): array {
                 return [$value => match ($value) {
                     'serpapi' => 'SerpAPI Google Images',
@@ -413,7 +418,18 @@ class ArticlePresetForm
             return [];
         }
 
-        return array_values((array) config('hws-publish.photo_sources', []));
+        $preferredDefaults = ['unsplash', 'pexels', 'pixabay'];
+        $configured = collect((array) config('hws-publish.photo_sources', []))
+            ->map(fn ($value) => (string) $value)
+            ->filter(fn ($value) => filled($value))
+            ->values();
+
+        $defaults = $configured
+            ->filter(fn ($value) => in_array($value, $preferredDefaults, true))
+            ->values()
+            ->all();
+
+        return $defaults !== [] ? $defaults : $preferredDefaults;
     }
 
     protected static function allProviderModelOptions(): array

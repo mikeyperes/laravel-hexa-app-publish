@@ -149,11 +149,10 @@
         </div>
 
         <div class="max-w-md">
-            <label class="block text-xs text-gray-500 mb-1">Default Run Mode</label>
+            <label class="block text-xs text-gray-500 mb-1">Publish Destination</label>
             <select x-model="form.delivery_mode" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <option value="draft-local">Local only</option>
+                <option value="draft-local">Publish only (no WordPress)</option>
                 <option value="draft-wordpress">WordPress delivery</option>
-                <option value="auto-publish">WordPress auto-publish</option>
             </select>
             <p class="mt-2 text-xs text-gray-400" x-text="deliveryModeHint(form.delivery_mode)"></p>
         </div>
@@ -255,6 +254,10 @@ function campaignCreate() {
         _autosaveReady: false,
 
         init() {
+            if (this.form.delivery_mode === 'auto-publish') {
+                this.form.delivery_mode = 'draft-wordpress';
+                this.form.post_status = this.form.post_status || 'publish';
+            }
             this.$watch('termsText', value => {
                 this.form.keywords = this.parseTerms(value);
             });
@@ -296,10 +299,7 @@ function campaignCreate() {
 
         deliveryModeHint(value) {
             if (value === 'draft-wordpress') {
-                return 'Creates or updates a WordPress post. Post status on the campaign controls whether it stays draft, goes pending review, or publishes.';
-            }
-            if (value === 'auto-publish') {
-                return 'Publishes to WordPress automatically when a run succeeds.';
+                return 'Creates or updates a WordPress post. The post status right beside it controls whether that post stays draft, goes pending review, or publishes live.';
             }
             return 'Keeps the article inside Publish only. No WordPress draft or live post is created.';
         },

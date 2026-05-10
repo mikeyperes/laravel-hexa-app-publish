@@ -239,7 +239,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             const tinyKey = @json(config('services.tinymce.api_key') ?: 'no-api-key');
             const sources = ['https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js'];
             if (tinyKey && tinyKey !== 'no-api-key') {
-                sources.unshift('https://cdn.tiny.cloud/1/' + tinyKey + '/tinymce/7/tinymce.min.js');
+                sources.push('https://cdn.tiny.cloud/1/' + tinyKey + '/tinymce/7/tinymce.min.js');
             }
 
             this._approvalEmailTinyMcePromise = new Promise((resolve) => {

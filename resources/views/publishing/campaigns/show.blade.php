@@ -824,22 +824,21 @@
                     </p>
                 </div>
                 <div class="hx-field">
-                    <label class="hx-label">Delivery mode</label>
+                    <label class="hx-label">Publish destination</label>
                     <select x-model="form.delivery_mode" class="hx-select">
-                        <option value="draft-local">Local only</option>
+                        <option value="draft-local">Publish only (no WordPress)</option>
                         <option value="draft-wordpress">WordPress delivery</option>
-                        <option value="auto-publish">WordPress auto-publish</option>
                     </select>
                     <p class="hx-field-hint mt-1" x-text="deliveryModeHint(form.delivery_mode)"></p>
                 </div>
-                <div class="hx-field">
+                <div class="hx-field" x-show="form.delivery_mode !== 'draft-local'" x-cloak>
                     <label class="hx-label">Post status</label>
                     <select x-model="form.post_status" class="hx-select">
                         <option value="draft">Draft</option>
                         <option value="pending">Pending</option>
                         <option value="publish">Publish</option>
                     </select>
-                    <p class="hx-field-hint mt-1">Use this only for WordPress delivery. Local-only runs ignore the WordPress post status.</p>
+                    <p class="hx-field-hint mt-1">This is the real WordPress status control. Use it to keep the post as a draft, send it for review, or publish it live.</p>
                 </div>
             </div>
         </div>
@@ -1077,6 +1076,10 @@ function campaignDashboard() {
         },
 
         init() {
+            if (this.form.delivery_mode === 'auto-publish') {
+                this.form.delivery_mode = 'draft-wordpress';
+                this.form.post_status = this.form.post_status || 'publish';
+            }
             this._loadCampaignPreset();
             this._loadArticlePreset();
             this.$watch('termsText', v => { this.form.keywords = (v || '').split('\n').map(s => s.trim()).filter(Boolean); });
@@ -1139,17 +1142,13 @@ function campaignDashboard() {
 
         deliveryModeLabel(value) {
             if (value === 'draft-wordpress') return 'WordPress delivery';
-            if (value === 'auto-publish') return 'WordPress auto-publish';
             if (value === 'draft-local') return 'Local only';
             return this.formatLabel(value || 'draft-wordpress');
         },
 
         deliveryModeHint(value) {
             if (value === 'draft-wordpress') {
-                return 'Creates or updates a WordPress post. The post status controls whether it stays draft, goes pending review, or is ready to publish.';
-            }
-            if (value === 'auto-publish') {
-                return 'Sends the article straight to WordPress on successful runs. Use a publish-ready post status when you want it to go live automatically.';
+                return 'Creates or updates a WordPress post. The post status right beside it controls whether that post stays draft, goes pending review, or publishes live.';
             }
             return 'Keeps the article inside Publish only. Nothing is created or updated on WordPress.';
         },
