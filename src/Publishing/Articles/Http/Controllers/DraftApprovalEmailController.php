@@ -181,7 +181,7 @@ class DraftApprovalEmailController extends Controller
         }
 
         $config["additional_ccs"] = trim((string) ($article->creator?->additional_contact_emails ?? ""));
-        $config["smtp_settings_url"] = route("publish.settings.master");
+        $config["smtp_settings_url"] = route("settings.smtp-accounts.index");
 
         return $config;
     }

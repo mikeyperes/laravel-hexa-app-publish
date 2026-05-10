@@ -24,7 +24,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         approvalEmailIntroHtml: '',
         approvalEmailImageMode: 'embed',
         approvalEmailAdditionalCcs: '',
-        approvalEmailSmtpSettingsUrl: @json(route('publish.settings.master')),
+        approvalEmailSmtpSettingsUrl: @json(route('settings.smtp-accounts.index')),
         approvalEmailPreviewHtml: '',
         approvalEmailWarnings: [],
         approvalEmailHeaders: {},
