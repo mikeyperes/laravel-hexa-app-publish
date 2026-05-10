@@ -622,6 +622,20 @@ function userProfile() {
 
         csrfToken: document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
 
+        async readJsonResponse(response, fallbackLabel = 'Request') {
+            const text = await response.text();
+            if (!text) {
+                return {};
+            }
+
+            try {
+                return JSON.parse(text);
+            } catch (error) {
+                const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 180);
+                throw new Error(fallbackLabel + ' returned non-JSON output: ' + snippet);
+            }
+        },
+
         _logTime() {
             return new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
         },
@@ -792,41 +806,45 @@ function userProfile() {
             this.wpInstalls = [];
 
             this.logSite('info', 'Starting WordPress scan for ' + accounts.length + ' account(s)...');
+            this.scanStatusText = 'Scanning attached accounts...';
 
-            let totalFound = 0;
-            let allInstalls = [];
+            try {
+                const res = await fetch('{{ route("publish.accounts.scan-wp", $user->id) }}', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': this.csrfToken,
+                    },
+                    body: JSON.stringify({}),
+                });
 
-            for (let i = 0; i < accounts.length; i++) {
-                const acct = accounts[i];
-                this.scanStatusText = 'Scanning account ' + (i + 1) + ' of ' + accounts.length + '...';
-                this.logSite('info', 'Scanning ' + acct.username + ' (' + acct.domain + ')...');
+                const data = await this.readJsonResponse(res, 'WordPress scan');
+                const accountResults = Array.isArray(data.account_results) ? data.account_results : [];
 
-                try {
-                    const res = await fetch('{{ route("publish.accounts.scan-wp-single", $user->id) }}', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                        body: JSON.stringify({ hosting_account_id: acct.id }),
-                    });
-                    const data = await res.json();
+                accountResults.forEach((result, idx) => {
+                    this.logSite('info', 'Scanning ' + (result.username || ('account ' + (idx + 1))) + ' (' + (result.domain || 'unknown domain') + ')...');
+                    this.logSite(result.success ? 'success' : 'error', result.message || 'Unknown scan result');
+                });
 
-                    if (data.success) {
-                        const count = (data.installs || []).length;
-                        totalFound += count;
-                        allInstalls = allInstalls.concat(data.installs || []);
-                        this.logSite('success', acct.username + ': ' + count + ' install(s) found');
-                    } else {
-                        this.logSite('error', acct.username + ': ' + (data.message || 'Unknown error'));
-                    }
-                } catch (e) {
-                    this.logSite('error', acct.username + ': ' + e.message);
+                if (!res.ok || data.success === false) {
+                    throw new Error(data.message || ('Scan failed with HTTP ' + res.status));
                 }
-            }
 
-            this.wpInstalls = allInstalls;
-            this.scanSuccess = true;
-            this.scanBanner = 'Scan complete. ' + totalFound + ' WordPress install(s) found across ' + accounts.length + ' account(s).';
-            this.logSite('info', 'Scan complete. Total installs found: ' + totalFound);
-            this.scanning = false;
+                const installs = Array.isArray(data.installs) ? data.installs : [];
+                const totalFound = installs.length;
+                this.wpInstalls = installs;
+                this.scanSuccess = true;
+                this.scanBanner = data.message || ('Scan complete. ' + totalFound + ' WordPress install(s) found across ' + accounts.length + ' account(s).');
+                this.logSite('info', 'Scan complete. Total installs found: ' + totalFound);
+            } catch (e) {
+                this.scanSuccess = false;
+                this.scanBanner = e.message || 'WordPress scan failed.';
+                this.logSite('error', this.scanBanner);
+            } finally {
+                this.scanning = false;
+            }
         },
     };
 }

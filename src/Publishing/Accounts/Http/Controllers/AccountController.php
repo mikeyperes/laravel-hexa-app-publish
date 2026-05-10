@@ -298,12 +298,23 @@ class AccountController extends Controller
 
         $allInstalls = [];
         $errors = [];
+        $accountResults = [];
 
         $wpToolkit = app(\hexa_package_wptoolkit\Services\WpToolkitService::class);
 
         foreach ($accounts as $account) {
             if (!$account->whmServer) {
-                $errors[] = $account->username . ': No WHM server linked.';
+                $message = $account->username . ': No WHM server linked.';
+                $errors[] = $message;
+                $accountResults[] = [
+                    'account_id' => $account->id,
+                    'username' => $account->username,
+                    'domain' => $account->domain,
+                    'success' => false,
+                    'install_count' => 0,
+                    'message' => $message,
+                    'installs' => [],
+                ];
                 continue;
             }
 
@@ -311,18 +322,60 @@ class AccountController extends Controller
                 $result = $wpToolkit->getInstallsForAccount($account->whmServer, $account->username);
 
                 if ($result['success'] && !empty($result['installs'])) {
+                    $installs = [];
                     foreach ($result['installs'] as $install) {
                         $install['cpanel_user'] = $account->username;
                         $install['cpanel_domain'] = $account->domain;
                         $install['server_name'] = $account->whmServer->name ?? $account->whmServer->hostname;
                         $install['hosting_account_id'] = $account->id;
                         $allInstalls[] = $install;
+                        $installs[] = $install;
                     }
+
+                    $accountResults[] = [
+                        'account_id' => $account->id,
+                        'username' => $account->username,
+                        'domain' => $account->domain,
+                        'success' => true,
+                        'install_count' => count($installs),
+                        'message' => $account->username . ': ' . count($installs) . ' install(s) found.',
+                        'installs' => $installs,
+                    ];
+                } elseif ($result['success']) {
+                    $accountResults[] = [
+                        'account_id' => $account->id,
+                        'username' => $account->username,
+                        'domain' => $account->domain,
+                        'success' => true,
+                        'install_count' => 0,
+                        'message' => $account->username . ': No installs found.',
+                        'installs' => [],
+                    ];
                 } elseif (!$result['success']) {
-                    $errors[] = $account->username . ': ' . ($result['error'] ?? 'Failed');
+                    $message = $account->username . ': ' . ($result['error'] ?? 'Failed');
+                    $errors[] = $message;
+                    $accountResults[] = [
+                        'account_id' => $account->id,
+                        'username' => $account->username,
+                        'domain' => $account->domain,
+                        'success' => false,
+                        'install_count' => 0,
+                        'message' => $message,
+                        'installs' => [],
+                    ];
                 }
             } catch (\Exception $e) {
-                $errors[] = $account->username . ': ' . $e->getMessage();
+                $message = $account->username . ': ' . $e->getMessage();
+                $errors[] = $message;
+                $accountResults[] = [
+                    'account_id' => $account->id,
+                    'username' => $account->username,
+                    'domain' => $account->domain,
+                    'success' => false,
+                    'install_count' => 0,
+                    'message' => $message,
+                    'installs' => [],
+                ];
             }
         }
 
@@ -331,6 +384,7 @@ class AccountController extends Controller
             'message' => count($allInstalls) . ' WordPress install(s) found across ' . count($accounts) . ' account(s).',
             'installs' => $allInstalls,
             'errors' => $errors,
+            'account_results' => $accountResults,
         ]);
     }
 }
