@@ -116,6 +116,29 @@ class PipelineStateService
             data_get($payload, 'selectedSite.is_press_release_source')
             ?? ($siteId > 0 ? PublishSite::query()->whereKey($siteId)->value('is_press_release_source') : false)
         );
+        if ($articleType === 'press-release' && !$siteAllowsSyndication) {
+            $fallbackSite = PublishSite::query()
+                ->select(['id', 'name', 'url', 'status', 'default_author', 'is_press_release_source', 'wp_username', 'connection_type'])
+                ->where('status', 'connected')
+                ->where('is_press_release_source', true)
+                ->orderBy('id')
+                ->first();
+            if ($fallbackSite) {
+                $siteId = (int) $fallbackSite->id;
+                $siteAllowsSyndication = true;
+                $payload['selectedSiteId'] = (string) $fallbackSite->id;
+                $payload['selectedSite'] = [
+                    'id' => $fallbackSite->id,
+                    'name' => $fallbackSite->name,
+                    'url' => $fallbackSite->url,
+                    'status' => $fallbackSite->status,
+                    'default_author' => $fallbackSite->default_author,
+                    'is_press_release_source' => (bool) $fallbackSite->is_press_release_source,
+                    'wp_username' => $fallbackSite->wp_username,
+                    'connection_type' => $fallbackSite->connection_type,
+                ];
+            }
+        }
         if ($articleType !== 'press-release' || !$siteAllowsSyndication) {
             $payload['selectedSyndicationCats'] = [];
         }

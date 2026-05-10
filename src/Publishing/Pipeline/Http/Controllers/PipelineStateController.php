@@ -55,7 +55,7 @@ class PipelineStateController extends Controller
             ?? data_get($validated, "payload.currentArticleType")
             ?? data_get($validated, "payload.selectedTemplate.article_type")
             ?? data_get($validated, "payload.pressRelease.article_type")
-            ?? $state->workflow_type
+            ?? $draft->article_type
             ?? ""
         ));
 
@@ -71,6 +71,31 @@ class PipelineStateController extends Controller
         $site = $resolvedSiteId > 0
             ? PublishSite::query()->select(['id', 'publish_account_id', 'is_press_release_source'])->find($resolvedSiteId)
             : null;
+
+        if ($resolvedArticleType === 'press-release' && !($site?->is_press_release_source)) {
+            $fallbackSite = PublishSite::query()
+                ->select(['id', 'publish_account_id', 'is_press_release_source', 'name', 'url', 'status', 'default_author', 'wp_username', 'connection_type'])
+                ->where('status', 'connected')
+                ->where('is_press_release_source', true)
+                ->orderBy('id')
+                ->first();
+
+            if ($fallbackSite) {
+                $resolvedSiteId = (int) $fallbackSite->id;
+                $site = $fallbackSite;
+                $validated['payload']['selectedSiteId'] = (string) $fallbackSite->id;
+                $validated['payload']['selectedSite'] = [
+                    'id' => $fallbackSite->id,
+                    'name' => $fallbackSite->name,
+                    'url' => $fallbackSite->url,
+                    'status' => $fallbackSite->status,
+                    'default_author' => $fallbackSite->default_author,
+                    'is_press_release_source' => (bool) $fallbackSite->is_press_release_source,
+                    'wp_username' => $fallbackSite->wp_username,
+                    'connection_type' => $fallbackSite->connection_type,
+                ];
+            }
+        }
 
         if ($resolvedArticleType !== 'press-release' || !($site?->is_press_release_source)) {
             $validated['payload']['selectedSyndicationCats'] = [];

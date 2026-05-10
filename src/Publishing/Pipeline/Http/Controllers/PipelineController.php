@@ -165,6 +165,28 @@ class PipelineController extends Controller
         $bootSite = $bootSiteId !== ''
             ? ($sites->firstWhere('id', (int) $bootSiteId) ?: (($draftSite && (string) $draftSite->id === $bootSiteId) ? $draftSite : null))
             : $draftSite;
+        if ($bootArticleType === 'press-release' && !($bootSite?->is_press_release_source)) {
+            $fallbackPrSite = $prSourceSites->first();
+            if ($fallbackPrSite) {
+                $bootSite = $fallbackPrSite;
+                $bootSiteId = (string) $fallbackPrSite->id;
+                $pipelinePayload['selectedSiteId'] = $bootSiteId;
+                $pipelinePayload['selectedSite'] = [
+                    'id' => $fallbackPrSite->id,
+                    'name' => $fallbackPrSite->name,
+                    'url' => $fallbackPrSite->url,
+                    'status' => $fallbackPrSite->status,
+                    'default_author' => $fallbackPrSite->default_author,
+                    'is_press_release_source' => (bool) $fallbackPrSite->is_press_release_source,
+                    'wp_username' => $fallbackPrSite->wp_username,
+                    'connection_type' => $fallbackPrSite->connection_type,
+                ];
+                $pipelinePayload['existingWpPostId'] = null;
+                $pipelinePayload['existingWpStatus'] = '';
+                $pipelinePayload['existingWpPostUrl'] = '';
+                $pipelinePayload['existingWpAdminUrl'] = '';
+            }
+        }
         $canReuseExistingWpBinding = $draft->wp_post_id
             && (string) ($draft->publish_site_id ?: '') !== ''
             && (string) $draft->publish_site_id === $bootSiteId
