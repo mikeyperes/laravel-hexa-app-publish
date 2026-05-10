@@ -269,12 +269,22 @@ class ArticleController extends Controller
      * @param int $id
      * @return JsonResponse
      */
-    public function publish(int $id): JsonResponse
+    public function publish(Request $request, int $id): JsonResponse
     {
         $article = $this->findArticle($id, ['site']);
         $site = $article->site;
-        $wpStatus = ($article->delivery_mode === 'draft-wordpress') ? 'draft' : 'publish';
+        $requestedStatus = trim((string) $request->input('status', ''));
+        $wpStatus = in_array($requestedStatus, ['draft', 'publish'], true)
+            ? $requestedStatus
+            : (($article->delivery_mode === 'draft-wordpress') ? 'draft' : 'publish');
         $hasExistingPost = !empty($article->wp_post_id);
+
+        if (!$site) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No connected WordPress site is assigned to this article.',
+            ], 422);
+        }
 
         $delivery = app(\hexa_app_publish\Publishing\Delivery\Services\WordPressDeliveryService::class);
         $result = $hasExistingPost
@@ -306,6 +316,16 @@ class ArticleController extends Controller
             'message' => (($result['post_status'] ?? $wpStatus) === 'publish'
                 ? "Article published to {$site->name}."
                 : "WordPress draft updated on {$site->name}.") . " WP Post ID: {$result['post_id']}.",
+            'article' => [
+                'id' => $article->id,
+                'status' => $article->status,
+                'delivery_mode' => $article->delivery_mode,
+                'wp_post_id' => $article->wp_post_id,
+                'wp_post_url' => $article->wp_post_url,
+                'wp_status' => $article->wp_status,
+                'published_at' => optional($article->published_at)->toIso8601String(),
+                'site_name' => $site->name,
+            ],
         ]);
     }
 

@@ -37,6 +37,7 @@
     <div class="space-y-2">
         @forelse($drafts as $draft)
         @php
+            $statePayload = is_array($draft->pipelineState?->payload ?? null) ? $draft->pipelineState->payload : [];
             $thumb = null;
             if ($draft->wp_images && is_array($draft->wp_images)) {
                 $featured = collect($draft->wp_images)->firstWhere('is_featured', true);
@@ -55,6 +56,23 @@
             }
             $isPublished = in_array($draft->status, ['completed', 'published'], true) || $draft->wp_post_url;
             $accentClass = $isPublished ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-gray-300';
+            $previewBody = $draft->body ? preg_replace('/<div[^>]*class="[^"]*photo-placeholder[^"]*"[^>]*>.*?<\/div>/s', '', $draft->body) : '';
+            if ($previewBody && !preg_match('/<p[\s>]/i', $previewBody)) {
+                $parts = preg_split('/\n{2,}/', trim($previewBody));
+                $previewBody = implode('', array_map(fn($p) => '<p>' . nl2br(trim($p)) . '</p>', array_filter($parts)));
+            }
+            $previewCategories = is_array($draft->categories) && $draft->categories
+                ? array_values(array_filter(array_map(fn($value) => trim((string) $value), $draft->categories)))
+                : array_values(array_filter(array_map(fn($value) => trim((string) $value), (array) ($statePayload['categories'] ?? []))));
+            $previewTags = is_array($draft->tags) && $draft->tags
+                ? array_values(array_filter(array_map(fn($value) => trim((string) $value), $draft->tags)))
+                : array_values(array_filter(array_map(fn($value) => trim((string) $value), (array) ($statePayload['tags'] ?? []))));
+            $previewSyndication = ($draft->article_type === 'press-release' && ($draft->site?->is_press_release_source))
+                ? array_values(array_filter(array_map(fn($value) => (string) $value, (array) ($statePayload['selectedSyndicationCats'] ?? []))))
+                : [];
+            $previewWpAdminUrl = ($draft->site && $draft->wp_post_id)
+                ? rtrim((string) $draft->site->url, '/') . '/wp-admin/post.php?post=' . $draft->wp_post_id . '&action=edit'
+                : null;
         @endphp
         <div class="bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all p-4 {{ $accentClass }}" :class="deletingId === {{ $draft->id }} ? '!border-red-300 !bg-red-50' : ''" id="row-{{ $draft->id }}">
             <div class="flex items-start gap-4">
@@ -81,6 +99,9 @@
                     <div class="flex items-start gap-3">
                         <a href="{{ route('publish.pipeline', ['id' => $draft->id]) }}" class="flex-1 min-w-0 block text-base font-semibold text-gray-900 hover:text-blue-600 break-words leading-snug">{{ $draft->title ?: 'Untitled' }}</a>
                         <div class="flex-shrink-0 flex items-center gap-1">
+                            <button @click="togglePreview({{ $draft->id }})" class="p-1.5 rounded-md text-gray-400 hover:text-slate-700 hover:bg-slate-50 transition-colors" :title="isPreviewOpen({{ $draft->id }}) ? 'Hide preview' : 'Preview in place'">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                            </button>
                             <a href="{{ route('publish.pipeline', ['id' => $draft->id]) }}" class="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Open in pipeline">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                             </a>
@@ -169,6 +190,181 @@
                 </div>
             </div>
 
+            <div x-show="isPreviewOpen({{ $draft->id }})" x-cloak class="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 overflow-hidden">
+                <div class="border-b border-slate-200 bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-sm font-semibold text-slate-900">Draft Preview & Approval</h3>
+                        <p class="mt-0.5 text-xs text-slate-500">Review the article, prepare it for WordPress, publish it without leaving this page, and send the completion email from the same card.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button @click="refreshWpStatus({{ $draft->id }})" :disabled="rowRunning({{ $draft->id }})" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            Refresh WP
+                        </button>
+                        <button x-show="!rowHasWpPost({{ $draft->id }})" x-cloak @click="prepareAndCreateWpDraft({{ $draft->id }})" :disabled="rowRunning({{ $draft->id }})" class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                            <svg x-show="rowRunning({{ $draft->id }})" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <span>Prepare & Create WP Draft</span>
+                        </button>
+                        <button x-show="rowHasWpPost({{ $draft->id }}) && !rowIsLive({{ $draft->id }})" x-cloak @click="publishExistingDraft({{ $draft->id }}, 'publish')" :disabled="rowRunning({{ $draft->id }})" class="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50">
+                            <svg x-show="rowRunning({{ $draft->id }})" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <span>Publish Existing Draft</span>
+                        </button>
+                        <button x-show="rowIsLive({{ $draft->id }})" x-cloak @click="publishExistingDraft({{ $draft->id }}, 'publish')" :disabled="rowRunning({{ $draft->id }})" class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">
+                            <svg x-show="rowRunning({{ $draft->id }})" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            <span>Update Live Post</span>
+                        </button>
+                        <button x-show="rowHasWpPost({{ $draft->id }})" x-cloak @click="openApprovalEmail({{ $draft->id }})" class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8m-16 8h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+                            Email Completed Draft
+                        </button>
+                    </div>
+                </div>
+
+                <div class="px-4 py-4 space-y-4">
+                    <div x-show="rowMessage({{ $draft->id }})" x-cloak class="rounded-lg border px-3 py-2 text-sm" :class="rowError({{ $draft->id }}) ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-700'">
+                        <span x-text="rowMessage({{ $draft->id }})"></span>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 text-xs">
+                                <div class="rounded-lg border border-slate-200 bg-white px-3 py-3">
+                                    <p class="font-semibold uppercase tracking-wide text-slate-400">Publication</p>
+                                    <p class="mt-1 text-sm font-medium text-slate-900">{{ $draft->site?->name ?? 'No site selected' }}</p>
+                                    @if($draft->site?->url)
+                                        <a href="{{ $draft->site->url }}" target="_blank" rel="noopener" class="mt-1 inline-flex break-all text-blue-600 hover:underline">{{ $draft->site->url }}</a>
+                                    @endif
+                                </div>
+                                <div class="rounded-lg border border-slate-200 bg-white px-3 py-3">
+                                    <p class="font-semibold uppercase tracking-wide text-slate-400">WordPress</p>
+                                    <p class="mt-1 text-sm font-medium text-slate-900" x-text="rowWpPostLabel({{ $draft->id }})">{{ $draft->wp_post_id ? ('#' . $draft->wp_post_id) : 'No WP post yet' }}</p>
+                                    <a x-show="rowWpPostUrl({{ $draft->id }})" x-cloak :href="rowWpPostUrl({{ $draft->id }})" target="_blank" rel="noopener" class="mt-1 inline-flex break-all text-blue-600 hover:underline" x-text="rowWpPostUrl({{ $draft->id }})"></a>
+                                    <a x-show="rowWpAdminUrl({{ $draft->id }})" x-cloak :href="rowWpAdminUrl({{ $draft->id }})" target="_blank" rel="noopener" class="mt-1 inline-flex break-all text-slate-500 hover:text-slate-700 hover:underline">WP Admin Edit</a>
+                                </div>
+                                <div class="rounded-lg border border-slate-200 bg-white px-3 py-3">
+                                    <p class="font-semibold uppercase tracking-wide text-slate-400">Article Settings</p>
+                                    <p class="mt-1 text-sm font-medium text-slate-900">{{ ucfirst(str_replace('_', ' ', $draft->article_type ?: 'editorial')) }}</p>
+                                    <p class="mt-1 text-slate-500">Delivery: {{ str_replace('-', ' ', $draft->delivery_mode ?: 'draft-local') }}</p>
+                                    <p class="mt-1 text-slate-500">Author: {{ $draft->author ?: ($draft->site?->default_author ?: '—') }}</p>
+                                </div>
+                            </div>
+
+                            <div class="rounded-lg border border-slate-200 bg-white px-4 py-4">
+                                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <div>
+                                        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Categories</p>
+                                        <div class="mt-2 flex flex-wrap gap-2">
+                                            @forelse($previewCategories as $category)
+                                                <span class="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700">{{ $category }}</span>
+                                            @empty
+                                                <span class="text-xs text-slate-400">None selected</span>
+                                            @endforelse
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Tags</p>
+                                        <div class="mt-2 flex flex-wrap gap-2">
+                                            @forelse($previewTags as $tag)
+                                                <span class="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700">{{ $tag }}</span>
+                                            @empty
+                                                <span class="text-xs text-slate-400">None selected</span>
+                                            @endforelse
+                                        </div>
+                                    </div>
+                                </div>
+                                @if(count($previewSyndication) > 0)
+                                    <div class="mt-4 border-t border-slate-100 pt-4">
+                                        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Publication Syndication</p>
+                                        <p class="mt-2 text-xs text-slate-500">Selected term IDs: {{ implode(', ', $previewSyndication) }}</p>
+                                    </div>
+                                @endif
+                            </div>
+
+                            @if($draft->excerpt)
+                                <div class="rounded-lg border border-slate-200 bg-white px-4 py-4">
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Excerpt</p>
+                                    <p class="mt-2 text-sm leading-6 text-slate-700">{{ $draft->excerpt }}</p>
+                                </div>
+                            @endif
+
+                            <div class="rounded-lg border border-slate-200 bg-white">
+                                <div class="border-b border-slate-200 px-4 py-3 flex items-center justify-between gap-3">
+                                    <div>
+                                        <p class="text-sm font-semibold text-slate-900">Article Preview</p>
+                                        <p class="mt-0.5 text-xs text-slate-500">Inline preview of the current article body and formatting.</p>
+                                    </div>
+                                    <span class="text-xs text-slate-400">{{ number_format($draft->word_count ?: str_word_count(strip_tags($previewBody))) }} words</span>
+                                </div>
+                                <div class="max-h-[36rem] overflow-y-auto px-4 py-4">
+                                    <div class="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-a:text-blue-600 prose-img:rounded-lg">
+                                        {!! $previewBody ?: '<p class="text-sm text-slate-400">No article body saved yet.</p>' !!}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="rounded-lg border border-slate-200 bg-white px-4 py-4">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div>
+                                        <p class="text-sm font-semibold text-slate-900">Prepare Status</p>
+                                        <p class="mt-0.5 text-xs text-slate-500">Uses the same WordPress preparation stages as the main publishing flow.</p>
+                                    </div>
+                                    <span x-show="rowPhase({{ $draft->id }})" x-cloak class="inline-flex rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600" x-text="rowPhase({{ $draft->id }})"></span>
+                                </div>
+
+                                <div class="mt-4 space-y-3">
+                                    <template x-for="item in rowChecklist({{ $draft->id }})" :key="'{{ $draft->id }}-' + item.key">
+                                        <div class="flex items-start gap-3 rounded-lg border border-slate-100 px-3 py-3">
+                                            <div class="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold"
+                                                 :class="{
+                                                    'bg-green-100 text-green-700': item.status === 'done',
+                                                    'bg-red-100 text-red-700': item.status === 'failed',
+                                                    'bg-blue-100 text-blue-700': item.status === 'running',
+                                                    'bg-slate-100 text-slate-500': item.status === 'pending' || item.status === 'skipped'
+                                                 }"
+                                                 x-text="item.status === 'done' ? '✓' : (item.status === 'failed' ? '!' : (item.status === 'running' ? '…' : '○'))"></div>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <p class="text-sm font-medium text-slate-900" x-text="item.label"></p>
+                                                    <span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                                                          :class="{
+                                                              'bg-green-100 text-green-700': item.status === 'done',
+                                                              'bg-red-100 text-red-700': item.status === 'failed',
+                                                              'bg-blue-100 text-blue-700': item.status === 'running',
+                                                              'bg-slate-100 text-slate-500': item.status === 'pending' || item.status === 'skipped'
+                                                          }"
+                                                          x-text="item.status"></span>
+                                                </div>
+                                                <p class="mt-1 text-xs leading-5 text-slate-500" x-text="item.live_detail || item.detail"></p>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <div x-show="rowLog({{ $draft->id }}).length > 0" x-cloak class="rounded-lg border border-slate-200 bg-slate-950 px-4 py-4 max-h-72 overflow-y-auto">
+                                <div class="mb-3 flex items-center justify-between">
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-300">Live Activity</p>
+                                    <span class="text-[10px] text-slate-500" x-text="rowLog({{ $draft->id }}).length + ' entries'"></span>
+                                </div>
+                                <template x-for="(entry, idx) in rowLog({{ $draft->id }})" :key="'{{ $draft->id }}-log-' + idx">
+                                    <p class="py-1 text-xs font-mono"
+                                       :class="{
+                                            'text-green-400': entry.type === 'success' || entry.type === 'done',
+                                            'text-red-400': entry.type === 'error',
+                                            'text-yellow-400': entry.type === 'warning',
+                                            'text-blue-400': entry.type === 'info',
+                                            'text-slate-400': entry.type === 'step'
+                                       }"
+                                       x-text="entry.message"></p>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {{-- Delete log --}}
             <div x-show="deletingId === {{ $draft->id }} && deleteLog.length > 0" x-cloak class="mt-3 rounded bg-gray-900 p-3">
                 <template x-for="(entry, idx) in deleteLog" :key="idx">
@@ -236,6 +432,20 @@
 function articlesList() {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
+    const draftWordPressChecklist = @json(collect($wordpressChecklist ?? [])->filter(fn ($item) => in_array($item['key'] ?? '', ['wp_connection', 'wp_html', 'wp_media', 'wp_taxonomies', 'wp_integrity', 'delivery'], true))->values()->all());
+    const initialRows = @json($drafts->mapWithKeys(function ($draft) {
+        return [
+            $draft->id => [
+                'wp_post_id' => $draft->wp_post_id ? (int) $draft->wp_post_id : null,
+                'wp_status' => (string) ($draft->wp_status ?? ''),
+                'wp_post_url' => (string) ($draft->wp_post_url ?? ''),
+                'status' => (string) ($draft->status ?? ''),
+                'delivery_mode' => (string) ($draft->delivery_mode ?? 'draft-local'),
+                'published_at' => optional($draft->published_at)->toIso8601String(),
+                'site_url' => (string) ($draft->site?->url ?? ''),
+            ],
+        ];
+    })->all());
     return {
         ...draftApprovalEmailMixin(),
         searchQuery: new URLSearchParams(window.location.search).get('q') || '',
@@ -246,6 +456,253 @@ function articlesList() {
         deleteLog: [],
         bulkDeleting: false,
         approvalEmailWidth: (typeof localStorage !== 'undefined' && localStorage.getItem('approvalEmailWidth')) || 'M',
+        previewOpenIds: [],
+        rowStates: {},
+
+        buildChecklist() {
+            return JSON.parse(JSON.stringify(draftWordPressChecklist)).map((item) => ({
+                ...item,
+                status: item.status || 'pending',
+                live_detail: item.live_detail || '',
+            }));
+        },
+
+        baseArticleState(id) {
+            return {
+                id,
+                wp_post_id: initialRows[id]?.wp_post_id || null,
+                wp_status: initialRows[id]?.wp_status || '',
+                wp_post_url: initialRows[id]?.wp_post_url || '',
+                status: initialRows[id]?.status || 'drafting',
+                delivery_mode: initialRows[id]?.delivery_mode || 'draft-local',
+                published_at: initialRows[id]?.published_at || null,
+                site_url: initialRows[id]?.site_url || '',
+            };
+        },
+
+        ensureRowState(id) {
+            if (!this.rowStates[id]) {
+                this.rowStates[id] = {
+                    open: false,
+                    running: false,
+                    error: false,
+                    message: '',
+                    phase: '',
+                    log: [],
+                    checklist: this.buildChecklist(),
+                    article: this.baseArticleState(id),
+                };
+            }
+            return this.rowStates[id];
+        },
+
+        isPreviewOpen(id) {
+            return this.ensureRowState(id).open;
+        },
+
+        togglePreview(id) {
+            const state = this.ensureRowState(id);
+            state.open = !state.open;
+        },
+
+        rowRunning(id) {
+            return this.ensureRowState(id).running;
+        },
+
+        rowError(id) {
+            return this.ensureRowState(id).error;
+        },
+
+        rowMessage(id) {
+            return this.ensureRowState(id).message;
+        },
+
+        rowPhase(id) {
+            return this.ensureRowState(id).phase;
+        },
+
+        rowChecklist(id) {
+            return this.ensureRowState(id).checklist;
+        },
+
+        rowLog(id) {
+            return this.ensureRowState(id).log;
+        },
+
+        rowHasWpPost(id) {
+            return !!this.ensureRowState(id).article?.wp_post_id;
+        },
+
+        rowIsLive(id) {
+            const article = this.ensureRowState(id).article || {};
+            return article.wp_status === 'publish' || article.status === 'published' || article.status === 'completed' || !!article.published_at;
+        },
+
+        rowWpPostLabel(id) {
+            const article = this.ensureRowState(id).article || {};
+            return article.wp_post_id ? ('#' + article.wp_post_id) : 'No WP post yet';
+        },
+
+        rowWpPostUrl(id) {
+            return this.ensureRowState(id).article?.wp_post_url || '';
+        },
+
+        rowWpAdminUrl(id) {
+            const article = this.ensureRowState(id).article || {};
+            if (!article.wp_post_id || !article.site_url) return '';
+            return article.site_url.replace(/\/$/, '') + '/wp-admin/post.php?post=' + article.wp_post_id + '&action=edit';
+        },
+
+        setRowMessage(id, message, isError = false) {
+            const state = this.ensureRowState(id);
+            state.message = message || '';
+            state.error = !!isError;
+        },
+
+        setRowPhase(id, phase = '') {
+            this.ensureRowState(id).phase = phase;
+        },
+
+        clearRowLog(id) {
+            this.ensureRowState(id).log = [];
+        },
+
+        pushRowLog(id, message, type = 'info') {
+            this.ensureRowState(id).log.push({ message, type });
+        },
+
+        applyChecklist(id, checklist = []) {
+            if (!Array.isArray(checklist) || checklist.length === 0) return;
+            this.ensureRowState(id).checklist = checklist.map((item) => ({
+                ...item,
+                status: item.status || 'pending',
+                live_detail: item.live_detail || '',
+            }));
+        },
+
+        applyArticleState(id, article = {}) {
+            if (!article || typeof article !== 'object') return;
+            const state = this.ensureRowState(id);
+            state.article = {
+                ...state.article,
+                ...article,
+                wp_post_id: article.wp_post_id ?? state.article.wp_post_id ?? null,
+                wp_status: article.wp_status ?? state.article.wp_status ?? '',
+                wp_post_url: article.wp_post_url ?? state.article.wp_post_url ?? '',
+                status: article.status ?? state.article.status ?? 'drafting',
+                delivery_mode: article.delivery_mode ?? state.article.delivery_mode ?? 'draft-local',
+                published_at: article.published_at ?? state.article.published_at ?? null,
+                site_url: article.site?.url ?? article.site_url ?? state.article.site_url ?? '',
+            };
+        },
+
+        async requestJson(url, options = {}) {
+            const response = await fetch(url, {
+                credentials: 'same-origin',
+                headers,
+                ...options,
+            });
+            const text = await response.text();
+            let data = null;
+            try {
+                data = text ? JSON.parse(text) : {};
+            } catch (error) {
+                throw new Error(text || ('Unexpected response (' + response.status + ')'));
+            }
+            if (!response.ok) {
+                throw new Error(data?.message || data?.error || ('Request failed (' + response.status + ')'));
+            }
+            return data;
+        },
+
+        resetChecklistToTemplate(id) {
+            this.ensureRowState(id).checklist = this.buildChecklist();
+        },
+
+        async prepareWordPress(id) {
+            const state = this.ensureRowState(id);
+            state.open = true;
+            state.running = true;
+            this.setRowMessage(id, '');
+            this.setRowPhase(id, 'Preparing');
+            this.clearRowLog(id);
+            this.resetChecklistToTemplate(id);
+            this.pushRowLog(id, 'Starting WordPress preparation…', 'step');
+
+            try {
+                const data = await this.requestJson(`/article/articles/${id}/prepare-wordpress`, { method: 'POST' });
+                this.applyChecklist(id, data.checklist || []);
+                this.applyArticleState(id, data.article || {});
+                (data.steps || []).forEach((entry) => this.pushRowLog(id, entry.message || entry.details || 'Step complete', entry.type || 'info'));
+                this.setRowMessage(id, data.message || 'Draft prepared for WordPress.');
+                this.pushRowLog(id, data.message || 'Draft prepared for WordPress.', 'success');
+                return data;
+            } catch (error) {
+                this.setRowMessage(id, error.message || 'WordPress preparation failed.', true);
+                this.pushRowLog(id, error.message || 'WordPress preparation failed.', 'error');
+                return null;
+            } finally {
+                state.running = false;
+                this.setRowPhase(id, '');
+            }
+        },
+
+        async prepareAndCreateWpDraft(id) {
+            const prepared = await this.prepareWordPress(id);
+            if (!prepared?.success) return null;
+            return this.publishExistingDraft(id, 'draft', 'Creating Draft');
+        },
+
+        async publishExistingDraft(id, status = 'publish', phaseLabel = null) {
+            const state = this.ensureRowState(id);
+            state.open = true;
+            state.running = true;
+            this.setRowMessage(id, '');
+            this.setRowPhase(id, phaseLabel || (status === 'draft' ? 'Creating Draft' : (this.rowIsLive(id) ? 'Updating Live Post' : 'Publishing Draft')));
+            this.pushRowLog(id, status === 'draft' ? 'Sending prepared draft to WordPress…' : 'Publishing WordPress article…', 'step');
+
+            try {
+                const data = await this.requestJson(`/publish/articles/${id}/publish`, {
+                    method: 'POST',
+                    body: JSON.stringify({ status }),
+                });
+                this.applyArticleState(id, data.article || {});
+                this.setRowMessage(id, data.message || 'WordPress delivery complete.');
+                this.pushRowLog(id, data.message || 'WordPress delivery complete.', 'success');
+                return data;
+            } catch (error) {
+                this.setRowMessage(id, error.message || 'WordPress publish failed.', true);
+                this.pushRowLog(id, error.message || 'WordPress publish failed.', 'error');
+                return null;
+            } finally {
+                state.running = false;
+                this.setRowPhase(id, '');
+            }
+        },
+
+        async refreshWpStatus(id) {
+            const state = this.ensureRowState(id);
+            state.running = true;
+            this.setRowMessage(id, '');
+            this.setRowPhase(id, 'Refreshing');
+            this.clearRowLog(id);
+            this.pushRowLog(id, 'Refreshing WordPress state…', 'step');
+
+            try {
+                const data = await this.requestJson(`/publish/articles/${id}/refresh-wp`, { method: 'POST' });
+                this.applyArticleState(id, data.article || {});
+                (data.steps || []).forEach((entry) => this.pushRowLog(id, entry.detail ? `${entry.label}: ${entry.detail}` : entry.label, entry.status === 'error' ? 'error' : (entry.status === 'ok' ? 'success' : 'info')));
+                this.setRowMessage(id, data.message || 'WordPress state refreshed.', !data.success);
+                return data;
+            } catch (error) {
+                this.setRowMessage(id, error.message || 'Failed to refresh WordPress status.', true);
+                this.pushRowLog(id, error.message || 'Failed to refresh WordPress status.', 'error');
+                return null;
+            } finally {
+                state.running = false;
+                this.setRowPhase(id, '');
+            }
+        },
 
         cycleApprovalEmailWidth() {
             const order = ['M', 'L', 'XL'];
@@ -255,6 +712,7 @@ function articlesList() {
         },
 
         init() {
+            Object.keys(initialRows).forEach((id) => this.ensureRowState(Number(id)));
             const params = new URLSearchParams(window.location.search);
             const emailParam = params.get('email');
             if (emailParam) {

@@ -36,6 +36,7 @@ Route::get('/article/articles/{id}', [DraftController::class, 'show'])->name('pu
 Route::put('/article/articles/{id}', [DraftController::class, 'update'])->name('publish.drafts.update');
 Route::delete('/article/articles/{id}', [DraftController::class, 'destroy'])->name('publish.drafts.destroy');
 Route::post('/article/articles/bulk-delete', [DraftController::class, 'bulkDestroy'])->name('publish.drafts.bulk-destroy');
+Route::post('/article/articles/{id}/prepare-wordpress', [DraftController::class, 'prepareWordPress'])->name('publish.drafts.prepare-wordpress');
 
 
 Route::get('/article/articles/{id}/approval-email', [DraftApprovalEmailController::class, 'show'])->name('publish.drafts.approval.show');

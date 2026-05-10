@@ -5,6 +5,8 @@ namespace hexa_app_publish\Publishing\Articles\Http\Controllers;
 use hexa_core\Http\Controllers\Controller;
 use hexa_app_publish\Publishing\Access\Services\PublishAccessService;
 use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
+use hexa_app_publish\Publishing\Articles\Services\DraftWordPressWorkflowService;
+use hexa_app_publish\Publishing\Campaigns\Services\CampaignChecklistService;
 use hexa_app_publish\Services\ArticleDeleteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,13 +17,16 @@ use Illuminate\View\View;
  */
 class DraftController extends Controller
 {
-    public function __construct(private PublishAccessService $access)
+    public function __construct(
+        private PublishAccessService $access,
+        private CampaignChecklistService $campaignChecklistService,
+    )
     {
     }
 
     public function index(Request $request): View|JsonResponse
     {
-        $query = $this->access->articleQuery($request->user())->with(['creator', 'site', 'latestApprovalEmail.sender'])->withCount('approvalEmails');
+        $query = $this->access->articleQuery($request->user())->with(['creator', 'site', 'pipelineState', 'latestApprovalEmail.sender'])->withCount('approvalEmails');
 
         if ($request->filled('user_id')) {
             $userId = (int) $request->input('user_id');
@@ -52,6 +57,7 @@ class DraftController extends Controller
 
         return view('app-publish::publishing.articles.drafts.index', [
             'drafts' => $articles,
+            'wordpressChecklist' => $this->campaignChecklistService->definitions('draft-wordpress'),
         ]);
     }
 
@@ -86,15 +92,20 @@ class DraftController extends Controller
     public function show(Request $request, int $id): View|JsonResponse
     {
         $draft = $this->access->resolveArticleOrFail($request->user(), $id);
-        $draft->loadMissing(['creator', 'site', 'latestApprovalEmail.sender'])->loadCount('approvalEmails');
+        $draft->loadMissing(['creator', 'site', 'pipelineState', 'latestApprovalEmail.sender'])->loadCount('approvalEmails');
 
         if ($request->wantsJson()) {
-            return response()->json(['success' => true, 'article' => $draft]);
+            return response()->json([
+                'success' => true,
+                'article' => $draft,
+                'preview' => app(DraftWordPressWorkflowService::class)->buildPreview($draft)['article'],
+            ]);
         }
 
         return view('app-publish::publishing.articles.drafts.index', [
-            'drafts' => $this->access->articleQuery($request->user())->with(['creator', 'site', 'latestApprovalEmail.sender'])->withCount('approvalEmails')->orderByDesc('updated_at')->paginate(100),
+            'drafts' => $this->access->articleQuery($request->user())->with(['creator', 'site', 'pipelineState', 'latestApprovalEmail.sender'])->withCount('approvalEmails')->orderByDesc('updated_at')->paginate(100),
             'editDraft' => $draft,
+            'wordpressChecklist' => $this->campaignChecklistService->definitions('draft-wordpress'),
         ]);
     }
 
@@ -167,5 +178,14 @@ class DraftController extends Controller
             'message' => count($validated['ids']) . ' article(s) moved to deleted archive.',
             'logs'    => $allLogs,
         ]);
+    }
+
+    public function prepareWordPress(Request $request, int $id): JsonResponse
+    {
+        $draft = $this->access->resolveArticleOrFail($request->user(), $id);
+
+        return response()->json(
+            app(DraftWordPressWorkflowService::class)->prepare($draft)
+        );
     }
 }
