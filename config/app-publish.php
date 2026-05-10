@@ -40,6 +40,7 @@ return [
         'published',
         'failed',
         'completed',
+        'deleted',
     ],
 
     /*
