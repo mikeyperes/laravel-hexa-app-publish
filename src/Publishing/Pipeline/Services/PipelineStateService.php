@@ -4,6 +4,7 @@ namespace hexa_app_publish\Publishing\Pipeline\Services;
 
 use hexa_app_publish\Publishing\Articles\Models\PublishArticle;
 use hexa_app_publish\Publishing\Pipeline\Models\PublishPipelineState;
+use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 
 class PipelineStateService
 {
@@ -104,6 +105,20 @@ class PipelineStateService
             (array) ($payload['pressRelease'] ?? [])
         ));
         $payload['prArticle'] = $this->prArticleWorkflow->normalizeState((array) ($payload['prArticle'] ?? []));
+
+        $articleType = $this->detectWorkflowType($payload);
+        $siteId = (int) (
+            data_get($payload, 'selectedSiteId')
+            ?? data_get($payload, 'selectedSite.id')
+            ?? 0
+        );
+        $siteAllowsSyndication = (bool) (
+            data_get($payload, 'selectedSite.is_press_release_source')
+            ?? ($siteId > 0 ? PublishSite::query()->whereKey($siteId)->value('is_press_release_source') : false)
+        );
+        if ($articleType !== 'press-release' || !$siteAllowsSyndication) {
+            $payload['selectedSyndicationCats'] = [];
+        }
 
         return $payload;
     }

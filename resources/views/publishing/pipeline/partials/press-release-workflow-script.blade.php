@@ -1394,6 +1394,14 @@ function pressReleaseWorkflowMixin(config) {
                 state.currentArticleType = null;
             }
 
+            const canPersistSyndication = !!(
+                resolvedArticleType === 'press-release'
+                && (state.selectedSite?.is_press_release_source || this.selectedSite?.is_press_release_source)
+            );
+            if (!canPersistSyndication) {
+                state.selectedSyndicationCats = [];
+            }
+
             const titleLooksPlaceholder = !state.articleTitle || /^untitled(?:\s+pipeline\s+draft)?$/i.test(String(state.articleTitle || '').trim());
             if (titleLooksPlaceholder && state.spunContent) {
                 const derivedTitle = this.deriveArticleTitleFromHtml(state.spunContent);

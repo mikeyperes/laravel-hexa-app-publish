@@ -608,6 +608,8 @@
 
                 const restoredPressReleaseState = this.normalizePressReleaseState(this.pressRelease || {});
                 const restoredPrSubjectCount = Array.isArray(this.selectedPrProfiles) ? this.selectedPrProfiles.length : 0;
+                const draftArticleTypeHint = String(draftState?.article_type || '').trim();
+                const draftSiteIdHint = draftState?.selectedSiteId ? String(draftState.selectedSiteId) : '';
                 const explicitRestoredArticleType = String(
                     this.template_overrides.article_type
                     || state?.template_overrides?.article_type
@@ -646,19 +648,43 @@
                     this.pressRelease.article_type = 'pr-full-feature';
                 }
 
+                const finalRestoredArticleType = String(this.template_overrides.article_type || '').trim();
+                const shouldPreferDraftContext = !!(
+                    restoredFromLocalState
+                    && (
+                        (draftArticleTypeHint && draftArticleTypeHint !== 'press-release' && finalRestoredArticleType === 'press-release')
+                        || (draftSiteIdHint && state?.selectedSiteId && String(state.selectedSiteId) !== draftSiteIdHint && draftState?.selectedSite && !draftState.selectedSite.is_press_release_source)
+                    )
+                );
+
+                const restoredSiteIdForBootstrap = shouldPreferDraftContext && draftSiteIdHint
+                    ? draftSiteIdHint
+                    : (state.selectedSiteId ? String(state.selectedSiteId) : '');
+
+                if (shouldPreferDraftContext) {
+                    if (draftArticleTypeHint) {
+                        this.template_overrides.article_type = draftArticleTypeHint;
+                        this.pressRelease.article_type = draftArticleTypeHint;
+                    }
+                    if (restoredSiteIdForBootstrap) {
+                        this.selectedSiteId = restoredSiteIdForBootstrap;
+                        this.selectedSite = this.sites.find(s => s.id == restoredSiteIdForBootstrap) || draftState.selectedSite || null;
+                    }
+                }
+
                 // Site connection (nested object)
-                if (state.selectedSiteId) {
-                    this.selectedSiteId = String(state.selectedSiteId);
+                if (restoredSiteIdForBootstrap) {
+                    this.selectedSiteId = restoredSiteIdForBootstrap;
                     this.siteConn.status = state.siteConnStatus ?? null;
                     this.siteConn.message = state.siteConnMessage || '';
                     if (state.siteConnLog) this.siteConn.log = state.siteConnLog;
                     if (state.siteConnAuthors) this.siteConn.authors = state.siteConnAuthors;
                     this.$nextTick(() => {
-                        this.selectedSiteId = String(state.selectedSiteId);
-                        this.selectedSite = this.sites.find(s => s.id == state.selectedSiteId) || state.selectedSite || null;
-                        const cacheKey = this.siteConnectionCacheKey?.(state.selectedSiteId);
+                        this.selectedSiteId = restoredSiteIdForBootstrap;
+                        this.selectedSite = this.sites.find(s => s.id == restoredSiteIdForBootstrap) || (shouldPreferDraftContext ? draftState.selectedSite : state.selectedSite) || null;
+                        const cacheKey = this.siteConnectionCacheKey?.(restoredSiteIdForBootstrap);
                         if (cacheKey) {
-                            const restored = this.restoreSiteConnection(state.selectedSiteId, cacheKey);
+                            const restored = this.restoreSiteConnection(restoredSiteIdForBootstrap, cacheKey);
                             if (restored && this.selectedSite) {
                                 this.selectedSite.status = 'connected';
                             }
@@ -797,6 +823,11 @@
             }
             if (!this.canUsePublicationSyndication?.()) {
                 this.selectedSyndicationCats = [];
+                this.syndicationCategories = [];
+                this.syndicationCategoriesCacheMeta = null;
+                if (Array.isArray(this.prepareChecklist) && this.prepareChecklist.length > 0) {
+                    this.prepareChecklist = this.prepareChecklist.filter((item) => item?.type !== 'publication');
+                }
             }
             if ((!Array.isArray(this.suggestedCategories) || this.suggestedCategories.length === 0) && Array.isArray(draftState.categories) && draftState.categories.length > 0) {
                 this.suggestedCategories = this.normalizeUniqueTextList(draftState.categories, 10);

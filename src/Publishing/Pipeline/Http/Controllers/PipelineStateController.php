@@ -49,12 +49,6 @@ class PipelineStateController extends Controller
             ]);
         }
 
-        $state = $this->stateService->save(
-            $draft,
-            $validated["payload"],
-            $validated["workflow_type"] ?? null
-        );
-
         $resolvedArticleType = trim((string) (
             data_get($validated, "payload.template_overrides.article_type")
             ?? data_get($validated, "payload.article_type")
@@ -74,13 +68,32 @@ class PipelineStateController extends Controller
         $previousSiteId = (int) ($draft->publish_site_id ?: 0);
         $articleTypeChanged = $resolvedArticleType !== '' && $resolvedArticleType !== $previousArticleType;
         $siteChanged = $resolvedSiteId !== $previousSiteId;
+        $site = $resolvedSiteId > 0
+            ? PublishSite::query()->select(['id', 'publish_account_id', 'is_press_release_source'])->find($resolvedSiteId)
+            : null;
+
+        if ($resolvedArticleType !== 'press-release' || !($site?->is_press_release_source)) {
+            $validated['payload']['selectedSyndicationCats'] = [];
+        }
+
+        if ($siteChanged || $articleTypeChanged) {
+            $validated['payload']['existingWpPostId'] = null;
+            $validated['payload']['existingWpStatus'] = '';
+            $validated['payload']['existingWpPostUrl'] = '';
+            $validated['payload']['existingWpAdminUrl'] = '';
+        }
+
+        $state = $this->stateService->save(
+            $draft,
+            $validated["payload"],
+            $validated["workflow_type"] ?? null
+        );
 
         if ($resolvedArticleType !== "" && $articleTypeChanged) {
             $draft->article_type = $resolvedArticleType;
         }
 
         if ($resolvedSiteId > 0 && $previousSiteId !== $resolvedSiteId) {
-            $site = PublishSite::query()->select(['id', 'publish_account_id'])->find($resolvedSiteId);
             $draft->publish_site_id = $site?->id ?: null;
             $draft->publish_account_id = $site?->publish_account_id ?: null;
         } elseif ($resolvedSiteId === 0 && $previousSiteId !== 0) {
