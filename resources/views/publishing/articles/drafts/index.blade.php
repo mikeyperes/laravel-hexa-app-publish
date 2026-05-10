@@ -432,12 +432,13 @@
 
 @push('scripts')
 @include('app-publish::publishing.articles.partials.draft-approval-email-script')
-<script>
-function articlesList() {
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
-    const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
-    const draftWordPressChecklist = @json(collect($wordpressChecklist ?? [])->filter(fn ($item) => in_array($item['key'] ?? '', ['wp_connection', 'wp_html', 'wp_media', 'wp_taxonomies', 'wp_integrity', 'delivery'], true))->values()->all());
-    const initialRows = @json($drafts->mapWithKeys(function ($draft) {
+@php
+    $draftWordPressChecklistJson = collect($wordpressChecklist ?? [])
+        ->filter(fn ($item) => in_array($item['key'] ?? '', ['wp_connection', 'wp_html', 'wp_media', 'wp_taxonomies', 'wp_integrity', 'delivery'], true))
+        ->values()
+        ->all();
+
+    $initialRowStatesJson = $drafts->mapWithKeys(function ($draft) {
         return [
             $draft->id => [
                 'wp_post_id' => $draft->wp_post_id ? (int) $draft->wp_post_id : null,
@@ -449,7 +450,14 @@ function articlesList() {
                 'site_url' => (string) ($draft->site?->url ?? ''),
             ],
         ];
-    })->all());
+    })->all();
+@endphp
+<script>
+function articlesList() {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+    const headers = { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' };
+    const draftWordPressChecklist = @json($draftWordPressChecklistJson);
+    const initialRows = @json($initialRowStatesJson);
     return {
         ...draftApprovalEmailMixin(),
         searchQuery: new URLSearchParams(window.location.search).get('q') || '',
