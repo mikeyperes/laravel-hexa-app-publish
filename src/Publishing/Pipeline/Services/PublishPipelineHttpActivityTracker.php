@@ -80,7 +80,8 @@ class PublishPipelineHttpActivityTracker
         }
 
         $requestDetails = $pending['request'] ?? $this->extractRequestDetails($event->request);
-        $durationMs = $pending['started_at'] ? (int) round((microtime(true) - (float) $pending['started_at']) * 1000) : null;
+        $pendingStartedAt = $pending['started_at'] ?? null;
+        $durationMs = $pendingStartedAt ? (int) round((microtime(true) - (float) $pendingStartedAt) * 1000) : null;
 
         $this->recordEvent($context, $requestDetails, [
             'status_code' => null,

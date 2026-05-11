@@ -224,18 +224,18 @@
                     <div>
                         <div class="text-xs font-semibold uppercase tracking-wide text-amber-700">Stale Run Detected</div>
                         <p class="mt-1 text-sm text-amber-900">
-                            Operation <span class="font-semibold" x-text="'#' + staleOperationInfo.id"></span>
+                            Operation <span class="font-semibold" x-text="staleOperationInfo ? '#' + staleOperationInfo.id : ''"></span>
                             stopped updating and is not auto-resumed anymore.
                             Force stop it before spawning another article.
                         </p>
                         <div class="mt-2 text-xs text-amber-800 space-y-1">
-                            <p x-show="staleOperationInfo.last_stage" x-cloak x-text="'Last stage: ' + formatLabel(staleOperationInfo.last_stage) + (staleOperationInfo.last_substage ? ' / ' + formatLabel(staleOperationInfo.last_substage) : '')"></p>
-                            <p x-show="staleOperationInfo.last_message" x-cloak x-text="'Last message: ' + staleOperationInfo.last_message"></p>
-                            <p x-show="staleOperationInfo.last_event_at" x-cloak x-text="'Last event: ' + formatDateTime(staleOperationInfo.last_event_at)"></p>
+                            <p x-show="staleOperationInfo && staleOperationInfo.last_stage" x-cloak x-text="staleOperationInfo && staleOperationInfo.last_stage ? 'Last stage: ' + formatLabel(staleOperationInfo.last_stage) + (staleOperationInfo.last_substage ? ' / ' + formatLabel(staleOperationInfo.last_substage) : '') : ''"></p>
+                            <p x-show="staleOperationInfo && staleOperationInfo.last_message" x-cloak x-text="staleOperationInfo && staleOperationInfo.last_message ? 'Last message: ' + staleOperationInfo.last_message : ''"></p>
+                            <p x-show="staleOperationInfo && staleOperationInfo.last_event_at" x-cloak x-text="staleOperationInfo && staleOperationInfo.last_event_at ? 'Last event: ' + formatDateTime(staleOperationInfo.last_event_at) : ''"></p>
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                        <a x-show="staleOperationArticle?.show_url" x-cloak :href="staleOperationArticle.show_url" target="_blank" rel="noopener" class="hx-btn hx-btn-secondary">Open Stale Article</a>
+                        <a x-show="staleOperationArticle?.show_url" x-cloak :href="staleOperationArticle ? staleOperationArticle.show_url : '#'" target="_blank" rel="noopener" class="hx-btn hx-btn-secondary">Open Stale Article</a>
                         <button type="button" @click="stopOperation()" :disabled="stoppingRun" class="hx-btn hx-btn-red">
                             <span x-text="stoppingRun ? 'Stopping…' : 'Force Stop Stale Run'"></span>
                         </button>

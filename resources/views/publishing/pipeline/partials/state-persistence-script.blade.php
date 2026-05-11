@@ -1368,8 +1368,11 @@
             }
         },
 
-        async flushPipelineStateNow() {
+        async flushPipelineStateNow({ silent = false, forceRetry = false } = {}) {
             if (this._restoring) return true;
+            if (forceRetry && this._draftSessionConflictActive) {
+                this._clearDraftSessionConflict?.();
+            }
             if (this._draftSessionConflictActive) return false;
 
             this.savePipelineState();
@@ -1383,7 +1386,7 @@
                 this._serverPipelineStateTimer = null;
             }
 
-            return await this.savePipelineStateToServer();
+            return await this.savePipelineStateToServer({ silent, forceRetry });
         },
 
         clearPipeline() {

@@ -76,7 +76,12 @@
         <template x-if="notification.type === 'error'">
             <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </template>
-        <span class="text-sm break-words flex-1" :class="notification.type === 'success' ? 'text-green-800' : 'text-red-800'" x-text="notification.message"></span>
+        <div class="flex-1 min-w-0">
+            <span class="text-sm break-words block" :class="notification.type === 'success' ? 'text-green-800' : 'text-red-800'" x-text="notification.message"></span>
+            <template x-if="notification.code || notification.status">
+                <span class="mt-1 block text-[11px] font-mono break-all" :class="notification.type === 'success' ? 'text-green-700' : 'text-red-700'" x-text="((notification.status ? ('HTTP ' + notification.status) : 'HTTP ?') + (notification.code ? (' · ' + notification.code) : ''))"></span>
+            </template>
+        </div>
         <button @click="notification.show = false" class="text-gray-400 hover:text-gray-600 flex-shrink-0">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>

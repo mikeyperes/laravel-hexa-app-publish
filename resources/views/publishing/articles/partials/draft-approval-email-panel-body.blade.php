@@ -5,12 +5,12 @@
         <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500">Recipients</h4>
         <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">To</label>
-            <input type="email" x-model="approvalEmailTo" @input.debounce.300ms="approvalEmailToTouched = true; savePipelineState?.()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="client@example.com">
+            <input type="email" x-model="approvalEmailTo" @input.debounce.300ms="approvalEmailToTouched = true; approvalEmailPersistState()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="client@example.com">
             <p class="mt-1.5 text-xs text-gray-500">Defaults to the creator contact email, then falls back to the login email.</p>
         </div>
         <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">CC</label>
-            <input type="text" x-model="approvalEmailCc" @input.debounce.300ms="approvalEmailCcTouched = true; savePipelineState?.()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="team@example.com, account@example.com">
+            <input type="text" x-model="approvalEmailCc" @input.debounce.300ms="approvalEmailCcTouched = true; approvalEmailPersistState()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="team@example.com, account@example.com">
             <div class="mt-2 flex flex-wrap items-center gap-2">
                 <button type="button" @click="approvalEmailAppendCcAddress(approvalEmailSuperAdminEmail)" class="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
                     Add super admin email
@@ -47,7 +47,7 @@
         <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500">Content</h4>
         <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">Subject</label>
-            <input type="text" x-model="approvalEmailSubject" @input.debounce.300ms="savePipelineState?.()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <input type="text" x-model="approvalEmailSubject" @input.debounce.300ms="approvalEmailPersistState()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
         </div>
         <div>
             <div class="flex items-center gap-1.5 mb-1">
@@ -58,7 +58,7 @@
                 x-ref="approvalEmailIntroEditor"
                 :id="approvalEmailIntroEditorId"
                 x-model="approvalEmailIntroHtml"
-                @input.debounce.300ms="savePipelineState?.()"
+                @input.debounce.300ms="approvalEmailPersistState()"
                 rows="8"
                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Optional note that appears above the draft body."></textarea>
@@ -69,7 +69,7 @@
                 <label class="text-xs font-medium text-gray-700">Image handling</label>
                 <x-hexa-tooltip mode="hover" label="?" widthClass="w-72" position="bottom">How images render in the email body. Links + captions is safest for inboxes; embed forces direct attachment; WordPress-hosted uses already-uploaded media.</x-hexa-tooltip>
             </div>
-            <select x-model="approvalEmailImageMode" @change="savePipelineState?.()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <select x-model="approvalEmailImageMode" @change="approvalEmailPersistState()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                 <option value="links">Clickable image links + captions</option>
                 <option value="embed">Embed images directly</option>
                 <option value="wordpress">Use prepared WordPress-hosted images</option>
@@ -112,7 +112,7 @@
             </button>
         </div>
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <input type="email" x-ref="approvalEmailTestInput" x-model="approvalEmailTestTo" @input.debounce.300ms="savePipelineState?.()" @keydown.enter.prevent="approvalEmailSubmitTest()" @keydown.escape="approvalEmailTestPromptOpen = false" placeholder="michael@mike-ro-tech.com" class="flex-1 rounded-lg border border-indigo-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <input type="email" x-ref="approvalEmailTestInput" x-model="approvalEmailTestTo" @input.debounce.300ms="approvalEmailPersistState()" @keydown.enter.prevent="approvalEmailSubmitTest()" @keydown.escape="approvalEmailTestPromptOpen = false" placeholder="michael@mike-ro-tech.com" class="flex-1 rounded-lg border border-indigo-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
             <button type="button" @click="approvalEmailTestPromptOpen = false" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
             <button type="button" @click="approvalEmailSubmitTest()" :disabled="approvalEmailTestSending || !approvalEmailTestTo" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 inline-flex items-center gap-2">
                 <svg x-show="approvalEmailTestSending" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>

@@ -268,15 +268,8 @@ class WordPressDeliveryService
             return $options;
         }
 
-        $taxonomyInfo = $this->resolveSyndicationTaxonomy($site);
-        $taxonomy = (string) ($taxonomyInfo['taxonomy'] ?? 'publication');
-        $options['publication_taxonomy'] = $taxonomy;
-
-        if ($taxonomy === 'category') {
-            $existing = array_values(array_filter(array_map('intval', (array) ($options['category_ids'] ?? []))));
-            $syndication = array_values(array_filter(array_map('intval', (array) ($options['publication_term_ids'] ?? []))));
-            $options['category_ids'] = array_values(array_unique(array_merge($existing, $syndication)));
-        }
+        $options['publication_term_ids'] = array_values(array_unique(array_filter(array_map('intval', (array) ($options['publication_term_ids'] ?? [])))));
+        $options['publication_taxonomy'] = 'publication';
 
         return $options;
     }

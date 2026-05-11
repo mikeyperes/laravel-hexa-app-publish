@@ -118,14 +118,14 @@ class PipelineController extends Controller
                 $draft = $this->resetReusablePipelineDraft($draft);
             }
 
-            return redirect()->route('publish.pipeline', ['id' => $draft->id]);
+            return redirect()->route('publish.pipeline.v2', ['id' => $draft->id]);
         }
 
         // Load existing draft
         $draftId = (int) $request->input('id');
         $draft = PublishArticle::with(['pipelineState', 'site', 'creator'])->find($draftId);
         if (!$draft) {
-            return redirect()->route('publish.pipeline');
+            return redirect()->route('publish.pipeline.v2');
         }
 
         $sites = PublishSite::where('status', 'connected')
@@ -2342,7 +2342,7 @@ class PipelineController extends Controller
             return;
         }
 
-        hexaLogDebug('publish.pipeline', $message, $context);
+        hexaLogDebug('publish.pipeline.v2', $message, $context);
     }
 
     private function resolveAuthorizedDraft(int $draftId): PublishArticle

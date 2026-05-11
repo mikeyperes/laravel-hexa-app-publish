@@ -222,7 +222,14 @@ class ArticleController extends Controller
      */
     public function edit(int $id)
     {
-        return redirect()->route('publish.pipeline', ['id' => $id]);
+        $article = PublishArticle::query()->findOrFail($id);
+
+        $params = ['id' => $article->id];
+        if ($article->wp_post_id || $article->wp_status || $article->wp_post_url || $article->published_at) {
+            $params['step'] = 7;
+        }
+
+        return redirect()->route('publish.pipeline.v2', $params);
     }
 
     /**
@@ -792,7 +799,7 @@ class ArticleController extends Controller
         $effectiveStatus = $article->wp_status ?: $effectiveStatus;
         $effectiveUrl = $article->wp_post_url ?: $effectiveUrl;
         $isLive = $effectiveStatus === 'publish';
-        $resumeUrl = route('publish.pipeline', ['id' => $article->id]);
+        $resumeUrl = route('publish.pipeline.v2', ['id' => $article->id]);
 
         $recommendedAction = !$hasWordPressPost
             ? 'Resume in editor to keep working on this local draft, then prepare and publish when ready.'

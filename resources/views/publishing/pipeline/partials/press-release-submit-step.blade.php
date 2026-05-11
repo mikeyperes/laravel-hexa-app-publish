@@ -318,6 +318,8 @@
 
             {{-- Notion book import --}}
             <div x-show="pressRelease.submit_method === 'notion-book'" x-cloak class="space-y-4"
+                @hexa-search-focus.window="if ($event.detail.component_id === 'press-release-person-search') handlePressReleasePersonSearchFocus()"
+                @hexa-search-query.window="if ($event.detail.component_id === 'press-release-person-search') handlePressReleasePersonSearchInput()"
                 @hexa-search-selected.window="if ($event.detail.component_id === 'press-release-person-search') loadPressReleaseNotionPersonBooks($event.detail.item)">
                 <div class="rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-3 text-sm text-blue-900">
                     <span class="font-semibold">💡 Good to know:</span> select a person from Notion first, then choose one of their related books. The author URL, Google Books link, book cover, Google Drive assets, and author photos are imported automatically.
@@ -353,13 +355,14 @@
                     <div class="divide-y divide-gray-100">
                         <template x-for="record in pressReleasePersonResults" :key="'person-' + record.id">
                             <button type="button" @click="loadPressReleaseNotionPersonBooks(record)"
+                                :disabled="pressReleaseLoadingPersonBooks"
                                 class="w-full text-left px-4 py-3 hover:bg-purple-50 transition-colors">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0 flex-1">
                                         <p class="text-sm font-semibold text-gray-800 break-words" x-text="record.title"></p>
                                         <p class="mt-1 text-xs text-gray-500 break-words" x-text="record.subtitle || 'Notion people record'"></p>
                                     </div>
-                                    <span class="text-xs text-purple-600 font-medium flex-shrink-0" x-text="pressReleaseLoadingPersonBooks ? 'Loading…' : 'Select'"></span>
+                                    <span class="text-xs text-purple-600 font-medium flex-shrink-0" x-text="String(pressReleaseLoadingPersonBooksId || '') === String(record.id) ? 'Loading…' : 'Select'"></span>
                                 </div>
                             </button>
                         </template>

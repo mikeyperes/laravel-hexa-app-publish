@@ -26,7 +26,7 @@ class PipelineDraftSessionService
             return null;
         }
 
-        if (($session['user_id'] ?? null) !== null && $userId !== null && (int) $session['user_id'] !== (int) $userId) {
+        if (($session['user_id'] ?? null) !== null && $userId !== null && (int) $session['user_id'] === (int) $userId) {
             return null;
         }
 

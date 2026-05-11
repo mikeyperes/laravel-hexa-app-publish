@@ -28,15 +28,24 @@
                     <div x-show="existingWpPostId" x-cloak class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
                         <template x-if="existingWpStatus === 'publish'">
                             <div class="space-y-2">
-                                <p>WordPress post <span class="font-mono" x-text="'#' + existingWpPostId"></span> is already live. Edit the article, run prepare again, then use <span class="font-medium">Update live WordPress post</span> to replace the same post without leaving this editor.</p>
+                                <p>This article already has a live WordPress post <span class="font-mono" x-text="'#' + existingWpPostId"></span>. Reopening it lands on Review &amp; Publish so you can inspect the live links, re-prepare safely, and update that same post without losing continuity.</p>
                                 <div class="flex flex-wrap gap-3 text-xs">
+                                    <a x-show="existingWpPostUrl" x-cloak :href="existingWpPostUrl" target="_blank" rel="noopener" class="text-blue-700 hover:text-blue-900 underline">View live post ↗</a>
+                                    <a x-show="existingWpAdminUrl" x-cloak :href="existingWpAdminUrl" target="_blank" rel="noopener" class="text-blue-700 hover:text-blue-900 underline">Open WP Admin ↗</a>
                                     <button type="button" @click="openStep(6); currentStep = 6; _syncStepToUrl && _syncStepToUrl()" class="text-blue-700 hover:text-blue-900 underline">Edit article content</button>
                                     <button type="button" @click="publishAction = 'publish'; $nextTick(() => _focusPublishActionBox())" class="text-blue-700 hover:text-blue-900 underline">Re-prepare this live post</button>
                                 </div>
                             </div>
                         </template>
                         <template x-if="existingWpStatus !== 'publish'">
-                            <p>This draft already owns WordPress post <span class="font-mono" x-text="'#' + existingWpPostId"></span>. Use <span class="font-medium">Publish existing WordPress draft live</span> to promote that same post, or <span class="font-medium">Update existing WordPress draft</span> to keep refining it safely.</p>
+                            <div class="space-y-2">
+                            <p>This article already owns WordPress draft <span class="font-mono" x-text="'#' + existingWpPostId"></span>. Reopening it lands on Review &amp; Publish because the draft is already connected to WordPress, so you can inspect the current WordPress links and either refine or promote that same draft.</p>
+                            <div class="flex flex-wrap gap-3 text-xs">
+                                <a x-show="existingWpPostUrl" x-cloak :href="existingWpPostUrl" target="_blank" rel="noopener" class="text-blue-700 hover:text-blue-900 underline">View current WP link ↗</a>
+                                <a x-show="existingWpAdminUrl" x-cloak :href="existingWpAdminUrl" target="_blank" rel="noopener" class="text-blue-700 hover:text-blue-900 underline">Open WP Admin ↗</a>
+                                <button type="button" @click="openStep(6); currentStep = 6; _syncStepToUrl && _syncStepToUrl()" class="text-blue-700 hover:text-blue-900 underline">Edit article content</button>
+                            </div>
+                        </div>
                         </template>
                     </div>
 

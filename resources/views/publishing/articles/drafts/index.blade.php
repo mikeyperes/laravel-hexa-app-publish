@@ -26,7 +26,7 @@
                 <svg x-show="bulkDeleting" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 Delete Selected (<span x-text="selectedIds.length"></span>)
             </button>
-            <a href="{{ route('publish.pipeline', ['spawn' => 1]) }}" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 inline-flex items-center gap-1.5">
+            <a href="{{ route('publish.pipeline.v2', ['spawn' => 1]) }}" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-700 inline-flex items-center gap-1.5">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                 New Article
             </a>
@@ -54,11 +54,19 @@
                     $thumb = $firstPhoto;
                 }
             }
-            $isPublished = in_array($draft->status, ['completed', 'published'], true) || $draft->wp_post_url;
-            $accentClass = $isPublished ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-gray-300';
-            $previewBody = $draft->body ? preg_replace('/<div[^>]*class="[^"]*photo-placeholder[^"]*"[^>]*>.*?<\/div>/s', '', $draft->body) : '';
-            if ($previewBody && !preg_match('/<p[\s>]/i', $previewBody)) {
-                $parts = preg_split('/\n{2,}/', trim($previewBody));
+            $wpStatus = strtolower((string) ($draft->wp_status ?? ''));
+            $hasWpPost = (bool) $draft->wp_post_id;
+            $isWpLive = in_array($wpStatus, ['publish', 'published'], true) || !is_null($draft->published_at);
+            $isWpDraft = $hasWpPost && !$isWpLive;
+            $isReadyState = in_array($draft->status, ['completed', 'published'], true);
+            $accentClass = $isWpLive
+                ? 'border-l-4 border-l-green-500'
+                : ($isWpDraft
+                    ? 'border-l-4 border-l-blue-500'
+                    : ($isReadyState ? 'border-l-4 border-l-amber-400' : 'border-l-4 border-l-gray-300'));
+            $previewBody = $draft->body ? preg_replace('/<div[^>]*class=\"[^\"]*photo-placeholder[^\"]*\"[^>]*>.*?<\\/div>/s', '', $draft->body) : '';
+            if ($previewBody && !preg_match('/<p[\\s>]/i', $previewBody)) {
+                $parts = preg_split('/\\n{2,}/', trim($previewBody));
                 $previewBody = implode('', array_map(fn($p) => '<p>' . nl2br(trim($p)) . '</p>', array_filter($parts)));
             }
             $previewCategories = is_array($draft->categories) && $draft->categories
@@ -73,6 +81,27 @@
             $previewWpAdminUrl = ($draft->site && $draft->wp_post_id)
                 ? rtrim((string) $draft->site->url, '/') . '/wp-admin/post.php?post=' . $draft->wp_post_id . '&action=edit'
                 : null;
+            $pipelineParams = ['id' => $draft->id];
+            if ($hasWpPost || $draft->wp_post_url || $draft->published_at) {
+                $pipelineParams['step'] = 7;
+            }
+            $pipelineUrl = route('publish.pipeline.v2', $pipelineParams);
+            $wpPrimaryUrl = null;
+            $wpPrimaryLabel = null;
+            $wpPrimaryTitle = null;
+            if ($draft->wp_post_url) {
+                if ($isWpLive) {
+                    $wpPrimaryUrl = $draft->wp_post_url;
+                    $wpPrimaryLabel = 'Live link';
+                    $wpPrimaryTitle = 'Open live post';
+                } elseif ($hasWpPost) {
+                    $wpPrimaryUrl = str_contains($draft->wp_post_url, 'preview=true')
+                        ? $draft->wp_post_url
+                        : ($draft->wp_post_url . (str_contains($draft->wp_post_url, '?') ? '&preview=true' : '?preview=true'));
+                    $wpPrimaryLabel = 'Draft preview';
+                    $wpPrimaryTitle = 'Open WordPress draft preview';
+                }
+            }
         @endphp
         <div class="bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all p-4 {{ $accentClass }}" :class="deletingId === {{ $draft->id }} ? '!border-red-300 !bg-red-50' : ''" id="row-{{ $draft->id }}">
             <div class="flex items-start gap-4">
@@ -82,7 +111,7 @@
                 </div>
 
                 {{-- Featured image (160x112) --}}
-                <a href="{{ route('publish.pipeline', ['id' => $draft->id]) }}" class="flex-shrink-0 w-40 h-28 rounded-md bg-gray-100 overflow-hidden block group">
+                <a href="{{ $pipelineUrl }}" class="flex-shrink-0 w-40 h-28 rounded-md bg-gray-100 overflow-hidden block group">
                     @if($thumb)
                         <img src="{{ $thumb }}" alt="" class="w-full h-full object-cover group-hover:opacity-90 transition" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\'w-full h-full flex items-center justify-center text-gray-300\'><svg class=\'w-9 h-9\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z\'/></svg></div>'">
                     @else
@@ -97,19 +126,19 @@
 
                     {{-- Title row: title (flex-1) + action icons (top-right) --}}
                     <div class="flex items-start gap-3">
-                        <a href="{{ route('publish.pipeline', ['id' => $draft->id]) }}" class="flex-1 min-w-0 block text-base font-semibold text-gray-900 hover:text-blue-600 break-words leading-snug">{{ $draft->title ?: 'Untitled' }}</a>
+                        <a href="{{ $pipelineUrl }}" class="flex-1 min-w-0 block text-base font-semibold text-gray-900 hover:text-blue-600 break-words leading-snug">{{ $draft->title ?: 'Untitled' }}</a>
                         <div class="flex-shrink-0 flex items-center gap-1">
                             <button @click="togglePreview({{ $draft->id }})" class="p-1.5 rounded-md text-gray-400 hover:text-slate-700 hover:bg-slate-50 transition-colors" :title="isPreviewOpen({{ $draft->id }}) ? 'Hide preview' : 'Preview in place'">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                             </button>
-                            <a href="{{ route('publish.pipeline', ['id' => $draft->id]) }}" class="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Open in pipeline">
+                            <a href="{{ $pipelineUrl }}" class="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Open in review & publish">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                             </a>
                             <button @click="openApprovalEmail({{ $draft->id }})" class="p-1.5 rounded-md text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Approval email">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8m-16 8h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
                             </button>
-                            @if($draft->wp_post_url)
-                                <a href="{{ $draft->wp_post_url }}" target="_blank" rel="noopener" class="p-1.5 rounded-md text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors" title="Open live post">
+                            @if($wpPrimaryUrl)
+                                <a href="{{ $wpPrimaryUrl }}" target="_blank" rel="noopener" class="p-1.5 rounded-md text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors" title="{{ $wpPrimaryTitle }}">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                                 </a>
                             @endif
@@ -170,16 +199,25 @@
                                 </span>
                             @endif
                             @if($draft->wp_post_id)
-                                @if($draft->published_at)<span class="text-gray-300">·</span>@endif
-                                <span class="text-gray-400">WP #{{ $draft->wp_post_id }}</span>
+                                <span class="text-gray-400">{{ $isWpLive ? 'WP Live' : 'WP Draft' }} #{{ $draft->wp_post_id }}</span>
+                            @endif
+                            @if($wpPrimaryUrl)
+                                <a href="{{ $wpPrimaryUrl }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">{{ $wpPrimaryLabel }} ↗</a>
+                            @endif
+                            @if($previewWpAdminUrl)
+                                <a href="{{ $previewWpAdminUrl }}" target="_blank" rel="noopener" class="text-slate-500 hover:text-slate-700 hover:underline">WP Admin ↗</a>
                             @endif
                         </div>
                         <div class="flex items-center gap-1.5 flex-shrink-0">
                             @if($draft->article_type)
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">{{ ucfirst(str_replace('_', ' ', $draft->article_type)) }}</span>
                             @endif
-                            @if($draft->status === 'completed' || $draft->status === 'published')
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200">{{ ucfirst($draft->status) }}</span>
+                            @if($isWpLive)
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200">Live</span>
+                            @elseif($isWpDraft)
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">WP Draft</span>
+                            @elseif($isReadyState)
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">Ready</span>
                             @elseif($draft->status === 'drafting')
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-200">Draft</span>
                             @else
@@ -241,9 +279,9 @@
                                 </div>
                                 <div class="rounded-lg border border-slate-200 bg-white px-3 py-3">
                                     <p class="font-semibold uppercase tracking-wide text-slate-400">WordPress</p>
-                                    <p class="mt-1 text-sm font-medium text-slate-900" x-text="rowWpPostLabel({{ $draft->id }})">{{ $draft->wp_post_id ? ('#' . $draft->wp_post_id) : 'No WP post yet' }}</p>
-                                    <a x-show="rowWpPostUrl({{ $draft->id }})" x-cloak :href="rowWpPostUrl({{ $draft->id }})" target="_blank" rel="noopener" class="mt-1 inline-flex break-all text-blue-600 hover:underline" x-text="rowWpPostUrl({{ $draft->id }})"></a>
-                                    <a x-show="rowWpAdminUrl({{ $draft->id }})" x-cloak :href="rowWpAdminUrl({{ $draft->id }})" target="_blank" rel="noopener" class="mt-1 inline-flex break-all text-slate-500 hover:text-slate-700 hover:underline">WP Admin Edit</a>
+                                    <p class="mt-1 text-sm font-medium text-slate-900" x-text="rowWpPostLabel({{ $draft->id }})">{{ $isWpLive ? ('Live post #' . $draft->wp_post_id) : ($draft->wp_post_id ? ('WordPress draft #' . $draft->wp_post_id) : 'No WP post yet') }}</p>
+                                    <a x-show="rowWpPrimaryUrl({{ $draft->id }})" x-cloak :href="rowWpPrimaryUrl({{ $draft->id }})" target="_blank" rel="noopener" class="mt-1 inline-flex text-blue-600 hover:underline" x-text="rowWpPrimaryLabel({{ $draft->id }}) + ' ↗'"></a>
+                                    <a x-show="rowWpAdminUrl({{ $draft->id }})" x-cloak :href="rowWpAdminUrl({{ $draft->id }})" target="_blank" rel="noopener" class="mt-1 inline-flex text-slate-500 hover:text-slate-700 hover:underline">WP Admin ↗</a>
                                 </div>
                                 <div class="rounded-lg border border-slate-200 bg-white px-3 py-3">
                                     <p class="font-semibold uppercase tracking-wide text-slate-400">Article Settings</p>
@@ -380,7 +418,7 @@
         <div class="bg-white rounded-lg border border-gray-200 p-12 text-center">
             <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             <p class="text-gray-400 text-sm">No articles found.</p>
-            <a href="{{ route('publish.pipeline', ['spawn' => 1]) }}" class="inline-flex items-center gap-1.5 mt-3 text-sm text-blue-600 hover:text-blue-700">
+            <a href="{{ route('publish.pipeline.v2', ['spawn' => 1]) }}" class="inline-flex items-center gap-1.5 mt-3 text-sm text-blue-600 hover:text-blue-700">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                 Create your first article
             </a>
@@ -547,16 +585,38 @@ function articlesList() {
 
         rowIsLive(id) {
             const article = this.ensureRowState(id).article || {};
-            return article.wp_status === 'publish' || article.status === 'published' || article.status === 'completed' || !!article.published_at;
+            const wpStatus = String(article.wp_status || '').toLowerCase();
+            return wpStatus === 'publish' || wpStatus === 'published' || !!article.published_at;
+        },
+
+        rowIsWpDraft(id) {
+            const article = this.ensureRowState(id).article || {};
+            return !!article.wp_post_id && !this.rowIsLive(id);
         },
 
         rowWpPostLabel(id) {
             const article = this.ensureRowState(id).article || {};
-            return article.wp_post_id ? ('#' + article.wp_post_id) : 'No WP post yet';
+            if (!article.wp_post_id) return 'No WP post yet';
+            return this.rowIsLive(id)
+                ? ('Live post #' + article.wp_post_id)
+                : ('WordPress draft #' + article.wp_post_id);
+        },
+
+        rowWpPrimaryUrl(id) {
+            const article = this.ensureRowState(id).article || {};
+            const postUrl = String(article.wp_post_url || '').trim();
+            if (!postUrl) return '';
+            if (this.rowIsLive(id)) return postUrl;
+            return postUrl.includes('preview=true') ? postUrl : (postUrl + (postUrl.includes('?') ? '&preview=true' : '?preview=true'));
+        },
+
+        rowWpPrimaryLabel(id) {
+            if (!this.rowHasWpPost(id)) return '';
+            return this.rowIsLive(id) ? 'Live link' : 'Draft preview';
         },
 
         rowWpPostUrl(id) {
-            return this.ensureRowState(id).article?.wp_post_url || '';
+            return this.rowWpPrimaryUrl(id);
         },
 
         rowWpAdminUrl(id) {

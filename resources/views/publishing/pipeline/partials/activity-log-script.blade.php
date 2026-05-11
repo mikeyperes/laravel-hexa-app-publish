@@ -796,7 +796,10 @@
             });
 
             if (!silent) {
-                this.showNotification('error', message);
+                this.showNotification('error', message, {
+                    status: 409,
+                    code: data?.code || 'draft_session_conflict',
+                });
             }
         },
 

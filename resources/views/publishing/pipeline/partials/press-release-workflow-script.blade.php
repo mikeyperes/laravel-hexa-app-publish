@@ -26,12 +26,14 @@ function pressReleaseWorkflowMixin(config) {
         pressReleasePersonDropdownOpen: false,
         pressReleasePersonNoResults: false,
         pressReleaseLoadingPersonBooks: false,
+        pressReleaseLoadingPersonBooksId: null,
         pressReleaseImportingBookId: null,
         _serverPipelineStateTimer: null,
         _savingPipelineStateServer: false,
         _pressReleaseLegacyRefreshEpisodeId: null,
         _pressReleaseEpisodeSearchToken: 0,
         _pressReleasePersonSearchToken: 0,
+        _pressReleasePersonSearchController: null,
 
         normalizePressReleaseState(state = {}) {
             const defaults = clone(this.pressReleaseDefaultState || {});
@@ -685,6 +687,20 @@ function pressReleaseWorkflowMixin(config) {
             const query = loadRecent ? '' : String(this.pressRelease.notion_person_query || '').trim();
 
             const token = ++this._pressReleasePersonSearchToken;
+            if (loadRecent) {
+                window.dispatchEvent(new CustomEvent('hexa-search-cancel', {
+                    detail: {
+                        component_id: 'press-release-person-search',
+                        close: true,
+                        clearResults: true,
+                    },
+                }));
+            }
+            if (this._pressReleasePersonSearchController) {
+                this._pressReleasePersonSearchController.abort();
+            }
+            const controller = new AbortController();
+            this._pressReleasePersonSearchController = controller;
             this.pressReleasePersonSearching = true;
             this.pressReleasePersonDropdownOpen = !!loadRecent;
             this.pressReleasePersonNoResults = false;
@@ -698,9 +714,10 @@ function pressReleaseWorkflowMixin(config) {
                 }
                 const response = await fetch(searchUrl.toString(), {
                     headers: { Accept: 'application/json' },
+                    signal: controller.signal,
                 });
                 const data = await response.json();
-                if (token !== this._pressReleasePersonSearchToken) {
+                if (token !== this._pressReleasePersonSearchToken || controller !== this._pressReleasePersonSearchController) {
                     return;
                 }
                 this.pressReleasePersonResults = Array.isArray(data) ? data : [];
@@ -710,6 +727,9 @@ function pressReleaseWorkflowMixin(config) {
                     this.showNotification('error', 'No Notion people matched that search.');
                 }
             } catch (error) {
+                if (error?.name === 'AbortError') {
+                    return;
+                }
                 if (token !== this._pressReleasePersonSearchToken) {
                     return;
                 }
@@ -718,10 +738,35 @@ function pressReleaseWorkflowMixin(config) {
                 this.pressReleasePersonDropdownOpen = false;
                 this.showNotification('error', error.message || 'Failed to search Notion people.');
             } finally {
-                if (token === this._pressReleasePersonSearchToken) {
+                if (token === this._pressReleasePersonSearchToken && controller === this._pressReleasePersonSearchController) {
                     this.pressReleasePersonSearching = false;
+                    this._pressReleasePersonSearchController = null;
                 }
             }
+        },
+
+        cancelPressReleaseNotionPeopleSearch(options = {}) {
+            ++this._pressReleasePersonSearchToken;
+            if (this._pressReleasePersonSearchController) {
+                this._pressReleasePersonSearchController.abort();
+                this._pressReleasePersonSearchController = null;
+            }
+            this.pressReleasePersonSearching = false;
+            this.pressReleasePersonNoResults = false;
+            if (options.clearResults !== false) {
+                this.pressReleasePersonResults = [];
+            }
+            if (options.close !== false) {
+                this.pressReleasePersonDropdownOpen = false;
+            }
+        },
+
+        handlePressReleasePersonSearchFocus() {
+            this.cancelPressReleaseNotionPeopleSearch({ clearResults: false, close: true });
+        },
+
+        handlePressReleasePersonSearchInput() {
+            this.cancelPressReleaseNotionPeopleSearch({ clearResults: false, close: true });
         },
 
         async loadPressReleaseNotionPersonBooks(record, options = {}) {
@@ -731,7 +776,16 @@ function pressReleaseWorkflowMixin(config) {
             }
 
             const notify = options.notify !== false;
+            this.cancelPressReleaseNotionPeopleSearch();
+            window.dispatchEvent(new CustomEvent('hexa-search-cancel', {
+                detail: {
+                    component_id: 'press-release-person-search',
+                    close: true,
+                    clearResults: true,
+                },
+            }));
             this.pressReleaseLoadingPersonBooks = true;
+            this.pressReleaseLoadingPersonBooksId = String(record.id);
 
             try {
                 const response = await this._rawPipelineFetch('{{ route("publish.pipeline.press-release.list-notion-person-books") }}', {
@@ -777,6 +831,7 @@ function pressReleaseWorkflowMixin(config) {
                 throw error;
             } finally {
                 this.pressReleaseLoadingPersonBooks = false;
+                this.pressReleaseLoadingPersonBooksId = null;
             }
         },
         pressReleaseNeedsLegacyNotionRefresh() {
@@ -1272,8 +1327,11 @@ function pressReleaseWorkflowMixin(config) {
             this._serverPipelineStateTimer = setTimeout(() => this.savePipelineStateToServer(), 350);
         },
 
-        async savePipelineStateToServer() {
+        async savePipelineStateToServer({ silent = true, forceRetry = false } = {}) {
             if (!this.draftId) return true;
+            if (forceRetry && this._draftSessionConflictActive) {
+                this._clearDraftSessionConflict?.();
+            }
             if (this._draftSessionConflictActive) return false;
             if (this._savingPipelineStateServer) {
                 this._pendingServerPipelineStateSave = true;
@@ -1307,12 +1365,18 @@ function pressReleaseWorkflowMixin(config) {
                 });
                 const data = await response.json().catch(() => ({}));
                 if (response.status === 409 && data.code === 'draft_session_conflict') {
-                    this._handleDraftSessionConflict?.('state', data, { silent: true });
+                    this._lastPipelineStateSaveError = {
+                        message: data.message || 'Pipeline state save failed.',
+                        status: response.status,
+                        code: data.code || 'draft_session_conflict',
+                    };
+                    this._handleDraftSessionConflict?.('state', data, { silent });
                     this._savingPipelineStateServer = false;
                     return false;
                 }
                 if (response.ok && data.success) {
                     this._clearDraftSessionConflict?.();
+                    this._lastPipelineStateSaveError = null;
                     this._lastServerPipelineStateSignature = signature;
                     this._logDebug?.('state', 'Server pipeline state saved', {
                         stage: 'state',
@@ -1329,23 +1393,45 @@ function pressReleaseWorkflowMixin(config) {
                 }
 
                 this._pendingServerPipelineStateSave = true;
+                this._lastPipelineStateSaveError = {
+                    message: data.message || 'Server pipeline state save failed',
+                    status: response.status,
+                    code: data.code || 'pipeline_state_save_failed',
+                };
                 this._logActivity?.('state', 'error', data.message || 'Server pipeline state save failed', {
                     stage: 'state',
                     substage: 'server_response_error',
                     status: response.status,
                     duration_ms: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt)),
+                    details: data.code ? ('code: ' + data.code) : '',
                 });
+                if (!silent) {
+                    this.showNotification?.('error', this._lastPipelineStateSaveError.message, {
+                        status: this._lastPipelineStateSaveError.status,
+                        code: this._lastPipelineStateSaveError.code,
+                    });
+                }
             } catch (error) {
                 if (this._isLikelyNavigationAbort?.(error)) {
                     this._savingPipelineStateServer = false;
                     return false;
                 }
                 this._pendingServerPipelineStateSave = true;
+                this._lastPipelineStateSaveError = {
+                    message: 'Server pipeline state save error: ' + error.message,
+                    status: null,
+                    code: 'request_exception',
+                };
                 this._logActivity?.('state', 'error', 'Server pipeline state save error: ' + error.message, {
                     stage: 'state',
                     substage: 'server_exception',
                     duration_ms: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt)),
                 });
+                if (!silent) {
+                    this.showNotification?.('error', this._lastPipelineStateSaveError.message, {
+                        code: this._lastPipelineStateSaveError.code,
+                    });
+                }
             }
 
             this._savingPipelineStateServer = false;

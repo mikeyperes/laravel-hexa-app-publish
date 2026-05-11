@@ -94,16 +94,11 @@ class DraftApprovalEmailService
         ]);
 
         $startedAt = microtime(true);
-        $result = $this->emailService->send(
-            to: $config['to'],
-            subject: $config['subject'],
-            body: $message['body_html'],
-            fromName: $config['from_name'],
-            fromEmail: $config['from_email'],
-            replyTo: $config['reply_to'],
-            cc: $config['cc'],
-            smtpAccountId: $smtpMeta['id'],
-            context: 'publish_draft_approval:' . $article->id . ':' . $record->id,
+        $result = $this->sendEmailThroughConfiguredTransport(
+            config: $config,
+            message: $message,
+            smtpMeta: $smtpMeta,
+            context: "publish_draft_approval:" . $article->id . ":" . $record->id,
         );
         $elapsedMs = (int) round((microtime(true) - $startedAt) * 1000);
 
@@ -441,6 +436,71 @@ HTML;
         }
 
         return [$this->transformImagesToLinks($html), $warnings];
+    }
+
+    private function sendEmailThroughConfiguredTransport(array $config, array $message, array $smtpMeta, string $context): array
+    {
+        $service = trim((string) ($smtpMeta["service"] ?? "core-smtp")) ?: "core-smtp";
+
+        if ($service === "smtp2go" && class_exists(\hexa_package_smtp2go\Services\Smtp2goService::class)) {
+            $payload = [
+                "sender" => $config["from_email"],
+                "to" => [$config["to"]],
+                "subject" => $config["subject"],
+                "html_body" => $message["body_html"],
+                "text_body" => $message["body_text"],
+            ];
+            if ($config["reply_to"] !== "") {
+                $payload["reply_to"] = $config["reply_to"];
+            }
+            if (!empty($config["cc_list"])) {
+                $payload["cc"] = array_values($config["cc_list"]);
+            }
+
+            $result = app(\hexa_package_smtp2go\Services\Smtp2goService::class)->sendTransactionalEmail($payload);
+
+            return [
+                "success" => (bool) ($result["success"] ?? false),
+                "message" => (bool) ($result["success"] ?? false) ? "Email sent successfully to " . $config["to"] : ("Email failed: " . (string) ($result["error"] ?? $result["message"] ?? "SMTP2GO send failed.")),
+                "diagnostics" => ["provider" => "smtp2go", "response" => $result["data"] ?? null],
+            ];
+        }
+
+        if ($service === "brevo" && class_exists(\hexa_package_brevo\Services\BrevoService::class)) {
+            $payload = [
+                "sender" => ["name" => $config["from_name"], "email" => $config["from_email"]],
+                "to" => [["email" => $config["to"]]],
+                "subject" => $config["subject"],
+                "htmlContent" => $message["body_html"],
+                "textContent" => $message["body_text"],
+            ];
+            if ($config["reply_to"] !== "") {
+                $payload["replyTo"] = ["email" => $config["reply_to"]];
+            }
+            if (!empty($config["cc_list"])) {
+                $payload["cc"] = array_map(static fn (string $email): array => ["email" => $email], array_values($config["cc_list"]));
+            }
+
+            $result = app(\hexa_package_brevo\Services\BrevoService::class)->sendTransactionalEmail($payload);
+
+            return [
+                "success" => (bool) ($result["success"] ?? false),
+                "message" => (bool) ($result["success"] ?? false) ? "Email sent successfully to " . $config["to"] : ("Email failed: " . (string) ($result["error"] ?? $result["message"] ?? "Brevo send failed.")),
+                "diagnostics" => ["provider" => "brevo", "response" => $result["data"] ?? null],
+            ];
+        }
+
+        return $this->emailService->send(
+            to: $config["to"],
+            subject: $config["subject"],
+            body: $message["body_html"],
+            fromName: $config["from_name"],
+            fromEmail: $config["from_email"],
+            replyTo: $config["reply_to"],
+            cc: $config["cc"],
+            smtpAccountId: $smtpMeta["id"],
+            context: $context,
+        );
     }
 
     private function resolveDefaultRecipient(array $snapshot): string
@@ -804,74 +864,65 @@ HTML;
 
     private function resolveSmtpMeta(): array
     {
-        $settingsHost = trim((string) (Setting::getValue('smtp_host', '') ?: ''));
-        $settingsUsername = trim((string) (Setting::getValue('smtp_username', '') ?: ''));
-        $settingsFromEmail = trim((string) ((Setting::getValue('smtp_from_email', '') ?: Setting::getValue('from_email', '')) ?: ''));
-        $settingsFromName = (string) ((Setting::getValue('smtp_from_name', '') ?: Setting::getValue('from_name', '')) ?: 'Scale My Publication');
+        $service = trim((string) Setting::getValue("system_sender_service", "core-smtp")) ?: "core-smtp";
+        $fromEmail = trim((string) Setting::getValue("from_email", ""));
+        $fromName = (string) (Setting::getValue("from_name", "") ?: "Scale My Publication");
 
-        $preferredAccount = null;
-        if ($settingsHost !== '' || $settingsUsername !== '' || $settingsFromEmail !== '') {
-            $preferredAccount = SmtpAccount::query()
-                ->where('is_active', true)
-                ->where(function ($query) use ($settingsHost, $settingsUsername, $settingsFromEmail) {
-                    if ($settingsHost !== '') {
-                        $query->orWhere('host', $settingsHost);
-                    }
-                    if ($settingsUsername !== '') {
-                        $query->orWhere('username', $settingsUsername);
-                    }
-                    if ($settingsFromEmail !== '') {
-                        $query->orWhere('from_email', $settingsFromEmail);
-                    }
-                })
-                ->orderByDesc('is_default')
-                ->orderByDesc('is_system_sender')
-                ->first();
-        }
-
-        if ($preferredAccount) {
+        if ($service !== "core-smtp") {
             return [
-                'id' => $preferredAccount->id,
-                'name' => $preferredAccount->name,
-                'from_email' => $preferredAccount->from_email,
-                'from_name' => $preferredAccount->from_name ?: $settingsFromName,
-                'host' => $preferredAccount->host,
-                'source' => 'smtp_account_match',
+                "id" => null,
+                "name" => strtoupper($service),
+                "from_email" => $fromEmail,
+                "from_name" => $fromName,
+                "host" => $service === "smtp2go"
+                    ? trim((string) Setting::getValue("smtp2go_smtp_server", "mail.smtp2go.com"))
+                    : "api.brevo.com",
+                "source" => "system_sender_service",
+                "service" => $service,
             ];
         }
 
-        if ($settingsHost !== '' || $settingsFromEmail !== '') {
-            return [
-                'id' => null,
-                'name' => $settingsFromName ?: 'Settings fallback',
-                'from_email' => $settingsFromEmail,
-                'from_name' => $settingsFromName,
-                'host' => $settingsHost,
-                'source' => 'settings',
-            ];
+        $systemAccountId = (int) Setting::getValue("system_smtp_account_id", "0");
+        if ($systemAccountId > 0) {
+            $systemAccount = SmtpAccount::query()->where("id", $systemAccountId)->where("is_active", true)->first();
+            if ($systemAccount) {
+                return [
+                    "id" => $systemAccount->id,
+                    "name" => $systemAccount->name,
+                    "from_email" => $systemAccount->from_email,
+                    "from_name" => $systemAccount->from_name ?: $fromName,
+                    "host" => $systemAccount->host,
+                    "source" => "system_smtp_account",
+                    "service" => "core-smtp",
+                ];
+            }
         }
 
-        $account = SmtpAccount::query()->where('is_default', true)->where('is_active', true)->first();
+        $account = SmtpAccount::query()->where("is_system_sender", true)->where("is_active", true)->first()
+            ?: SmtpAccount::query()->where("is_default", true)->where("is_active", true)->first();
         if ($account) {
             return [
-                'id' => $account->id,
-                'name' => $account->name,
-                'from_email' => $account->from_email,
-                'from_name' => $account->from_name,
-                'host' => $account->host,
-                'source' => 'smtp_account',
+                "id" => $account->id,
+                "name" => $account->name,
+                "from_email" => $account->from_email,
+                "from_name" => $account->from_name ?: $fromName,
+                "host" => $account->host,
+                "source" => "smtp_account",
+                "service" => "core-smtp",
             ];
         }
 
         return [
-            'id' => null,
-            'name' => $settingsFromName ?: 'Settings fallback',
-            'from_email' => $settingsFromEmail,
-            'from_name' => $settingsFromName,
-            'host' => $settingsHost,
-            'source' => 'settings',
+            "id" => null,
+            "name" => $fromName ?: "Settings fallback",
+            "from_email" => $fromEmail,
+            "from_name" => $fromName,
+            "host" => "",
+            "source" => "settings",
+            "service" => "core-smtp",
         ];
     }
+
 
     private function logActivity(
         PublishArticle $article,

@@ -197,6 +197,14 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             this.approvalEmailStatus = '';
         },
 
+        approvalEmailPersistState() {
+            try {
+                if (this.savePipelineState) {
+                    this.savePipelineState();
+                }
+            } catch (error) {}
+        },
+
         approvalEmailStatusNeedsSmtpSettings() {
             const message = String(this.approvalEmailStatus || '').toLowerCase();
             return this.approvalEmailStatusType === 'error'
@@ -365,7 +373,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 list.push(candidate);
                 this.approvalEmailCc = list.join(', ');
                 this.approvalEmailCcTouched = true;
-                this.savePipelineState?.();
+                this.approvalEmailPersistState();
             }
         },
 
@@ -388,7 +396,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             }
             this.approvalEmailCc = list.join(', ');
             this.approvalEmailCcTouched = true;
-            this.savePipelineState?.();
+            this.approvalEmailPersistState();
         },
 
         async approvalEmailLoad(articleId = null, options = {}) {

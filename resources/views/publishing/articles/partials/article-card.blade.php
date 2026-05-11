@@ -33,6 +33,10 @@
     .hx-article-meta a { color:#2563eb; }
     .hx-article-meta a:hover { text-decoration:underline; }
     .hx-article-meta strong { color:#1e293b; font-weight:600; }
+    .hx-article-links { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; font-size:13px; color:#64748b; }
+    .hx-article-links a { color:#2563eb; }
+    .hx-article-links a:hover { text-decoration:underline; }
+    .hx-article-links .hx-link-status { color:#334155; font-weight:600; }
     .hx-article-cats { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; color:#64748b; }
     .hx-article-cats .hx-cat { background:#f1f5f9; color:#475569; padding:3px 9px; border-radius:6px; font-size:11px; font-weight:500; }
     .hx-article-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 20px; border-top:1px solid #f1f5f9; background:#fafbfc; }
@@ -66,9 +70,8 @@
     $showUrl = $campaignId > 0
         ? route('publish.articles.show', ['id' => $article->id, 'campaign_id' => $campaignId, 'article_id' => $article->id])
         : route('publish.articles.show', $article->id);
-    $editUrl = $campaignId > 0
-        ? route('publish.articles.edit', ['id' => $article->id, 'campaign_id' => $campaignId, 'article_id' => $article->id])
-        : route('publish.articles.edit', $article->id);
+    $pipelineParams = ['id' => $article->id, 'step' => ($article->wp_post_id || $article->wp_status || $article->wp_post_url || $article->published_at) ? 7 : 6];
+    $editUrl = route('publish.pipeline.v2', $pipelineParams);
 
     $thumb = null;
     if ($article->wp_images && is_array($article->wp_images)) {
@@ -85,14 +88,20 @@
     }
     $sourceCount = count((array) ($article->source_articles ?? []));
 
+    $hasWpPost = (bool) $article->wp_post_id;
+    $wpStatus = strtolower((string) ($article->wp_status ?? ''));
+    $isWpLive = in_array($wpStatus, ['publish', 'published'], true) || !is_null($article->published_at);
+    $isWpDraft = $hasWpPost && !$isWpLive;
     $pipelineTone = match($article->status) {
-        'completed' => 'green',
+        'completed' => 'amber',
+        'published' => 'green',
         'failed', 'error' => 'red',
         'running', 'pending', 'queued', 'drafting', 'sourcing', 'spinning', 'review' => 'amber',
         default => 'slate',
     };
     $pipelineLabel = match($article->status) {
-        'completed' => 'Generated',
+        'completed' => $hasWpPost ? 'Ready to Update' : 'Ready to Publish',
+        'published' => 'Published',
         'running', 'drafting', 'sourcing', 'spinning' => 'In Progress',
         'review' => 'Ready for Review',
         'queued', 'pending' => 'Queued',
@@ -108,21 +117,23 @@
     } elseif ($displayTitle === '') {
         $displayTitle = 'Untitled Article';
     }
-    $isDraft = in_array($article->wp_status, ['draft', 'pending', 'auto-draft', 'future'], true);
-    $wpTone = match($article->wp_status) {
-        'publish', 'published' => 'green',
-        'draft', 'auto-draft' => 'gray',
-        'pending', 'future' => 'amber',
-        'trash' => 'red',
+    $wpTone = match(true) {
+        $isWpLive => 'green',
+        $isWpDraft => 'blue',
+        $wpStatus === 'trash' => 'red',
         default => 'slate',
     };
     $wpEditUrl = ($siteUrl && $article->wp_post_id)
         ? $siteUrl . '/wp-admin/post.php?post=' . $article->wp_post_id . '&action=edit'
         : null;
-    $wpLink = $isDraft
-        ? ($wpEditUrl ?: $article->wp_post_url)
+    $wpPreviewUrl = $article->wp_post_url
+        ? (str_contains($article->wp_post_url, 'preview=true') ? $article->wp_post_url : ($article->wp_post_url . (str_contains($article->wp_post_url, '?') ? '&preview=true' : '?preview=true')))
+        : null;
+    $wpLink = $isWpDraft
+        ? ($wpPreviewUrl ?: $wpEditUrl ?: $article->wp_post_url)
         : ($article->wp_post_url ?: $wpEditUrl);
-    $wpLinkLabel = $isDraft ? 'Edit in WordPress' : 'View on WordPress';
+    $wpLinkLabel = $isWpLive ? 'Live link' : ($isWpDraft ? 'Draft preview' : 'WordPress link');
+    $wpBadgeLabel = $isWpLive ? 'WordPress · Live' : ($isWpDraft ? 'WordPress · Draft' : ('WordPress · ' . ucfirst((string) $article->wp_status)));
 
     $showSiteChip = $showCampaignSite ?? true;
     $thumbToneClass = in_array((string) $article->status, ['failed', 'error'], true)
@@ -153,9 +164,9 @@
                 @endif
                 @if($article->wp_status)
                     @if($wpLink)
-                        <a href="{{ $wpLink }}" target="_blank" rel="noopener" class="hx-tag {{ $wpTone }}" title="{{ $wpLinkLabel }} on {{ $siteName ?: 'WordPress' }}">WordPress · {{ ucfirst($article->wp_status) }} ↗</a>
+                        <a href="{{ $wpLink }}" target="_blank" rel="noopener" class="hx-tag {{ $wpTone }}" title="{{ $wpLinkLabel }} on {{ $siteName ?: 'WordPress' }}">{{ $wpBadgeLabel }} ↗</a>
                     @else
-                        <span class="hx-tag {{ $wpTone }}" title="WordPress post status (no URL available)">WordPress · {{ ucfirst($article->wp_status) }}</span>
+                        <span class="hx-tag {{ $wpTone }}" title="WordPress post status (no URL available)">{{ $wpBadgeLabel }}</span>
                     @endif
                 @endif
                 @if($showSiteChip && $siteName)
@@ -183,6 +194,20 @@
                 <span class="hx-sep">·</span>{{ $article->created_at?->setTimezone($tz)->format('M j, Y · g:i A') }}
             </div>
 
+            @if($hasWpPost || $wpLink || $wpEditUrl)
+                <div class="hx-article-links">
+                    @if($hasWpPost)
+                        <span class="hx-link-status">{{ $isWpLive ? 'Live post' : 'WordPress draft' }} #{{ $article->wp_post_id }}</span>
+                    @endif
+                    @if($wpLink)
+                        <a href="{{ $wpLink }}" target="_blank" rel="noopener">{{ $wpLinkLabel }} ↗</a>
+                    @endif
+                    @if($wpEditUrl)
+                        <a href="{{ $wpEditUrl }}" target="_blank" rel="noopener">WP Admin ↗</a>
+                    @endif
+                </div>
+            @endif
+
             @if(!empty($article->categories) && is_array($article->categories))
                 <div class="hx-article-cats">
                     @foreach(array_slice((array) $article->categories, 0, 6) as $cat)
@@ -205,7 +230,7 @@
                 <span class="hx-sep">·</span><span>${{ number_format((float) $article->ai_cost, 4) }}</span>
             @endif
             @if($article->wp_post_id)
-                <span class="hx-sep">·</span><span>WP #{{ $article->wp_post_id }}</span>
+                <span class="hx-sep">·</span><span>{{ $isWpLive ? 'WP Live' : 'WP Draft' }} #{{ $article->wp_post_id }}</span>
             @endif
         </div>
         <div class="hx-article-actions">
@@ -240,7 +265,7 @@
             @if($wpLink)
                 <a href="{{ $wpLink }}" target="_blank" rel="noopener" class="hx-article-btn hx-article-btn-secondary">{{ $wpLinkLabel }}&nbsp;↗</a>
             @endif
-            @if($article->wp_post_url && $isDraft && $wpLink !== $article->wp_post_url)
+            @if($article->wp_post_url && $isWpDraft && $wpLink !== $article->wp_post_url)
                 <a href="{{ $article->wp_post_url }}?preview=true" target="_blank" rel="noopener" class="hx-article-btn hx-article-btn-secondary">Preview&nbsp;↗</a>
             @endif
             <a href="{{ $showUrl }}" target="_blank" rel="noopener" class="hx-article-btn hx-article-btn-primary">Open&nbsp;→</a>

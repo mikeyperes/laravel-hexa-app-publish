@@ -1,5 +1,8 @@
         // ── Draft ─────────────────────────────────────────
         async saveDraftNow(silent = false) {
+            if (!silent && this._draftSessionConflictActive) {
+                this._clearDraftSessionConflict?.();
+            }
             if (this._draftSaveTimer) {
                 clearTimeout(this._draftSaveTimer);
                 this._draftSaveTimer = null;
@@ -68,14 +71,17 @@
             });
 
             if (!silent) {
-                const stateSaved = await this.flushPipelineStateNow();
+                const stateSaved = await this.flushPipelineStateNow({ silent, forceRetry: !silent });
                 if (!stateSaved) {
                     this.savingDraft = false;
-                    this._logActivity('draft', 'error', 'Draft settings failed to save before draft persistence.', {
+                    const stateError = this._lastPipelineStateSaveError || {};
+                    this._logActivity('draft', 'error', stateError.message || 'Draft settings failed to save before draft persistence.', {
                         stage: 'draft',
                         substage: 'state_flush_failed',
+                        status: stateError.status ?? null,
+                        details: stateError.code ? ('code: ' + stateError.code) : '',
                     });
-                    this.showNotification('error', 'Draft settings could not be saved. Please try again.');
+                    this.showNotification('error', stateError.message || 'Draft settings could not be saved. Please try again.', { status: stateError.status ?? null, code: stateError.code || 'pipeline_state_save_failed' });
                     return;
                 }
             }
@@ -109,8 +115,12 @@
                         substage: 'response_error',
                         status: resp.status,
                         duration_ms: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt)),
+                        details: data.code ? ('code: ' + data.code) : '',
                     });
-                    if (!silent) this.showNotification('error', data.message);
+                    if (!silent) this.showNotification('error', data.message || 'Draft save failed', {
+                        status: resp.status,
+                        code: data.code || 'draft_save_failed',
+                    });
                 }
             } catch (e) {
                 this._logActivity('draft', 'error', 'Failed to save draft: ' + (e.message || 'Request failed'), {
@@ -118,7 +128,7 @@
                     substage: 'exception',
                     duration_ms: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt)),
                 });
-                if (!silent) this.showNotification('error', 'Failed to save draft');
+                if (!silent) this.showNotification('error', 'Failed to save draft', { code: 'request_exception' });
             }
             this.savingDraft = false;
 
@@ -153,8 +163,14 @@
         },
 
         // ── Notifications ─────────────────────────────────
-        showNotification(type, message) {
-            this.notification = { show: true, type, message };
+        showNotification(type, message, meta = {}) {
+            this.notification = {
+                show: true,
+                type,
+                message,
+                status: Number.isFinite(Number(meta?.status)) ? Number(meta.status) : null,
+                code: meta?.code || '',
+            };
             this._logActivity('ui', type, message, { debug_only: type === 'success' });
             // Errors stay permanently, success fades after 8 seconds
             if (type === 'success') {

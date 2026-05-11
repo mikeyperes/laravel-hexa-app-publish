@@ -117,7 +117,7 @@
             </div>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
-            <a href="{{ route('publish.pipeline', ['spawn' => 1]) }}" target="_blank" rel="noopener" class="v2-btn v2-btn-secondary text-red-700">Open Isolated Draft</a>
+            <a href="{{ route('publish.pipeline.v2', ['spawn' => 1]) }}" target="_blank" rel="noopener" class="v2-btn v2-btn-secondary text-red-700">Open Isolated Draft</a>
             <button type="button" @click="_clearDraftSessionConflict()" class="v2-btn v2-btn-ghost text-white hover:bg-red-700">Dismiss</button>
         </div>
     </div>
@@ -158,7 +158,7 @@
                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg>
                     </button>
                     <div x-show="open" x-cloak x-transition class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg w-56 py-1 z-50">
-                        <a href="{{ route('publish.pipeline', ['spawn' => 1]) }}" target="_blank" rel="noopener" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                        <a href="{{ route('publish.pipeline.v2', ['spawn' => 1]) }}" target="_blank" rel="noopener" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                             Open Isolated Draft (new tab)
                         </a>
                         <a href="{{ route('publish.pipeline.legacy', ['id' => $draftId]) }}" class="block px-4 py-2 text-sm text-amber-700 hover:bg-amber-50">
