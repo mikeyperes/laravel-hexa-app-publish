@@ -89,17 +89,20 @@ class WordPressDeliveryService
 
         $postId = $result['data']['post_id'] ?? null;
 
-        if ($postId && !empty($options['publication_term_ids']) && $publicationTaxonomy !== 'category') {
-            $taxonomyResult = $this->wptoolkit->wpCliSetPostTerms(
+        $linksPayload = null;
+        if ($postId) {
+            $pressReleaseSync = $this->syncHexaPressReleaseLinks(
+                $site,
                 $resolved['server'],
-                $site->wordpress_install_id,
                 (int) $postId,
                 $publicationTaxonomy,
-                (array) $options['publication_term_ids']
+                $options,
+                $result['data']['post_url'] ?? null
             );
-            if (!($taxonomyResult['success'] ?? false)) {
-                $result['message'] = trim(($result['message'] ?? 'Post created.') . ' Warning: ' . ($taxonomyResult['message'] ?? 'Failed to set syndication terms.'));
+            if (!empty($pressReleaseSync['warning'])) {
+                $result['message'] = trim(($result['message'] ?? 'Post created.') . ' Warning: ' . $pressReleaseSync['warning']);
             }
+            $linksPayload = $pressReleaseSync['links'] ?? null;
         }
 
         return $this->success(
@@ -109,7 +112,10 @@ class WordPressDeliveryService
             $postId,
             $result['data']['post_url'] ?? null,
             $result['data']['post_status'] ?? $status,
-            $result['data']['post_date'] ?? $date
+            $result['data']['post_date'] ?? $date,
+            [
+                'links_injected' => $linksPayload,
+            ]
         );
     }
 
@@ -134,18 +140,19 @@ class WordPressDeliveryService
             return $this->failure($result['message'] ?? 'WP Toolkit update failed.', $transportMode);
         }
 
-        if (!empty($options['publication_term_ids']) && $publicationTaxonomy !== 'category') {
-            $taxonomyResult = $this->wptoolkit->wpCliSetPostTerms(
-                $resolved['server'],
-                $site->wordpress_install_id,
-                $postId,
-                $publicationTaxonomy,
-                (array) $options['publication_term_ids']
-            );
-            if (!($taxonomyResult['success'] ?? false)) {
-                $result['message'] = trim(($result['message'] ?? 'Post updated.') . ' Warning: ' . ($taxonomyResult['message'] ?? 'Failed to set syndication terms.'));
-            }
+        $linksPayload = null;
+        $pressReleaseSync = $this->syncHexaPressReleaseLinks(
+            $site,
+            $resolved['server'],
+            $postId,
+            $publicationTaxonomy,
+            $options,
+            $result['data']['post_url'] ?? null
+        );
+        if (!empty($pressReleaseSync['warning'])) {
+            $result['message'] = trim(($result['message'] ?? 'Post updated.') . ' Warning: ' . $pressReleaseSync['warning']);
         }
+        $linksPayload = $pressReleaseSync['links'] ?? null;
 
         return $this->success(
             $site,
@@ -154,7 +161,10 @@ class WordPressDeliveryService
             $result['data']['post_id'] ?? $postId,
             $result['data']['post_url'] ?? null,
             $result['data']['post_status'] ?? $status,
-            $result['data']['post_date'] ?? null
+            $result['data']['post_date'] ?? null,
+            [
+                'links_injected' => $linksPayload,
+            ]
         );
     }
 
@@ -258,10 +268,6 @@ class WordPressDeliveryService
 
     private function normalizeSyndicationOptions(PublishSite $site, array $options): array
     {
-        if (empty($options['publication_term_ids'])) {
-            return $options;
-        }
-
         $articleType = trim((string) ($options['article_type'] ?? ''));
         if ($articleType !== 'press-release' || !$site->is_press_release_source) {
             unset($options['publication_term_ids'], $options['publication_taxonomy']);
@@ -348,9 +354,9 @@ class WordPressDeliveryService
         return $postData;
     }
 
-    private function failure(string $message, string $mode): array
+    private function failure(string $message, string $mode, array $extra = []): array
     {
-        return [
+        return array_merge([
             'success' => false,
             'message' => $message,
             'post_id' => null,
@@ -358,15 +364,15 @@ class WordPressDeliveryService
             'post_status' => null,
             'post_date' => null,
             'mode' => $mode,
-        ];
+        ], $extra);
     }
 
-    private function success(PublishSite $site, string $mode, string $message, ?int $postId, ?string $postUrl = null, ?string $postStatus = null, ?string $postDate = null): array
+    private function success(PublishSite $site, string $mode, string $message, ?int $postId, ?string $postUrl = null, ?string $postStatus = null, ?string $postDate = null, array $extra = []): array
     {
         $postUrl = $this->normalizePostUrl($postUrl)
             ?: ($postId ? rtrim($site->url, '/') . '/?p=' . $postId : null);
 
-        return [
+        return array_merge([
             'success' => true,
             'message' => $message,
             'post_id' => $postId,
@@ -374,7 +380,7 @@ class WordPressDeliveryService
             'post_status' => $postStatus,
             'post_date' => $postDate,
             'mode' => $mode,
-        ];
+        ], $extra);
     }
 
     private function normalizePostUrl(?string $postUrl): ?string
@@ -397,5 +403,126 @@ class WordPressDeliveryService
         $account = HostingAccount::find($site->hosting_account_id);
         $server = $account ? WhmServer::find($account->whm_server_id) : null;
         return ['server' => $server, 'account' => $account];
+    }
+
+    private function syncHexaPressReleaseLinks(PublishSite $site, ?WhmServer $server, int $postId, string $publicationTaxonomy, array $options, ?string $postUrl = null): array
+    {
+        if (
+            !$server
+            || !$site->wordpress_install_id
+            || !$site->is_press_release_source
+            || trim((string) ($options['article_type'] ?? '')) !== 'press-release'
+            || $publicationTaxonomy === 'category'
+            || $postId <= 0
+        ) {
+            return ['links' => null, 'warning' => null];
+        }
+
+        $termIds = array_values(array_unique(array_filter(array_map('intval', (array) ($options['publication_term_ids'] ?? [])))));
+        $postUrl = $this->normalizePostUrl($postUrl);
+
+        $php = '$postId=' . (int) $postId . ';'
+            . '$taxonomy=' . var_export($publicationTaxonomy, true) . ';'
+            . '$providedTermIds=' . var_export($termIds, true) . ';'
+            . '$forcedPermalink=' . var_export((string) ($postUrl ?? ''), true) . ';'
+            . '$fieldRefs=["link_output"=>"field_64a72abb02037","link_output_html"=>"field_652cb84e99150","link_output_standard"=>"field_64a004af275a4","non_featured_standard_urls"=>"field_65100cf3201c7"];'
+            . '$emit=function(array $payload){echo "HEXA_PR_LINKS:".wp_json_encode($payload);};'
+            . '$title=html_entity_decode((string) get_the_title($postId), ENT_QUOTES, "UTF-8");'
+            . '$slug=(string) get_post_field("post_name",$postId);'
+            . '$permalink=trim($forcedPermalink)!=="" ? trim($forcedPermalink) : (string) get_permalink($postId);'
+            . 'if ($slug === "") { $emit(["success"=>false,"message"=>"Post slug missing.","links"=>null]); return; }'
+            . 'global $wpdb;'
+            . '$taxonomyExists = taxonomy_exists($taxonomy);'
+            . 'if (empty($providedTermIds)) {'
+            . '  if ($taxonomyExists) { $providedTermIds = get_terms(["taxonomy"=>$taxonomy,"hide_empty"=>false,"fields"=>"ids"]); if (is_wp_error($providedTermIds)) { $providedTermIds = []; } }'
+            . '  else {'
+            . '    $providedTermIds = $wpdb->get_col($wpdb->prepare("SELECT tt.term_id FROM {$wpdb->term_relationships} tr INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id WHERE tr.object_id = %d AND tt.taxonomy = %s", $postId, $taxonomy));'
+            . '  }'
+            . '}'
+            . '$providedTermIds = array_values(array_unique(array_map("intval", array_filter((array) $providedTermIds))));'
+            . 'if ($taxonomyExists && !empty($providedTermIds)) { $assigned = wp_set_object_terms($postId, $providedTermIds, $taxonomy, false); if (is_wp_error($assigned)) { $emit(["success"=>false,"message"=>$assigned->get_error_message(),"links"=>null]); return; } }'
+            . '$termIdsForLinks = $providedTermIds;'
+            . 'if ($taxonomyExists) { $resolvedIds = wp_get_object_terms($postId, $taxonomy, ["fields" => "ids"]); if (!is_wp_error($resolvedIds) && !empty($resolvedIds)) { $termIdsForLinks = array_values(array_map("intval", (array) $resolvedIds)); } }'
+            . 'elseif (empty($termIdsForLinks)) { $termIdsForLinks = array_values(array_map("intval", (array) $wpdb->get_col($wpdb->prepare("SELECT tt.term_id FROM {$wpdb->term_relationships} tr INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id WHERE tr.object_id = %d AND tt.taxonomy = %s", $postId, $taxonomy)))); }'
+            . '$terms = [];'
+            . 'foreach ($termIdsForLinks as $termId) {'
+            . '  $row = $wpdb->get_row($wpdb->prepare("SELECT t.term_id, t.name FROM {$wpdb->terms} t INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_id = t.term_id WHERE t.term_id = %d AND tt.taxonomy = %s LIMIT 1", (int) $termId, $taxonomy));'
+            . '  if ($row) { $terms[] = $row; }'
+            . '}'
+            . 'usort($terms, static function($a,$b){ return strcasecmp((string) ($a->name ?? ""), (string) ($b->name ?? "")); });'
+            . '$sourceRows=[]; $newSourceRows=[];'
+            . 'foreach ($terms as $term) {'
+            . '  $publicationPostId = (int) $wpdb->get_var($wpdb->prepare("SELECT meta_value FROM {$wpdb->termmeta} WHERE term_id = %d AND meta_key = %s LIMIT 1", (int) $term->term_id, "publication"));'
+            . '  $prefix = trim((string) get_post_meta($publicationPostId, "url_press_release_prefix", true));'
+            . '  $baseUrl = trim((string) get_post_meta($publicationPostId, "url", true));'
+            . '  if ($prefix === "" && $baseUrl !== "") { $prefix = rtrim($baseUrl, "/") . "/press-release/"; }'
+            . '  if ($prefix === "") { continue; }'
+            . '  $url = rtrim($prefix, "/") . "/" . $slug;'
+            . '  $row = ["term_id" => (int) $term->term_id, "name" => (string) $term->name, "url" => $url, "publication_post_id" => $publicationPostId, "new_source" => (bool) get_post_meta($publicationPostId, "new_source", true)];'
+            . '  if ($row["new_source"]) { $newSourceRows[] = $row; } else { $sourceRows[] = $row; }'
+            . '}'
+            . '$plainLines = static function(array $rows){ $lines=[]; foreach ($rows as $row) { $lines[] = $row["name"] . ": " . $row["url"]; } return implode(" <br /><br />", $lines); };'
+            . '$htmlLines = static function(array $rows){ $lines=[]; foreach ($rows as $row) { $url = esc_url($row["url"]); $label = esc_html($row["name"]); $lines[] = $label . ": <a href=\"" . $url . "\" target=\"_blank\" title=\"" . esc_attr($row["url"]) . "\">" . esc_html($row["url"]) . "</a>"; } return implode(" <br /><br />", $lines); };'
+            . '$pressReleaseLinePlain = "PRESS RELEASE: " . $permalink;'
+            . '$pressReleaseLineHtml = "PRESS RELEASE: <a href=\"" . esc_url($permalink) . "\" target=\"_blank\" title=\"" . esc_attr($permalink) . "\">" . esc_html($permalink) . "</a>";'
+            . '$plain = $title . "\\n<br /><br />" . $pressReleaseLinePlain . " <br /><br />NOTE: Please allow 1 hour for links to go live";'
+            . '$html = esc_html($title) . "\\n<br /><br />" . $pressReleaseLineHtml . " <br /><br />NOTE: Please allow 1 hour for links to go live";'
+            . '$standardPlain = $plainLines($sourceRows);'
+            . '$standardHtml = $htmlLines($sourceRows);'
+            . '$newPlain = $plainLines($newSourceRows);'
+            . '$newHtml = $htmlLines($newSourceRows);'
+            . 'if ($standardPlain !== "") { $plain .= "<br /><br /><br /><br />SOURCES---<br /><br />" . $standardPlain; $html .= "<br /><br /><br /><br />SOURCES---<br /><br />" . $standardHtml; }'
+            . 'if ($newPlain !== "") { $plain .= "<br /><br /><br /><br />NEW SOURCES---<br /><br />" . $newPlain; $html .= "<br /><br /><br /><br />NEW SOURCES---<br /><br />" . $newHtml; }'
+            . '$nonFeaturedHtml = trim($standardHtml . ($standardHtml !== "" && $newHtml !== "" ? " <br /><br />" : "") . $newHtml);'
+            . 'update_post_meta($postId, "link_output", $plain);'
+            . 'update_post_meta($postId, "link_output_html", $html);'
+            . 'update_post_meta($postId, "link_output_standard", $html);'
+            . 'update_post_meta($postId, "non_featured_standard_urls", $nonFeaturedHtml);'
+            . 'foreach ($fieldRefs as $metaKey => $fieldKey) { update_post_meta($postId, "_" . $metaKey, $fieldKey); }'
+            . '$links = ['
+            . '  "type" => "press_release_links",'
+            . '  "title" => $title,'
+            . '  "permalink" => $permalink,'
+            . '  "link_output" => $plain,'
+            . '  "link_output_html" => $html,'
+            . '  "link_output_standard" => $html,'
+            . '  "non_featured_standard_urls" => $nonFeaturedHtml,'
+            . '  "plain" => $plain,'
+            . '  "html" => $html,'
+            . '  "standard_sources" => $sourceRows,'
+            . '  "new_sources" => $newSourceRows,'
+            . '  "publication_term_ids" => $termIdsForLinks,'
+            . '];'
+            . '$emit(["success"=>true,"message"=>"Press release links synced.","links"=>$links]);';
+
+        $result = $this->wptoolkit->wpCliEval($server, (int) $site->wordpress_install_id, $php);
+        if (!($result['success'] ?? false)) {
+            return [
+                'links' => null,
+                'warning' => $result['message'] ?? 'Failed to sync press release links.',
+            ];
+        }
+
+        foreach (explode("\n", (string) ($result['stdout'] ?? '')) as $line) {
+            $line = trim($line);
+            if (!str_contains($line, 'HEXA_PR_LINKS:')) {
+                continue;
+            }
+            $json = substr($line, strpos($line, 'HEXA_PR_LINKS:') + 14);
+            $payload = json_decode(trim($json), true);
+            if (!is_array($payload)) {
+                continue;
+            }
+
+            return [
+                'links' => is_array($payload['links'] ?? null) ? $payload['links'] : null,
+                'warning' => !($payload['success'] ?? false) ? (string) ($payload['message'] ?? 'Failed to sync press release links.') : null,
+            ];
+        }
+
+        return [
+            'links' => null,
+            'warning' => 'Failed to parse synced press release links output.',
+        ];
     }
 }

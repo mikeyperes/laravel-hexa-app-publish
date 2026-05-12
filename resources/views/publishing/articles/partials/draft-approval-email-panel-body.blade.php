@@ -12,13 +12,25 @@
             <label class="block text-xs font-medium text-gray-700 mb-1">CC</label>
             <input type="text" x-model="approvalEmailCc" @input.debounce.300ms="approvalEmailCcTouched = true; approvalEmailPersistState()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="team@example.com, account@example.com">
             <div class="mt-2 flex flex-wrap items-center gap-2">
-                <button type="button" @click="approvalEmailAppendCcAddress(approvalEmailSuperAdminEmail)" class="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
-                    Add super admin email
+                <button type="button" @click="approvalEmailImportSuperAdmin()" :disabled="approvalEmailSuperAdminImporting" class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                    <svg x-show="approvalEmailSuperAdminImporting" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    <svg x-show="!approvalEmailSuperAdminImporting" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    <span x-text="approvalEmailSuperAdminImporting ? 'Adding…' : 'Add super admin email'"></span>
                 </button>
-                <button type="button" @click="approvalEmailAppendCcList(approvalEmailAdditionalCcs)" class="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
-                    Add CCs
+                <button type="button" @click="approvalEmailImportCcs()" :disabled="approvalEmailCcsImporting" class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                    <svg x-show="approvalEmailCcsImporting" x-cloak class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    <svg x-show="!approvalEmailCcsImporting" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    <span x-text="approvalEmailCcsImporting ? 'Adding…' : 'Add CCs'"></span>
                 </button>
-                <span class="text-xs text-gray-500">Loads creator additional contact emails by default when they exist.</span>
+            </div>
+            <div class="mt-1.5 space-y-0.5">
+                <p x-show="approvalEmailSuperAdminEmpty" x-cloak class="text-[11px] text-gray-500">
+                    No super admin email set. <a href="{{ route('profile.edit') }}" target="_blank" rel="noopener" class="text-blue-600 hover:text-blue-800 underline">Click here to add</a>.
+                </p>
+                <p x-show="approvalEmailCcsEmpty" x-cloak class="text-[11px] text-gray-500">
+                    No CCs available. <a href="{{ route('profile.edit') }}" target="_blank" rel="noopener" class="text-blue-600 hover:text-blue-800 underline">Click here to add</a>.
+                </p>
+                <p x-show="!approvalEmailSuperAdminEmpty && !approvalEmailCcsEmpty" x-cloak class="text-[11px] text-gray-500">Loads creator additional contact emails by default when they exist.</p>
             </div>
         </div>
     </section>
@@ -46,24 +58,58 @@
     <section class="space-y-3">
         <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500">Content</h4>
         <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Template</label>
+            <select x-model="approvalEmailTemplateId" @change="applyApprovalEmailTemplate(approvalEmailTemplateId, { force: true })" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <option value="">Default draft approval template</option>
+                <template x-for="template in approvalEmailTemplates" :key="template.id">
+                    <option :value="String(template.id)" x-text="template.name + ((template.is_selected_default || template.is_primary) ? ' (Default)' : '')"></option>
+                </template>
+            </select>
+            <p class="mt-1.5 text-xs text-gray-500">This controls the full draft email layout, including the inline article block and review link.</p>
+        </div>
+        <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">Subject</label>
             <input type="text" x-model="approvalEmailSubject" @input.debounce.300ms="approvalEmailPersistState()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
         </div>
         <div>
             <div class="flex items-center gap-1.5 mb-1">
-                <label class="text-xs font-medium text-gray-700">Append text at top of email body</label>
-                <x-hexa-tooltip mode="hover" label="?" widthClass="w-72" position="bottom">This content is inserted above the featured image and article body. Use it for a short note, approval instructions, or account context.</x-hexa-tooltip>
+                <label class="text-xs font-medium text-gray-700">Email body template</label>
+                <x-hexa-tooltip mode="hover" label="?" widthClass="w-80" position="bottom">Use shortcodes like {article}, {article_body}, {article_header}, and {review_url}. The selected template should include {article} if you want the full article rendered inline.</x-hexa-tooltip>
             </div>
             <textarea
                 x-ref="approvalEmailIntroEditor"
                 :id="approvalEmailIntroEditorId"
-                x-model="approvalEmailIntroHtml"
+                x-model="approvalEmailBodyTemplate"
                 @input.debounce.300ms="approvalEmailPersistState()"
-                rows="8"
+                rows="12"
                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Optional note that appears above the draft body."></textarea>
+                placeholder="<p>Hi,</p><p>Your draft is ready.</p><p><a href=&quot;{review_url}&quot;>Open review page</a></p><hr><div>{article}</div>"></textarea>
             <p class="mt-1.5 text-xs text-gray-500">TinyMCE loads here automatically. If the editor library is blocked, this falls back to a normal HTML textarea.</p>
         </div>
+        <details x-show="Object.keys(approvalEmailShortcodes || {}).length > 0" x-cloak class="rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
+            <summary class="cursor-pointer px-4 py-2.5 flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:bg-gray-100 select-none">
+                <span class="inline-flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                    Available shortcodes
+                </span>
+                <span class="inline-flex items-center gap-1.5">
+                    <span class="text-[10px] text-gray-400 normal-case tracking-normal" x-text="Object.keys(approvalEmailShortcodes || {}).length + ' codes'"></span>
+                    <svg class="w-3.5 h-3.5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </span>
+            </summary>
+            <div class="border-t border-gray-200 bg-white">
+                <template x-for="(description, code) in approvalEmailShortcodes" :key="code">
+                    <div class="flex items-baseline gap-2.5 px-4 py-2 text-xs border-b border-gray-100 last:border-b-0">
+                        <code class="font-mono text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded shrink-0 text-[11px]" x-text="code"></code>
+                        <span class="text-gray-400">—</span>
+                        <span class="text-gray-700" x-text="description"></span>
+                    </div>
+                </template>
+                <p class="px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-[11px] text-gray-500">
+                    Use <code class="font-mono text-blue-700">{article}</code> for the full inline article and <code class="font-mono text-blue-700">{review_url}</code> for the hosted review page link.
+                </p>
+            </div>
+        </details>
         <div>
             <div class="flex items-center gap-1.5 mb-1">
                 <label class="text-xs font-medium text-gray-700">Image handling</label>

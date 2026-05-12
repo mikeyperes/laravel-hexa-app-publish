@@ -4,6 +4,7 @@ namespace hexa_app_publish\Publishing\Pipeline\Http\Controllers;
 
 use hexa_core\Forms\Runtime\FormRuntimeService;
 use hexa_core\Http\Controllers\Controller;
+use hexa_core\Models\EmailLog;
 use hexa_core\Models\Setting;
 use hexa_core\Models\User;
 use hexa_app_publish\Models\PublishArticle;
@@ -38,6 +39,9 @@ use hexa_app_publish\Publishing\Pipeline\Http\Requests\PublishToWordpressRequest
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\SaveDraftRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\SpinRequest;
 use hexa_app_publish\Support\AiModelCatalog;
+use hexa_core\Services\EmailService;
+use hexa_core\TemplateCenter\Models\EmailTemplate;
+use hexa_core\Services\SmtpSenderServiceRegistryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -204,6 +208,45 @@ class PipelineController extends Controller
             ->latest('id')
             ->value('result_payload->html');
         $selectedBootSite = $bootSite ?: $draftSite;
+        $publicationNotificationConfig = config('hws-publish.publication_notification', []);
+        $publicationNotificationTemplateModels = EmailTemplate::query()
+            ->where('use_case', 'publication_notification')
+            ->where('is_active', true)
+            ->orderByDesc('is_primary')
+            ->orderBy('name')
+            ->get(['id', 'name', 'is_primary', 'from_name', 'from_email', 'reply_to', 'cc', 'subject', 'body', 'smtp_account_id']);
+        $preferredPublicationNotificationTemplate = null;
+        if ($bootArticleType === 'press-release' && ($selectedBootSite?->is_press_release_source)) {
+            $preferredPublicationNotificationTemplate = $publicationNotificationTemplateModels->first(
+                fn (EmailTemplate $template) => str_contains(strtolower((string) $template->name), 'press release')
+            );
+        }
+        $primaryPublicationNotificationTemplate = $preferredPublicationNotificationTemplate
+            ?: $publicationNotificationTemplateModels->firstWhere('is_primary', true)
+            ?: $publicationNotificationTemplateModels->first();
+        $publicationNotificationTemplates = $publicationNotificationTemplateModels
+            ->map(fn (EmailTemplate $template) => [
+                'id' => (int) $template->id,
+                'name' => (string) $template->name,
+                'is_primary' => (bool) $template->is_primary,
+                'from_name' => (string) ($template->from_name ?? ''),
+                'from_email' => (string) ($template->from_email ?? ''),
+                'reply_to' => (string) ($template->reply_to ?? ''),
+                'cc' => (string) ($template->cc ?? ''),
+                'subject' => (string) ($template->subject ?? ''),
+                'body' => (string) ($template->body ?? ''),
+                'smtp_account_id' => $template->smtp_account_id ? (int) $template->smtp_account_id : null,
+            ])
+            ->values();
+        $publicationNotificationDefaults = [
+            'template_id' => $primaryPublicationNotificationTemplate?->id ? (string) $primaryPublicationNotificationTemplate->id : '',
+            'from_name' => (string) (($primaryPublicationNotificationTemplate?->from_name) ?: ($publicationNotificationConfig['default_from_name'] ?? 'Scale My Publication')),
+            'from_email' => (string) (($primaryPublicationNotificationTemplate?->from_email) ?: ($publicationNotificationConfig['default_from_email'] ?? 'no-reply@scalemypublication.com')),
+            'reply_to' => (string) (($primaryPublicationNotificationTemplate?->reply_to) ?: ($publicationNotificationConfig['default_reply_to'] ?? '')),
+            'cc' => (string) (($primaryPublicationNotificationTemplate?->cc) ?: ($publicationNotificationConfig['default_cc'] ?? '')),
+            'subject' => (string) (($primaryPublicationNotificationTemplate?->subject) ?: ($publicationNotificationConfig['default_subject'] ?? 'Your article is now live on {publication_name}')),
+            'body' => (string) (($primaryPublicationNotificationTemplate?->body) ?: ($publicationNotificationConfig['default_body'] ?? '')),
+        ];
 
         $draftState = [
             'article_type' => $draft->article_type ?: 'editorial',
@@ -319,7 +362,155 @@ class PipelineController extends Controller
             'workflowDefinitions' => $this->workflowRegistry->definitions(),
             'pressReleaseDefaultState' => app(\hexa_app_publish\Publishing\Pipeline\Services\PressReleaseWorkflowService::class)->defaultState(),
             'prArticleDefaultState' => app(PrArticleWorkflowService::class)->defaultState(),
+            'publicationNotificationTemplates' => $publicationNotificationTemplates,
+            'publicationNotificationDefaults' => $publicationNotificationDefaults,
         ]);
+    }
+
+    public function sendPublicationNotification(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'draft_id' => 'required|integer|exists:publish_articles,id',
+            'template_id' => 'nullable|integer|exists:email_templates,id',
+            'to' => 'required|email|max:255',
+            'from_name' => 'nullable|string|max:255',
+            'from_email' => 'required|email|max:255',
+            'reply_to' => 'nullable|email|max:255',
+            'cc' => 'nullable|string|max:500',
+            'subject' => 'required|string|max:500',
+            'body' => 'required|string',
+        ]);
+
+        $article = PublishArticle::query()->findOrFail((int) $validated['draft_id']);
+        if ((int) ($article->created_by ?? 0) !== (int) auth()->id() && !auth()->user()?->is_admin) {
+            abort(403);
+        }
+
+        $template = null;
+        if (!empty($validated['template_id'])) {
+            $template = EmailTemplate::query()
+                ->whereKey((int) $validated['template_id'])
+                ->where('use_case', 'publication_notification')
+                ->where('is_active', true)
+                ->first();
+
+            if (!$template) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The selected publication notification template is no longer available.',
+                ], 422);
+            }
+        }
+
+        $body = trim((string) $validated['body']);
+        $bodyHtml = $body !== strip_tags($body) ? $body : nl2br(e($body));
+        $fromName = filled($validated['from_name'] ?? null) ? (string) $validated['from_name'] : null;
+        $fromEmail = (string) $validated['from_email'];
+        $replyTo = filled($validated['reply_to'] ?? null) ? (string) $validated['reply_to'] : null;
+        $cc = filled($validated['cc'] ?? null) ? (string) $validated['cc'] : null;
+        $serviceDefaults = app(SmtpSenderServiceRegistryService::class)->currentDefaults();
+        $senderService = trim((string) ($serviceDefaults['service'] ?? 'core-smtp'));
+        $smtpAccountId = $template?->smtp_account_id ? (int) $template->smtp_account_id : null;
+        $systemSmtpAccountId = isset($serviceDefaults['system_smtp_account_id']) ? (int) $serviceDefaults['system_smtp_account_id'] : 0;
+
+        // Publication-notification templates often inherit the historical system SMTP row.
+        // If the active sender service is an external provider, do not force the old core SMTP
+        // account unless the template is intentionally pinned to a different account.
+        if ($smtpAccountId && $senderService !== 'core-smtp' && $smtpAccountId === $systemSmtpAccountId) {
+            $smtpAccountId = null;
+        }
+
+        $result = null;
+        $usedExternalProvider = null;
+
+        if (!$smtpAccountId && $senderService === 'smtp2go' && class_exists(\hexa_package_smtp2go\Services\Smtp2goService::class)) {
+            $payload = [
+                'sender' => $fromEmail,
+                'to' => [(string) $validated['to']],
+                'subject' => (string) $validated['subject'],
+                'html_body' => $bodyHtml,
+                'text_body' => trim(strip_tags(str_replace(['<br>', '</p>'], [PHP_EOL, PHP_EOL], $bodyHtml))),
+            ];
+            if ($replyTo) {
+                $payload['reply_to'] = $replyTo;
+            }
+            if ($cc) {
+                $payload['cc'] = array_values(array_filter(array_map('trim', explode(',', $cc))));
+            }
+
+            $providerResult = app(\hexa_package_smtp2go\Services\Smtp2goService::class)->sendTransactionalEmail($payload);
+            $usedExternalProvider = 'smtp2go';
+            $result = [
+                'success' => (bool) ($providerResult['success'] ?? false),
+                'message' => (bool) ($providerResult['success'] ?? false)
+                    ? 'Publication notification sent via SMTP2GO.'
+                    : 'Email failed: ' . (string) ($providerResult['error'] ?? $providerResult['message'] ?? 'SMTP2GO send failed.'),
+            ];
+        } elseif (!$smtpAccountId && $senderService === 'brevo' && class_exists(\hexa_package_brevo\Services\BrevoService::class)) {
+            $payload = [
+                'sender' => [
+                    'name' => $fromName ?: (string) ($serviceDefaults['from_name'] ?? 'Scale My Publication'),
+                    'email' => $fromEmail,
+                ],
+                'to' => [
+                    ['email' => (string) $validated['to']],
+                ],
+                'subject' => (string) $validated['subject'],
+                'htmlContent' => $bodyHtml,
+                'textContent' => trim(strip_tags(str_replace(['<br>', '</p>'], [PHP_EOL, PHP_EOL], $bodyHtml))),
+            ];
+            if ($replyTo) {
+                $payload['replyTo'] = ['email' => $replyTo];
+            }
+            if ($cc) {
+                $payload['cc'] = array_map(
+                    static fn (string $email): array => ['email' => trim($email)],
+                    array_values(array_filter(array_map('trim', explode(',', $cc))))
+                );
+            }
+
+            $providerResult = app(\hexa_package_brevo\Services\BrevoService::class)->sendTransactionalEmail($payload);
+            $usedExternalProvider = 'brevo';
+            $result = [
+                'success' => (bool) ($providerResult['success'] ?? false),
+                'message' => (bool) ($providerResult['success'] ?? false)
+                    ? 'Publication notification sent via Brevo.'
+                    : 'Email failed: ' . (string) ($providerResult['error'] ?? $providerResult['message'] ?? 'Brevo send failed.'),
+            ];
+        } else {
+            $result = app(EmailService::class)->send(
+                (string) $validated['to'],
+                (string) $validated['subject'],
+                $bodyHtml,
+                $fromName,
+                $fromEmail,
+                $replyTo,
+                $cc,
+                $smtpAccountId,
+                'publication_notification'
+            );
+        }
+
+        if ($usedExternalProvider) {
+            try {
+                EmailLog::create([
+                    'to' => (string) $validated['to'],
+                    'subject' => (string) $validated['subject'],
+                    'status' => !empty($result['success']) ? 'sent' : 'failed',
+                    'error' => !empty($result['success']) ? null : (string) ($result['message'] ?? 'Provider send failed.'),
+                    'from_email' => $fromEmail,
+                    'from_name' => $fromName ?: (string) ($serviceDefaults['from_name'] ?? 'Scale My Publication'),
+                    'context' => 'publication_notification:' . $usedExternalProvider,
+                    'smtp_account_id' => null,
+                ]);
+            } catch (\Throwable) {
+            }
+        }
+
+        return response()->json([
+            'success' => (bool) ($result['success'] ?? false),
+            'message' => (string) ($result['message'] ?? 'Notification send finished.'),
+        ], ($result['success'] ?? false) ? 200 : 422);
     }
 
     public function generatePhotoMeta(GeneratePhotoMetaRequest $request): JsonResponse

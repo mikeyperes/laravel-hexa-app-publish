@@ -222,13 +222,17 @@ class DraftApprovalEmailService
 
     private function defaultComposerConfigFromSnapshot(array $snapshot): array
     {
+        $defaults = config('hws-publish.draft_approval_email', []);
+
         return [
             'to' => $this->resolveDefaultRecipient($snapshot),
             'cc' => $this->resolveDefaultCc($snapshot),
-            'from_name' => 'Scale My Publication',
-            'from_email' => 'no-reply@scalemypublication.com',
-            'reply_to' => 'support@scalemypublication.com',
+            'from_name' => (string) ($defaults['default_from_name'] ?? 'Scale My Publication'),
+            'from_email' => (string) ($defaults['default_from_email'] ?? 'no-reply@scalemypublication.com'),
+            'reply_to' => (string) ($defaults['default_reply_to'] ?? 'support@scalemypublication.com'),
             'subject' => $this->defaultSubject($snapshot),
+            'template_id' => '',
+            'body_template' => (string) ($defaults['default_body'] ?? ''),
             'intro_html' => '',
             'image_mode' => 'embed',
         ];
@@ -243,6 +247,8 @@ class DraftApprovalEmailService
         $fromEmail = trim((string) ($input['from_email'] ?? $defaults['from_email'])) ?: $defaults['from_email'];
         $replyTo = trim((string) ($input['reply_to'] ?? $defaults['reply_to'])) ?: $defaults['reply_to'];
         $subject = trim((string) ($input['subject'] ?? $defaults['subject'])) ?: $defaults['subject'];
+        $templateId = trim((string) ($input['template_id'] ?? $defaults['template_id'] ?? ''));
+        $bodyTemplate = (string) ($input['body_template'] ?? $defaults['body_template'] ?? '');
         $introHtml = (string) ($input['intro_html'] ?? $defaults['intro_html']);
         $imageMode = trim((string) ($input['image_mode'] ?? $defaults['image_mode'])) ?: 'embed';
 
@@ -275,6 +281,8 @@ class DraftApprovalEmailService
             'from_email' => $fromEmail,
             'reply_to' => $replyTo,
             'subject' => $subject,
+            'template_id' => $templateId,
+            'body_template' => $bodyTemplate,
             'intro_html' => $introHtml,
             'image_mode' => $imageMode,
         ];
@@ -350,7 +358,7 @@ class DraftApprovalEmailService
             ? '<img src="' . $this->escapeAttribute($trackingUrl) . '" alt="" width="1" height="1" style="display:none;" />'
             : '';
 
-        $bodyHtml = <<<HTML
+        $defaultBodyHtml = <<<HTML
 <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;max-width:760px;margin:0 auto;padding:24px;">
   <div style="margin:0 0 20px; padding:16px 18px; border:1px solid #dbeafe; border-radius:12px; background:#eff6ff;">
     <p style="margin:0 0 8px; font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#1d4ed8;">Approval draft</p>
@@ -372,6 +380,36 @@ class DraftApprovalEmailService
 </div>
 HTML;
 
+        $bodyHtml = $defaultBodyHtml;
+        if (trim((string) ($config['body_template'] ?? '')) !== '') {
+            $articleBodyPlain = $this->htmlToText($articleHtml);
+            $articleHeaderHtml = '<h1 style="font-size:30px; line-height:1.2; margin:0 0 12px;">' . $this->escapeHtml($snapshot['title']) . '</h1>';
+            $articleHeaderPlain = $snapshot['title'];
+            $username = trim((string) ($snapshot['creator_name'] ?? ''));
+            $siteName = trim((string) ($snapshot['site_name'] ?? ''));
+            $siteUrl = trim((string) ($snapshot['site_url'] ?? ''));
+            $tokens = [
+                '{article_title}' => $snapshot['title'],
+                '{article}' => '<article style="font-size:15px; line-height:1.7; color:#111827;">' . $articleHeaderHtml . $excerptHtml . $articleHtml . '</article>',
+                '{article_plain}' => trim($articleHeaderPlain . PHP_EOL . PHP_EOL . ($snapshot['excerpt'] !== '' ? $snapshot['excerpt'] . PHP_EOL . PHP_EOL : '') . $articleBodyPlain),
+                '{article_body}' => $articleHtml,
+                '{article_body_plain}' => $articleBodyPlain,
+                '{article_header}' => $articleHeaderHtml,
+                '{article_header_plain}' => $articleHeaderPlain,
+                '{review_url}' => $reviewUrl === '#' ? '' : $reviewUrl,
+                '{username}' => $username,
+                '{site_name}' => $siteName,
+                '{site_url}' => $siteUrl,
+                '{publication_name}' => $siteName,
+                '{publication_url}' => $siteUrl,
+            ];
+
+            $bodyHtml = $this->renderBodyTemplate((string) $config['body_template'], $tokens);
+            if ($includeTracking && $trackingMarkup !== '') {
+                $bodyHtml .= $trackingMarkup;
+            }
+        }
+
         $headers = [
             'From' => trim($config['from_name'] . ' <' . $config['from_email'] . '>'),
             'Reply-To' => $config['reply_to'],
@@ -379,6 +417,7 @@ HTML;
             'Cc' => implode(', ', $config['cc_list']),
             'Subject' => $config['subject'],
             'Image Mode' => $config['image_mode'],
+            'Template' => (string) ($config['template_id'] ?? ''),
         ];
 
         return [
@@ -395,8 +434,19 @@ HTML;
                 'has_prepared_html' => $snapshot['prepared_html'] !== '',
                 'has_featured_image' => ($snapshot['featured_url'] !== '' || $snapshot['featured_wp_url'] !== ''),
                 'has_intro_html' => trim(strip_tags((string) ($config['intro_html'] ?? ''))) !== '',
+                'has_body_template' => trim((string) ($config['body_template'] ?? '')) !== '',
             ],
         ];
+    }
+
+    private function renderBodyTemplate(string $template, array $tokens): string
+    {
+        $output = $template;
+        foreach ($tokens as $code => $value) {
+            $output = str_replace($code, (string) $value, $output);
+        }
+
+        return $output;
     }
 
     private function buildArticleHtmlForMode(array $snapshot, string $imageMode): array

@@ -8,7 +8,6 @@ use hexa_app_publish\Publishing\Accounts\Models\PublishAccount;
 use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
 use hexa_app_publish\Publishing\Campaigns\Services\CampaignEligibilityService;
 use hexa_app_publish\Publishing\Campaigns\Services\CampaignChecklistService;
-use hexa_app_publish\Publishing\Campaigns\Services\CampaignIntegrityReportService;
 use hexa_app_publish\Publishing\Campaigns\Services\CampaignModeResolver;
 use hexa_app_publish\Publishing\Campaigns\Services\CampaignRunOperationService;
 use hexa_app_publish\Publishing\Campaigns\Services\CampaignScheduleService;
@@ -36,7 +35,6 @@ class CampaignController extends Controller
     protected CampaignScheduleService $scheduleService;
     protected CampaignSettingsResolver $settingsResolver;
     protected CampaignChecklistService $checklistService;
-    protected CampaignIntegrityReportService $integrityReportService;
     protected CampaignRunOperationService $runOperationService;
     protected PipelineOperationService $pipelineOperationService;
 
@@ -52,7 +50,6 @@ class CampaignController extends Controller
         CampaignScheduleService $scheduleService,
         CampaignSettingsResolver $settingsResolver,
         CampaignChecklistService $checklistService,
-        CampaignIntegrityReportService $integrityReportService,
         CampaignRunOperationService $runOperationService,
         PipelineOperationService $pipelineOperationService
     )
@@ -64,7 +61,6 @@ class CampaignController extends Controller
         $this->scheduleService = $scheduleService;
         $this->settingsResolver = $settingsResolver;
         $this->checklistService = $checklistService;
-        $this->integrityReportService = $integrityReportService;
         $this->runOperationService = $runOperationService;
         $this->pipelineOperationService = $pipelineOperationService;
     }
@@ -77,7 +73,7 @@ class CampaignController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = PublishCampaign::with(['account', 'site', 'template', 'articles']);
+        $query = PublishCampaign::with(['account', 'site', 'template'])->withCount('articles');
 
         if ($request->filled('account_id')) {
             $query->where('publish_account_id', $request->input('account_id'));
@@ -202,7 +198,7 @@ class CampaignController extends Controller
 
         $validated['campaign_id'] = PublishCampaign::generateCampaignId();
         $validated['status'] = 'draft';
-        $validated['article_type'] = $validated['article_type'] ?? 'editorial';
+        $validated['article_type'] = 'editorial';
         $validated['created_by'] = auth()->id();
         $validated['auto_publish'] = ($validated['delivery_mode'] ?? 'draft-local') === 'auto-publish';
         $validated['delivery_mode'] = $this->modeResolver->normalizeDeliveryMode($validated['delivery_mode'] ?? 'draft-local');
@@ -340,8 +336,6 @@ class CampaignController extends Controller
             ];
         })->values();
 
-        $effectiveAuthor = $campaign->author ?: ($resolvedSettings['author'] ?? $campaign->site?->default_author ?? '');
-
         $campaignForm = [
             'user_id' => $campaign->user_id,
             'campaign_preset_id' => $campaign->campaign_preset_id ? (string) $campaign->campaign_preset_id : '',
@@ -366,8 +360,7 @@ class CampaignController extends Controller
             'drip_interval_minutes' => $campaign->drip_interval_minutes ?? 60,
         ];
 
-        $initialSiteAuthors = $this->loadInitialSiteAuthors($campaign->site, $campaign->author ?: null);
-        $integrityReport = $this->integrityReportService->build($campaign);
+        $initialSiteAuthors = $this->loadInitialSiteAuthors($campaign->site, $campaign->author);
 
         return view('app-publish::publishing.campaigns.show', [
             'campaign' => $campaign,
@@ -381,7 +374,6 @@ class CampaignController extends Controller
             'deliveryModes' => $this->eligibility->supportedDeliveryModes(),
             'articleTypes' => $this->eligibility->supportedArticleTypes(),
             'campaignForm' => $campaignForm,
-            'effectiveCampaignAuthor' => $effectiveAuthor,
             'campaignPresetFields' => $campaignPresetForm->toClientPayload('edit', [
                 'mode' => 'edit',
                 'context' => 'edit',
@@ -416,8 +408,6 @@ class CampaignController extends Controller
             ],
             'initialSiteAuthors' => $initialSiteAuthors,
             'initialSiteDefaultAuthor' => $campaign->site?->default_author,
-            'initialSiteAuthorCast' => array_values(array_filter((array) ($campaign->site?->author_cast ?? []), fn ($value) => filled($value))),
-            'integrityReport' => $integrityReport,
         ]);
     }
 
@@ -608,7 +598,6 @@ class CampaignController extends Controller
         return $this->appendMissingAuthorOptions($authors, array_filter([
             $selectedAuthor,
             $site?->default_author,
-            ...array_values(array_filter((array) ($site?->author_cast ?? []), fn ($value) => filled($value))),
         ]));
     }
 
@@ -651,28 +640,6 @@ class CampaignController extends Controller
         return array_values($authors);
     }
 
-    private function resolveWpToolkitServer(PublishSite $site): ?WhmServer
-    {
-        if ($site->hosting_account_id) {
-            $hosting = HostingAccount::find($site->hosting_account_id);
-            if ($hosting?->whm_server_id) {
-                $server = WhmServer::find($hosting->whm_server_id);
-                if ($server) {
-                    return $server;
-                }
-            }
-        }
-
-        if ($site->publish_account_id) {
-            $server = WhmServer::whereHas('accounts', fn ($query) => $query->where('id', $site->publish_account_id))->first();
-            if ($server) {
-                return $server;
-            }
-        }
-
-        return null;
-    }
-
     public function startOperation(int $id, Request $request): JsonResponse
     {
         $campaign = PublishCampaign::findOrFail($id);
@@ -711,43 +678,24 @@ class CampaignController extends Controller
         $site = $campaign->publish_site_id ? PublishSite::find($campaign->publish_site_id) : null;
 
         if (!$site || !$site->wordpress_install_id) {
-            return response()->json([
-                'success' => true,
-                'data' => [],
-                'meta' => [
-                    'default_author' => $site?->default_author,
-                    'author_cast' => array_values(array_filter((array) ($site?->author_cast ?? []), fn ($value) => filled($value))),
-                    'last_connected_at' => $site?->last_connected_at?->toIso8601String(),
-                ],
-            ]);
+            return response()->json(['success' => true, 'data' => []]);
         }
 
-        $server = $this->resolveWpToolkitServer($site);
-        if (!$server) {
-            return response()->json([
-                'success' => false,
-                'data' => [],
-                'message' => 'No WP Toolkit server is linked to the selected site.',
-                'meta' => [
-                    'default_author' => $site->default_author,
-                    'author_cast' => array_values(array_filter((array) ($site->author_cast ?? []), fn ($value) => filled($value))),
-                    'last_connected_at' => $site->last_connected_at?->toIso8601String(),
-                ],
-            ]);
-        }
-
-        $result = app(WpToolkitService::class)->wpCliListAdminUsers(
-            $server,
-            (int) $site->wordpress_install_id,
-            $request->boolean('force')
-        );
-        $authors = $this->appendMissingAuthorOptions(
-            array_values(array_filter((array) ($result['authors'] ?? []), fn ($author) => is_array($author) && filled($author['user_login'] ?? $author['display_name'] ?? null))),
-            array_filter([
-                $campaign->author,
-                $site->default_author,
-            ])
-        );
+        $cacheKey = 'campaigns:' . $campaign->id . ':site:' . $site->id . ':authors';
+        $authors = \Illuminate\Support\Facades\Cache::remember($cacheKey, 600, function () use ($site) {
+            $server = $site->publish_account_id
+                ? WhmServer::whereHas('accounts', fn ($q) => $q->where('id', $site->publish_account_id))->first()
+                : null;
+            if (!$server) {
+                $hosting = HostingAccount::find($site->publish_account_id);
+                $server = $hosting?->whm_server;
+            }
+            if (!$server) {
+                return [];
+            }
+            $result = app(WpToolkitService::class)->wpCliListAdminUsers($server, (int) $site->wordpress_install_id);
+            return $result['authors'] ?? [];
+        });
 
         $q = trim((string) $request->input('q', ''));
         $limit = (int) ($request->input('limit', 15) ?: 15);
@@ -758,11 +706,9 @@ class CampaignController extends Controller
             : array_values(array_filter($authors, function ($a) use ($q) {
                 $hay = strtolower(
                     ($a['display_name'] ?? '') . ' '
-                    . ($a['user_login'] ?? '') . ' '
                     . ($a['username'] ?? '') . ' '
                     . ($a['email'] ?? '') . ' '
-                    . ($a['slug'] ?? '') . ' '
-                    . implode(' ', (array) ($a['roles'] ?? []))
+                    . ($a['slug'] ?? '')
                 );
                 return str_contains($hay, strtolower($q));
             }));
@@ -770,64 +716,24 @@ class CampaignController extends Controller
         $filtered = array_slice($filtered, 0, $limit);
 
         $data = array_map(function ($a) {
-            $name = $a['display_name'] ?? $a['name'] ?? $a['user_login'] ?? $a['username'] ?? $a['slug'] ?? '';
-            $username = $a['user_login'] ?? $a['username'] ?? $a['slug'] ?? \Illuminate\Support\Str::slug($name);
+            $name = $a['display_name'] ?? $a['name'] ?? $a['username'] ?? $a['slug'] ?? '';
             return [
-                'id' => $a['id'] ?? $a['ID'] ?? $username,
+                'id' => $a['id'] ?? $a['ID'] ?? $name,
                 'name' => $name,
                 'display_name' => $name,
-                'username' => $username,
-                'user_login' => $username,
+                'username' => $a['username'] ?? $a['slug'] ?? $name,
                 'email' => $a['email'] ?? '',
-                'slug' => $a['slug'] ?? \Illuminate\Support\Str::slug($username),
-                'roles' => array_values((array) ($a['roles'] ?? [])),
+                'slug' => $a['slug'] ?? \Illuminate\Support\Str::slug($name),
             ];
         }, $filtered);
 
-        return response()->json([
-            'success' => (bool) ($result['success'] ?? true),
-            'data' => $data,
-            'message' => $result['message'] ?? null,
-            'meta' => [
-                'default_author' => $site->default_author,
-                'author_cast' => array_values(array_filter((array) ($site->author_cast ?? []), fn ($value) => filled($value))),
-                'last_connected_at' => $site->last_connected_at?->toIso8601String(),
-                'cache_hit' => $result['cache_hit'] ?? null,
-                'cached_at' => $result['cached_at'] ?? null,
-                'expires_at' => $result['expires_at'] ?? null,
-                'author_count' => count($authors),
-            ],
-        ]);
-    }
-
-    public function integrityReport(int $id, Request $request): JsonResponse
-    {
-        $campaign = PublishCampaign::with([
-            'site',
-            'template',
-            'campaignPreset',
-            'articles.site',
-        ])->findOrFail($id);
-
-        return response()->json([
-            'success' => true,
-            'report' => $this->integrityReportService->build($campaign, $request->boolean('force_authors')),
-        ]);
+        return response()->json(['success' => true, 'data' => $data]);
     }
 
     public function runNow(int $id, Request $request): JsonResponse
     {
         $campaign = PublishCampaign::findOrFail($id);
         $mode = $this->modeResolver->normalizeDeliveryMode($request->input('mode', $campaign->delivery_mode ?: 'draft-local'));
-        $integrity = $this->integrityReportService->build($campaign);
-
-        if ((int) data_get($integrity, 'summary.blocking_errors', 0) > 0) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Fix the blocking campaign integrity issues before running this campaign.',
-                'report' => $integrity,
-            ], 422);
-        }
 
         try {
             $started = $this->runOperationService->start($campaign, $mode);
@@ -963,45 +869,6 @@ class CampaignController extends Controller
     }
 
     /**
-     * Delete multiple campaigns in one request.
-     */
-    public function bulkDestroy(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'campaign_ids' => 'required|array|min:1',
-            'campaign_ids.*' => 'integer|exists:publish_campaigns,id',
-        ]);
-
-        $campaigns = PublishCampaign::query()
-            ->whereIn('id', array_values(array_unique(array_map('intval', $validated['campaign_ids']))))
-            ->get(['id', 'name']);
-
-        if ($campaigns->isEmpty()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No campaigns were found for deletion.',
-            ], 422);
-        }
-
-        $count = $campaigns->count();
-        $names = $campaigns->pluck('name')->filter()->values()->all();
-
-        PublishCampaign::query()->whereIn('id', $campaigns->pluck('id'))->delete();
-
-        hexaLog('campaigns', 'campaigns_bulk_deleted', 'Campaigns deleted in bulk', [
-            'campaign_ids' => $campaigns->pluck('id')->all(),
-            'campaign_names' => $names,
-            'deleted_count' => $count,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => $count . ' campaign' . ($count === 1 ? '' : 's') . ' deleted.',
-            'deleted_count' => $count,
-        ]);
-    }
-
-    /**
      * Show edit form for a campaign.
      *
      * @param int $id
@@ -1068,7 +935,7 @@ class CampaignController extends Controller
             $validated['auto_publish'] = $validated['delivery_mode'] === 'auto-publish';
         }
 
-        $validated['article_type'] = $validated['article_type'] ?? ($campaign->article_type ?: 'editorial');
+        $validated['article_type'] = 'editorial';
 
         $validated['timezone'] = $this->resolveCampaignTimezone(
             $validated['user_id'] ?? $campaign->user_id,

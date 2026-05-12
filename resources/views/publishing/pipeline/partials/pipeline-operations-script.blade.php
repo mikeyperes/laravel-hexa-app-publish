@@ -736,6 +736,9 @@
 
             this.publishResult = result;
             this.publishError = '';
+            if (result.links_injected) {
+                this.publicationNotificationArticleLinks = result.links_injected;
+            }
             if (result.post_id) {
                 this.existingWpPostId = result.post_id;
                 this.existingWpAdminUrl = this.selectedSite?.url
@@ -776,17 +779,92 @@
             });
         },
 
+        publicationNotificationResolvedLinks() {
+            const payload = this.publishResult?.links_injected || this.publicationNotificationArticleLinks || {};
+            if (!payload || typeof payload !== 'object') {
+                return { html: '', plain: '' };
+            }
+
+            const plainCandidate = payload.plain || payload.link_output || payload.html || payload.link_output_html || payload.link_output_standard || '';
+
+            return {
+                html: String(payload.html || payload.link_output_html || payload.link_output_standard || '').trim(),
+                plain: this.publicationNotificationHtmlToText(plainCandidate),
+            };
+        },
+
+        publicationNotificationEscapeHtml(value = '') {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        },
+
+        publicationNotificationHtmlToText(html = '') {
+            const container = document.createElement('div');
+            container.innerHTML = String(html || '')
+                .replace(/<br\s*\/?>/gi, '\n')
+                .replace(/<\/p>/gi, '\n\n')
+                .replace(/<\/div>/gi, '\n')
+                .replace(/<\/h[1-6]>/gi, '\n\n')
+                .replace(/<\/li>/gi, '\n');
+            const raw = String(container.textContent || container.innerText || '');
+            return raw
+                .replace(/\u00a0/g, ' ')
+                .replace(/[ \t]+\n/g, '\n')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+        },
+
+        publicationNotificationResolvedArticle() {
+            const body = String(
+                this._resolveCanonicalArticleHtml?.({ preferPrepared: true, hydrateState: false })
+                || this.preparedHtml
+                || this.editorContent
+                || this.spunContent
+                || ''
+            ).trim();
+            const title = String(this.articleTitle || '').trim();
+            const header = title ? '<h1>' + this.publicationNotificationEscapeHtml(title) + '</h1>' : '';
+            const full = [header, body].filter(Boolean).join('\n');
+
+            return {
+                header_html: header,
+                header_plain: title,
+                body_html: body,
+                body_plain: this.publicationNotificationHtmlToText(body),
+                html: full,
+                plain: this.publicationNotificationHtmlToText(full),
+            };
+        },
+
         publicationNotificationTokenMap(extra = {}) {
             const permalink = String(this.publishResult?.post_url || this.existingWpPostUrl || '').trim();
             const publicationUrl = String(this.selectedSite?.url || '').trim();
             const publicationName = String(this.selectedSite?.name || '').trim();
             const username = String(this.selectedUser?.name || '').trim();
+            const links = this.publicationNotificationResolvedLinks();
+            const article = this.publicationNotificationResolvedArticle();
+            const articleLinksHtml = links.html || (permalink ? '<a href="' + permalink + '">' + permalink + '</a>' : '');
+            const articleLinksPlain = links.plain || permalink;
             return {
                 '{permalink}': permalink,
                 '{username}': username,
                 '{publication_name}': publicationName,
                 '{publication_url}': publicationUrl,
                 '{article_title}': String(this.articleTitle || '').trim(),
+                '{article}': article.html,
+                '{article_plain}': article.plain,
+                '{article_body}': article.body_html,
+                '{article_body_plain}': article.body_plain,
+                '{article_header}': article.header_html,
+                '{article_header_plain}': article.header_plain,
+                '{article_links}': articleLinksHtml,
+                '{article_links_plain}': articleLinksPlain,
+                '{press_release_links}': articleLinksHtml,
+                '{press_release_links_plain}': articleLinksPlain,
                 '{site_name}': publicationName,
                 '{site_url}': publicationUrl,
                 '{account_name}': username,
@@ -813,6 +891,12 @@
 
         defaultPublicationNotificationTemplate() {
             const templates = Array.isArray(this.publicationNotificationTemplates) ? this.publicationNotificationTemplates : [];
+            if (this.currentArticleType === 'press-release' && this.selectedSite?.is_press_release_source) {
+                const pressReleaseTemplate = templates.find((template) => String(template.name || '').toLowerCase().includes('press release'));
+                if (pressReleaseTemplate) {
+                    return pressReleaseTemplate;
+                }
+            }
             return templates.find((template) => !!template.is_primary) || templates[0] || null;
         },
 

@@ -308,6 +308,7 @@ function publishPipeline() {
         publicationNotificationTemplates: @json($publicationNotificationTemplates ?? []),
         publicationNotificationDefaults: @json($publicationNotificationDefaults ?? []),
         publicationNotificationShortcodes: @json(config('hws-publish.shortcodes', [])),
+        publicationNotificationArticleLinks: @json($draft->links_injected ?? null),
         publicationNotificationTemplateId: @json(($publicationNotificationDefaults['template_id'] ?? '')),
         publicationNotificationFromName: @json(($publicationNotificationDefaults['from_name'] ?? '')),
         publicationNotificationFromEmail: @json(($publicationNotificationDefaults['from_email'] ?? '')),

@@ -693,6 +693,7 @@ function pressReleaseWorkflowMixin(config) {
                         component_id: 'press-release-person-search',
                         close: true,
                         clearResults: true,
+                        clearQuery: true,
                     },
                 }));
             }
@@ -762,11 +763,11 @@ function pressReleaseWorkflowMixin(config) {
         },
 
         handlePressReleasePersonSearchFocus() {
-            this.cancelPressReleaseNotionPeopleSearch({ clearResults: false, close: true });
+            this.cancelPressReleaseNotionPeopleSearch({ clearResults: true, close: true });
         },
 
         handlePressReleasePersonSearchInput() {
-            this.cancelPressReleaseNotionPeopleSearch({ clearResults: false, close: true });
+            this.cancelPressReleaseNotionPeopleSearch({ clearResults: true, close: true });
         },
 
         async loadPressReleaseNotionPersonBooks(record, options = {}) {
@@ -782,6 +783,7 @@ function pressReleaseWorkflowMixin(config) {
                     component_id: 'press-release-person-search',
                     close: true,
                     clearResults: true,
+                    clearQuery: true,
                 },
             }));
             this.pressReleaseLoadingPersonBooks = true;

@@ -9,6 +9,7 @@ use hexa_app_publish\Publishing\Articles\Services\DraftApprovalEmailService;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineStateService;
 use hexa_core\Http\Controllers\Controller;
 use hexa_core\Models\EmailLog;
+use hexa_core\TemplateCenter\Models\EmailTemplate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -29,6 +30,8 @@ class DraftApprovalEmailController extends Controller
             "article" => $this->serializeArticle($article),
             "composer" => $this->composerConfig($article),
             "logs" => $this->serializeLogs($article),
+            "templates" => $this->approvalTemplates($article),
+            "shortcodes" => $this->approvalShortcodes(),
         ]);
     }
 
@@ -44,6 +47,8 @@ class DraftApprovalEmailController extends Controller
             "from_email" => "nullable|string|max:255",
             "reply_to" => "nullable|string|max:255",
             "subject" => "nullable|string|max:255",
+            "template_id" => "nullable|integer|exists:email_templates,id",
+            "body_template" => "nullable|string|max:100000",
             "intro_html" => "nullable|string|max:50000",
             "image_mode" => "nullable|string|max:40",
         ]);
@@ -60,6 +65,8 @@ class DraftApprovalEmailController extends Controller
                 "from_email" => (string) ($input["from_email"] ?? $preview["config"]["from_email"] ?? ""),
                 "reply_to" => (string) ($input["reply_to"] ?? $preview["config"]["reply_to"] ?? ""),
                 "subject" => (string) ($input["subject"] ?? $preview["config"]["subject"] ?? ""),
+                "template_id" => (string) ($input["template_id"] ?? $preview["config"]["template_id"] ?? ""),
+                "body_template" => (string) ($input["body_template"] ?? $preview["config"]["body_template"] ?? ""),
                 "intro_html" => (string) ($input["intro_html"] ?? $preview["config"]["intro_html"] ?? ""),
                 "image_mode" => (string) ($input["image_mode"] ?? $preview["config"]["image_mode"] ?? "embed"),
             ]),
@@ -67,6 +74,8 @@ class DraftApprovalEmailController extends Controller
             "warnings" => $preview["warnings"],
             "snapshot" => $preview["snapshot"],
             "headers" => $preview["headers"],
+            "templates" => $this->approvalTemplates($article),
+            "shortcodes" => $this->approvalShortcodes(),
         ]);
     }
 
@@ -82,6 +91,8 @@ class DraftApprovalEmailController extends Controller
             "from_email" => "nullable|string|max:255",
             "reply_to" => "nullable|string|max:255",
             "subject" => "nullable|string|max:255",
+            "template_id" => "nullable|integer|exists:email_templates,id",
+            "body_template" => "nullable|string|max:100000",
             "intro_html" => "nullable|string|max:50000",
             "image_mode" => "nullable|string|max:40",
             "test_mode" => "nullable|boolean",
@@ -129,6 +140,7 @@ class DraftApprovalEmailController extends Controller
     private function composerConfig(PublishArticle $article): array
     {
         $config = $this->approvalEmails->defaultComposerConfig($article);
+        $config = array_merge($config, $this->approvalTemplateDefaults($article));
         $payload = $this->pipelineState->payload($article);
         $map = [
             "to" => "approvalEmailTo",
@@ -137,6 +149,8 @@ class DraftApprovalEmailController extends Controller
             "from_email" => "approvalEmailFromEmail",
             "reply_to" => "approvalEmailReplyTo",
             "subject" => "approvalEmailSubject",
+            "template_id" => "approvalEmailTemplateId",
+            "body_template" => "approvalEmailBodyTemplate",
             "intro_html" => "approvalEmailIntroHtml",
             "image_mode" => "approvalEmailImageMode",
         ];
@@ -201,9 +215,98 @@ class DraftApprovalEmailController extends Controller
         $payload["approvalEmailFromEmail"] = trim((string) ($input["from_email"] ?? ($payload["approvalEmailFromEmail"] ?? "")));
         $payload["approvalEmailReplyTo"] = trim((string) ($input["reply_to"] ?? ($payload["approvalEmailReplyTo"] ?? "")));
         $payload["approvalEmailSubject"] = trim((string) ($input["subject"] ?? ($payload["approvalEmailSubject"] ?? "")));
+        $payload["approvalEmailTemplateId"] = isset($input["template_id"]) ? trim((string) $input["template_id"]) : trim((string) ($payload["approvalEmailTemplateId"] ?? ""));
+        $payload["approvalEmailBodyTemplate"] = (string) ($input["body_template"] ?? ($payload["approvalEmailBodyTemplate"] ?? ""));
         $payload["approvalEmailIntroHtml"] = (string) ($input["intro_html"] ?? ($payload["approvalEmailIntroHtml"] ?? ""));
         $payload["approvalEmailImageMode"] = trim((string) ($input["image_mode"] ?? ($payload["approvalEmailImageMode"] ?? "embed")));
         $this->pipelineState->save($article, $payload);
+    }
+
+    private function approvalTemplates(PublishArticle $article): array
+    {
+        $templates = EmailTemplate::query()
+            ->where("use_case", "draft_approval_email")
+            ->where("is_active", true)
+            ->orderByDesc("is_primary")
+            ->orderBy("name")
+            ->get(["id", "name", "is_primary", "from_name", "from_email", "reply_to", "cc", "subject", "body", "smtp_account_id"]);
+
+        if ($templates->isEmpty()) {
+            return [];
+        }
+
+        $preferredTemplate = null;
+        if ($article->article_type === "press-release") {
+            $preferredTemplate = $templates->first(
+                fn (EmailTemplate $template) => str_contains(strtolower((string) $template->name), "press release")
+            );
+        }
+        $primaryTemplate = $preferredTemplate
+            ?: $templates->firstWhere("is_primary", true)
+            ?: $templates->first();
+
+        return $templates
+            ->map(fn (EmailTemplate $template) => [
+                "id" => (int) $template->id,
+                "name" => (string) $template->name,
+                "is_primary" => (bool) $template->is_primary,
+                "is_selected_default" => $primaryTemplate && (int) $primaryTemplate->id === (int) $template->id,
+                "from_name" => (string) ($template->from_name ?? ""),
+                "from_email" => (string) ($template->from_email ?? ""),
+                "reply_to" => (string) ($template->reply_to ?? ""),
+                "cc" => (string) ($template->cc ?? ""),
+                "subject" => (string) ($template->subject ?? ""),
+                "body" => (string) ($template->body ?? ""),
+                "smtp_account_id" => $template->smtp_account_id ? (int) $template->smtp_account_id : null,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function approvalTemplateDefaults(PublishArticle $article): array
+    {
+        $templates = collect($this->approvalTemplates($article));
+        $defaults = config("hws-publish.draft_approval_email", []);
+        $primaryTemplate = $templates->firstWhere("is_selected_default", true)
+            ?: $templates->firstWhere("is_primary", true)
+            ?: $templates->first();
+
+        return [
+            "template_id" => $primaryTemplate ? (string) ($primaryTemplate["id"] ?? "") : "",
+            "from_name" => (string) ($primaryTemplate["from_name"] ?? ($defaults["default_from_name"] ?? "Scale My Publication")),
+            "from_email" => (string) ($primaryTemplate["from_email"] ?? ($defaults["default_from_email"] ?? "no-reply@scalemypublication.com")),
+            "reply_to" => (string) ($primaryTemplate["reply_to"] ?? ($defaults["default_reply_to"] ?? "support@scalemypublication.com")),
+            "cc" => (string) ($primaryTemplate["cc"] ?? ($defaults["default_cc"] ?? "")),
+            "subject" => (string) ($primaryTemplate["subject"] ?? ($defaults["default_subject"] ?? "Your draft is ready: {article_title}")),
+            "body_template" => (string) ($primaryTemplate["body"] ?? ($defaults["default_body"] ?? "")),
+        ];
+    }
+
+    private function approvalShortcodes(): array
+    {
+        $available = config("hws-publish.shortcodes", []);
+        $allowed = [
+            "{article_title}",
+            "{article}",
+            "{article_plain}",
+            "{article_body}",
+            "{article_body_plain}",
+            "{article_header}",
+            "{article_header_plain}",
+            "{review_url}",
+            "{username}",
+            "{site_name}",
+            "{site_url}",
+        ];
+
+        $shortcodes = [];
+        foreach ($allowed as $code) {
+            if (array_key_exists($code, $available)) {
+                $shortcodes[$code] = $available[$code];
+            }
+        }
+
+        return $shortcodes;
     }
 
     private function serializeArticle(PublishArticle $article): array

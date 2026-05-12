@@ -32,17 +32,16 @@ Route::get('/article/editor/{id}', [ArticleController::class, 'editor'])->name('
 // Drafted articles
 Route::get('/article/articles', [DraftController::class, 'index'])->name('publish.drafts.index');
 Route::post('/article/articles', [DraftController::class, 'store'])->name('publish.drafts.store');
-Route::get('/article/articles/{id}', [DraftController::class, 'show'])->name('publish.drafts.show');
-Route::put('/article/articles/{id}', [DraftController::class, 'update'])->name('publish.drafts.update');
-Route::delete('/article/articles/{id}', [DraftController::class, 'destroy'])->name('publish.drafts.destroy');
-Route::post('/article/articles/bulk-delete', [DraftController::class, 'bulkDestroy'])->name('publish.drafts.bulk-destroy');
-Route::post('/article/articles/{id}/prepare-wordpress', [DraftController::class, 'prepareWordPress'])->name('publish.drafts.prepare-wordpress');
-
-
+Route::post('/article/articles/{id}/prepare', [DraftController::class, 'prepare'])->name('publish.drafts.prepare');
+Route::post('/article/articles/{id}/approve', [DraftController::class, 'approve'])->name('publish.drafts.approve');
 Route::get('/article/articles/{id}/approval-email', [DraftApprovalEmailController::class, 'show'])->name('publish.drafts.approval.show');
 Route::post('/article/articles/{id}/approval-email/preview', [DraftApprovalEmailController::class, 'preview'])->name('publish.drafts.approval.preview');
 Route::post('/article/articles/{id}/approval-email/send', [DraftApprovalEmailController::class, 'send'])->name('publish.drafts.approval.send');
 Route::get('/article/articles/{id}/approval-email/logs', [DraftApprovalEmailController::class, 'logs'])->name('publish.drafts.approval.logs');
+Route::get('/article/articles/{id}', [DraftController::class, 'show'])->name('publish.drafts.show');
+Route::put('/article/articles/{id}', [DraftController::class, 'update'])->name('publish.drafts.update');
+Route::delete('/article/articles/{id}', [DraftController::class, 'destroy'])->name('publish.drafts.destroy');
+Route::post('/article/articles/bulk-delete', [DraftController::class, 'bulkDestroy'])->name('publish.drafts.bulk-destroy');
 
 // Bookmarks
 Route::get('/article/bookmarks', [BookmarkController::class, 'index'])->name('publish.bookmarks.index');

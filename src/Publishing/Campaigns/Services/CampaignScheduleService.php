@@ -42,6 +42,47 @@ class CampaignScheduleService
         return $this->incrementForInterval($base, $campaign->interval_unit ?? 'daily');
     }
 
+    /**
+     * Return the current interval window in UTC for counting campaign output.
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    public function currentWindowUtc(PublishCampaign $campaign, ?CarbonInterface $reference = null): array
+    {
+        $tz = $campaign->timezone ?: 'America/New_York';
+        $local = ($reference ?: now())->copy()->setTimezone($tz);
+        $time = $campaign->run_at_time ?: '09:00';
+        $unit = $campaign->interval_unit ?? 'daily';
+
+        if ($unit === 'hourly') {
+            $startLocal = $local->copy()->startOfHour();
+            $endLocal = $startLocal->copy()->addHour();
+        } elseif ($unit === 'weekly') {
+            $startLocal = $local->copy()->startOfWeek()->setTimeFromTimeString($time)->setSecond(0);
+            if ($local->lt($startLocal)) {
+                $startLocal->subWeek();
+            }
+            $endLocal = $startLocal->copy()->addWeek();
+        } elseif ($unit === 'monthly') {
+            $startLocal = $local->copy()->startOfMonth()->setTimeFromTimeString($time)->setSecond(0);
+            if ($local->lt($startLocal)) {
+                $startLocal->subMonth();
+            }
+            $endLocal = $startLocal->copy()->addMonth();
+        } else {
+            $startLocal = $local->copy()->setTimeFromTimeString($time)->setSecond(0);
+            if ($local->lt($startLocal)) {
+                $startLocal->subDay();
+            }
+            $endLocal = $startLocal->copy()->addDay();
+        }
+
+        return [
+            $startLocal->copy()->utc(),
+            $endLocal->copy()->utc(),
+        ];
+    }
+
     private function incrementForInterval(Carbon $date, string $intervalUnit): Carbon
     {
         return match ($intervalUnit) {

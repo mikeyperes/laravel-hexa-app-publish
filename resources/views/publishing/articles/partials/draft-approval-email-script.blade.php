@@ -21,6 +21,8 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         approvalEmailFromEmail: 'no-reply@scalemypublication.com',
         approvalEmailReplyTo: 'support@scalemypublication.com',
         approvalEmailSubject: '',
+        approvalEmailTemplateId: '',
+        approvalEmailBodyTemplate: '',
         approvalEmailIntroHtml: '',
         approvalEmailImageMode: 'embed',
         approvalEmailAdditionalCcs: '',
@@ -30,7 +32,13 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         approvalEmailHeaders: {},
         approvalEmailSnapshot: {},
         approvalEmailLogs: [],
+        approvalEmailTemplates: [],
+        approvalEmailShortcodes: {},
         approvalEmailSuperAdminEmail: 'michael@mike-ro-tech.com',
+        approvalEmailSuperAdminImporting: false,
+        approvalEmailCcsImporting: false,
+        approvalEmailSuperAdminEmpty: false,
+        approvalEmailCcsEmpty: false,
         approvalEmailIntroEditorId: 'approval-email-intro-' + Math.random().toString(36).slice(2),
         approvalEmailTestTo: "michael@mike-ro-tech.com",
         _approvalEmailTinyMcePromise: null,
@@ -149,6 +157,8 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 from_email: String(this.approvalEmailFromEmail || '').trim(),
                 reply_to: String(this.approvalEmailReplyTo || '').trim(),
                 subject: String(this.approvalEmailSubject || '').trim(),
+                template_id: String(this.approvalEmailTemplateId || '').trim(),
+                body_template: String(this.approvalEmailBodyTemplate || ''),
                 intro_html: String(this.approvalEmailIntroHtml || ''),
                 image_mode: String(this.approvalEmailImageMode || 'embed').trim() || 'embed',
             };
@@ -163,6 +173,8 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 approvalEmailFromEmail: config.from_email ?? 'no-reply@scalemypublication.com',
                 approvalEmailReplyTo: config.reply_to ?? 'support@scalemypublication.com',
                 approvalEmailSubject: config.subject ?? '',
+                approvalEmailTemplateId: config.template_id ?? '',
+                approvalEmailBodyTemplate: config.body_template ?? '',
                 approvalEmailIntroHtml: config.intro_html ?? '',
                 approvalEmailImageMode: config.image_mode ?? 'embed',
             };
@@ -209,6 +221,58 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             const message = String(this.approvalEmailStatus || '').toLowerCase();
             return this.approvalEmailStatusType === 'error'
                 && (message.includes('smtp') || message.includes('mail'));
+        },
+
+        getApprovalEmailTemplateById(templateId = null) {
+            const target = String(templateId || this.approvalEmailTemplateId || '').trim();
+            if (!target) return null;
+            return (Array.isArray(this.approvalEmailTemplates) ? this.approvalEmailTemplates : [])
+                .find((template) => String(template.id) === target) || null;
+        },
+
+        defaultApprovalEmailTemplate() {
+            const templates = Array.isArray(this.approvalEmailTemplates) ? this.approvalEmailTemplates : [];
+            return templates.find((template) => !!template.is_selected_default)
+                || templates.find((template) => !!template.is_primary)
+                || templates[0]
+                || null;
+        },
+
+        applyApprovalEmailTemplate(templateId = null, { force = true } = {}) {
+            if (templateId !== null) {
+                this.approvalEmailTemplateId = String(templateId || '');
+            }
+
+            const template = this.getApprovalEmailTemplateById()
+                || this.defaultApprovalEmailTemplate();
+            if (!template) {
+                this.approvalEmailPersistState();
+                return;
+            }
+
+            if (force || !String(this.approvalEmailFromName || '').trim()) {
+                this.approvalEmailFromName = String(template.from_name || this.approvalEmailFromName || '');
+            }
+            if (force || !String(this.approvalEmailFromEmail || '').trim()) {
+                this.approvalEmailFromEmail = String(template.from_email || this.approvalEmailFromEmail || '');
+            }
+            if (force || !String(this.approvalEmailReplyTo || '').trim()) {
+                this.approvalEmailReplyTo = String(template.reply_to || this.approvalEmailReplyTo || '');
+            }
+            if (force || !String(this.approvalEmailCc || '').trim()) {
+                this.approvalEmailCc = String(template.cc || this.approvalEmailCc || '');
+            }
+            if (force || !String(this.approvalEmailSubject || '').trim()) {
+                this.approvalEmailSubject = String(template.subject || this.approvalEmailSubject || '');
+            }
+            if (force || !String(this.approvalEmailBodyTemplate || '').trim()) {
+                this.approvalEmailBodyTemplate = String(template.body || this.approvalEmailBodyTemplate || '');
+            }
+
+            if (typeof this.$nextTick === 'function') {
+                this.$nextTick(() => this.approvalEmailSyncIntroEditor());
+            }
+            this.approvalEmailPersistState();
         },
 
         approvalEmailImageModeHelp() {
@@ -293,7 +357,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             if (!textarea) return false;
             const ready = await this.approvalEmailEnsureTinyMceLoaded();
             if (!ready || !window.tinymce) {
-                textarea.value = String(this.approvalEmailIntroHtml || '');
+                textarea.value = String(this.approvalEmailBodyTemplate || '');
                 return false;
             }
 
@@ -319,10 +383,10 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 autoresize_bottom_margin: 12,
                 setup: (editor) => {
                     editor.on('init', () => {
-                        editor.setContent(String(this.approvalEmailIntroHtml || ''));
+                        editor.setContent(String(this.approvalEmailBodyTemplate || ''));
                     });
                     const sync = () => {
-                        this.approvalEmailIntroHtml = editor.getContent({ format: 'html' }) || '';
+                        this.approvalEmailBodyTemplate = editor.getContent({ format: 'html' }) || '';
                     };
                     editor.on('change input undo redo keyup setcontent', sync);
                 },
@@ -335,18 +399,18 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         approvalEmailPullIntroEditorHtml() {
             const editor = window.tinymce?.get(this.approvalEmailIntroEditorId);
             if (editor) {
-                this.approvalEmailIntroHtml = editor.getContent({ format: 'html' }) || '';
-                return this.approvalEmailIntroHtml;
+                this.approvalEmailBodyTemplate = editor.getContent({ format: 'html' }) || '';
+                return this.approvalEmailBodyTemplate;
             }
             const textarea = this.approvalEmailIntroTextarea();
             if (textarea) {
-                this.approvalEmailIntroHtml = textarea.value || '';
+                this.approvalEmailBodyTemplate = textarea.value || '';
             }
-            return this.approvalEmailIntroHtml;
+            return this.approvalEmailBodyTemplate;
         },
 
         approvalEmailSyncIntroEditor() {
-            const next = String(this.approvalEmailIntroHtml || '');
+            const next = String(this.approvalEmailBodyTemplate || '');
             const editor = window.tinymce?.get(this.approvalEmailIntroEditorId);
             if (editor) {
                 const current = editor.getContent({ format: 'html' }) || '';
@@ -374,6 +438,40 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 this.approvalEmailCc = list.join(', ');
                 this.approvalEmailCcTouched = true;
                 this.approvalEmailPersistState();
+            }
+        },
+
+        async approvalEmailImportSuperAdmin() {
+            if (this.approvalEmailSuperAdminImporting) return;
+            this.approvalEmailSuperAdminImporting = true;
+            this.approvalEmailSuperAdminEmpty = false;
+            await new Promise((r) => setTimeout(r, 240));
+            try {
+                const email = String(this.approvalEmailSuperAdminEmail || "").trim();
+                if (!email) {
+                    this.approvalEmailSuperAdminEmpty = true;
+                } else {
+                    this.approvalEmailAppendCcAddress(email);
+                }
+            } finally {
+                this.approvalEmailSuperAdminImporting = false;
+            }
+        },
+
+        async approvalEmailImportCcs() {
+            if (this.approvalEmailCcsImporting) return;
+            this.approvalEmailCcsImporting = true;
+            this.approvalEmailCcsEmpty = false;
+            await new Promise((r) => setTimeout(r, 240));
+            try {
+                const list = String(this.approvalEmailAdditionalCcs || "").trim();
+                if (!list) {
+                    this.approvalEmailCcsEmpty = true;
+                } else {
+                    this.approvalEmailAppendCcList(list);
+                }
+            } finally {
+                this.approvalEmailCcsImporting = false;
             }
         },
 
@@ -417,8 +515,16 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
 
                 this.approvalEmailArticle = data.article || null;
                 this.approvalEmailLogs = Array.isArray(data.logs) ? data.logs : [];
+                this.approvalEmailTemplates = Array.isArray(data.templates) ? data.templates : [];
+                this.approvalEmailShortcodes = data.shortcodes || {};
                 this.approvalEmailLoadedDraftId = targetId;
                 this.approvalEmailApplyComposer(data.composer || {}, { preserveFilled: !!options.preserveFilled });
+                if (!String(this.approvalEmailTemplateId || '').trim()) {
+                    const defaultTemplate = this.defaultApprovalEmailTemplate();
+                    if (defaultTemplate?.id) {
+                        this.approvalEmailTemplateId = String(defaultTemplate.id);
+                    }
+                }
                 if (!String(this.approvalEmailTestTo || "").trim()) {
                     this.approvalEmailTestTo = this.approvalEmailSuperAdminEmail;
                 }

@@ -3,8 +3,6 @@
 namespace hexa_app_publish\Providers;
 
 use hexa_app_publish\Console\RunCampaignsCommand;
-use hexa_app_publish\Publishing\Pipeline\Services\PublishPipelineApiContext;
-use hexa_app_publish\Publishing\Pipeline\Services\PublishPipelineHttpActivityTracker;
 use hexa_app_publish\Publishing\Schedule\Feeds\PublishScheduleCalendarFeed;
 use hexa_app_publish\Publishing\Uploads\Console\CleanupOrphanUploadsCommand;
 use hexa_app_publish\Publishing\Templates\Forms\ArticlePresetForm;
@@ -20,10 +18,6 @@ use hexa_core\Services\PackageRegistryService;
 use hexa_core\UserRoles\Models\Role;
 use hexa_app_publish\Publishing\Access\Services\PublishAccessService;
 use hexa_app_publish\Publishing\Accounts\Services\UserProfileDataService;
-use Illuminate\Http\Client\Events\ConnectionFailed;
-use Illuminate\Http\Client\Events\RequestSending;
-use Illuminate\Http\Client\Events\ResponseReceived;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 
@@ -37,8 +31,6 @@ class AppPublishServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__ . '/../../config/app-publish.php', 'hws-publish');
 
         $this->app->singleton(PublishService::class);
-        $this->app->singleton(PublishPipelineApiContext::class);
-        $this->app->singleton(PublishPipelineHttpActivityTracker::class);
     }
 
     /**
@@ -61,6 +53,7 @@ class AppPublishServiceProvider extends ServiceProvider
         $this->syncNonAdminSiteRolePatterns();
 
         $this->registerListCategories();
+
         $this->registerForms();
 
         $this->registerTemplateCenterSupport();
@@ -68,25 +61,9 @@ class AppPublishServiceProvider extends ServiceProvider
         $this->registerCrons();
 
         $this->registerNonAdminWorkspaceGuard();
-        $this->registerPipelineHttpTelemetry();
 
         // Register publish commands for both CLI and web-triggered Artisan::call() cron runs.
         $this->commands([RunCampaignsCommand::class, CleanupOrphanUploadsCommand::class]);
-    }
-
-    private function registerPipelineHttpTelemetry(): void
-    {
-        Event::listen(RequestSending::class, function (RequestSending $event): void {
-            app(PublishPipelineHttpActivityTracker::class)->onRequestSending($event);
-        });
-
-        Event::listen(ResponseReceived::class, function (ResponseReceived $event): void {
-            app(PublishPipelineHttpActivityTracker::class)->onResponseReceived($event);
-        });
-
-        Event::listen(ConnectionFailed::class, function (ConnectionFailed $event): void {
-            app(PublishPipelineHttpActivityTracker::class)->onConnectionFailed($event);
-        });
     }
 
     private function registerCalendarSources(): void
@@ -207,6 +184,16 @@ class AppPublishServiceProvider extends ServiceProvider
         }
 
         if (method_exists($registry, 'registerTemplateUseCase')) {
+            $registry->registerTemplateUseCase('draft_approval_email', [
+                'label' => 'Draft Approval Email',
+                'used_in' => 'Articles → Draft Email drawer on /article/articles for client review before final publication.',
+                'shortcodes' => array_keys($shortcodes),
+                'sort_order' => 25,
+                'mode' => 'full_email',
+                'mode_label' => 'Email Template',
+                'mode_note' => 'Used by the draft approval email composer on the article drafts page.',
+            ], 'app-publish');
+
             $registry->registerTemplateUseCase('publication_notification', [
                 'label' => 'Publication Notification',
                 'used_in' => 'Publish Article / publish2 → Review & Publish after a live post is published.',

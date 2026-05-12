@@ -313,7 +313,7 @@ class PipelineOperationExecutor
                     'categories' => $payload['categories'] ?? null,
                     'tags' => $payload['tags'] ?? null,
                     'wp_images' => $payload['wp_images'] ?? null,
-                    'links_injected' => null,
+                    'links_injected' => $delivery['links_injected'] ?? null,
                     'created_by' => $operation->created_by,
                 ], $payload['draft_id'] ?? null);
 
@@ -359,6 +359,7 @@ class PipelineOperationExecutor
                     'post_id' => $delivery['post_id'],
                     'post_url' => $delivery['post_url'],
                     'post_status' => $delivery['post_status'] ?? $payload['status'] ?? null,
+                    'links_injected' => $delivery['links_injected'] ?? null,
                     'used_existing_post' => $updatingExistingPost,
                     'existing_post_id' => $existingPostId,
                     'article_id' => $article->id,

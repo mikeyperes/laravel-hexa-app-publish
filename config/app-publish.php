@@ -2,7 +2,7 @@
 
 return [
 
-    'version' => '18.16.44',
+    'version' => '18.16.45',
 
     /*
     |--------------------------------------------------------------------------
@@ -291,7 +291,21 @@ return [
         'default_reply_to' => '',
         'default_cc' => '',
         'default_subject' => 'Your article is now live on {publication_name}',
-        'default_body' => "Hi,\n\nYour article is now live on {publication_name}.\n\nTitle: {article_title}\nPermalink: {permalink}\nPublication site: {publication_url}\n\nBest,\n{username}",
+        'default_body' => "<p>Hi,</p><p>Your article is now live on <strong>{publication_name}</strong>.</p><p><strong>Title:</strong> {article_title}<br><strong>Permalink:</strong> <a href=\"{permalink}\">{permalink}</a><br><strong>Publication site:</strong> <a href=\"{publication_url}\">{publication_url}</a></p><hr><div>{article}</div><p>Best,<br>{username}</p>",
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Draft Approval Email Defaults
+    |--------------------------------------------------------------------------
+    */
+    'draft_approval_email' => [
+        'default_from_name' => 'Scale My Publication',
+        'default_from_email' => 'no-reply@scalemypublication.com',
+        'default_reply_to' => 'support@scalemypublication.com',
+        'default_cc' => '',
+        'default_subject' => 'Your draft is ready: {article_title}',
+        'default_body' => "<p>Hi,</p><p>Your draft is ready for review.</p><p><a href=\"{review_url}\">Open review page</a></p><hr><div>{article}</div><p>Best,<br>{username}</p>",
     ],
 
     /*
@@ -304,8 +318,19 @@ return [
         '{site_name}' => 'WordPress site name',
         '{site_url}' => 'WordPress site URL',
         '{article_title}' => 'Article title',
+        '{article}' => 'Full article HTML with title header',
+        '{article_plain}' => 'Full article plain text with title header',
+        '{article_body}' => 'Article body HTML only',
+        '{article_body_plain}' => 'Article body plain text only',
+        '{article_header}' => 'Article title as an HTML heading',
+        '{article_header_plain}' => 'Article title as plain text',
         '{campaign_name}' => 'Campaign name',
         '{permalink}' => 'Published article permalink',
+        '{article_links}' => 'Rendered live article links block (HTML, press-release aware)',
+        '{article_links_plain}' => 'Rendered live article links block (plain text)',
+        '{press_release_links}' => 'Press release links block (HTML)',
+        '{press_release_links_plain}' => 'Press release links block (plain text)',
+        '{review_url}' => 'Hosted review URL for the draft approval email',
         '{username}' => 'Selected publishing user name',
         '{publication_name}' => 'Publication/site display name',
         '{publication_url}' => 'Publication/site URL',
