@@ -8,6 +8,7 @@ use hexa_app_publish\Publishing\Articles\Models\PublishArticleApprovalEmail;
 use hexa_app_publish\Publishing\Articles\Services\DraftApprovalEmailService;
 use hexa_app_publish\Publishing\Pipeline\Services\PipelineStateService;
 use hexa_core\Http\Controllers\Controller;
+use hexa_core\Models\User;
 use hexa_core\Models\EmailLog;
 use hexa_core\TemplateCenter\Models\EmailTemplate;
 use Illuminate\Http\JsonResponse;
@@ -35,6 +36,35 @@ class DraftApprovalEmailController extends Controller
         ]);
     }
 
+    public function searchUsers(Request $request): JsonResponse
+    {
+        $query = trim((string) $request->query("q", ""));
+        if ($query === "") {
+            return response()->json(["success" => true, "users" => []]);
+        }
+        $like = "%" . str_replace(["\\", "%", "_"], ["\\\\", "\%", "\_"], $query) . "%";
+        $users = User::query()
+            ->select(["id", "name", "email", "contact_email", "additional_contact_emails"])
+            ->where(function ($inner) use ($like) {
+                $inner->where("name", "like", $like)
+                    ->orWhere("email", "like", $like)
+                    ->orWhere("contact_email", "like", $like)
+                    ->orWhere("additional_contact_emails", "like", $like);
+            })
+            ->orderBy("name")
+            ->limit(12)
+            ->get()
+            ->map(fn (User $user) => [
+                "id" => (int) $user->id,
+                "name" => (string) ($user->name ?? ""),
+                "email" => (string) ($user->email ?? ""),
+                "contact_email" => (string) ($user->contact_email ?? ""),
+                "additional_contact_emails" => (string) ($user->additional_contact_emails ?? ""),
+            ])
+            ->values();
+        return response()->json(["success" => true, "users" => $users]);
+    }
+
     public function preview(Request $request, int $id): JsonResponse
     {
         $article = $this->resolveArticle($request, $id);
@@ -51,6 +81,7 @@ class DraftApprovalEmailController extends Controller
             "body_template" => "nullable|string|max:100000",
             "intro_html" => "nullable|string|max:50000",
             "image_mode" => "nullable|string|max:40",
+            "secondary_user_id" => "nullable|integer|exists:users,id",
         ]);
 
         $this->persistComposerState($article, $input);
@@ -95,6 +126,7 @@ class DraftApprovalEmailController extends Controller
             "body_template" => "nullable|string|max:100000",
             "intro_html" => "nullable|string|max:50000",
             "image_mode" => "nullable|string|max:40",
+            "secondary_user_id" => "nullable|integer|exists:users,id",
             "test_mode" => "nullable|boolean",
             "test_to" => "nullable|email|max:255",
         ]);
@@ -111,9 +143,9 @@ class DraftApprovalEmailController extends Controller
             "success" => $email->status === "sent",
             "message" => $email->status === "sent"
                 ? ($isTest
-                    ? ("Draft approval test email sent to " . ($actualRecipients !== "" ? $actualRecipients : "the selected recipient") . ".")
-                    : "Draft approval email sent.")
-                : ($email->error ?: ($isTest ? "Draft approval test email failed." : "Draft approval email failed.")),
+                    ? ("Test email sent to " . ($actualRecipients !== "" ? $actualRecipients : "the selected recipient") . ".")
+                    : "Email sent.")
+                : ($email->error ?: ($isTest ? "Test email failed." : "Email failed.")),
             "email" => $this->serializeLog($email),
             "logs" => $this->serializeLogs($article),
         ], $email->status === "sent" ? 200 : 422);
@@ -132,7 +164,7 @@ class DraftApprovalEmailController extends Controller
     private function resolveArticle(Request $request, int $id): PublishArticle
     {
         $article = $this->access->resolveArticleOrFail($request->user(), $id);
-        $article->loadMissing(["site", "creator", "pipelineState", "latestApprovalEmail.sender"]);
+        $article->loadMissing(["site", "account", "creator", "pipelineState", "latestApprovalEmail.sender"]);
 
         return $article;
     }
@@ -142,6 +174,8 @@ class DraftApprovalEmailController extends Controller
         $config = $this->approvalEmails->defaultComposerConfig($article);
         $config = array_merge($config, $this->approvalTemplateDefaults($article));
         $payload = $this->pipelineState->payload($article);
+        $contextKey = $this->composerContextKey($article);
+        $preserveComposerPayload = (string) ($payload["approvalEmailContextKey"] ?? "") === $contextKey;
         $map = [
             "to" => "approvalEmailTo",
             "cc" => "approvalEmailCc",
@@ -158,44 +192,58 @@ class DraftApprovalEmailController extends Controller
         $toTouched = (bool) ($payload["approvalEmailToTouched"] ?? false);
         $ccTouched = (bool) ($payload["approvalEmailCcTouched"] ?? false);
 
-        foreach ($map as $configKey => $payloadKey) {
-            if (!array_key_exists($payloadKey, $payload) || $payload[$payloadKey] === null) {
-                continue;
-            }
-            if ($configKey === "to" && !$toTouched) {
-                continue;
-            }
-            if ($configKey === "cc" && !$ccTouched) {
-                continue;
-            }
+        if ($preserveComposerPayload) {
+            foreach ($map as $configKey => $payloadKey) {
+                if (!array_key_exists($payloadKey, $payload) || $payload[$payloadKey] === null) {
+                    continue;
+                }
+                if ($configKey === "to" && !$toTouched) {
+                    continue;
+                }
+                if ($configKey === "cc" && !$ccTouched) {
+                    continue;
+                }
 
-            $value = is_string($payload[$payloadKey])
-                ? $payload[$payloadKey]
-                : (string) $payload[$payloadKey];
+                $value = is_string($payload[$payloadKey])
+                    ? $payload[$payloadKey]
+                    : (string) $payload[$payloadKey];
 
-            if ($configKey !== "intro_html") {
-                $value = trim($value);
-            }
+                if ($configKey !== "intro_html") {
+                    $value = trim($value);
+                }
 
-            if (in_array($configKey, ["to", "cc", "from_name", "from_email", "reply_to", "subject", "image_mode"], true) && $value === "") {
-                continue;
-            }
+                if (in_array($configKey, ["to", "cc", "from_name", "from_email", "reply_to", "subject", "image_mode"], true) && $value === "") {
+                    continue;
+                }
 
-            $config[$configKey] = $value;
-        }
-
-        $creatorContact = trim((string) ($article->creator?->contact_email ?? ""));
-        $creatorLogin = trim((string) ($article->creator?->email ?? ""));
-        if (!$toTouched) {
-            if ($creatorContact !== "" && filter_var($creatorContact, FILTER_VALIDATE_EMAIL)) {
-                $config["to"] = $creatorContact;
-            } elseif ($creatorLogin !== "" && filter_var($creatorLogin, FILTER_VALIDATE_EMAIL)) {
-                $config["to"] = $creatorLogin;
+                $config[$configKey] = $value;
             }
         }
 
-        $config["additional_ccs"] = trim((string) ($article->creator?->additional_contact_emails ?? ""));
+        $templateDefaults = $this->approvalTemplateDefaults($article);
+        $validTemplateIds = collect($this->approvalTemplates($article))->pluck("id")->map(fn ($id) => (string) $id)->all();
+        if (!in_array((string) ($config["template_id"] ?? ""), $validTemplateIds, true)) {
+            $config = array_merge($config, $templateDefaults);
+        }
+        if (str_contains((string) ($config["body_template"] ?? ""), "{review_url}") || str_contains((string) ($config["body_template"] ?? ""), "Open review page")) {
+            $config["body_template"] = (string) ($templateDefaults["body_template"] ?? "");
+        }
+
+        $config["additional_ccs"] = $this->approvalEmails->defaultAdditionalCcs($article);
         $config["smtp_settings_url"] = route("settings.smtp-accounts.index");
+        $config["secondary_user_search_url"] = route("publish.drafts.approval.users");
+
+        $secondaryUserId = (int) ($payload["approvalEmailSecondaryUserId"] ?? 0);
+        $secondaryUser = $secondaryUserId > 0
+            ? User::query()->select(["id", "name", "email", "contact_email", "additional_contact_emails"])->find($secondaryUserId)
+            : null;
+        $config["secondary_user"] = $secondaryUser ? [
+            "id" => (int) $secondaryUser->id,
+            "name" => (string) ($secondaryUser->name ?? ""),
+            "email" => (string) ($secondaryUser->email ?? ""),
+            "contact_email" => (string) ($secondaryUser->contact_email ?? ""),
+            "additional_contact_emails" => (string) ($secondaryUser->additional_contact_emails ?? ""),
+        ] : null;
 
         return $config;
     }
@@ -203,6 +251,7 @@ class DraftApprovalEmailController extends Controller
     private function persistComposerState(PublishArticle $article, array $input): void
     {
         $payload = $this->pipelineState->payload($article);
+        $payload["approvalEmailContextKey"] = $this->composerContextKey($article);
         $payload["approvalEmailTo"] = trim((string) ($input["to"] ?? ($payload["approvalEmailTo"] ?? "")));
         if (array_key_exists("to_touched", $input)) {
             $payload["approvalEmailToTouched"] = (bool) $input["to_touched"];
@@ -219,13 +268,30 @@ class DraftApprovalEmailController extends Controller
         $payload["approvalEmailBodyTemplate"] = (string) ($input["body_template"] ?? ($payload["approvalEmailBodyTemplate"] ?? ""));
         $payload["approvalEmailIntroHtml"] = (string) ($input["intro_html"] ?? ($payload["approvalEmailIntroHtml"] ?? ""));
         $payload["approvalEmailImageMode"] = trim((string) ($input["image_mode"] ?? ($payload["approvalEmailImageMode"] ?? "embed")));
+        $payload["approvalEmailSecondaryUserId"] = isset($input["secondary_user_id"])
+            ? (int) $input["secondary_user_id"]
+            : (int) ($payload["approvalEmailSecondaryUserId"] ?? 0);
         $this->pipelineState->save($article, $payload);
+    }
+
+    private function composerContextKey(PublishArticle $article): string
+    {
+        return implode("|", [
+            $this->approvalEmails->recommendedTemplateUseCase($article),
+            $this->approvalEmails->preferredTemplateKeyword($article) ?? "",
+            (string) ($article->article_type ?? ""),
+            (string) ($article->wp_status ?? ""),
+            (string) ($article->site?->id ?? 0),
+        ]);
     }
 
     private function approvalTemplates(PublishArticle $article): array
     {
+        $useCase = $this->approvalEmails->recommendedTemplateUseCase($article);
+        $preferredKeyword = $this->approvalEmails->preferredTemplateKeyword($article);
+
         $templates = EmailTemplate::query()
-            ->where("use_case", "draft_approval_email")
+            ->where("use_case", $useCase)
             ->where("is_active", true)
             ->orderByDesc("is_primary")
             ->orderBy("name")
@@ -236,9 +302,9 @@ class DraftApprovalEmailController extends Controller
         }
 
         $preferredTemplate = null;
-        if ($article->article_type === "press-release") {
+        if ($preferredKeyword) {
             $preferredTemplate = $templates->first(
-                fn (EmailTemplate $template) => str_contains(strtolower((string) $template->name), "press release")
+                fn (EmailTemplate $template) => str_contains(strtolower((string) $template->name), strtolower($preferredKeyword))
             );
         }
         $primaryTemplate = $preferredTemplate
@@ -249,6 +315,7 @@ class DraftApprovalEmailController extends Controller
             ->map(fn (EmailTemplate $template) => [
                 "id" => (int) $template->id,
                 "name" => (string) $template->name,
+                "use_case" => $useCase,
                 "is_primary" => (bool) $template->is_primary,
                 "is_selected_default" => $primaryTemplate && (int) $primaryTemplate->id === (int) $template->id,
                 "from_name" => (string) ($template->from_name ?? ""),
@@ -266,7 +333,8 @@ class DraftApprovalEmailController extends Controller
     private function approvalTemplateDefaults(PublishArticle $article): array
     {
         $templates = collect($this->approvalTemplates($article));
-        $defaults = config("hws-publish.draft_approval_email", []);
+        $useCase = $this->approvalEmails->recommendedTemplateUseCase($article);
+        $defaults = config("hws-publish.{$useCase}", []);
         $primaryTemplate = $templates->firstWhere("is_selected_default", true)
             ?: $templates->firstWhere("is_primary", true)
             ?: $templates->first();
@@ -277,7 +345,7 @@ class DraftApprovalEmailController extends Controller
             "from_email" => (string) ($primaryTemplate["from_email"] ?? ($defaults["default_from_email"] ?? "no-reply@scalemypublication.com")),
             "reply_to" => (string) ($primaryTemplate["reply_to"] ?? ($defaults["default_reply_to"] ?? "support@scalemypublication.com")),
             "cc" => (string) ($primaryTemplate["cc"] ?? ($defaults["default_cc"] ?? "")),
-            "subject" => (string) ($primaryTemplate["subject"] ?? ($defaults["default_subject"] ?? "Your draft is ready: {article_title}")),
+            "subject" => $this->approvalEmails->recommendedSubject($article),
             "body_template" => (string) ($primaryTemplate["body"] ?? ($defaults["default_body"] ?? "")),
         ];
     }
@@ -293,10 +361,19 @@ class DraftApprovalEmailController extends Controller
             "{article_body_plain}",
             "{article_header}",
             "{article_header_plain}",
-            "{review_url}",
+            "{permalink}",
+            "{article_links}",
+            "{article_links_plain}",
+            "{press_release_links}",
+            "{press_release_links_plain}",
+            "{hexa_pr_link}",
+            "{hexa_pr_links}",
+            "{hexa_pr_links_plain}",
             "{username}",
             "{site_name}",
             "{site_url}",
+            "{publication_name}",
+            "{publication_url}",
         ];
 
         $shortcodes = [];
@@ -317,6 +394,12 @@ class DraftApprovalEmailController extends Controller
             "title" => $article->title,
             "status" => $article->status,
             "article_type" => $article->article_type,
+            "wp_status" => $article->wp_status,
+            "wp_post_url" => $article->wp_post_url,
+            "site_name" => $article->site?->name,
+            "site_url" => $article->site?->url,
+            "is_live_article" => $this->approvalEmails->isLiveArticle($article),
+            "template_use_case" => $this->approvalEmails->recommendedTemplateUseCase($article),
             "featured_image_url" => $this->resolveFeaturedImage($article),
             "approval_emails_count" => $article->approval_emails_count ?? $article->approvalEmails()->count(),
             "latest_approval_email" => $article->latestApprovalEmail ? $this->serializeLog($article->latestApprovalEmail) : null,

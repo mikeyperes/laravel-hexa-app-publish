@@ -84,6 +84,7 @@ class PipelineOperationExecutor
                     'duration_ms' => $durationMs,
                     'stage' => 'prepare',
                     'substage' => $result['success'] ? 'complete' : 'failed',
+                    'publication_term_ids' => array_values(array_map('intval', $payload['publication_term_ids'] ?? [])),
                 ]);
 
                 $this->operationService->appendEvent(
@@ -228,6 +229,17 @@ class PipelineOperationExecutor
 
                 if (!$delivery['success']) {
                     $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+                    if ($operation->article && !empty($delivery['post_id']) && (string) ($delivery['post_status'] ?? '') === 'draft') {
+                        $operation->article->update([
+                            'status' => 'completed',
+                            'delivery_mode' => 'draft-wordpress',
+                            'wp_post_id' => (int) $delivery['post_id'],
+                            'wp_post_url' => $delivery['post_url'] ?? $operation->article->wp_post_url,
+                            'wp_status' => 'draft',
+                            'published_at' => null,
+                            'links_injected' => $delivery['links_injected'] ?? $operation->article->links_injected,
+                        ]);
+                    }
                     $this->operationService->appendEvent($operation, 'publish', 'error', "WordPress publish failed: {$delivery['message']}", [
                         'stage' => 'publish',
                         'substage' => 'wp_error',
@@ -250,6 +262,9 @@ class PipelineOperationExecutor
                         'duration_ms' => $durationMs,
                         'stage' => 'publish',
                         'substage' => 'wp_error',
+                        'post_id' => $delivery['post_id'] ?? null,
+                        'post_url' => $delivery['post_url'] ?? null,
+                        'post_status' => $delivery['post_status'] ?? null,
                     ]);
                     return;
                 }

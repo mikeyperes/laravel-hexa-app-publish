@@ -60,6 +60,17 @@ Photo instructions:
   <!-- PHOTO: selected client photo 2 | concise alt text | concise caption | client-photo-2 -->
 - Use the selected photo inventory from the subject context. Do not ask for stock images if real subject photos are available.
 
+TITLE AND METADATA RULES:
+- Keep the <h1> headline and body in third person unless you are preserving a direct quote copied from source material.
+- Never use em dashes or en dashes anywhere in the output. Use commas, periods, parentheses, or a simple hyphen instead.
+- At the very end of the response, output a METADATA comment.
+- Return exactly 10 distinct headline options in the METADATA titles array. Never return a single title.
+- Make the headline options sound like sharp editorial hooks or thesis statements, not puffed attribution.
+- Do not use fluffy constructions such as "Name on ...", "Name says ...", "Name thinks ...", "Name believes ...", "Name explains ...", "What Name thinks ...", or "Why Name believes ...".
+- If you use the subject name, place it early and pair it with a concise hook, ideally in the form "Name: [statement]" or another tight editorial construction.
+- Keep the headline options concise. Aim for roughly 45 to 75 characters when possible, and never exceed 88 characters.
+- Front-load the person or company when it matters for SEO. Do not bury the subject after a long generic setup.
+
 Supportive instructions:
 {custom_instructions}
 
@@ -94,8 +105,21 @@ Revise the draft according to the requested changes while preserving:
 - subject-led feature structure
 - credibility and readability
 - any valid photo markers and supporting links that already work
+- third-person narrative outside direct quotes
+- punctuation that avoids em dashes and en dashes
 
 If changes are requested, implement them directly and return the improved full article HTML.
+
+TITLE AND METADATA RULES:
+- Keep the <h1> headline and body in third person unless you are preserving a direct quote copied from source material.
+- Never use em dashes or en dashes anywhere in the output. Use commas, periods, parentheses, or a simple hyphen instead.
+- At the very end of the response, output a METADATA comment.
+- Return exactly 10 distinct headline options in the METADATA titles array. Never return a single title.
+- Make the headline options sound like sharp editorial hooks or thesis statements, not puffed attribution.
+- Do not use fluffy constructions such as "Name on ...", "Name says ...", "Name thinks ...", "Name believes ...", "Name explains ...", "What Name thinks ...", or "Why Name believes ...".
+- If you use the subject name, place it early and pair it with a concise hook, ideally in the form "Name: [statement]" or another tight editorial construction.
+- Keep the headline options concise. Aim for roughly 45 to 75 characters when possible, and never exceed 88 characters.
+- Front-load the person or company when it matters for SEO. Do not bury the subject after a long generic setup.
 
 Supportive instructions:
 {custom_instructions}
@@ -151,6 +175,17 @@ Photo instructions:
   <!-- FEATURED: expert portrait | concise alt text | concise caption | expert-featured -->
   <!-- PHOTO: selected expert photo 1 | concise alt text | concise caption | expert-photo-1 -->
 
+TITLE AND METADATA RULES:
+- Keep the <h1> headline and body in third person unless you are preserving a direct quote copied from source material.
+- Never use em dashes or en dashes anywhere in the output. Use commas, periods, parentheses, or a simple hyphen instead.
+- At the very end of the response, output a METADATA comment.
+- Return exactly 10 distinct headline options in the METADATA titles array. Never return a single title.
+- Make the headline options sound like sharp editorial hooks or thesis statements, not puffed attribution.
+- Do not use fluffy constructions such as "Name on ...", "Name says ...", "Name thinks ...", "Name believes ...", "Name explains ...", "What Name thinks ...", or "Why Name believes ...".
+- If you use the subject name, place it early and pair it with a concise hook, ideally in the form "Name: [statement]" or another tight editorial construction.
+- Keep the headline options concise. Aim for roughly 45 to 75 characters when possible, and never exceed 88 characters.
+- Front-load the person or company when it matters for SEO. Do not bury the subject after a long generic setup.
+
 Supportive instructions:
 {custom_instructions}
 
@@ -189,6 +224,19 @@ Keep:
 - authoritative but readable tone
 - valid supporting links
 - valid photo markers where appropriate
+- third-person narrative outside direct quotes
+- punctuation that avoids em dashes and en dashes
+
+TITLE AND METADATA RULES:
+- Keep the <h1> headline and body in third person unless you are preserving a direct quote copied from source material.
+- Never use em dashes or en dashes anywhere in the output. Use commas, periods, parentheses, or a simple hyphen instead.
+- At the very end of the response, output a METADATA comment.
+- Return exactly 10 distinct headline options in the METADATA titles array. Never return a single title.
+- Make the headline options sound like sharp editorial hooks or thesis statements, not puffed attribution.
+- Do not use fluffy constructions such as "Name on ...", "Name says ...", "Name thinks ...", "Name believes ...", "Name explains ...", "What Name thinks ...", or "Why Name believes ...".
+- If you use the subject name, place it early and pair it with a concise hook, ideally in the form "Name: [statement]" or another tight editorial construction.
+- Keep the headline options concise. Aim for roughly 45 to 75 characters when possible, and never exceed 88 characters.
+- Front-load the person or company when it matters for SEO. Do not bury the subject after a long generic setup.
 
 Supportive instructions:
 {custom_instructions}

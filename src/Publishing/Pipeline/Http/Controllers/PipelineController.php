@@ -38,6 +38,7 @@ use hexa_app_publish\Publishing\Pipeline\Http\Requests\PreviewPromptRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\PublishToWordpressRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\SaveDraftRequest;
 use hexa_app_publish\Publishing\Pipeline\Http\Requests\SpinRequest;
+use hexa_app_publish\Publishing\Sites\Services\SiteAuthorResolutionService;
 use hexa_app_publish\Support\AiModelCatalog;
 use hexa_core\Services\EmailService;
 use hexa_core\TemplateCenter\Models\EmailTemplate;
@@ -122,7 +123,15 @@ class PipelineController extends Controller
                 $draft = $this->resetReusablePipelineDraft($draft);
             }
 
-            return redirect()->route('publish.pipeline.v2', ['id' => $draft->id]);
+            $params = ['id' => $draft->id];
+            if ($request->filled('mode')) {
+                $params['mode'] = $request->query('mode');
+            }
+            if ($request->filled('step')) {
+                $params['step'] = (int) $request->query('step');
+            }
+
+            return redirect()->route('publish.pipeline.v2', $params);
         }
 
         // Load existing draft
@@ -208,6 +217,27 @@ class PipelineController extends Controller
             ->latest('id')
             ->value('result_payload->html');
         $selectedBootSite = $bootSite ?: $draftSite;
+        $latestPublishedSiteId = (int) PublishPipelineOperation::query()
+            ->where("publish_article_id", $draft->id)
+            ->where("operation_type", PublishPipelineOperation::TYPE_PUBLISH)
+            ->where("status", PublishPipelineOperation::STATUS_COMPLETED)
+            ->latest("id")
+            ->value("publish_site_id");
+        $authorSiteId = (int) (data_get($pipelinePayload, "publishAuthorSiteId") ?: 0);
+        $preferredBootAuthor = (
+            !$draft->wp_post_id
+            && $selectedBootSite?->id
+            && (
+                $authorSiteId !== (int) $selectedBootSite->id
+                || ($latestPublishedSiteId > 0 && $latestPublishedSiteId !== (int) $selectedBootSite->id)
+            )
+        )
+            ? ($selectedBootSite?->default_author ?? null)
+            : ($draft->author ?: data_get($pipelinePayload, "publishAuthor"));
+        $resolvedBootAuthor = app(SiteAuthorResolutionService::class)->resolvePreferredAuthor(
+            $selectedBootSite,
+            $preferredBootAuthor
+        );
         $publicationNotificationConfig = config('hws-publish.publication_notification', []);
         $publicationNotificationTemplateModels = EmailTemplate::query()
             ->where('use_case', 'publication_notification')
@@ -268,7 +298,7 @@ class PipelineController extends Controller
                 'wp_username' => $selectedBootSite->wp_username,
                 'connection_type' => $selectedBootSite->connection_type,
             ] : null,
-            'publishAuthor' => $draft->author ?: ($selectedBootSite?->default_author ?? ''),
+            'publishAuthor' => $resolvedBootAuthor ?? ($selectedBootSite?->default_author ?? ''),
             'siteConnStatus' => $selectedBootSite
                 ? match ($selectedBootSite->status) {
                     'connected' => true,
@@ -364,6 +394,7 @@ class PipelineController extends Controller
             'prArticleDefaultState' => app(PrArticleWorkflowService::class)->defaultState(),
             'publicationNotificationTemplates' => $publicationNotificationTemplates,
             'publicationNotificationDefaults' => $publicationNotificationDefaults,
+            "manualEditorMode" => $request->query("mode") === "manual_editor",
         ]);
     }
 
@@ -1676,8 +1707,9 @@ class PipelineController extends Controller
             $account = \hexa_package_whm\Models\HostingAccount::find($site->hosting_account_id);
             $server = $account ? \hexa_package_whm\Models\WhmServer::find($account->whm_server_id) : null;
             if ($server && $site->wordpress_install_id) {
-                $wptoolkit = app(\hexa_package_wptoolkit\Services\WpToolkitService::class);
-                $result = $wptoolkit->wpCliDeleteMedia($server, (int) $site->wordpress_install_id, $mediaId);
+                $wordpress = app(\hexa_package_wordpress\Services\WordPressManagerService::class);
+                $target = app(\hexa_app_publish\Publishing\Sites\Services\PublishSiteWordPressTargetFactory::class)->fromSite($site);
+                $result = $wordpress->deleteMedia($target, $mediaId);
                 if ($result['success']) {
                     return response()->json(['success' => true, 'message' => "Media #{$mediaId} deleted"]);
                 }
@@ -1688,12 +1720,12 @@ class PipelineController extends Controller
 
         // REST mode
         try {
-            $resp = \Illuminate\Support\Facades\Http::withBasicAuth($site->wp_username, $site->wp_application_password)
-                ->timeout(15)
-                ->delete(rtrim($site->url, '/') . '/wp-json/wp/v2/media/' . $mediaId . '?force=true');
-            return response()->json(['success' => $resp->successful(), 'message' => $resp->successful() ? "Media #{$mediaId} deleted" : 'Delete failed']);
+            $wordpress = app(\hexa_package_wordpress\Services\WordPressManagerService::class);
+            $target = app(\hexa_app_publish\Publishing\Sites\Services\PublishSiteWordPressTargetFactory::class)->fromSite($site);
+            $resp = $wordpress->deleteMedia($target, $mediaId);
+            return response()->json(["success" => (bool) ($resp["success"] ?? false), "message" => (string) (($resp["message"] ?? "") ?: (((bool) ($resp["success"] ?? false)) ? "Media #{$mediaId} deleted" : "Delete failed"))]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()]);
+            return response()->json(["success" => false, "message" => $e->getMessage()]);
         }
     }
 
@@ -1925,6 +1957,36 @@ class PipelineController extends Controller
             'featured_image_search' => $validated['featured_image_search'] ?? null,
             'notes'            => $validated['notes'] ?? null,
         ];
+
+        $selectedSite = !empty($validated["site_id"]) ? PublishSite::find((int) $validated["site_id"]) : null;
+        $existingDraft = !empty($validated["draft_id"]) ? PublishArticle::find((int) $validated["draft_id"]) : null;
+        $preferredAuthor = $validated["author"] ?? null;
+        if ($existingDraft && (int) ($existingDraft->publish_site_id ?? 0) !== (int) ($validated["site_id"] ?? 0)) {
+            $preferredAuthor = $selectedSite?->default_author;
+        }
+        $data["author"] = app(SiteAuthorResolutionService::class)->resolvePreferredAuthor($selectedSite, $preferredAuthor);
+
+        if ($existingDraft) {
+            $existingWpStatus = strtolower(trim((string) ($existingDraft->wp_status ?? "")));
+            $hasLiveWordPressPost = in_array($existingWpStatus, ["publish", "published"], true)
+                || !empty($existingDraft->published_at);
+            $hasWordPressDraft = !$hasLiveWordPressPost && (
+                !empty($existingDraft->wp_post_id)
+                || in_array($existingWpStatus, ["draft", "future", "pending", "private"], true)
+            );
+
+            if ($hasLiveWordPressPost) {
+                $data["status"] = in_array($existingDraft->status, ["published", "completed"], true)
+                    ? $existingDraft->status
+                    : "published";
+                $data["delivery_mode"] = $deliveryMode ?: ($existingDraft->delivery_mode ?: "auto-publish");
+            } elseif ($hasWordPressDraft) {
+                $data["status"] = "completed";
+                $data["delivery_mode"] = $deliveryMode ?: ($existingDraft->delivery_mode ?: "draft-wordpress");
+            } else {
+                $data["delivery_mode"] = $deliveryMode ?: ($existingDraft->delivery_mode ?: null);
+            }
+        }
 
         if (!empty($validated['draft_id'])) {
             $draft = PublishArticle::findOrFail($validated['draft_id']);

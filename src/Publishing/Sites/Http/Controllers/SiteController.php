@@ -8,10 +8,10 @@ use hexa_app_publish\Publishing\Access\Services\PublishAccessService;
 use hexa_app_publish\Publishing\Accounts\Models\PublishAccount;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_app_publish\Services\PublishService;
+use hexa_app_publish\Publishing\Sites\Services\PublishSiteWordPressTargetFactory;
+use hexa_package_wordpress\Services\WordPressManagerService;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
-use hexa_package_wordpress\Services\WordPressService;
-use hexa_package_wptoolkit\Services\WpToolkitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -21,22 +21,16 @@ class SiteController extends Controller
 {
     protected GenericService $generic;
     protected PublishService $publishService;
-    protected WordPressService $wp;
-    protected WpToolkitService $wptoolkit;
+    protected WordPressManagerService $wordpress;
+    protected PublishSiteWordPressTargetFactory $targetFactory;
     protected PublishAccessService $access;
 
-    /**
-     * @param GenericService   $generic
-     * @param PublishService   $publishService
-     * @param WordPressService $wp
-     * @param WpToolkitService $wptoolkit
-     */
-    public function __construct(GenericService $generic, PublishService $publishService, WordPressService $wp, WpToolkitService $wptoolkit, PublishAccessService $access)
+    public function __construct(GenericService $generic, PublishService $publishService, WordPressManagerService $wordpress, PublishSiteWordPressTargetFactory $targetFactory, PublishAccessService $access)
     {
         $this->generic = $generic;
         $this->publishService = $publishService;
-        $this->wp = $wp;
-        $this->wptoolkit = $wptoolkit;
+        $this->wordpress = $wordpress;
+        $this->targetFactory = $targetFactory;
         $this->access = $access;
     }
 
@@ -118,7 +112,7 @@ class SiteController extends Controller
         }
 
         try {
-            $result = $this->wptoolkit->getInstallsForAccount($account->whmServer, $account->username);
+            $result = app(\hexa_package_wordpress\Services\WordPressManagerService::class)->discoverInstallsForAccount($account->whmServer, $account->username);
 
             if ($result['success'] && !empty($result['installs'])) {
                 $installs = array_map(function ($install) use ($account) {
@@ -267,7 +261,7 @@ class SiteController extends Controller
                 ]);
             }
 
-            $result = $this->wp->testConnection($site->url, $site->wp_username, $site->wp_application_password);
+            $result = $this->wordpress->testConnection($this->targetFactory->fromSite($site));
 
             $site->update([
                 'status' => $result['success'] ? 'connected' : 'error',
@@ -280,14 +274,9 @@ class SiteController extends Controller
             return response()->json($result);
         }
 
-        // WP Toolkit connection — TODO: implement via wptoolkit package
-        // WP Toolkit — use wpCliTestWriteAccess
-        $resolved = $this->resolveServer($site);
-        if (!$resolved['server']) {
-            return response()->json(['success' => false, 'message' => 'Server not found for this site.']);
-        }
 
-        $result = $this->wptoolkit->wpCliTestWriteAccess($resolved['server'], $site->wordpress_install_id);
+        $target = $this->targetFactory->fromSite($site);
+        $result = $this->wordpress->testConnection($target);
 
         $site->update([
             'status' => $result['success'] ? 'connected' : 'error',
@@ -309,42 +298,37 @@ class SiteController extends Controller
     public function testWriteAccess(int $id): JsonResponse
     {
         $site = PublishSite::findOrFail($id);
-        $resolved = $this->resolveServer($site);
-        if (!$resolved['server'] || !$site->wordpress_install_id) {
-            return response()->json(['success' => false, 'message' => 'Server or install ID not configured.', 'authors' => []]);
-        }
-
-        // Single SSH session: test write + get authors
-        $result = $this->wptoolkit->wpCliTestWriteAccess($resolved['server'], $site->wordpress_install_id);
+        $target = $this->targetFactory->fromSite($site);
+        $result = $this->wordpress->testWriteAccess($target);
 
         $authors = [];
         $authorsResult = null;
-        if ($result['success']) {
-            $authorsResult = $this->wptoolkit->wpCliListAdminUsers($resolved['server'], (int) $site->wordpress_install_id, true);
-            $authors = $authorsResult['success'] ? ($authorsResult['authors'] ?? []) : [];
+        if ($result["success"] ?? false) {
+            $authorsResult = $this->wordpress->listAuthors($target, true);
+            $authors = ($authorsResult["success"] ?? false) ? ($authorsResult["authors"] ?? []) : [];
         }
 
         $site->update([
-            'status' => $result['success'] ? 'connected' : 'error',
-            'last_connected_at' => $result['success'] ? now() : $site->last_connected_at,
-            'last_error' => $result['success'] ? null : $result['message'],
+            "status" => ($result["success"] ?? false) ? "connected" : "error",
+            "last_connected_at" => ($result["success"] ?? false) ? now() : $site->last_connected_at,
+            "last_error" => ($result["success"] ?? false) ? null : ($result["message"] ?? null),
         ]);
 
-        hexaLog('publish', 'site_test_write', ($result['success'] ? 'Write test passed' : 'Write test failed') . " for \"{$site->name}\" ({$site->url})", [
-            'site_id' => $site->id,
-            'site_name' => $site->name,
-            'site_url' => $site->url,
-            'success' => $result['success'],
-            'authors_count' => count($authors),
+        hexaLog("publish", "site_test_write", (($result["success"] ?? false) ? "Write test passed" : "Write test failed") . " for \"" . $site->name . "\" (" . $site->url . ")", [
+            "site_id" => $site->id,
+            "site_name" => $site->name,
+            "site_url" => $site->url,
+            "success" => (bool) ($result["success"] ?? false),
+            "authors_count" => count($authors),
         ]);
 
-        $result['authors'] = $authors;
-        $result['default_author'] = $site->default_author;
-        $result['author_cast'] = array_values(array_filter((array) ($site->author_cast ?? []), fn ($value) => filled($value)));
-        $result['last_connected_at'] = $site->last_connected_at?->toIso8601String();
-        $result['cache_hit'] = $authorsResult['cache_hit'] ?? null;
-        $result['cached_at'] = $authorsResult['cached_at'] ?? null;
-        $result['expires_at'] = $authorsResult['expires_at'] ?? null;
+        $result["authors"] = $authors;
+        $result["default_author"] = $site->default_author;
+        $result["author_cast"] = array_values(array_filter((array) ($site->author_cast ?? []), fn ($value) => filled($value)));
+        $result["last_connected_at"] = $site->last_connected_at?->toIso8601String();
+        $result["cache_hit"] = $authorsResult["cache_hit"] ?? null;
+        $result["cached_at"] = $authorsResult["cached_at"] ?? null;
+        $result["expires_at"] = $authorsResult["expires_at"] ?? null;
         return response()->json($result);
     }
 
@@ -357,15 +341,11 @@ class SiteController extends Controller
     public function getAuthors(Request $request, int $id): JsonResponse
     {
         $site = PublishSite::findOrFail($id);
-        $resolved = $this->resolveServer($site);
-        if (!$resolved['server'] || !$site->wordpress_install_id) {
-            return response()->json(['success' => false, 'authors' => [], 'message' => 'Server not configured.']);
-        }
-
-        $result = $this->wptoolkit->wpCliListAdminUsers($resolved['server'], (int) $site->wordpress_install_id, $request->boolean('force'));
-        $result['default_author'] = $site->default_author;
-        $result['author_cast'] = array_values(array_filter((array) ($site->author_cast ?? []), fn ($value) => filled($value)));
-        $result['last_connected_at'] = $site->last_connected_at?->toIso8601String();
+        $target = app(\hexa_app_publish\Publishing\Sites\Services\PublishSiteWordPressTargetFactory::class)->fromSite($site);
+        $result = app(\hexa_package_wordpress\Services\WordPressManagerService::class)->listAuthors($target, $request->boolean("force"));
+        $result["default_author"] = $site->default_author;
+        $result["author_cast"] = array_values(array_filter((array) ($site->author_cast ?? []), fn ($value) => filled($value)));
+        $result["last_connected_at"] = $site->last_connected_at?->toIso8601String();
 
         return response()->json($result);
     }
@@ -376,128 +356,71 @@ class SiteController extends Controller
     public function getCategories(Request $request, int $id): JsonResponse
     {
         $site = PublishSite::findOrFail($id);
-        $resolved = $this->resolveServer($site);
-        if (!$resolved['server'] || !$site->wordpress_install_id) {
-            return response()->json(['success' => false, 'categories' => [], 'message' => 'Server not configured.']);
-        }
+        $target = app(\hexa_app_publish\Publishing\Sites\Services\PublishSiteWordPressTargetFactory::class)->fromSite($site);
+        $taxonomy = trim((string) $request->query("taxonomy", "category")) ?: "category";
+        $force = $request->boolean("force");
 
-        $taxonomy = trim((string) $request->query('taxonomy', 'category')) ?: 'category';
-        $force = $request->boolean('force');
-
-        if ($taxonomy !== 'publication') {
-            return response()->json(
-                $this->wptoolkit->wpCliListCategories($resolved['server'], (int) $site->wordpress_install_id)
-            );
-        }
-
-        // Direct-DB recovery for the publication taxonomy when WP-CLI cant see
-        // it (e.g. CPT/taxonomy slug collision on Hexa PR Wire). Queries
-        // wp_term_taxonomy directly via wpCliEval so the controller can return
-        // the real hierarchical Publications list rather than falling back to
-        // the WP `category` taxonomy.
-        if ($taxonomy === 'publication') {
-            $dbCacheKey = sprintf('publish:site:%d:taxonomy:publication:db:v1', $site->id);
-            if (!$force && ($cachedDb = Cache::get($dbCacheKey)) && is_array($cachedDb)) {
+        if ($taxonomy === "publication") {
+            $taxonomyInfo = ["success" => true, "taxonomy" => "publication", "label" => "Publications", "hierarchical" => true];
+            $resolvedTaxonomy = "publication";
+        } else {
+            $taxonomyInfo = app(\hexa_package_wordpress\Services\WordPressManagerService::class)->resolvePreferredTaxonomy($target, [$taxonomy, "category"]);
+            if (!($taxonomyInfo["success"] ?? false)) {
                 return response()->json([
-                    ...$cachedDb,
-                    'cache' => [
-                        'cached' => true,
-                        'cached_at' => $cachedDb['fetched_at'] ?? null,
-                        'age_seconds' => $this->cacheAgeSeconds($cachedDb['fetched_at'] ?? null),
-                        'age_human' => $this->cacheAgeHuman($cachedDb['fetched_at'] ?? null),
-                    ],
-                ]);
+                    "success" => false,
+                    "categories" => [],
+                    "message" => $taxonomyInfo["message"] ?? "Failed to resolve syndication taxonomy.",
+                ], 500);
             }
-
-            $dbTerms = $this->fetchPublicationTermsViaDb($resolved['server'], (int) $site->wordpress_install_id);
-            if (!empty($dbTerms)) {
-                $payload = [
-                    'success' => true,
-                    'categories' => $this->flattenPublicationTerms($dbTerms),
-                    'taxonomy' => 'publication',
-                    'taxonomy_requested' => 'publication',
-                    'taxonomy_label' => 'Publications',
-                    'hierarchical' => true,
-                    'message' => count($dbTerms) . ' publication terms loaded (db-fallback).',
-                    'fetched_at' => now()->toIso8601String(),
-                ];
-                Cache::put($dbCacheKey, $payload, now()->addHours(6));
-                return response()->json([
-                    ...$payload,
-                    'cache' => [
-                        'cached' => false,
-                        'cached_at' => $payload['fetched_at'],
-                        'age_seconds' => 0,
-                        'age_human' => 'just now',
-                    ],
-                ]);
-            }
+            $resolvedTaxonomy = (string) ($taxonomyInfo["taxonomy"] ?? $taxonomy);
         }
 
-        $taxonomyInfo = $this->wptoolkit->wpCliResolvePreferredTaxonomy(
-            $resolved['server'],
-            (int) $site->wordpress_install_id,
-            [$taxonomy, 'category']
-        );
-        if (!($taxonomyInfo['success'] ?? false)) {
-            return response()->json([
-                'success' => false,
-                'categories' => [],
-                'message' => $taxonomyInfo['message'] ?? 'Failed to resolve syndication taxonomy.',
-            ], 500);
-        }
-
-        $resolvedTaxonomy = (string) ($taxonomyInfo['taxonomy'] ?? $taxonomy);
-        $cacheKey = sprintf('publish:site:%d:taxonomy:%s:v2', $site->id, $resolvedTaxonomy);
+        $cacheKey = sprintf("publish:site:%d:taxonomy:%s:v3", $site->id, $resolvedTaxonomy);
         if (!$force && ($cached = Cache::get($cacheKey))) {
             return response()->json([
                 ...$cached,
-                'cache' => [
-                    'cached' => true,
-                    'cached_at' => $cached['fetched_at'] ?? null,
-                    'age_seconds' => $this->cacheAgeSeconds($cached['fetched_at'] ?? null),
-                    'age_human' => $this->cacheAgeHuman($cached['fetched_at'] ?? null),
+                "cache" => [
+                    "cached" => true,
+                    "cached_at" => $cached["fetched_at"] ?? null,
+                    "age_seconds" => $this->cacheAgeSeconds($cached["fetched_at"] ?? null),
+                    "age_human" => $this->cacheAgeHuman($cached["fetched_at"] ?? null),
                 ],
             ]);
         }
 
-        $result = $this->wptoolkit->wpCliListTaxonomyTerms($resolved['server'], (int) $site->wordpress_install_id, $resolvedTaxonomy);
-        if (!($result['success'] ?? false)) {
+        $result = app(\hexa_package_wordpress\Services\WordPressManagerService::class)->listTerms($target, $resolvedTaxonomy, $force);
+        if (!($result["success"] ?? false)) {
             return response()->json([
-                'success' => false,
-                'categories' => [],
-                'message' => $result['message'] ?? 'Failed to load syndication taxonomy terms.',
+                "success" => false,
+                "categories" => [],
+                "message" => $result["message"] ?? "Failed to load taxonomy terms.",
             ], 500);
         }
 
         $payload = [
-            'success' => true,
-            'categories' => $this->flattenPublicationTerms($result['terms'] ?? []),
-            'taxonomy' => $resolvedTaxonomy,
-            'taxonomy_requested' => $taxonomy,
-            'taxonomy_label' => (string) ($taxonomyInfo['label'] ?? ucfirst(str_replace(['-', '_'], ' ', $resolvedTaxonomy))),
-            'hierarchical' => (bool) ($taxonomyInfo['hierarchical'] ?? true),
-            'message' => $result['message'] ?? 'Syndication taxonomy loaded.',
-            'fetched_at' => now()->toIso8601String(),
+            "success" => true,
+            "categories" => $this->flattenPublicationTerms($result["terms"] ?? []),
+            "taxonomy" => $resolvedTaxonomy,
+            "taxonomy_requested" => $taxonomy,
+            "taxonomy_label" => (string) ($taxonomyInfo["label"] ?? ucfirst(str_replace(["-", "_"], " ", $resolvedTaxonomy))),
+            "hierarchical" => (bool) ($taxonomyInfo["hierarchical"] ?? true),
+            "message" => $result["message"] ?? "Taxonomy loaded.",
+            "fetched_at" => now()->toIso8601String(),
         ];
 
         Cache::put($cacheKey, $payload, now()->addHours(6));
 
         return response()->json([
             ...$payload,
-            'cache' => [
-                'cached' => false,
-                'cached_at' => $payload['fetched_at'],
-                'age_seconds' => 0,
-                'age_human' => 'just now',
+            "cache" => [
+                "cached" => false,
+                "cached_at" => $payload["fetched_at"],
+                "age_seconds" => 0,
+                "age_human" => "just now",
             ],
         ]);
     }
 
-    /**
-     * @param array<int, array<string, mixed>> $terms
-     * @return array<int, array<string, mixed>>
-     */
     private function flattenPublicationTerms(array $terms): array
     {
         $rows = [];
@@ -546,7 +469,7 @@ class SiteController extends Controller
             return 'unknown';
         }
 
-        return now()->diffForHumans($fetchedAt, ['parts' => 2, 'short' => true]);
+        return \Illuminate\Support\Carbon::parse($fetchedAt)->diffForHumans(now(), ['parts' => 2, 'short' => true, 'syntax' => \Carbon\CarbonInterface::DIFF_RELATIVE_TO_NOW]);
     }
 
     /**
@@ -639,27 +562,13 @@ class SiteController extends Controller
             return [];
         }
 
-        $php = 'global $wpdb; $tax = "publication"; '
-            . '$rows = $wpdb->get_results($wpdb->prepare("SELECT t.term_id, t.name, t.slug, tt.parent, tt.count FROM {$wpdb->terms} t JOIN {$wpdb->term_taxonomy} tt ON t.term_id = tt.term_id WHERE tt.taxonomy = %s ORDER BY tt.parent ASC, t.name ASC LIMIT 500", $tax)); '
-            . '$payload = array_map(static function ($t) { return ["id" => (int) $t->term_id, "term_id" => (int) $t->term_id, "parent" => (int) $t->parent, "count" => (int) $t->count, "name" => (string) $t->name, "slug" => (string) $t->slug]; }, is_array($rows) ? $rows : []); '
-            . 'echo wp_json_encode($payload);';
+        $result = app(\hexa_package_wordpress\Services\WordPressManagerService::class)->listTerms([
+            "mode" => "wptoolkit",
+            "server" => $server,
+            "install_id" => $installId,
+        ], "publication");
 
-        try {
-            $res = $this->wptoolkit->wpCliEval($server, $installId, $php);
-        } catch (\Throwable $e) {
-            return [];
-        }
-
-        if (!($res['success'] ?? false)) {
-            return [];
-        }
-
-        $stdout = trim((string) ($res['stdout'] ?? $res['output'] ?? ''));
-        if ($stdout === '') {
-            return [];
-        }
-
-        $decoded = json_decode($stdout, true);
-        return is_array($decoded) ? $decoded : [];
+        return ($result["success"] ?? false) ? (array) ($result["terms"] ?? []) : [];
     }
+
 }

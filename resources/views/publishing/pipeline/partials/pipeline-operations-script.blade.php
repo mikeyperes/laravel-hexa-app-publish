@@ -305,17 +305,77 @@
             }
         },
 
+        _resolvedPublicationTermIds() {
+            if (!this.canUsePublicationSyndication?.()) return [];
+
+            const candidateSources = [
+                this.selectedSyndicationCats,
+                this.draftState?.selectedSyndicationCats,
+            ];
+
+            for (const source of candidateSources) {
+                const rawValues = Array.isArray(source)
+                    ? source
+                    : (source && typeof source === 'object' ? Object.values(source) : []);
+                const ids = Array.from(new Set(rawValues.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)));
+                if (ids.length > 0) return ids;
+            }
+
+            return [];
+        },
+
+        _resolvedPublicationNames(publicationTermIds = null) {
+            const ids = Array.isArray(publicationTermIds) && publicationTermIds.length
+                ? Array.from(new Set(publicationTermIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)))
+                : this._resolvedPublicationTermIds();
+            if (!ids.length) return [];
+            const categories = Array.isArray(this.syndicationCategories) ? this.syndicationCategories : [];
+            return ids.map((id) => {
+                const match = categories.find((cat) => Number(cat.id) === Number(id));
+                return match?.label || match?.name || ('Publication #' + id);
+            });
+        },
+
+        _ensurePrepareChecklistPublicationItems(publicationTermIds = null) {
+            if (!this.canUsePublicationSyndication?.() || !Array.isArray(this.prepareChecklist)) return;
+
+            const ids = Array.isArray(publicationTermIds) && publicationTermIds.length
+                ? Array.from(new Set(publicationTermIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)))
+                : this._resolvedPublicationTermIds();
+            if (!ids.length) return;
+
+            const publicationNames = this._resolvedPublicationNames(ids);
+            const existing = this.prepareChecklist.filter((item) => item.type === 'publication');
+            const defaultStatus = existing.length > 0
+                ? (existing.every((item) => item.status === 'done') ? 'done' : (existing.some((item) => item.status === 'running') ? 'running' : existing[0].status || 'pending'))
+                : (this.prepareOperationStatus === 'completed' ? 'done' : 'pending');
+
+            const publicationItems = publicationNames.map((name, index) => ({
+                label: name,
+                status: existing[index]?.status || defaultStatus,
+                detail: 'selected for syndication',
+                type: 'publication',
+            }));
+
+            const nonPublication = this.prepareChecklist.filter((item) => item.type !== 'publication');
+            const tagIndex = nonPublication.findIndex((item) => item.type === 'tag');
+            const integrityIndex = nonPublication.findIndex((item) => item.type === 'integrity');
+            const insertAt = tagIndex >= 0
+                ? tagIndex
+                : (integrityIndex >= 0 ? integrityIndex : nonPublication.length);
+            nonPublication.splice(insertAt, 0, ...publicationItems);
+            this.prepareChecklist = nonPublication;
+        },
+
+        _publicationSyndicationReady() {
+            return !this.canUsePublicationSyndication?.()
+                || (!this.loadingSyndicationCats && this._resolvedPublicationTermIds().length > 0);
+        },
+
         _buildPrepareChecklist() {
             const activePhotos = this.photoSuggestions.filter(p => !p.removed && p.autoPhoto);
-            const allowSyndication = this.canUsePublicationSyndication?.();
-            const selectedPublicationIds = allowSyndication && Array.isArray(this.selectedSyndicationCats)
-                ? this.selectedSyndicationCats.map((id) => Number(id))
-                : [];
-            const publicationNames = Array.isArray(this.syndicationCategories)
-                ? this.syndicationCategories
-                    .filter((cat) => selectedPublicationIds.includes(Number(cat.id)))
-                    .map((cat) => cat.label || cat.name || ('Publication #' + cat.id))
-                : selectedPublicationIds.map((id) => 'Publication #' + id);
+            const selectedPublicationIds = this._resolvedPublicationTermIds();
+            const publicationNames = this._resolvedPublicationNames(selectedPublicationIds);
             const photoItems = activePhotos.map((p, i) => ({
                 label: 'Photo ' + (i + 1) + ': ' + (p.search_term || 'image'),
                 status: 'pending',
@@ -383,6 +443,7 @@
             }
             this.orphanedMedia = [];
             this.prepareChecklist = this._buildPrepareChecklist();
+            this._ensurePrepareChecklistPublicationItems();
 
             if (!announce) return;
 
@@ -393,11 +454,8 @@
             if (this.publishAuthor) this._logPrepare('info', 'Author: ' + this.publishAuthor);
             this._logPrepare('info', 'Images: ' + activePhotos.length + ' inner + ' + (this.featuredPhoto ? '1 featured' : 'no featured'));
             this._logPrepare('info', 'Categories: ' + this.selectedCategoryNames().join(', '));
-            const publicationNames = this.canUsePublicationSyndication?.() && Array.isArray(this.syndicationCategories)
-                ? this.syndicationCategories
-                    .filter((cat) => (this.selectedSyndicationCats || []).map((id) => Number(id)).includes(Number(cat.id)))
-                    .map((cat) => cat.label || cat.name || ('Publication #' + cat.id))
-                : [];
+            const resolvedPublicationIds = this._resolvedPublicationTermIds();
+            const publicationNames = this._resolvedPublicationNames(resolvedPublicationIds);
             if (publicationNames.length) this._logPrepare('info', 'Publication Syndication: ' + publicationNames.join(', '));
             this._logPrepare('info', 'Tags: ' + this.selectedTagNames().join(', '));
         },
@@ -686,6 +744,7 @@
                 result.wp_images.forEach(img => this._mergeUploadedImageRecord(img));
             }
             this.prepareIntegrityIssues = result.integrity_issues || [];
+            this._ensurePrepareChecklistPublicationItems(result.publication_term_ids || operation?.result_payload?.publication_term_ids || []);
             this.prepareChecklist.forEach(c => {
                 if (c.status === 'pending' || c.status === 'running') c.status = 'done';
             });
@@ -786,10 +845,93 @@
             }
 
             const plainCandidate = payload.plain || payload.link_output || payload.html || payload.link_output_html || payload.link_output_standard || '';
+            const rawPlain = this.publicationNotificationHtmlToText(plainCandidate);
+            const rawHtml = String(payload.html || payload.link_output_html || payload.link_output_standard || '').trim();
+            const lines = rawPlain.split(/\r?\n/).map((line) => String(line || '').trim()).filter(Boolean);
+            const sections = [];
+            const seen = new Set();
+            let currentSection = 'Distribution links';
+            let primaryUrl = '';
+            let note = '';
+
+            const ensureSection = (title) => {
+                const normalized = String(title || 'Distribution links').trim() || 'Distribution links';
+                let section = sections.find((item) => item.title === normalized);
+                if (!section) {
+                    section = { title: normalized, items: [] };
+                    sections.push(section);
+                }
+                return section;
+            };
+
+            const pushItem = (title, label, url) => {
+                const cleanLabel = String(label || '').trim();
+                const cleanUrl = String(url || '').trim();
+                if (!cleanLabel || !cleanUrl) return;
+                const key = cleanLabel.toLowerCase() + '|' + cleanUrl.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                ensureSection(title).items.push({ label: cleanLabel, url: cleanUrl });
+            };
+
+            lines.forEach((line) => {
+                if (/^SOURCES---$/i.test(line)) {
+                    currentSection = 'Sources';
+                    return;
+                }
+                if (/^NEW SOURCES---$/i.test(line)) {
+                    currentSection = 'New sources';
+                    return;
+                }
+                let match = line.match(/^PRESS RELEASE:\s*(https?:\/\/\S+)/i);
+                if (match) {
+                    primaryUrl = String(match[1] || '').trim();
+                    return;
+                }
+                match = line.match(/^NOTE:\s*(.+)$/i);
+                if (match) {
+                    note = String(match[1] || '').trim();
+                    return;
+                }
+                match = line.match(/^([^:]+):\s*(https?:\/\/\S+)/i);
+                if (match) {
+                    pushItem(currentSection, match[1], match[2]);
+                }
+            });
+
+            if (!primaryUrl && !note && sections.length === 0) {
+                return { html: rawHtml, plain: rawPlain };
+            }
+
+            const esc = (value) => this.publicationNotificationEscapeHtml(value);
+            const blocks = [];
+            if (primaryUrl) {
+                blocks.push('<p><strong>Press release:</strong> <a href=' + String.fromCharCode(39) + esc(primaryUrl) + String.fromCharCode(39) + '>' + esc(primaryUrl) + '</a></p>');
+            }
+            if (note) {
+                blocks.push('<p><em>' + esc(note) + '</em></p>');
+            }
+            sections.filter((section) => section.items.length > 0).forEach((section) => {
+                const itemsHtml = section.items.map((item) => '<li style=' + String.fromCharCode(39) + 'margin:0 0 6px 0;' + String.fromCharCode(39) + '><strong>' + esc(item.label) + ':</strong> <a href=' + String.fromCharCode(39) + esc(item.url) + String.fromCharCode(39) + '>' + esc(item.url) + '</a></li>').join('');
+                blocks.push('<div style=' + String.fromCharCode(39) + 'margin-top:12px;' + String.fromCharCode(39) + '><p style=' + String.fromCharCode(39) + 'margin:0 0 8px 0;' + String.fromCharCode(39) + '><strong>' + esc(section.title) + '</strong></p><ul style=' + String.fromCharCode(39) + 'margin:0; padding-left:20px;' + String.fromCharCode(39) + '>' + itemsHtml + '</ul></div>');
+            });
+
+            const plainLines = [];
+            if (primaryUrl) {
+                plainLines.push('Press release: ' + primaryUrl);
+            }
+            if (note) {
+                plainLines.push(note);
+            }
+            sections.filter((section) => section.items.length > 0).forEach((section) => {
+                plainLines.push('');
+                plainLines.push(section.title);
+                section.items.forEach((item) => plainLines.push('- ' + item.label + ': ' + item.url));
+            });
 
             return {
-                html: String(payload.html || payload.link_output_html || payload.link_output_standard || '').trim(),
-                plain: this.publicationNotificationHtmlToText(plainCandidate),
+                html: '<div>' + blocks.join('') + '</div>',
+                plain: plainLines.join('\n').trim(),
             };
         },
 
@@ -865,9 +1007,13 @@
                 '{article_links_plain}': articleLinksPlain,
                 '{press_release_links}': articleLinksHtml,
                 '{press_release_links_plain}': articleLinksPlain,
+                '{hexa_pr_link}': permalink,
+                '{hexa_pr_links}': articleLinksHtml,
+                '{hexa_pr_links_plain}': articleLinksPlain,
                 '{site_name}': publicationName,
                 '{site_url}': publicationUrl,
                 '{account_name}': username,
+
                 '{campaign_name}': '',
                 ...extra,
             };
@@ -918,6 +1064,8 @@
 
         derivePublicationNotificationRecipient() {
             const directCandidates = [
+                this.publicationNotificationDefaults?.to,
+                this.approvalEmailTo,
                 this.pressRelease?.notion_guest?.email,
                 this.pressRelease?.details?.contact_email,
                 this.pressRelease?.contact_email,
@@ -931,12 +1079,59 @@
             return this.extractPublicationNotificationProfileEmail();
         },
 
+        appendPublicationNotificationCcList(rawList = '') {
+            const incoming = String(rawList || '')
+                .split(/[\n,;]+/)
+                .map((value) => String(value || '').trim())
+                .filter((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
+            if (incoming.length === 0) return;
+
+            const existing = String(this.publicationNotificationCc || '')
+                .split(/[\n,;]+/)
+                .map((value) => String(value || '').trim())
+                .filter(Boolean);
+            const seen = new Set();
+            const merged = [];
+            [...existing, ...incoming].forEach((value) => {
+                const key = String(value || '').trim().toLowerCase();
+                if (!key || seen.has(key)) return;
+                seen.add(key);
+                merged.push(String(value || '').trim());
+            });
+            this.publicationNotificationCc = merged.join(', ');
+        },
+
+        publicationNotificationImportSecondaryUserTo() {
+            const email = String(this.approvalEmailSecondaryUserAddress?.() || '').trim();
+            if (!email) {
+                this.approvalEmailSecondaryUserCcEmpty = false;
+                this.publicationNotificationStatus = 'error';
+                this.publicationNotificationResult = { message: 'The selected secondary user does not have a public email.' };
+                this.showNotification('error', 'The selected secondary user does not have a public email.');
+                return;
+            }
+            this.publicationNotificationTo = email;
+        },
+
+        async publicationNotificationImportSecondaryUserCcs() {
+            this.approvalEmailSecondaryUserCcEmpty = false;
+            await new Promise((r) => setTimeout(r, 180));
+            const list = String(this.approvalEmailSecondaryUserCcList?.() || '').trim();
+            if (!list) {
+                this.approvalEmailSecondaryUserCcEmpty = true;
+                return;
+            }
+            this.appendPublicationNotificationCcList(list);
+        },
+
         initializePublicationNotificationState() {
+            let forcedTemplateHydration = false;
             if (!this.publicationNotificationTemplateId) {
                 const template = this.getPublicationNotificationTemplateById(this.publicationNotificationDefaults?.template_id)
                     || this.defaultPublicationNotificationTemplate();
                 if (template?.id) {
                     this.publicationNotificationTemplateId = String(template.id);
+                    forcedTemplateHydration = true;
                 }
             }
 
@@ -950,7 +1145,10 @@
                 this.publicationNotificationReplyTo = String(this.publicationNotificationDefaults?.reply_to || '');
             }
             if (!this.publicationNotificationCc) {
-                this.publicationNotificationCc = String(this.publicationNotificationDefaults?.cc || '');
+                this.publicationNotificationCc = String(this.publicationNotificationDefaults?.cc || this.approvalEmailCc || '');
+            }
+            if (!this.publicationNotificationTo) {
+                this.publicationNotificationTo = String(this.publicationNotificationDefaults?.to || this.derivePublicationNotificationRecipient() || '');
             }
             if (!this.publicationNotificationSubject) {
                 this.publicationNotificationSubject = String(this.publicationNotificationDefaults?.subject || '');
@@ -958,7 +1156,7 @@
             if (!this.publicationNotificationBody) {
                 this.publicationNotificationBody = String(this.publicationNotificationDefaults?.body || '');
             }
-            this.hydratePublicationNotificationFields({ force: false });
+            this.hydratePublicationNotificationFields({ force: forcedTemplateHydration });
         },
 
         hydratePublicationNotificationFields({ force = false } = {}) {
@@ -1086,6 +1284,7 @@
                 if (operation.last_message) {
                     this.prepareLastMessage = operation.last_message;
                 }
+                this._ensurePrepareChecklistPublicationItems(operation?.result_payload?.publication_term_ids || []);
                 const authItem = this.prepareChecklist.find(item => item.type === 'auth');
                 if (authItem && ['queued', 'running'].includes(this.prepareOperationStatus) && (!this.prepareLastStage || this.prepareLastStage.startsWith('connection'))) {
                     authItem.status = 'running';
@@ -1350,9 +1549,7 @@
 
         _buildPrepareRequestPayload() {
             const html = this._resolveCanonicalArticleHtml({ preferPrepared: false, hydrateState: true });
-            const publicationTermIds = this.canUsePublicationSyndication?.()
-                ? (Array.isArray(this.selectedSyndicationCats) ? this.selectedSyndicationCats.map((id) => Number(id)) : [])
-                : [];
+            const publicationTermIds = this._resolvedPublicationTermIds();
             return {
                 html,
                 title: this.articleTitle || 'article',
@@ -1380,9 +1577,7 @@
 
         _buildPublishRequestPayload(wpStatus) {
             const html = this._resolveCanonicalArticleHtml({ preferPrepared: true, hydrateState: true });
-            const publicationTermIds = this.canUsePublicationSyndication?.()
-                ? (Array.isArray(this.selectedSyndicationCats) ? this.selectedSyndicationCats.map((id) => Number(id)) : [])
-                : [];
+            const publicationTermIds = this._resolvedPublicationTermIds();
             return {
                 html,
                 title: this.articleTitle || 'Untitled',

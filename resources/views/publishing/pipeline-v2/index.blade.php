@@ -5,8 +5,8 @@
      right pane, and slide-in drawers. The original /article/publish URL
      is left untouched. --}}
 @extends('layouts.app')
-@section('title', 'Publish Article — #' . $draftId)
-@section('header', 'Publish Article — #' . $draftId)
+@section('title', ($manualEditorMode ?? false) ? 'Manual Editor — #' . $draftId : 'Publish Article — #' . $draftId)
+@section('header', ($manualEditorMode ?? false) ? 'Manual Editor — #' . $draftId : 'Publish Article — #' . $draftId)
 
 @section('content')
 
@@ -91,6 +91,7 @@
 <div class="v2-shell"
      x-data="publishPipeline()"
      data-publish-draft-id="{{ $draftId }}"
+     data-manual-editor-mode="{{ ($manualEditorMode ?? false) ? 1 : 0 }}"
      x-init="
         if (typeof $data.featuredSearchAttempted === 'undefined') { $data.featuredSearchAttempted = false; }
         if (typeof $data.featuredImageSearch === 'undefined') { $data.featuredImageSearch = ''; }
@@ -231,7 +232,7 @@
             </div>
 
             {{-- Phase 2: Source --}}
-            <div class="v2-phase" :class="{
+            <div x-show="!manualEditorMode" x-cloak class="v2-phase" :class="{
                     'is-current': [3,4].includes(currentStep),
                     'is-done': completedSteps.includes(3) && completedSteps.includes(4)
                 }">
@@ -266,7 +267,7 @@
             </div>
 
             {{-- Phase 3: Generate --}}
-            <div class="v2-phase" :class="{
+            <div x-show="!manualEditorMode" x-cloak class="v2-phase" :class="{
                     'is-current': [5,6].includes(currentStep),
                     'is-done': completedSteps.includes(5) && completedSteps.includes(6)
                 }">
@@ -298,8 +299,27 @@
                 </button>
             </div>
 
+            {{-- Manual mode: Create --}}
+            <div x-show="manualEditorMode" x-cloak class="v2-phase" :class="{ [`is-current`]: currentStep === 6, [`is-done`]: completedSteps.includes(6) }">
+                <div class="v2-phase-label">
+                    <span class="v2-phase-num">2</span>
+                    <span>Create</span>
+                </div>
+                <button type="button" @click="goToStep(6)"
+                        :disabled="!isStepAccessible(6)"
+                        class="v2-substep"
+                        :class="{
+                            [`is-current`]: currentStep === 6,
+                            [`is-done`]: completedSteps.includes(6),
+                            [`is-locked`]: !isStepAccessible(6) && !completedSteps.includes(6)
+                        }">
+                    <span class="v2-dot"><template x-if="completedSteps.includes(6)"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></template><template x-if="!completedSteps.includes(6)"><span>6</span></template></span>
+                    Article editor
+                </button>
+            </div>
+
             {{-- Phase 4: Publish --}}
-            <div class="v2-phase" :class="{
+            <div x-show="!manualEditorMode" x-cloak class="v2-phase" :class="{
                     'is-current': currentStep === 7,
                     'is-done': completedSteps.includes(7)
                 }">
@@ -314,6 +334,24 @@
                             'is-current': currentStep === 7,
                             'is-done': completedSteps.includes(7),
                             'is-locked': !isStepAccessible(7) && !completedSteps.includes(7)
+                        }">
+                    <span class="v2-dot"><template x-if="completedSteps.includes(7)"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></template><template x-if="!completedSteps.includes(7)"><span>7</span></template></span>
+                    Review &amp; publish
+                </button>
+            </div>
+
+            <div x-show="manualEditorMode" x-cloak class="v2-phase" :class="{ [`is-current`]: currentStep === 7, [`is-done`]: completedSteps.includes(7) }">
+                <div class="v2-phase-label">
+                    <span class="v2-phase-num">3</span>
+                    <span>Publish</span>
+                </div>
+                <button type="button" @click="goToStep(7)"
+                        :disabled="!isStepAccessible(7)"
+                        class="v2-substep"
+                        :class="{
+                            [`is-current`]: currentStep === 7,
+                            [`is-done`]: completedSteps.includes(7),
+                            [`is-locked`]: !isStepAccessible(7) && !completedSteps.includes(7)
                         }">
                     <span class="v2-dot"><template x-if="completedSteps.includes(7)"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></template><template x-if="!completedSteps.includes(7)"><span>7</span></template></span>
                     Review &amp; publish
@@ -352,7 +390,7 @@
 
             {{-- Step 1: Select user — legacy partial extracted verbatim from original lines 121..159 --}}
             <template x-if="currentStep === 1">
-                <div>
+                <div data-v3i-step1-next="1">
                     <div class="mb-4 flex items-center gap-3">
                         <span class="v2-pill v2-pill-blue">Step 1 of 7</span>
                         <h2 class="font-bold text-lg text-gray-900">Select user</h2>
@@ -361,6 +399,16 @@
                         </x-hexa-tooltip>
                     </div>
                     @include('app-publish::publishing.pipeline-v2._legacy-step-1')
+                    <div class="v2-action-bar mt-5">
+                        <div></div>
+                        <button type="button"
+                                @click="completeStep(1); openStep(2); goToStep(2)"
+                                :disabled="!selectedUser"
+                                class="v2-btn v2-btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                            Continue
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                        </button>
+                    </div>
                 </div>
             </template>
 
@@ -381,7 +429,7 @@
             {{-- ─── PHASE 2 — SOURCE ─── --}}
 
             {{-- Step 3: Submit press release (press-release types) OR gather sources (spin) --}}
-            <template x-if="currentStep === 3">
+            <template x-if="!manualEditorMode && currentStep === 3">
                 <div class="relative">
                     <div class="v2-section">
                         <div class="v2-section-head">
@@ -421,7 +469,7 @@
             </template>
 
             {{-- Step 4: Validate (press release) / Fetch sources (spin) --}}
-            <template x-if="currentStep === 4">
+            <template x-if="!manualEditorMode && currentStep === 4">
                 <div>
                     <div class="v2-section">
                         <div class="v2-section-head">
@@ -456,7 +504,7 @@
             {{-- ─── PHASE 3 — GENERATE ─── --}}
 
             {{-- Step 5: AI Spin (inline UI in original — legacy fallback for now) --}}
-            <template x-if="currentStep === 5">
+            <template x-if="!manualEditorMode && currentStep === 5">
                 <div>
                     <div class="v2-section">
                         <div class="v2-section-head">
@@ -493,13 +541,20 @@
                 <div>
                     <div class="mb-4 flex items-center gap-3">
                         <span class="v2-pill v2-pill-blue">Step 6 of 7</span>
-                        <h2 class="font-bold text-lg text-gray-900">Create the article</h2>
+                        <h2 class="font-bold text-lg text-gray-900" x-text="manualEditorMode ? `Article editor` : `Create the article`"></h2>
                         <x-hexa-tooltip mode="hover" title="Create article" label="?" widthClass="w-80" position="bottom">
-                            Edit the AI-generated body in TinyMCE, fine-tune metadata (title, categories, tags, slug), and review inline photo placements.
+                            <span x-show="!manualEditorMode">Edit the AI-generated body in TinyMCE, fine-tune metadata (title, categories, tags, slug), and review inline photo placements.</span><span x-show="manualEditorMode" x-cloak>Paste or revise the finished article in the shared TinyMCE editor, import photos, then continue into the normal prepare and publish flow.</span>
                         </x-hexa-tooltip>
                     </div>
                     {{-- Existing partial renders its full step card with its own header + body --}}
                     @include('app-publish::publishing.pipeline.partials.create-article-step')
+                    <div x-show="manualEditorMode" x-cloak class="v2-action-bar mt-5">
+                        <button type="button" @click="goToStep(2)" class="v2-btn v2-btn-secondary">Back to configuration</button>
+                        <button type="button" @click="completeStep(6); openStep(7); goToStep(7)" :disabled="!manualEditorCanReview()" class="v2-btn v2-btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                            Continue to Review &amp; Publish
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                        </button>
+                    </div>
                 </div>
             </template>
 

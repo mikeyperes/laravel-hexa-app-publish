@@ -46,6 +46,8 @@ function publishPipeline() {
             return this.currentStepLabels();
         },
 
+        manualEditorMode: @json($manualEditorMode ?? false),
+
         // Step 1 — User (preloaded from draft if user_id is set so Step 2 unlocks without a manual re-select)
         selectedUser: @json(isset($draftUser) && $draftUser ? ['id' => $draftUser->id, 'name' => $draftUser->name] : null),
 
@@ -320,6 +322,11 @@ function publishPipeline() {
         publicationNotificationSending: false,
         publicationNotificationStatus: '',
         publicationNotificationResult: null,
+        googleDocExport: @json($draftState['googleDocExport'] ?? []),
+        googleDocExporting: false,
+        googleDocExportError: '',
+        googleDocOwnerEmail: @json(config('google-docs.owner_email')),
+        googleDocExportRoute: @json(route('publish.drafts.google-doc.export', ['id' => $draftId])),
 
         // Notification
         notification: { show: false, type: 'success', message: '' },
@@ -330,7 +337,7 @@ function publishPipeline() {
         masterActivityAutoScroll: true,
         emailDrawerOpen: false,
         emailDrawerTab: 'approval',
-        emailDrawerWidth: (typeof localStorage !== 'undefined' && localStorage.getItem('emailDrawerWidth')) || 'M',
+        emailDrawerWidth: (typeof localStorage !== 'undefined' && localStorage.getItem('emailDrawerWidth')) || 'L',
         cycleEmailDrawerWidth() {
             const order = ['M', 'L', 'XL'];
             const next = order[(order.indexOf(this.emailDrawerWidth) + 1) % order.length];
@@ -388,6 +395,81 @@ function publishPipeline() {
         // CSRF token
         get csrfToken() {
             return document.querySelector('meta[name="csrf-token"]')?.content || '';
+        },
+
+        googleDocCurrentTitle() {
+            return String(this.articleTitle || this.draftState?.articleTitle || this.draftState?.title || 'Untitled').trim() || 'Untitled';
+        },
+
+        googleDocCurrentExcerpt() {
+            return String(this.articleDescription || this.draftState?.articleDescription || this.draftState?.excerpt || '').trim();
+        },
+
+        googleDocCurrentBody() {
+            const body = this._resolveCanonicalArticleHtml({ preferPrepared: false, hydrateState: true }) || this.editorContent || this.spunContent || this.draftState?.editorContent || this.draftState?.spunContent || '';
+            return String(body || '');
+        },
+
+        googleDocHasDocument() {
+            return !!String(this.googleDocExport?.document_id || '').trim();
+        },
+
+        googleDocIsStale() {
+            return false;
+        },
+
+        googleDocStatusLabel() {
+            if (!this.googleDocHasDocument()) return 'No Google Doc yet';
+            return 'Google Doc ready';
+        },
+
+        googleDocActionLabel() {
+            if (!this.googleDocHasDocument()) return 'Create Google Doc';
+            return 'Update Google Doc';
+        },
+
+        openGoogleDoc() {
+            if (this.googleDocExport?.url) {
+                window.open(this.googleDocExport.url, '_blank', 'noopener');
+            }
+        },
+
+        async exportGoogleDoc(openAfter = true) {
+            if (this.googleDocExporting || !this.draftId || !this.googleDocExportRoute) return;
+            this.googleDocExportError = '';
+            this.googleDocExporting = true;
+            try {
+                const response = await fetch(this.googleDocExportRoute, {
+                    method: 'POST',
+                    headers: {
+                        ...this.requestHeaders({ 'Content-Type': 'application/json' }),
+                    },
+                    body: JSON.stringify({
+                        title: this.googleDocCurrentTitle(),
+                        excerpt: this.googleDocCurrentExcerpt(),
+                        body: this.googleDocCurrentBody(),
+                    }),
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    this.googleDocExportError = data.message || 'Google Doc export failed.';
+                    this.showNotification('error', this.googleDocExportError);
+                    return;
+                }
+                this.googleDocExport = data.google_doc || {};
+                if (this.draftState && typeof this.draftState === 'object') {
+                    this.draftState.googleDocExport = this.googleDocExport;
+                }
+                this.showNotification('success', data.message || 'Google Doc exported successfully.');
+                if (openAfter && this.googleDocExport?.url) {
+                    window.open(this.googleDocExport.url, '_blank', 'noopener');
+                }
+            } catch (error) {
+                this.googleDocExportError = error.message || 'Google Doc export failed.';
+                this.showNotification('error', this.googleDocExportError);
+            } finally {
+                this.googleDocExporting = false;
+            }
         },
 
         requestHeaders(extra = {}) {

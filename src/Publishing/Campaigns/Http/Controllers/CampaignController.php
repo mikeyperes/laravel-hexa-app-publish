@@ -19,7 +19,6 @@ use hexa_app_publish\Publishing\Templates\Models\PublishTemplate;
 use hexa_app_publish\Services\PublishService;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
-use hexa_package_wptoolkit\Services\WpToolkitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
@@ -587,7 +586,8 @@ class CampaignController extends Controller
                 $server = $account ? WhmServer::find($account->whm_server_id) : null;
 
                 if ($server) {
-                    $result = app(WpToolkitService::class)->wpCliListAdminUsers($server, (int) $site->wordpress_install_id);
+                    $target = app(\hexa_app_publish\Publishing\Sites\Services\PublishSiteWordPressTargetFactory::class)->fromSite($site);
+                    $result = app(\hexa_package_wordpress\Services\WordPressManagerService::class)->listAuthors($target);
                     $authors = array_values(array_filter((array) ($result['authors'] ?? []), fn ($author) => is_array($author) && filled($author['user_login'] ?? null)));
                 }
             } catch (\Throwable $e) {
@@ -693,7 +693,8 @@ class CampaignController extends Controller
             if (!$server) {
                 return [];
             }
-            $result = app(WpToolkitService::class)->wpCliListAdminUsers($server, (int) $site->wordpress_install_id);
+            $target = app(\hexa_app_publish\Publishing\Sites\Services\PublishSiteWordPressTargetFactory::class)->fromSite($site);
+            $result = app(\hexa_package_wordpress\Services\WordPressManagerService::class)->listAuthors($target);
             return $result['authors'] ?? [];
         });
 

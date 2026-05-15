@@ -1,21 +1,51 @@
         // ── Navigation ────────────────────────────────────
         isStepAccessible(step) {
             if (step === 1) return true;
-            // Step 2 (Article Config) unlocks as soon as a user is set, preloaded, or present on the draft payload
             if (step === 2 && (this.selectedUser || this.draftState?.selectedUser)) return true;
+
+            if (this.manualEditorMode) {
+                if ([3, 4, 5].includes(step)) return false;
+                if (step === 6) {
+                    return !!(this.completedSteps.includes(2) || this.completedSteps.includes(6) || this.selectedSiteId);
+                }
+                if (step === 7) {
+                    const hasBody = !!String(this.editorContent || this.spunContent || this.draftState?.body || "").trim();
+                    return !!((this.completedSteps.includes(6) || hasBody) && (this.completedSteps.includes(2) || this.selectedSiteId));
+                }
+            }
+
             // Step 4 (Fetch) requires at least one source selected
             if (step === 4 && this.sources.length === 0 && !this.isGenerateMode) return false;
             return this.completedSteps.includes(step - 1) || this.completedSteps.includes(step);
         },
 
+        manualEditorAdvanceFromConfig() {
+            this.completeStep(2);
+            if (this.manualEditorMode) {
+                [3, 4, 5].forEach((step) => this.completeStep(step));
+                this.openStep(6);
+                this.goToStep(6);
+                this.showNotification?.("success", "Manual editor mode is ready — paste the finished article and continue to review.");
+                return;
+            }
+            this.openStep(3);
+        },
+
+        manualEditorCanReview() {
+            return !!String(this.editorContent || this.spunContent || this.draftState?.body || "").trim();
+        },
+
         _syncStepToUrl() {
             const url = new URL(window.location);
-            url.searchParams.set('step', this.currentStep);
-            history.replaceState(null, '', url.toString());
+            url.searchParams.set("step", this.currentStep);
+            history.replaceState(null, "", url.toString());
         },
 
         normalizedOpenSteps(step, keepCurrentOpen = false) {
             const numericStep = Number(step || 0);
+            if (this.manualEditorMode) {
+                return keepCurrentOpen ? [] : [numericStep];
+            }
             if (numericStep >= 4 && numericStep <= 7) {
                 return keepCurrentOpen ? [3] : [3, numericStep];
             }
@@ -24,6 +54,9 @@
 
         normalizeNestedOpenSteps(steps, currentStep = null) {
             const normalized = Array.from(new Set((Array.isArray(steps) ? steps : []).map((step) => Number(step)).filter((step) => step >= 1 && step <= 7)));
+            if (this.manualEditorMode) {
+                return normalized.filter((step) => ![3, 4, 5].includes(step));
+            }
             const activeStep = Number(currentStep || this.currentStep || 0);
             const hasNestedStep = normalized.some((step) => step >= 4 && step <= 7) || (activeStep >= 4 && activeStep <= 7);
             if (hasNestedStep && !normalized.includes(3)) {

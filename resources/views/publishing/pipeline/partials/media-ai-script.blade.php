@@ -264,11 +264,12 @@
                         is_parent: !!cat.is_parent,
                     }));
                     this.syndicationCategories = normalized;
+                    const cacheMeta = data.cache && typeof data.cache === 'object' ? data.cache : data;
                     this.syndicationCategoriesCacheMeta = {
-                        cached: !!data.cached,
-                        cached_at: data.cached_at || null,
-                        age_seconds: Number(data.age_seconds || 0),
-                        age_human: data.age_human || "just now",
+                        cached: !!cacheMeta.cached,
+                        cached_at: cacheMeta.cached_at || null,
+                        age_seconds: Number(cacheMeta.age_seconds || 0),
+                        age_human: cacheMeta.age_human || 'just now',
                     };
                     const existing = Array.isArray(this.selectedSyndicationCats)
                         ? this.selectedSyndicationCats.map((id) => Number(id))
@@ -281,6 +282,7 @@
                     this._syndicationAutoRequested = true;
                     this._syndicationAutoSiteId = String(this.selectedSite?.id || "");
                     this.savePipelineState?.();
+                    this._ensurePrepareChecklistPublicationItems?.();
                 } else {
                     this.showNotification("error", data.message || "Failed to load publication taxonomy");
                 }
@@ -292,10 +294,13 @@
 
         maybeAutoLoadSyndicationCategories() {
             const siteId = String(this.selectedSite?.id || "");
+            const reviewStepActive = Number(this.currentStep || 0) === 7
+                || (Array.isArray(this.openSteps) && this.openSteps.includes(7));
             const stepSixActive = Number(this.currentStep || 0) === 6
                 || (Array.isArray(this.openSteps) && this.openSteps.includes(6));
+            const syndicationUiActive = stepSixActive || reviewStepActive;
 
-            if (this.currentArticleType !== 'press-release' || !this.selectedSite?.is_press_release_source || !siteId || !stepSixActive) {
+            if (this.currentArticleType !== 'press-release' || !this.selectedSite?.is_press_release_source || !siteId || !syndicationUiActive) {
                 return false;
             }
 

@@ -7,7 +7,6 @@ use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
-use hexa_package_wptoolkit\Services\WpToolkitService;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -19,15 +18,10 @@ use Illuminate\Support\Facades\Http;
  */
 class WordPressDeletionService
 {
-    protected WpToolkitService $wptoolkit;
     protected ArticleActivityService $activities;
 
-    /**
-     * @param WpToolkitService $wptoolkit
-     */
-    public function __construct(WpToolkitService $wptoolkit, ArticleActivityService $activities)
+    public function __construct(ArticleActivityService $activities)
     {
-        $this->wptoolkit = $wptoolkit;
         $this->activities = $activities;
     }
 
@@ -131,36 +125,31 @@ class WordPressDeletionService
     {
         $log = [];
         $resolved = $this->resolveServer($site);
-        if (!$resolved['server']) {
-            $log[] = ['type' => 'error', 'message' => 'Server not found — skipping WP delete.'];
+        if (!$resolved["server"]) {
+            $log[] = ["type" => "error", "message" => "Server not found — skipping WP delete."];
             return $log;
         }
 
-        $server = $resolved['server'];
-        $installId = $site->wordpress_install_id;
-
-        // Delete WP media first (referenced by the post)
         $wpImages = $article->wp_images ?? [];
         if (!empty($wpImages)) {
-            $log[] = ['type' => 'step', 'message' => 'Deleting ' . count($wpImages) . ' media attachment(s) via SSH...'];
+            $log[] = ["type" => "step", "message" => "Deleting " . count($wpImages) . " media attachment(s) via package..."];
             foreach ($wpImages as $img) {
-                $mediaId = $img['media_id'] ?? null;
+                $mediaId = $img["media_id"] ?? null;
                 if ($mediaId) {
-                    $result = $this->wptoolkit->wpCliDeleteMedia($server, $installId, (int) $mediaId);
+                    $result = $this->wordpress()->deleteMedia($this->wpTarget($site), (int) $mediaId);
                     $log[] = [
-                        'type' => $result['success'] ? 'success' : 'error',
-                        'message' => 'Media #' . $mediaId . ': ' . $result['message'],
+                        "type" => ($result["success"] ?? false) ? "success" : "error",
+                        "message" => "Media #" . $mediaId . ": " . ($result["message"] ?? "Delete failed."),
                     ];
                 }
             }
         }
 
-        // Delete WP post
-        $log[] = ['type' => 'step', 'message' => 'Deleting WP post #' . $article->wp_post_id . ' via SSH...'];
-        $postResult = $this->wptoolkit->wpCliDeletePost($server, $installId, (int) $article->wp_post_id);
+        $log[] = ["type" => "step", "message" => "Deleting WP post #" . $article->wp_post_id . " via package..."];
+        $postResult = $this->wordpress()->deletePost($this->wpTarget($site), (int) $article->wp_post_id);
         $log[] = [
-            'type' => $postResult['success'] ? 'success' : 'error',
-            'message' => 'Post #' . $article->wp_post_id . ': ' . $postResult['message'],
+            "type" => ($postResult["success"] ?? false) ? "success" : "error",
+            "message" => "Post #" . $article->wp_post_id . ": " . ($postResult["message"] ?? "Delete failed."),
         ];
 
         return $log;
@@ -176,45 +165,39 @@ class WordPressDeletionService
     private function deleteRest(PublishSite $site, PublishArticle $article): array
     {
         $log = [];
-        $baseUrl = rtrim($site->url, '/');
+        $baseUrl = rtrim($site->url, "/");
 
-        // Delete WP media first
         $wpImages = $article->wp_images ?? [];
         if (!empty($wpImages)) {
-            $log[] = ['type' => 'step', 'message' => 'Deleting ' . count($wpImages) . ' media attachment(s) via REST...'];
+            $log[] = ["type" => "step", "message" => "Deleting " . count($wpImages) . " media attachment(s) via package..."];
             foreach ($wpImages as $img) {
-                $mediaId = $img['media_id'] ?? null;
+                $mediaId = $img["media_id"] ?? null;
                 if ($mediaId) {
-                    $mediaUrl = $img['media_url'] ?? $img['source_url'] ?? '';
-                    $filename = $img['filename'] ?? '';
+                    $mediaUrl = $img["media_url"] ?? $img["source_url"] ?? "";
+                    $filename = $img["filename"] ?? "";
                     try {
-                        $resp = Http::withBasicAuth($site->wp_username, $site->wp_application_password)
-                            ->timeout(15)
-                            ->delete($baseUrl . '/wp-json/wp/v2/media/' . $mediaId, ['force' => true]);
+                        $resp = $this->wordpress()->deleteMedia($this->wpTarget($site), (int) $mediaId);
                         $log[] = [
-                            'type' => $resp->successful() ? 'success' : 'error',
-                            'message' => 'Media #' . $mediaId . ($filename ? ' (' . $filename . ')' : '') . ($mediaUrl ? ' — ' . $mediaUrl : '') . ': ' . ($resp->successful() ? 'Deleted.' : 'HTTP ' . $resp->status()),
+                            "type" => ($resp["success"] ?? false) ? "success" : "error",
+                            "message" => "Media #" . $mediaId . ($filename ? " (" . $filename . ")" : "") . ($mediaUrl ? " — " . $mediaUrl : "") . ": " . (($resp["message"] ?? "") ?: (($resp["success"] ?? false) ? "Deleted." : "Delete failed.")),
                         ];
                     } catch (\Exception $e) {
-                        $log[] = ['type' => 'error', 'message' => 'Media #' . $mediaId . ': ' . $e->getMessage()];
+                        $log[] = ["type" => "error", "message" => "Media #" . $mediaId . ": " . $e->getMessage()];
                     }
                 }
             }
         }
 
-        // Delete WP post
-        $postUrl = $article->wp_post_url ?: ($baseUrl . '/?p=' . $article->wp_post_id);
-        $log[] = ['type' => 'step', 'message' => 'Deleting WP post #' . $article->wp_post_id . ' (' . $postUrl . ') via REST...'];
+        $postUrl = $article->wp_post_url ?: ($baseUrl . "/?p=" . $article->wp_post_id);
+        $log[] = ["type" => "step", "message" => "Deleting WP post #" . $article->wp_post_id . " (" . $postUrl . ") via package..."];
         try {
-            $resp = Http::withBasicAuth($site->wp_username, $site->wp_application_password)
-                ->timeout(15)
-                ->delete($baseUrl . '/wp-json/wp/v2/posts/' . $article->wp_post_id, ['force' => true]);
+            $resp = $this->wordpress()->deletePost($this->wpTarget($site), (int) $article->wp_post_id);
             $log[] = [
-                'type' => $resp->successful() ? 'success' : 'error',
-                'message' => 'Post #' . $article->wp_post_id . ' (' . $postUrl . '): ' . ($resp->successful() ? 'Deleted from WordPress.' : 'HTTP ' . $resp->status()),
+                "type" => ($resp["success"] ?? false) ? "success" : "error",
+                "message" => "Post #" . $article->wp_post_id . " (" . $postUrl . "): " . (($resp["message"] ?? "") ?: (($resp["success"] ?? false) ? "Deleted from WordPress." : "Delete failed.")),
             ];
         } catch (\Exception $e) {
-            $log[] = ['type' => 'error', 'message' => 'Post #' . $article->wp_post_id . ': ' . $e->getMessage()];
+            $log[] = ["type" => "error", "message" => "Post #" . $article->wp_post_id . ": " . $e->getMessage()];
         }
 
         return $log;
@@ -231,5 +214,18 @@ class WordPressDeletionService
         $account = HostingAccount::find($site->hosting_account_id);
         $server = $account ? WhmServer::find($account->whm_server_id) : null;
         return ['server' => $server, 'account' => $account];
+    }
+
+    private function wordpress(): \hexa_package_wordpress\Services\WordPressManagerService
+    {
+        return app(\hexa_package_wordpress\Services\WordPressManagerService::class);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function wpTarget(PublishSite $site): array
+    {
+        return app(\hexa_app_publish\Publishing\Sites\Services\PublishSiteWordPressTargetFactory::class)->fromSite($site);
     }
 }

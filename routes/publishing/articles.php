@@ -34,6 +34,8 @@ Route::get('/article/articles', [DraftController::class, 'index'])->name('publis
 Route::post('/article/articles', [DraftController::class, 'store'])->name('publish.drafts.store');
 Route::post('/article/articles/{id}/prepare', [DraftController::class, 'prepare'])->name('publish.drafts.prepare');
 Route::post('/article/articles/{id}/approve', [DraftController::class, 'approve'])->name('publish.drafts.approve');
+Route::post('/article/articles/{id}/google-doc/export', [DraftController::class, 'exportGoogleDoc'])->name('publish.drafts.google-doc.export');
+Route::get('/article/approval-email/users', [DraftApprovalEmailController::class, 'searchUsers'])->name('publish.drafts.approval.users');
 Route::get('/article/articles/{id}/approval-email', [DraftApprovalEmailController::class, 'show'])->name('publish.drafts.approval.show');
 Route::post('/article/articles/{id}/approval-email/preview', [DraftApprovalEmailController::class, 'preview'])->name('publish.drafts.approval.preview');
 Route::post('/article/articles/{id}/approval-email/send', [DraftApprovalEmailController::class, 'send'])->name('publish.drafts.approval.send');

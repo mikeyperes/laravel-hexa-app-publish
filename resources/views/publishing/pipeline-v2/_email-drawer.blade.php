@@ -1,7 +1,7 @@
 {{-- Email drawer: Draft Approval + Live Notification, tabbed.
      Reuses existing approvalEmail* and publicationNotification* x-models.
      Functionality is unchanged — visual layout, tooltips, and tab switching only. --}}
-<div class="flex flex-col h-full" x-init="approvalEmailEnsureLoaded()">
+<div class="flex flex-col h-full" x-init="approvalEmailEnsureLoaded(); initializePublicationNotificationState?.(); if (emailDrawerTab === 'notification') { applyPublicationNotificationTemplate(publicationNotificationTemplateId || publicationNotificationDefaults?.template_id || defaultPublicationNotificationTemplate()?.id || '', { force: true }); }">
 
     {{-- Header --}}
     <div class="px-5 py-3 border-b border-gray-200 flex items-start gap-3 flex-shrink-0">
@@ -40,7 +40,7 @@
                 Draft approval
             </span>
         </button>
-        <button type="button" @click="emailDrawerTab = 'notification'"
+        <button type="button" @click="emailDrawerTab = 'notification'; applyPublicationNotificationTemplate(publicationNotificationTemplateId || publicationNotificationDefaults?.template_id || defaultPublicationNotificationTemplate()?.id || '', { force: true })"
                 :class="emailDrawerTab === 'notification' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-800'"
                 class="px-3 py-2 text-sm font-medium border-b-2 transition">
             <span class="inline-flex items-center gap-2">
@@ -107,25 +107,65 @@
                 <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500">Template</h4>
                 <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Notification template</label>
-                    <select x-model="publicationNotificationTemplateId" @change="applyPublicationNotificationTemplate(publicationNotificationTemplateId, { force: true })" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                        <option value="">Default publication notification</option>
+                    <select x-model="publicationNotificationTemplateId" :value="publicationNotificationTemplateId || ''" @change="applyPublicationNotificationTemplate(publicationNotificationTemplateId, { force: true })" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="" x-text="publicationNotificationTemplateId ? (publicationNotificationTemplates.find(template => String(template.id) === String(publicationNotificationTemplateId))?.name || 'Default publication notification') : 'Default publication notification'">Default publication notification</option>
                         <template x-for="template in publicationNotificationTemplates" :key="template.id">
                             <option :value="String(template.id)" x-text="template.name + (template.is_primary ? ' (Default)' : '')"></option>
                         </template>
                     </select>
                 </div>
+                <p class="mt-1.5 text-xs text-gray-500">Selected: <span class="font-medium text-gray-700" x-text="publicationNotificationTemplates.find(template => String(template.id) === String(publicationNotificationTemplateId || ''))?.name || 'Default publication notification'"></span></p>
             </section>
 
             {{-- Recipients --}}
             <section class="space-y-3">
                 <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500">Recipients</h4>
-                <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">To</label>
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                        <label class="block text-xs font-medium text-gray-700">To</label>
+                        <button type="button" @click="approvalEmailSecondaryUserSearchOpen = !approvalEmailSecondaryUserSearchOpen; if (approvalEmailSecondaryUserSearchOpen) { $nextTick(() => $refs.approvalEmailSecondaryUserQuery?.focus()); }" class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                            <span x-text="approvalEmailSecondaryUser ? &quot;Change secondary user&quot; : &quot;Add secondary user&quot;"></span>
+                        </button>
+                    </div>
                     <input type="email" x-model="publicationNotificationTo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="client@example.com">
+
+                    <div x-show="approvalEmailSecondaryUserSearchOpen" x-cloak class="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
+                        <label class="block text-[11px] font-semibold uppercase tracking-wider text-gray-500">Search secondary user</label>
+                        <input type="text" x-ref="approvalEmailSecondaryUserQuery" x-model="approvalEmailSecondaryUserQuery" @input.debounce.250ms="approvalEmailSearchSecondaryUsers()" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Type a user name or email">
+                        <div x-show="approvalEmailSecondaryUserSearching" x-cloak class="text-[11px] text-gray-500">Searching users…</div>
+                        <div x-show="!approvalEmailSecondaryUserSearching && approvalEmailSecondaryUserQuery && approvalEmailSecondaryUserResults.length === 0" x-cloak class="text-[11px] text-gray-500">No matching users found.</div>
+                        <div x-show="approvalEmailSecondaryUserResults.length > 0" x-cloak class="max-h-56 overflow-auto rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+                            <template x-for="user in approvalEmailSecondaryUserResults" :key="user.id">
+                                <button type="button" @click="approvalEmailChooseSecondaryUser(user)" class="w-full px-3 py-2 text-left hover:bg-blue-50">
+                                    <div class="text-sm font-medium text-gray-900" x-text="user.name || user.email || ('User #' + user.id)"></div>
+                                    <div class="text-[11px] text-gray-500"><span x-text="approvalEmailSecondaryUserAddress(user) || 'No public email set'"></span></div>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div x-show="approvalEmailSecondaryUser" x-cloak class="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 space-y-2">
+                        <div class="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                                <p class="text-xs font-semibold text-blue-900" x-text="approvalEmailSecondaryUser?.name || 'Secondary user'"></p>
+                                <p class="text-[11px] text-blue-700" x-text="approvalEmailSecondaryUserAddress() || 'No public email available'"></p>
+                                <p x-show="approvalEmailSecondaryUser?.additional_contact_emails" x-cloak class="text-[11px] text-blue-700 break-all" x-text="approvalEmailSecondaryUser?.additional_contact_emails"></p>
+                            </div>
+                            <button type="button" @click="approvalEmailClearSecondaryUser()" class="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100">Clear</button>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" @click="publicationNotificationImportSecondaryUserTo()" class="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100">Use public email for To</button>
+                            <button type="button" @click="publicationNotificationImportSecondaryUserCcs()" class="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100">Add CC from secondary user</button>
+                        </div>
+                    </div>
+
+                    <p class="text-xs text-gray-500">Defaults to the selected article contact email. Falls back to the selected user, publishing account, then creator login email.</p>
                 </div>
                 <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">CC</label>
                     <input type="text" x-model="publicationNotificationCc" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="name@example.com, team@example.com">
+                    <p x-show="approvalEmailSecondaryUserCcEmpty" x-cloak class="mt-1.5 text-[11px] text-gray-500">The selected secondary user has no CC emails configured.</p>
                 </div>
             </section>
 
@@ -155,9 +195,16 @@
                     <label class="block text-xs font-medium text-gray-700 mb-1">Subject</label>
                     <input type="text" x-model="publicationNotificationSubject" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                 </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">Body</label>
-                    <textarea x-model="publicationNotificationBody" rows="9" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"></textarea>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Body HTML</label>
+                        <textarea x-model="publicationNotificationBody" rows="9" class="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"></textarea>
+                        <p class="mt-1.5 text-xs text-gray-500">Edit the raw HTML here. The rendered preview below shows the actual email formatting and syndicated press release links.</p>
+                    </div>
+                    <div class="rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
+                        <div class="px-3 py-2 border-b border-gray-200 text-xs font-semibold uppercase tracking-wider text-gray-500">Rendered preview</div>
+                        <div class="bg-white px-4 py-4 prose prose-sm max-w-none" x-html="publicationNotificationBody"></div>
+                    </div>
                 </div>
 
                 <details class="rounded-lg border border-gray-200 bg-gray-50">

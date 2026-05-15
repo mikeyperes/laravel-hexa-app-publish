@@ -30,6 +30,33 @@ class DraftApprovalEmailService
         return $this->defaultComposerConfigFromSnapshot($this->resolveSnapshot($article));
     }
 
+    public function isLiveArticle(PublishArticle $article): bool
+    {
+        return $this->isLiveSnapshot($this->resolveSnapshot($article));
+    }
+
+    public function recommendedTemplateUseCase(PublishArticle $article): string
+    {
+        return $this->recommendedTemplateUseCaseFromSnapshot($this->resolveSnapshot($article));
+    }
+
+    public function preferredTemplateKeyword(PublishArticle $article): ?string
+    {
+        $snapshot = $this->resolveSnapshot($article);
+
+        return $this->isPressReleaseSnapshot($snapshot) ? "Press Release" : "Standard";
+    }
+
+    public function recommendedSubject(PublishArticle $article): string
+    {
+        return $this->defaultSubject($this->resolveSnapshot($article));
+    }
+
+    public function defaultAdditionalCcs(PublishArticle $article): string
+    {
+        return $this->resolveDefaultCc($this->resolveSnapshot($article));
+    }
+
     public function preview(PublishArticle $article, array $input): array
     {
         $snapshot = $this->resolveSnapshot($article);
@@ -222,19 +249,19 @@ class DraftApprovalEmailService
 
     private function defaultComposerConfigFromSnapshot(array $snapshot): array
     {
-        $defaults = config('hws-publish.draft_approval_email', []);
+        $defaults = config("hws-publish." . $this->recommendedTemplateUseCaseFromSnapshot($snapshot), []);
 
         return [
-            'to' => $this->resolveDefaultRecipient($snapshot),
-            'cc' => $this->resolveDefaultCc($snapshot),
-            'from_name' => (string) ($defaults['default_from_name'] ?? 'Scale My Publication'),
-            'from_email' => (string) ($defaults['default_from_email'] ?? 'no-reply@scalemypublication.com'),
-            'reply_to' => (string) ($defaults['default_reply_to'] ?? 'support@scalemypublication.com'),
-            'subject' => $this->defaultSubject($snapshot),
-            'template_id' => '',
-            'body_template' => (string) ($defaults['default_body'] ?? ''),
-            'intro_html' => '',
-            'image_mode' => 'embed',
+            "to" => $this->resolveDefaultRecipient($snapshot),
+            "cc" => $this->resolveDefaultCc($snapshot),
+            "from_name" => (string) ($defaults["default_from_name"] ?? "Scale My Publication"),
+            "from_email" => (string) ($defaults["default_from_email"] ?? "no-reply@scalemypublication.com"),
+            "reply_to" => (string) ($defaults["default_reply_to"] ?? "support@scalemypublication.com"),
+            "subject" => $this->defaultSubject($snapshot),
+            "template_id" => "",
+            "body_template" => (string) ($defaults["default_body"] ?? ""),
+            "intro_html" => "",
+            "image_mode" => "embed",
         ];
     }
 
@@ -247,6 +274,16 @@ class DraftApprovalEmailService
         $fromEmail = trim((string) ($input['from_email'] ?? $defaults['from_email'])) ?: $defaults['from_email'];
         $replyTo = trim((string) ($input['reply_to'] ?? $defaults['reply_to'])) ?: $defaults['reply_to'];
         $subject = trim((string) ($input['subject'] ?? $defaults['subject'])) ?: $defaults['subject'];
+        $subjectTokens = [
+            "{article_title}" => (string) ($snapshot["title"] ?? ""),
+            "{site_name}" => (string) ($snapshot["site_name"] ?? ""),
+            "{site_url}" => (string) ($snapshot["site_url"] ?? ""),
+            "{publication_name}" => (string) ($snapshot["site_name"] ?? ""),
+            "{publication_url}" => (string) ($snapshot["site_url"] ?? ""),
+            "{username}" => (string) ($snapshot["selected_user_name"] ?? $snapshot["creator_name"] ?? ""),
+            "{permalink}" => (string) ($snapshot["permalink"] ?? $snapshot["wp_post_url"] ?? ""),
+        ];
+        $subject = strtr($subject, $subjectTokens);
         $templateId = trim((string) ($input['template_id'] ?? $defaults['template_id'] ?? ''));
         $bodyTemplate = (string) ($input['body_template'] ?? $defaults['body_template'] ?? '');
         $introHtml = (string) ($input['intro_html'] ?? $defaults['intro_html']);
@@ -290,49 +327,87 @@ class DraftApprovalEmailService
 
     private function defaultSubject(array $snapshot): string
     {
-        $title = trim((string) ($snapshot['title'] ?? 'Untitled')) ?: 'Untitled';
+        $title = trim((string) ($snapshot["title"] ?? "Untitled")) ?: "Untitled";
+        $siteName = trim((string) ($snapshot["site_name"] ?? "")) ?: "Your Publication";
 
-        return ($snapshot['article_type'] ?? '') === 'press-release'
-            ? 'Your Press Release draft is ready: ' . $title
-            : 'Your draft is ready: ' . $title;
+        if ($this->isLiveSnapshot($snapshot)) {
+            return $this->isPressReleaseSnapshot($snapshot)
+                ? "Your Press Release is Live on " . $siteName . ": " . $title
+                : "Your Article is Live on " . $siteName . ": " . $title;
+        }
+
+        return $this->isPressReleaseSnapshot($snapshot)
+            ? "Your Press Release is Ready: " . $title
+            : "Your Draft is Ready: " . $title;
     }
 
     private function resolveSnapshot(PublishArticle $article): array
     {
-        $article->loadMissing(['site', 'creator', 'pipelineState']);
+        $article->loadMissing(["site", "account", "creator", "pipelineState"]);
         $payload = $this->pipelineState->payload($article);
-        $pressRelease = is_array($payload['pressRelease'] ?? null) ? $payload['pressRelease'] : [];
-        $bodyHtml = trim((string) ($payload['editorContent'] ?? $payload['spunContent'] ?? $article->body ?? ($pressRelease['content_dump'] ?? '')));
+        $pressRelease = is_array($payload["pressRelease"] ?? null) ? $payload["pressRelease"] : [];
+        $selectedUser = is_array($payload["selectedUser"] ?? null) ? $payload["selectedUser"] : [];
+        $selectedUserModel = null;
+        $selectedUserId = (int) ($selectedUser["id"] ?? 0);
+        if ($selectedUserId > 0) {
+            $selectedUserModel = User::find($selectedUserId);
+        }
+        $bodyHtml = trim((string) ($payload["editorContent"] ?? $payload["spunContent"] ?? $article->body ?? ($pressRelease["content_dump"] ?? "")));
         $preparedHtml = (string) (PublishPipelineOperation::query()
-            ->where('publish_article_id', $article->id)
-            ->where('operation_type', PublishPipelineOperation::TYPE_PREPARE)
-            ->where('status', PublishPipelineOperation::STATUS_COMPLETED)
-            ->latest('id')
-            ->value('result_payload->html') ?? '');
-        $title = trim((string) ($payload['articleTitle'] ?? $article->title ?? 'Untitled')) ?: 'Untitled';
-        $excerpt = trim((string) ($payload['articleDescription'] ?? $article->excerpt ?? ''));
-        $siteUrl = trim((string) ($article->site?->url ?? Arr::get($payload, 'selectedSite.url', '')));
-        $featuredPhoto = is_array($payload['featuredPhoto'] ?? null) ? $payload['featuredPhoto'] : [];
+            ->where("publish_article_id", $article->id)
+            ->where("operation_type", PublishPipelineOperation::TYPE_PREPARE)
+            ->where("status", PublishPipelineOperation::STATUS_COMPLETED)
+            ->latest("id")
+            ->value("result_payload->html") ?? "");
+        $title = trim((string) ($payload["articleTitle"] ?? $article->title ?? "Untitled")) ?: "Untitled";
+        $excerpt = trim((string) ($payload["articleDescription"] ?? $article->excerpt ?? ""));
+        $siteUrl = trim((string) ($article->site?->url ?? Arr::get($payload, "selectedSite.url", "")));
+        $siteName = trim((string) ($article->site?->name ?? Arr::get($payload, "selectedSite.name", "")));
+        $featuredPhoto = is_array($payload["featuredPhoto"] ?? null) ? $payload["featuredPhoto"] : [];
         $creator = $article->creator;
+        $account = $article->account;
+        $linksInjected = is_array($article->links_injected ?? null) ? $article->links_injected : [];
+        $permalink = trim((string) ($article->wp_post_url ?? Arr::get($payload, "publishResult.post_url", "")));
+        $siteHost = strtolower(trim((string) (parse_url($siteUrl, PHP_URL_HOST) ?: "")));
+        $pressReleaseContact = trim((string) ($pressRelease["contact_email"] ?? $pressRelease["email"] ?? Arr::get($payload, "prArticle.contact_email", "")));
 
         return [
-            'article_id' => $article->id,
-            'article_code' => $article->article_id,
-            'article_type' => trim((string) ($payload['prArticle']['article_type'] ?? $payload['template_overrides']['article_type'] ?? $article->article_type ?? '')),
-            'title' => $title,
-            'excerpt' => $excerpt,
-            'body_html' => $bodyHtml,
-            'prepared_html' => $preparedHtml,
-            'site_url' => $siteUrl,
-            'site_name' => trim((string) ($article->site?->name ?? Arr::get($payload, 'selectedSite.name', ''))),
-            'creator_name' => trim((string) ($creator?->name ?? '')),
-            'creator_login_email' => trim((string) ($creator?->email ?? '')),
-            'creator_contact_email' => trim((string) ($creator?->contact_email ?? '')),
-            'creator_additional_contact_emails' => trim((string) ($creator?->additional_contact_emails ?? '')),
-            'featured_url' => trim((string) ($featuredPhoto['url_full'] ?? $featuredPhoto['url_large'] ?? $featuredPhoto['url'] ?? $featuredPhoto['url_thumb'] ?? '')),
-            'featured_alt' => trim((string) ($featuredPhoto['alt'] ?? 'Featured image')),
-            'featured_caption' => trim((string) ($payload['featuredCaption'] ?? '')),
-            'featured_wp_url' => trim((string) ($payload['preparedFeaturedWpUrl'] ?? $this->resolveWpFeaturedUrlFromArticle($article))),
+            "article_id" => $article->id,
+            "article_code" => $article->article_id,
+            "article_type" => trim((string) ($payload["prArticle"]["article_type"] ?? $payload["template_overrides"]["article_type"] ?? $article->article_type ?? "")),
+            "status" => (string) ($article->status ?? ""),
+            "delivery_mode" => trim((string) (Arr::get($payload, "publishMode", Arr::get($payload, "selectedSite.delivery_mode", "")))),
+            "wp_post_id" => $article->wp_post_id,
+            "wp_status" => trim((string) ($article->wp_status ?? Arr::get($payload, "publishResult.status", ""))),
+            "wp_post_url" => $permalink,
+            "permalink" => $permalink,
+            "title" => $title,
+            "excerpt" => $excerpt,
+            "body_html" => $bodyHtml,
+            "prepared_html" => $preparedHtml,
+            "site_url" => $siteUrl,
+            "site_name" => $siteName,
+            "site_host" => $siteHost,
+            "site_is_press_release_source" => str_contains($siteHost, "hexaprwire") || str_contains(strtolower($siteName), "hexa pr wire"),
+            "creator_name" => trim((string) ($creator?->name ?? "")),
+            "creator_login_email" => trim((string) ($creator?->email ?? "")),
+            "creator_contact_email" => trim((string) ($creator?->contact_email ?? "")),
+            "creator_additional_contact_emails" => trim((string) ($creator?->additional_contact_emails ?? "")),
+            "selected_user_name" => trim((string) ($selectedUser["name"] ?? $selectedUserModel?->name ?? "")),
+            "selected_user_email" => trim((string) ($selectedUser["email"] ?? $selectedUserModel?->email ?? "")),
+            "selected_user_contact_email" => trim((string) ($selectedUser["contact_email"] ?? $selectedUserModel?->contact_email ?? "")),
+            "selected_user_additional_contact_emails" => trim((string) ($selectedUser["additional_contact_emails"] ?? $selectedUserModel?->additional_contact_emails ?? "")),
+            "account_name" => trim((string) ($account?->name ?? "")),
+            "account_email" => trim((string) ($account?->email ?? "")),
+            "stored_approval_email_to" => trim((string) ($payload["approvalEmailTo"] ?? "")),
+            "press_release_contact_email" => $pressReleaseContact,
+            "featured_url" => trim((string) ($featuredPhoto["url_full"] ?? $featuredPhoto["url_large"] ?? $featuredPhoto["url"] ?? $featuredPhoto["url_thumb"] ?? "")),
+            "featured_alt" => trim((string) ($featuredPhoto["alt"] ?? "Featured image")),
+            "featured_caption" => trim((string) ($payload["featuredCaption"] ?? "")),
+            "featured_wp_url" => trim((string) ($payload["preparedFeaturedWpUrl"] ?? $this->resolveWpFeaturedUrlFromArticle($article))),
+            "links_injected_type" => trim((string) ($linksInjected["type"] ?? "")),
+            "links_injected_html" => trim((string) ($linksInjected["html"] ?? "")),
+            "links_injected_plain" => trim((string) ($linksInjected["plain"] ?? "")),
         ];
     }
 
@@ -340,6 +415,7 @@ class DraftApprovalEmailService
     {
         [$introHtml, $introWarnings] = $this->buildFragmentHtmlForMode((string) ($config['intro_html'] ?? ''), $snapshot, $config['image_mode']);
         [$articleHtml, $warnings] = $this->buildArticleHtmlForMode($snapshot, $config['image_mode']);
+        $articleHtml = $this->applyEmailTypography($articleHtml);
         $warnings = array_values(array_filter(array_merge($introWarnings, $warnings)));
         if (trim(strip_tags($articleHtml)) === '') {
             $warnings[] = 'The draft body is currently empty.';
@@ -349,7 +425,7 @@ class DraftApprovalEmailService
         $trackingUrl = $publicToken ? route('publish.drafts.approval.public.track', ['token' => $publicToken]) : null;
         $featuredHtml = $this->renderFeaturedImage($snapshot, $config['image_mode']);
         $excerptHtml = $snapshot['excerpt'] !== ''
-            ? '<p style="margin:0 0 18px; font-size:15px; line-height:1.6; color:#4b5563;">' . $this->escapeHtml($snapshot['excerpt']) . '</p>'
+            ? '<p style="margin:0 0 28px;font-family:Georgia,Cambria,\'Times New Roman\',serif;font-size:18px;line-height:1.55;color:#475569;font-style:italic;">' . $this->escapeHtml($snapshot['excerpt']) . '</p>'
             : '';
         $introBlock = trim(strip_tags($introHtml)) !== ''
             ? '<div style="margin:0 0 18px; font-size:15px; line-height:1.7; color:#111827;">' . $introHtml . '</div>'
@@ -359,22 +435,19 @@ class DraftApprovalEmailService
             : '';
 
         $defaultBodyHtml = <<<HTML
-<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;max-width:760px;margin:0 auto;padding:24px;">
-  <div style="margin:0 0 20px; padding:16px 18px; border:1px solid #dbeafe; border-radius:12px; background:#eff6ff;">
-    <p style="margin:0 0 8px; font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#1d4ed8;">Approval draft</p>
-    <h2 style="margin:0 0 8px; font-size:20px; line-height:1.3; color:#111827;">{$this->escapeHtml($config['subject'])}</h2>
-    <p style="margin:0 0 12px; font-size:14px; line-height:1.6; color:#475569;">This draft is ready for review. Use the hosted review page to confirm you’ve seen it and mark it reviewed.</p>
-    <p style="margin:0;"><a href="{$this->escapeAttribute($reviewUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:10px 14px;border-radius:8px;font-size:14px;font-weight:600;">Open review page</a></p>
-  </div>
+<div style="font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Helvetica,Arial,sans-serif;color:#1f2937;max-width:680px;margin:0 auto;padding:40px 28px 56px;background:#ffffff;">
+  <!-- DRAFT_FOR_REVIEW_MINIMALIST -->
+  <p style="margin:0 0 8px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#94a3b8;">Draft for review</p>
+  <p style="margin:0 0 32px;font-size:14px;line-height:1.6;color:#64748b;">A new draft is ready.</p>
   {$introBlock}
   {$featuredHtml}
   <article style="font-size:15px; line-height:1.7; color:#111827;">
-    <h1 style="font-size:30px; line-height:1.2; margin:0 0 12px;">{$this->escapeHtml($snapshot['title'])}</h1>
+    <h1 style="font-family:Georgia,\"Iowan Old Style\",Cambria,\"Times New Roman\",serif;font-size:34px;font-weight:700;line-height:1.15;letter-spacing:-0.01em;margin:0 0 16px;color:#0f172a;">{$this->escapeHtml($snapshot['title'])}</h1>
     {$excerptHtml}
     {$articleHtml}
   </article>
-  <div style="margin-top:24px; padding-top:12px; border-top:1px solid #e5e7eb; font-size:12px; line-height:1.6; color:#6b7280;">
-    <p style="margin:0;">Sent from Scale My Publication.</p>
+  <div style="margin-top:56px;padding-top:20px;border-top:1px solid #e5e7eb;text-align:center;">
+    <p style="margin:0;font-size:11px;color:#94a3b8;letter-spacing:0.08em;text-transform:uppercase;">Scale My Publication</p>
   </div>
   {$trackingMarkup}
 </div>
@@ -388,20 +461,32 @@ HTML;
             $username = trim((string) ($snapshot['creator_name'] ?? ''));
             $siteName = trim((string) ($snapshot['site_name'] ?? ''));
             $siteUrl = trim((string) ($snapshot['site_url'] ?? ''));
+            $articleLinksHtml = $this->resolveArticleLinksHtml($snapshot);
+            $articleLinksPlain = $this->resolveArticleLinksPlain($snapshot);
+            $primaryPressReleaseLink = $this->resolvePrimaryPressReleaseLink($snapshot);
+            $permalink = trim((string) ($snapshot["permalink"] ?? $snapshot["wp_post_url"] ?? ""));
             $tokens = [
-                '{article_title}' => $snapshot['title'],
-                '{article}' => '<article style="font-size:15px; line-height:1.7; color:#111827;">' . $articleHeaderHtml . $excerptHtml . $articleHtml . '</article>',
-                '{article_plain}' => trim($articleHeaderPlain . PHP_EOL . PHP_EOL . ($snapshot['excerpt'] !== '' ? $snapshot['excerpt'] . PHP_EOL . PHP_EOL : '') . $articleBodyPlain),
-                '{article_body}' => $articleHtml,
-                '{article_body_plain}' => $articleBodyPlain,
-                '{article_header}' => $articleHeaderHtml,
-                '{article_header_plain}' => $articleHeaderPlain,
-                '{review_url}' => $reviewUrl === '#' ? '' : $reviewUrl,
-                '{username}' => $username,
-                '{site_name}' => $siteName,
-                '{site_url}' => $siteUrl,
-                '{publication_name}' => $siteName,
-                '{publication_url}' => $siteUrl,
+                "{article_title}" => $snapshot["title"],
+                "{article}" => "<article style=\"font-size:15px; line-height:1.7; color:#111827;\">" . $articleHeaderHtml . $excerptHtml . $articleHtml . "</article>",
+                "{article_plain}" => trim($articleHeaderPlain . PHP_EOL . PHP_EOL . ($snapshot["excerpt"] !== "" ? $snapshot["excerpt"] . PHP_EOL . PHP_EOL : "") . $articleBodyPlain),
+                "{article_body}" => $articleHtml,
+                "{article_body_plain}" => $articleBodyPlain,
+                "{article_header}" => $articleHeaderHtml,
+                "{article_header_plain}" => $articleHeaderPlain,
+                "{review_url}" => $reviewUrl === "#" ? "" : $reviewUrl,
+                "{permalink}" => $permalink,
+                "{article_links}" => $articleLinksHtml,
+                "{article_links_plain}" => $articleLinksPlain,
+                "{press_release_links}" => $articleLinksHtml,
+                "{press_release_links_plain}" => $articleLinksPlain,
+                "{hexa_pr_link}" => $primaryPressReleaseLink,
+                "{hexa_pr_links}" => $articleLinksHtml,
+                "{hexa_pr_links_plain}" => $articleLinksPlain,
+                "{username}" => trim((string) ($snapshot["selected_user_name"] ?? $snapshot["creator_name"] ?? "")),
+                "{site_name}" => trim((string) ($snapshot["site_name"] ?? "")),
+                "{site_url}" => trim((string) ($snapshot["site_url"] ?? "")),
+                "{publication_name}" => trim((string) ($snapshot["site_name"] ?? "")),
+                "{publication_url}" => trim((string) ($snapshot["site_url"] ?? "")),
             ];
 
             $bodyHtml = $this->renderBodyTemplate((string) $config['body_template'], $tokens);
@@ -553,24 +638,123 @@ HTML;
         );
     }
 
+    private function recommendedTemplateUseCaseFromSnapshot(array $snapshot): string
+    {
+        return $this->isLiveSnapshot($snapshot) ? "publication_notification" : "draft_approval_email";
+    }
+
+    private function isLiveSnapshot(array $snapshot): bool
+    {
+        $wpStatus = strtolower(trim((string) ($snapshot["wp_status"] ?? "")));
+        $status = strtolower(trim((string) ($snapshot["status"] ?? "")));
+        $permalink = trim((string) ($snapshot["permalink"] ?? $snapshot["wp_post_url"] ?? ""));
+
+        return in_array($wpStatus, ["publish", "future", "private"], true)
+            || $status === "published"
+            || $permalink !== "";
+    }
+
+    private function isPressReleaseSnapshot(array $snapshot): bool
+    {
+        $type = strtolower(trim((string) ($snapshot["article_type"] ?? "")));
+        $linksType = strtolower(trim((string) ($snapshot["links_injected_type"] ?? "")));
+
+        return $type === "press-release" || $linksType === "press_release_links";
+    }
+
     private function resolveDefaultRecipient(array $snapshot): string
     {
-        $contactEmail = trim((string) ($snapshot['creator_contact_email'] ?? ''));
-        if ($contactEmail !== '' && filter_var($contactEmail, FILTER_VALIDATE_EMAIL)) {
-            return $contactEmail;
+        $candidates = [
+            trim((string) ($snapshot["selected_user_contact_email"] ?? "")),
+            trim((string) ($snapshot["selected_user_email"] ?? "")),
+        ];
+
+        if ($this->isPressReleaseSnapshot($snapshot)) {
+            $candidates[] = trim((string) ($snapshot["press_release_contact_email"] ?? ""));
         }
 
-        $loginEmail = trim((string) ($snapshot['creator_login_email'] ?? ''));
-        if ($loginEmail !== '' && filter_var($loginEmail, FILTER_VALIDATE_EMAIL)) {
-            return $loginEmail;
-        }
+        array_push(
+            $candidates,
+            trim((string) ($snapshot["account_email"] ?? "")),
+            trim((string) ($snapshot["creator_contact_email"] ?? "")),
+            trim((string) ($snapshot["creator_login_email"] ?? "")),
+            trim((string) ($snapshot["stored_approval_email_to"] ?? ""))
+        );
 
-        return '';
+        return $this->firstValidEmail(...$candidates);
     }
 
     private function resolveDefaultCc(array $snapshot): string
     {
-        return implode(', ', $this->parseEmailList((string) ($snapshot['creator_additional_contact_emails'] ?? '')));
+        $combined = array_merge(
+            $this->parseEmailList((string) ($snapshot["selected_user_additional_contact_emails"] ?? "")),
+            $this->parseEmailList((string) ($snapshot["creator_additional_contact_emails"] ?? ""))
+        );
+
+        return implode(", ", $this->parseEmailList(implode(", ", $combined)));
+    }
+
+    private function resolveArticleLinksHtml(array $snapshot): string
+    {
+        $html = trim((string) ($snapshot["links_injected_html"] ?? ""));
+        if ($html !== "") {
+            return $html;
+        }
+
+        $permalink = trim((string) ($snapshot["permalink"] ?? $snapshot["wp_post_url"] ?? ""));
+        if ($permalink === "") {
+            return "";
+        }
+
+        return "<p><a href=\"" . $this->escapeAttribute($permalink) . "\">" . $this->escapeHtml($permalink) . "</a></p>";
+    }
+
+    private function resolveArticleLinksPlain(array $snapshot): string
+    {
+        $plain = trim((string) ($snapshot["links_injected_plain"] ?? ""));
+        if ($plain !== "") {
+            return $plain;
+        }
+
+        return trim((string) ($snapshot["permalink"] ?? $snapshot["wp_post_url"] ?? ""));
+    }
+
+    private function resolvePrimaryPressReleaseLink(array $snapshot): string
+    {
+        $plain = $this->resolveArticleLinksPlain($snapshot);
+        $first = $this->extractFirstUrl($plain);
+        if ($first !== "") {
+            return $first;
+        }
+
+        $html = $this->resolveArticleLinksHtml($snapshot);
+        $first = $this->extractFirstUrl($html);
+        if ($first !== "") {
+            return $first;
+        }
+
+        return trim((string) ($snapshot["permalink"] ?? $snapshot["wp_post_url"] ?? ""));
+    }
+
+    private function extractFirstUrl(string $value): string
+    {
+        if (preg_match("/https?:\/\/[^\s<>\"\)]+/i", $value, $matches)) {
+            return rtrim((string) ($matches[0] ?? ""), ".,);");
+        }
+
+        return "";
+    }
+
+    private function firstValidEmail(string ...$candidates): string
+    {
+        foreach ($candidates as $candidate) {
+            $candidate = trim($candidate);
+            if ($candidate !== "" && filter_var($candidate, FILTER_VALIDATE_EMAIL)) {
+                return $candidate;
+            }
+        }
+
+        return "";
     }
 
     private function normalizeEmailListString(string $value): string
@@ -602,6 +786,53 @@ HTML;
         return 'michael@mike-ro-tech.com';
     }
 
+    private function applyEmailTypography(string $html): string
+    {
+        if (trim($html) === '') {
+            return $html;
+        }
+        $hrReplacement = '<div style="margin:36px auto;text-align:center;line-height:0;"><span style="display:inline-block;width:56px;height:3px;background:#0f172a;border-radius:3px;"></span></div>';
+        $html = preg_replace('#<hr\s*/?>#i', $hrReplacement, $html);
+
+        $h2Style = 'font-family:Georgia,"Iowan Old Style",Cambria,"Times New Roman",serif;font-size:24px;font-weight:700;line-height:1.3;letter-spacing:-0.005em;margin:36px 0 14px;color:#0f172a;';
+        $html = preg_replace_callback('#<h2(\s[^>]*)?>#i', function ($m) use ($h2Style) {
+            $attrs = $m[1] ?? '';
+            if (preg_match('/style\s*=\s*"([^"]*)"/i', $attrs)) {
+                return preg_replace('/style\s*=\s*"([^"]*)"/i', 'style="' . $h2Style . ' $1"', '<h2' . $attrs . '>');
+            }
+            return '<h2' . $attrs . ' style="' . $h2Style . '">';
+        }, $html);
+
+        $h3Style = 'font-family:Georgia,Cambria,"Times New Roman",serif;font-size:19px;font-weight:700;line-height:1.35;margin:28px 0 10px;color:#0f172a;';
+        $html = preg_replace_callback('#<h3(\s[^>]*)?>#i', function ($m) use ($h3Style) {
+            $attrs = $m[1] ?? '';
+            if (preg_match('/style\s*=\s*"([^"]*)"/i', $attrs)) {
+                return preg_replace('/style\s*=\s*"([^"]*)"/i', 'style="' . $h3Style . ' $1"', '<h3' . $attrs . '>');
+            }
+            return '<h3' . $attrs . ' style="' . $h3Style . '">';
+        }, $html);
+
+        $capStyle = 'font-style:italic;font-size:13px;line-height:1.5;color:#64748b;margin:8px 0 0;text-align:center;';
+        $html = preg_replace_callback('#<figcaption(\s[^>]*)?>#i', function ($m) use ($capStyle) {
+            $attrs = $m[1] ?? '';
+            if (preg_match('/style\s*=\s*"([^"]*)"/i', $attrs)) {
+                return preg_replace('/style\s*=\s*"([^"]*)"/i', 'style="' . $capStyle . ' $1"', '<figcaption' . $attrs . '>');
+            }
+            return '<figcaption' . $attrs . ' style="' . $capStyle . '">';
+        }, $html);
+
+        $blockquoteStyle = 'margin:24px 0;padding:4px 18px;border-left:3px solid #0f172a;font-style:italic;color:#334155;font-size:16px;line-height:1.7;';
+        $html = preg_replace_callback('#<blockquote(\s[^>]*)?>#i', function ($m) use ($blockquoteStyle) {
+            $attrs = $m[1] ?? '';
+            if (preg_match('/style\s*=\s*"([^"]*)"/i', $attrs)) {
+                return preg_replace('/style\s*=\s*"([^"]*)"/i', 'style="' . $blockquoteStyle . ' $1"', '<blockquote' . $attrs . '>');
+            }
+            return '<blockquote' . $attrs . ' style="' . $blockquoteStyle . '">';
+        }, $html);
+
+        return $html;
+    }
+
     private function renderFeaturedImage(array $snapshot, string $imageMode): string
     {
         $url = $imageMode === 'wordpress'
@@ -616,14 +847,14 @@ HTML;
 
         if ($imageMode === 'links') {
             $captionHtml = $caption !== ''
-                ? '<p style="margin:6px 0 0; font-size:12px; color:#6b7280;">' . $this->escapeHtml($caption) . '</p>'
+                ? '<p style="margin:6px 0 0; font-size:13px; color:#64748b; font-style:italic; text-align:center;">' . $this->escapeHtml($caption) . '</p>'
                 : '';
 
             return '<div style="margin:0 0 20px;"><p style="margin:0;"><a href="' . $this->escapeAttribute($url) . '" target="_blank" rel="noopener" style="color:#2563eb; font-weight:600; text-decoration:none;">View featured image</a></p>' . $captionHtml . '</div>';
         }
 
         $captionHtml = $caption !== ''
-            ? '<p style="margin:8px 0 0; font-size:12px; line-height:1.5; color:#6b7280;">' . $this->escapeHtml($caption) . '</p>'
+            ? '<p style="margin:8px 0 0; font-size:13px; line-height:1.5; color:#64748b; font-style:italic; text-align:center;">' . $this->escapeHtml($caption) . '</p>'
             : '';
 
         return '<div style="margin:0 0 20px;"><img src="' . $this->escapeAttribute($url) . '" alt="' . $this->escapeAttribute($snapshot['featured_alt']) . '" style="display:block; width:100%; max-width:100%; height:auto; border-radius:12px;" />' . $captionHtml . '</div>';
@@ -768,7 +999,7 @@ HTML;
 
             if ($caption !== '') {
                 $captionNode = $dom->createElement('p', $caption);
-                $captionNode->setAttribute('style', 'margin:6px 0 0;font-size:12px;line-height:1.5;color:#6b7280;');
+                $captionNode->setAttribute('style', 'margin:6px 0 0;font-size:13px;line-height:1.5;color:#64748b;font-style:italic;text-align:center;');
                 $wrapper->appendChild($captionNode);
             }
 

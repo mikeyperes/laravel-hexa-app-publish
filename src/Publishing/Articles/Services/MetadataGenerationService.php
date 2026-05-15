@@ -2,9 +2,12 @@
 
 namespace hexa_app_publish\Publishing\Articles\Services;
 
+use hexa_app_publish\Models\PublishArticle;
 use hexa_app_publish\Quality\Detection\Models\AiActivityLog;
 use hexa_app_publish\Publishing\Articles\Services\ArticleActivityService;
+use hexa_app_publish\Publishing\Articles\Support\GeneratedTitlePolicy;
 use hexa_package_anthropic\Services\AnthropicService;
+use Illuminate\Support\Str;
 
 /**
  * MetadataGenerationService — generates article titles, categories, tags via AI.
@@ -15,13 +18,15 @@ use hexa_package_anthropic\Services\AnthropicService;
 class MetadataGenerationService
 {
     protected AnthropicService $anthropic;
+    protected GeneratedTitlePolicy $titlePolicy;
 
     /**
      * @param AnthropicService $anthropic
      */
-    public function __construct(AnthropicService $anthropic)
+    public function __construct(AnthropicService $anthropic, GeneratedTitlePolicy $titlePolicy)
     {
         $this->anthropic = $anthropic;
+        $this->titlePolicy = $titlePolicy;
     }
 
     /**
@@ -34,7 +39,14 @@ class MetadataGenerationService
     public function generate(string $articleHtml, string $model = 'claude-haiku-4-5-20251001', ?int $articleId = null): array
     {
         $articleText = strip_tags($articleHtml);
-        $prompt = "Based on this article, generate exactly:\n\n1. 10 unique title options (compelling, SEO-friendly)\n2. 10 category suggestions (broad topics)\n3. 10 tag suggestions (specific keywords)\n\nHeadline rules:\n- Never use em dashes or en dashes in any title.\n- Never use first-person phrasing such as I, I'm, I've, my, we, our, or us.\n- Keep the titles in third person unless the article explicitly requires a first-person essay.\n- Return all 10 title options. Do not return a single title.\n\nArticle:\n" . mb_substr($articleText, 0, 3000) . "\n\nRespond ONLY in this exact JSON format, no other text:\n{\"titles\":[\"title1\",...],\"categories\":[\"cat1\",...],\"tags\":[\"tag1\",...]}";
+        $articleType = $articleId
+            ? PublishArticle::query()->whereKey($articleId)->value('article_type')
+            : null;
+        $prompt = "Based on this article, generate exactly:\n\n1. 10 unique title options (compelling, SEO-friendly)\n2. 10 category suggestions (broad topics)\n3. 10 tag suggestions (specific keywords)\n\nHeadline rules:\n- "
+            . implode("\n- ", $this->titlePolicy->promptRuleLines($articleType, 10))
+            . "\n\nArticle:\n"
+            . mb_substr($articleText, 0, 3000)
+            . "\n\nRespond ONLY in this exact JSON format, no other text:\n{\"titles\":[\"title1\",...],\"categories\":[\"cat1\",...],\"tags\":[\"tag1\",...]}";
 
         $result = $this->anthropic->chat(
             'You are a content metadata expert. Output ONLY valid JSON. No markdown, no explanation.',
@@ -71,13 +83,7 @@ class MetadataGenerationService
             return ['success' => false, 'message' => 'Failed to parse AI response.', 'raw' => $content, 'titles' => [], 'categories' => [], 'tags' => [], 'urls' => []];
         }
 
-        $titles = collect((array) ($parsed['titles'] ?? []))
-            ->map(fn ($title) => $this->normalizeListText((string) $title))
-            ->filter(fn ($title) => !$this->titleUsesFirstPerson($title))
-            ->unique()
-            ->values()
-            ->take(10)
-            ->all();
+        $titles = $this->titlePolicy->filterValidTitles((array) ($parsed['titles'] ?? []), $articleType);
 
         $categories = collect((array) ($parsed['categories'] ?? []))
             ->map(fn ($value) => $this->normalizeListText((string) $value))
@@ -139,7 +145,7 @@ class MetadataGenerationService
             'titles'     => $titles,
             'categories' => $categories,
             'tags'       => $tags,
-            'urls'       => array_slice($parsed['urls'] ?? [], 0, 10),
+            'urls'       => $this->extractArticleUrls($articleHtml),
         ];
     }
 
@@ -151,8 +157,21 @@ class MetadataGenerationService
         return trim((string) preg_replace('/\s+/', ' ', $value));
     }
 
-    private function titleUsesFirstPerson(string $title): bool
+    /**
+     * @return array<int, string>
+     */
+    private function extractArticleUrls(string $html): array
     {
-        return preg_match("/\\b(i|i'm|i’m|i've|i’ve|i'd|i’d|me|my|mine|myself|we|we're|we’re|we've|we’ve|our|ours|us)\\b/i", $title) === 1;
+        if (!preg_match_all('/<a[^>]+href=[\"\']([^\"\']+)[\"\']/i', $html, $matches)) {
+            return [];
+        }
+
+        return collect($matches[1] ?? [])
+            ->map(fn ($url) => trim((string) $url))
+            ->filter(fn ($url) => Str::startsWith($url, ['http://', 'https://']))
+            ->unique()
+            ->values()
+            ->take(10)
+            ->all();
     }
 }

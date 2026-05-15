@@ -3,10 +3,47 @@
     {{-- ─── Recipients ─── --}}
     <section class="space-y-3">
         <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500">Recipients</h4>
-        <div>
-            <label class="block text-xs font-medium text-gray-700 mb-1">To</label>
+        <div class="space-y-2">
+            <div class="flex items-center justify-between gap-2">
+                <label class="block text-xs font-medium text-gray-700">To</label>
+                <button type="button" @click="approvalEmailSecondaryUserSearchOpen = !approvalEmailSecondaryUserSearchOpen; if (approvalEmailSecondaryUserSearchOpen) { $nextTick(() => $refs.approvalEmailSecondaryUserQuery?.focus()); }" class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    <span x-text="approvalEmailSecondaryUser ? 'Change secondary user' : 'Add secondary user'"></span>
+                </button>
+            </div>
             <input type="email" x-model="approvalEmailTo" @input.debounce.300ms="approvalEmailToTouched = true; approvalEmailPersistState()" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="client@example.com">
-            <p class="mt-1.5 text-xs text-gray-500">Defaults to the creator contact email, then falls back to the login email.</p>
+
+            <div x-show="approvalEmailSecondaryUserSearchOpen" x-cloak class="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
+                <label class="block text-[11px] font-semibold uppercase tracking-wider text-gray-500">Search secondary user</label>
+                <input type="text" x-ref="approvalEmailSecondaryUserQuery" x-model="approvalEmailSecondaryUserQuery" @input.debounce.250ms="approvalEmailSearchSecondaryUsers()" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Type a user name or email">
+                <div x-show="approvalEmailSecondaryUserSearching" x-cloak class="text-[11px] text-gray-500">Searching users…</div>
+                <div x-show="!approvalEmailSecondaryUserSearching && approvalEmailSecondaryUserQuery && approvalEmailSecondaryUserResults.length === 0" x-cloak class="text-[11px] text-gray-500">No matching users found.</div>
+                <div x-show="approvalEmailSecondaryUserResults.length > 0" x-cloak class="max-h-56 overflow-auto rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+                    <template x-for="user in approvalEmailSecondaryUserResults" :key="user.id">
+                        <button type="button" @click="approvalEmailChooseSecondaryUser(user)" class="w-full px-3 py-2 text-left hover:bg-blue-50">
+                            <div class="text-sm font-medium text-gray-900" x-text="user.name || user.email || ('User #' + user.id)"></div>
+                            <div class="text-[11px] text-gray-500"><span x-text="approvalEmailSecondaryUserAddress(user) || 'No public email set'"></span></div>
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            <div x-show="approvalEmailSecondaryUser" x-cloak class="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 space-y-2">
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                        <p class="text-xs font-semibold text-blue-900" x-text="approvalEmailSecondaryUser?.name || 'Secondary user'"></p>
+                        <p class="text-[11px] text-blue-700" x-text="approvalEmailSecondaryUserAddress() || 'No public email available'"></p>
+                        <p x-show="approvalEmailSecondaryUser?.additional_contact_emails" x-cloak class="text-[11px] text-blue-700 break-all" x-text="approvalEmailSecondaryUser?.additional_contact_emails"></p>
+                    </div>
+                    <button type="button" @click="approvalEmailClearSecondaryUser()" class="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100">Clear</button>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" @click="approvalEmailImportSecondaryUserTo()" class="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100">Use public email for To</button>
+                    <button type="button" @click="approvalEmailImportSecondaryUserCcs()" class="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100">Add CC from secondary user</button>
+                </div>
+            </div>
+
+            <p class="text-xs text-gray-500">Defaults to the selected article contact email. Falls back to the selected user, publishing account, then creator login email.</p>
         </div>
         <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">CC</label>
@@ -30,7 +67,8 @@
                 <p x-show="approvalEmailCcsEmpty" x-cloak class="text-[11px] text-gray-500">
                     No CCs available. <a href="{{ route('profile.edit') }}" target="_blank" rel="noopener" class="text-blue-600 hover:text-blue-800 underline">Click here to add</a>.
                 </p>
-                <p x-show="!approvalEmailSuperAdminEmpty && !approvalEmailCcsEmpty" x-cloak class="text-[11px] text-gray-500">Loads creator additional contact emails by default when they exist.</p>
+                <p x-show="approvalEmailSecondaryUserCcEmpty" x-cloak class="text-[11px] text-gray-500">The selected secondary user has no CC emails configured.</p>
+                <p x-show="!approvalEmailSuperAdminEmpty && !approvalEmailCcsEmpty && !approvalEmailSecondaryUserCcEmpty" x-cloak class="text-[11px] text-gray-500">Loads creator additional contact emails by default when they exist.</p>
             </div>
         </div>
     </section>
@@ -60,12 +98,12 @@
         <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">Template</label>
             <select x-model="approvalEmailTemplateId" @change="applyApprovalEmailTemplate(approvalEmailTemplateId, { force: true })" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                <option value="">Default draft approval template</option>
+                <option value="">Default email template</option>
                 <template x-for="template in approvalEmailTemplates" :key="template.id">
                     <option :value="String(template.id)" x-text="template.name + ((template.is_selected_default || template.is_primary) ? ' (Default)' : '')"></option>
                 </template>
             </select>
-            <p class="mt-1.5 text-xs text-gray-500">This controls the full draft email layout, including the inline article block and review link.</p>
+            <p class="mt-1.5 text-xs text-gray-500">This controls the full email layout. Draft articles default to review-ready templates; live articles default to publication notification templates.</p>
         </div>
         <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">Subject</label>
@@ -74,7 +112,7 @@
         <div>
             <div class="flex items-center gap-1.5 mb-1">
                 <label class="text-xs font-medium text-gray-700">Email body template</label>
-                <x-hexa-tooltip mode="hover" label="?" widthClass="w-80" position="bottom">Use shortcodes like {article}, {article_body}, {article_header}, and {review_url}. The selected template should include {article} if you want the full article rendered inline.</x-hexa-tooltip>
+                <x-hexa-tooltip mode="hover" label="?" widthClass="w-80" position="bottom">Use shortcodes like {article}, {article_body}, {article_header}, {permalink}, and {press_release_links}. Include {article} if you want the full article rendered inline.</x-hexa-tooltip>
             </div>
             <textarea
                 x-ref="approvalEmailIntroEditor"
@@ -83,7 +121,7 @@
                 @input.debounce.300ms="approvalEmailPersistState()"
                 rows="12"
                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="<p>Hi,</p><p>Your draft is ready.</p><p><a href=&quot;{review_url}&quot;>Open review page</a></p><hr><div>{article}</div>"></textarea>
+                placeholder="<p>Hi,</p><p>Your draft is ready.</p><hr><div>{article}</div>"></textarea>
             <p class="mt-1.5 text-xs text-gray-500">TinyMCE loads here automatically. If the editor library is blocked, this falls back to a normal HTML textarea.</p>
         </div>
         <details x-show="Object.keys(approvalEmailShortcodes || {}).length > 0" x-cloak class="rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
@@ -106,7 +144,7 @@
                     </div>
                 </template>
                 <p class="px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-[11px] text-gray-500">
-                    Use <code class="font-mono text-blue-700">{article}</code> for the full inline article and <code class="font-mono text-blue-700">{review_url}</code> for the hosted review page link.
+                    Use <code class="font-mono text-blue-700">{article}</code> for the full inline article, <code class="font-mono text-blue-700">{permalink}</code> for the live article URL, and <code class="font-mono text-blue-700">{press_release_links}</code> for syndicated press release links.
                 </p>
             </div>
         </details>
@@ -235,7 +273,6 @@
                                 <span x-show="log.viewed_at" x-cloak><span class="font-medium text-gray-700">Viewed:</span> <span x-text="log.viewed_at"></span></span>
                                 <span x-show="log.reviewed_at" x-cloak><span class="font-medium text-gray-700">Reviewed:</span> <span x-text="log.reviewed_at"></span></span>
                             </div>
-                            <a :href="log.public_review_url" target="_blank" class="inline-flex w-fit items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100">Open review page</a>
                         </div>
                     </summary>
                     <div class="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
@@ -291,5 +328,5 @@
         </div>
     </details>
 
-    <p x-show="approvalEmailLogs.length === 0" x-cloak class="text-xs text-gray-400 text-center pt-2">No drafts have been sent yet — fill the form above and click <span class="font-medium">Send draft email</span>.</p>
+    <p x-show="approvalEmailLogs.length === 0" x-cloak class="text-xs text-gray-400 text-center pt-2">No emails have been sent yet — fill the form above and click <span class="font-medium">Send email</span>.</p>
 </div>

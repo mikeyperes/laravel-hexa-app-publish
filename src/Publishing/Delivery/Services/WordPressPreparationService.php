@@ -6,8 +6,6 @@ use hexa_app_publish\Discovery\Links\Health\Services\LinkHealthService;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
-use hexa_package_wordpress\Services\WordPressService;
-use hexa_package_wptoolkit\Services\WpToolkitService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
@@ -20,18 +18,6 @@ use Illuminate\Support\Str;
  */
 class WordPressPreparationService
 {
-    protected WpToolkitService $wptoolkit;
-    protected WordPressService $wp;
-
-    /**
-     * @param WpToolkitService $wptoolkit
-     * @param WordPressService $wp
-     */
-    public function __construct(WpToolkitService $wptoolkit, WordPressService $wp)
-    {
-        $this->wptoolkit = $wptoolkit;
-        $this->wp = $wp;
-    }
 
     /**
      * Prepare content for WordPress: upload images, create categories/tags, validate HTML.
@@ -79,8 +65,8 @@ class WordPressPreparationService
                 $this->emitProgress($send, 'error', "Missing WP Toolkit server or install ID.", 'connection', 'resolve_server');
                 return ['success' => false, 'html' => $html, 'category_ids' => [], 'tag_ids' => [], 'wp_images' => []];
             }
-            $connectionMode = $this->wptoolkit->connectionMode($server);
-            $connectionLabel = $this->wptoolkit->connectionLabel($server);
+            $connectionMode = $this->wordpress()->connectionMode($this->wpTarget($site));
+            $connectionLabel = $this->wordpress()->connectionLabel($this->wpTarget($site));
             $this->emitProgress($send, 'success', "{$connectionLabel} server resolved: {$server->hostname}", 'connection', 'resolve_server', [
                 'hostname' => $server->hostname,
                 'install_id' => $installId,
@@ -112,7 +98,7 @@ class WordPressPreparationService
             ]);
             $sshError = null;
             try {
-                $ssh = $this->wptoolkit->getConnection($server);
+                $ssh = $this->wordpress()->warmConnection($this->wpTarget($site));
             } catch (\Throwable $e) {
                 $sshError = $e->getMessage();
                 $ssh = ['success' => false, 'error' => $sshError];
@@ -591,90 +577,44 @@ class WordPressPreparationService
     private function resolveTaxonomyIds(PublishSite $site, string $mode, ?WhmServer $server, ?string $installId, array $terms, string $taxonomy, callable $send): array
     {
         if (empty($terms)) {
-            $this->emitProgress($send, 'step', "No {$taxonomy} to create", 'taxonomy', $taxonomy . '_none');
+            $this->emitProgress($send, "step", "No {$taxonomy} to create", "taxonomy", $taxonomy . "_none");
             return [];
         }
 
-        $this->emitProgress($send, 'info', "Creating " . count($terms) . " {$taxonomy}...", 'taxonomy', $taxonomy . '_start', [
-            'term_total' => count($terms),
+        $this->emitProgress($send, "info", "Creating " . count($terms) . " {$taxonomy}...", "taxonomy", $taxonomy . "_start", [
+            "term_total" => count($terms),
         ]);
 
-        if ($mode === 'wptoolkit') {
-            $batchResult = match ($taxonomy) {
-                'categories' => $this->wptoolkit->wpCliBatchCategories($server, $installId, $terms),
-                'tags' => $this->wptoolkit->wpCliBatchTags($server, $installId, $terms),
-                default => ['term_ids' => []],
-            };
+        $taxonomyKey = $taxonomy === "tags" ? "post_tag" : "category";
+        $result = $this->wordpress()->ensureTerms($this->wpTarget($site), $terms, $taxonomyKey);
+        $termIds = array_values(array_map("intval", (array) ($result["term_ids"] ?? [])));
+        $termDetails = (array) ($result["term_details"] ?? []);
 
-            $termIds = $batchResult['term_ids'] ?? [];
-            $termDetails = $batchResult['term_details'] ?? [];
-            // Report per-term results with existed/created status
-            foreach ($termDetails as $td) {
-                $name = $td['name'] ?? '?';
-                $id = $td['id'] ?? 0;
-                $existed = $td['existed'] ?? false;
-                $error = $td['error'] ?? null;
-                if ($error) {
-                    $this->emitProgress($send, 'warning', ucfirst($taxonomy) . ": '{$name}' — failed: {$error}", 'taxonomy', $taxonomy . '_term_failed', [
-                        'term_name' => $name,
-                    ]);
-                } elseif ($existed) {
-                    $this->emitProgress($send, 'success', ucfirst($taxonomy) . ": '{$name}' — already exists (id: {$id})", 'taxonomy', $taxonomy . '_term_ready', [
-                        'term_name' => $name,
-                        'term_id' => $id,
-                    ]);
-                } else {
-                    $this->emitProgress($send, 'success', ucfirst($taxonomy) . ": '{$name}' — created (id: {$id})", 'taxonomy', $taxonomy . '_term_ready', [
-                        'term_name' => $name,
-                        'term_id' => $id,
-                    ]);
-                }
-            }
-            $this->emitProgress($send, 'success', count($termIds) . "/" . count($terms) . " {$taxonomy} ready", 'taxonomy', $taxonomy . '_complete', [
-                'term_ready_count' => count($termIds),
-                'term_total' => count($terms),
-            ]);
-
-            return $termIds;
-        }
-
-        $existingTerms = match ($taxonomy) {
-            'categories' => $this->wp->getCategories($site->url, $site->wp_username, $site->wp_application_password),
-            'tags' => $this->wp->getTags($site->url, $site->wp_username, $site->wp_application_password),
-            default => ['success' => false, 'data' => []],
-        };
-
-        $existingTermMap = [];
-        if ($existingTerms['success']) {
-            foreach ($existingTerms['data'] as $term) {
-                $existingTermMap[strtolower($term['name'])] = $term['id'];
+        foreach ($termDetails as $td) {
+            $name = $td["name"] ?? "?";
+            $id = $td["id"] ?? 0;
+            $existed = $td["existed"] ?? false;
+            $error = $td["error"] ?? null;
+            if ($error) {
+                $this->emitProgress($send, "warning", ucfirst($taxonomy) . ": " . $name . " — failed: " . $error, "taxonomy", $taxonomy . "_term_failed", [
+                    "term_name" => $name,
+                ]);
+            } elseif ($existed) {
+                $this->emitProgress($send, "success", ucfirst($taxonomy) . ": " . $name . " — already exists (id: " . $id . ")", "taxonomy", $taxonomy . "_term_ready", [
+                    "term_name" => $name,
+                    "term_id" => $id,
+                ]);
+            } else {
+                $this->emitProgress($send, "success", ucfirst($taxonomy) . ": " . $name . " — created (id: " . $id . ")", "taxonomy", $taxonomy . "_term_ready", [
+                    "term_name" => $name,
+                    "term_id" => $id,
+                ]);
             }
         }
 
-        $termIds = [];
-        foreach ($terms as $termName) {
-            $termNameLower = strtolower(trim($termName));
-            if (isset($existingTermMap[$termNameLower])) {
-                $termIds[] = $existingTermMap[$termNameLower];
-                continue;
-            }
-
-            $createdId = $this->createTaxonomyViaRest(
-                $site->url,
-                $site->wp_username,
-                $site->wp_application_password,
-                $taxonomy,
-                $termName
-            );
-
-            if ($createdId) {
-                $termIds[] = $createdId;
-            }
-        }
-
-        $this->emitProgress($send, 'success', count($termIds) . "/" . count($terms) . " {$taxonomy} ready", 'taxonomy', $taxonomy . '_complete', [
-            'term_ready_count' => count($termIds),
-            'term_total' => count($terms),
+        $this->emitProgress($send, "success", count($termIds) . "/" . count($terms) . " {$taxonomy} ready", "taxonomy", $taxonomy . "_complete", [
+            "term_ready_count" => count($termIds),
+            "term_total" => count($terms),
         ]);
 
         return $termIds;
@@ -692,15 +632,16 @@ class WordPressPreparationService
      */
     private function createTaxonomyViaRest(string $siteUrl, string $username, string $appPassword, string $type, string $name): ?int
     {
-        try {
-            $resp = Http::withBasicAuth($username, $appPassword)
-                ->timeout(10)
-                ->post(rtrim($siteUrl, '/') . '/wp-json/wp/v2/' . $type, ['name' => $name]);
-            if ($resp->successful()) return $resp->json('id');
-        } catch (\Exception $e) {
-            // Silently fail — category/tag creation is non-critical
-        }
-        return null;
+        $taxonomy = $type === "tags" ? "post_tag" : "category";
+        $result = $this->wordpress()->ensureTerms([
+            "mode" => "rest",
+            "url" => $siteUrl,
+            "username" => $username,
+            "application_password" => $appPassword,
+        ], [$name], $taxonomy);
+
+        $termIds = array_values(array_map("intval", (array) ($result["term_ids"] ?? [])));
+        return $termIds !== [] ? (int) $termIds[0] : null;
     }
 
     /**
@@ -719,14 +660,12 @@ class WordPressPreparationService
     private function setHexaMeta(PublishSite $site, int $mediaId, int $draftId): void
     {
         try {
-            Http::withBasicAuth($site->wp_username, $site->wp_application_password)
-                ->timeout(10)
-                ->post(rtrim($site->url, '/') . '/wp-json/wp/v2/media/' . $mediaId, [
-                    'meta' => [
-                        '_hexa_upload'   => true,
-                        '_hexa_draft_id' => $draftId,
-                    ],
-                ]);
+            $this->wordpress()->updateMedia($this->wpTarget($site), $mediaId, [
+                "meta" => [
+                    "_hexa_upload" => true,
+                    "_hexa_draft_id" => $draftId,
+                ],
+            ]);
         } catch (\Exception $e) {
             // Non-critical — meta is for filtering only
         }
@@ -771,9 +710,9 @@ class WordPressPreparationService
             }
 
             if ($mode === 'wptoolkit') {
-                $result = $this->wptoolkit->wpCliUploadMedia($server, $installId, $url, $tryFilename, $altText, $caption, $altText);
+                $result = $this->wordpress()->uploadMedia($this->wpTarget($site), $url, $tryFilename, $altText, $caption, $altText);
             } else {
-                $result = $this->wp->uploadMedia($site->url, $site->wp_username, $site->wp_application_password, $url, $tryFilename, $altText);
+                $result = $this->wordpress()->uploadMedia($this->wpTarget($site), $url, $tryFilename, $altText, $caption, $altText);
             }
 
             $attempts[] = ['label' => $label, 'url' => $url, 'success' => $result['success'], 'message' => $result['message'] ?? ''];
@@ -1008,5 +947,18 @@ class WordPressPreparationService
         $html = preg_replace('/\n{3,}/', "\n\n", $html);
 
         return trim($html);
+    }
+
+    private function wordpress(): \hexa_package_wordpress\Services\WordPressManagerService
+    {
+        return app(\hexa_package_wordpress\Services\WordPressManagerService::class);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function wpTarget(PublishSite $site): array
+    {
+        return app(\hexa_app_publish\Publishing\Sites\Services\PublishSiteWordPressTargetFactory::class)->fromSite($site);
     }
 }

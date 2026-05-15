@@ -347,12 +347,26 @@
                     <p x-show="pressReleaseFieldHasError('notion_book')" x-cloak class="text-xs font-medium text-red-600">Select a Notion person and import one related book before continuing.</p>
                 </div>
 
-                <div x-show="pressReleasePersonDropdownOpen" x-cloak class="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                <div x-show="pressReleasePersonDropdownOpen" x-cloak class="rounded-xl border border-gray-200 bg-white overflow-hidden" data-v3i-recent-loader="1">
                     <div class="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
                         <p class="text-sm font-semibold text-gray-800">Recent Notion People</p>
                         <button @click="pressReleasePersonDropdownOpen = false" type="button" class="text-xs text-gray-500 hover:text-gray-700">Hide</button>
                     </div>
-                    <div class="divide-y divide-gray-100">
+                    {{-- In-container skeleton loader while fetching --}}
+                    <div x-show="pressReleasePersonSearching && pressReleasePersonResults.length === 0" x-cloak class="divide-y divide-gray-100">
+                        <template x-for="i in 4" :key="'skel-' + i">
+                            <div class="px-4 py-3 animate-pulse">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="flex-1 space-y-2">
+                                        <div class="h-3 w-2/3 bg-gray-200 rounded"></div>
+                                        <div class="h-2.5 w-1/2 bg-gray-100 rounded"></div>
+                                    </div>
+                                    <div class="h-2.5 w-12 bg-gray-200 rounded flex-shrink-0"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <div x-show="!(pressReleasePersonSearching && pressReleasePersonResults.length === 0)" x-cloak class="divide-y divide-gray-100">
                         <template x-for="record in pressReleasePersonResults" :key="'person-' + record.id">
                             <button type="button" @click="loadPressReleaseNotionPersonBooks(record)"
                                 :disabled="pressReleaseLoadingPersonBooks"
@@ -371,6 +385,7 @@
                         </div>
                     </div>
                 </div>
+                {{-- /v3i-recent-loader --}}
 
                 <div x-show="pressRelease.notion_person && pressRelease.notion_person.id" x-cloak x-data="{ showPersonAllFields: false }" class="rounded-xl border border-purple-200 bg-white overflow-hidden">
                     <div class="px-4 py-3 border-b border-purple-100 bg-purple-50 flex items-start justify-between gap-3">
@@ -597,7 +612,7 @@
                                     'labelExpression' => "notionAuditFieldLabel(row) || 'Field'",
                                     'sourceExpression' => 'notionAuditSourceLabel(row, "Person Database")',
                                     'valueExpression' => "row.value || ''",
-                                    'linkUrls' => false,
+                                    'linkUrls' => true,
                                     'panelClass' => 'rounded-lg border border-white/70 bg-white/80 p-3',
                                 ])
                                 @include('app-publish::publishing.pipeline.partials.notion-field-panel', [
@@ -607,7 +622,7 @@
                                     'labelExpression' => "notionAuditFieldLabel(row) || 'Field'",
                                     'sourceExpression' => 'notionAuditSourceLabel(row, "Book Database")',
                                     'valueExpression' => "row.value || ''",
-                                    'linkUrls' => false,
+                                    'linkUrls' => true,
                                     'panelClass' => 'rounded-lg border border-white/70 bg-white/80 p-3',
                                 ])
                             </div>
@@ -839,8 +854,8 @@
                     'viewUrlExpression' => 'asset.view_url || asset.url',
                     'setFeaturedAction' => 'setPressReleaseFeaturedPhoto(asset)',
                     'toggleInlineAction' => 'togglePressReleaseInlinePhotoSelection(asset)',
-                    'featuredButtonTextExpression' => 'pressReleaseAssetIsFeatured(asset) ? "Featured Image" : "Set Featured"',
-                    'inlineButtonTextExpression' => 'pressReleaseAssetIsFeatured(asset) ? "Featured image" : (pressReleaseAssetIsInline(asset) ? "Inline Selected" : "Add Inline")',
+                    'featuredButtonTextExpression' => 'pressReleaseAssetIsFeatured(asset) ? "✓ Featured (selected)" : "Set as Featured"',
+                    'inlineButtonTextExpression' => 'pressReleaseAssetIsFeatured(asset) ? "Use as Inline instead" : (pressReleaseAssetIsInline(asset) ? "✓ Inline (selected)" : "Set as Inline")',
                     'inlineButtonDisabledExpression' => 'pressReleaseAssetIsFeatured(asset)',
                     'countBadgeExpression' => 'pressReleasePhotoAssets.length + " photo(s)"',
                     'featuredBadgeExpression' => 'pressRelease.featured_photo_key ? "Featured selected" : "Featured not set"',

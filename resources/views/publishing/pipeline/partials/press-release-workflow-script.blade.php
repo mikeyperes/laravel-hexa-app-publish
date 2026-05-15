@@ -789,18 +789,31 @@ function pressReleaseWorkflowMixin(config) {
             this.pressReleaseLoadingPersonBooks = true;
             this.pressReleaseLoadingPersonBooksId = String(record.id);
 
+            // v3i-retry-scoped — one auto-retry on transient network/timeout, fully inside outer try so finally always runs
+            const endpoint = '{{ route("publish.pipeline.press-release.list-notion-person-books") }}';
+            const body = JSON.stringify({ draft_id: this.draftId, person_id: record.id });
             try {
-                const response = await this._rawPipelineFetch('{{ route("publish.pipeline.press-release.list-notion-person-books") }}', {
-                    method: 'POST',
-                    headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
-                    body: JSON.stringify({
-                        draft_id: this.draftId,
-                        person_id: record.id,
-                    }),
-                });
-                const data = await response.json();
-                if (!response.ok || !data.success || !data.press_release) {
-                    throw new Error(data.message || 'Failed to load related books for the selected person.');
+                let response, data;
+                for (let attempt = 1; attempt <= 2; attempt++) {
+                    try {
+                        response = await this._rawPipelineFetch(endpoint, {
+                            method: 'POST',
+                            headers: this.requestHeaders({ 'Content-Type': 'application/json' }),
+                            body,
+                        });
+                        data = await response.json();
+                        if (!response.ok || !data.success || !data.press_release) {
+                            throw new Error(data.message || ('Server returned ' + response.status + ' for related books endpoint.'));
+                        }
+                        break;
+                    } catch (err) {
+                        if (attempt === 1 && (String(err.message).match(/Failed to fetch|NetworkError|timeout/i) || !response)) {
+                            console.warn('[notion-books] attempt 1 failed (' + err.message + '), retrying...');
+                            await new Promise(r => setTimeout(r, 500));
+                            continue;
+                        }
+                        throw new Error('Notion books load failed (' + (response?.status || 'network') + '): ' + err.message);
+                    }
                 }
 
                 this.pressReleasePersonDropdownOpen = false;
@@ -1557,14 +1570,23 @@ function pressReleaseWorkflowMixin(config) {
         },
 
         preferredPressReleaseFeaturedAsset() {
-            const featuredUrl = this.isPressReleaseNotionBookImport()
-                ? (this.pressRelease?.notion_book?.featured_image_url || '')
+            // v3j-book-swap: for BOOK imports the AUTHOR photo should be featured (not the book cover).
+            // Book covers become INLINE selections instead.
+            const isBook = this.isPressReleaseNotionBookImport();
+            const featuredUrl = isBook
+                ? '' // ignore the server-suggested book featured_image_url for book imports
                 : (this.pressRelease?.notion_episode?.featured_image_url || '');
             const explicitFeaturedKey = String(this.pressRelease?.featured_photo_key || '').trim();
             const currentFeaturedUrl = this.toAbsoluteMediaUrl(this.featuredPhoto?.url_large || this.featuredPhoto?.url || '');
             const assets = ((this.pressReleasePhotoAssets || []).length ? this.pressReleasePhotoAssets : this.rebuildPressReleasePhotoAssets())
                 .map((asset) => ({ ...asset }));
+            const personFirst = isBook
+                ? (assets.find((a) => a.source === 'notion-person-media')
+                    || assets.find((a) => a.source === 'notion-person-drive')
+                    || assets.find((a) => a.source === 'notion-guest-drive'))
+                : null;
             const match = assets.find((asset) => explicitFeaturedKey && this.pressReleaseAssetKey(asset) === explicitFeaturedKey)
+                || personFirst
                 || assets.find((asset) => currentFeaturedUrl && this.toAbsoluteMediaUrl(this.pressReleaseSourceUploadUrl(asset) || asset.url || '') === currentFeaturedUrl)
                 || assets.find((asset) => featuredUrl && this.toAbsoluteMediaUrl(asset.url || '') === this.toAbsoluteMediaUrl(featuredUrl))
                 || assets.find((asset) => asset.role === 'featured')
@@ -1621,8 +1643,15 @@ function pressReleaseWorkflowMixin(config) {
             }
 
             if (!selected.length) {
+                // v3j-book-swap: for BOOK imports, prefer the book cover as the inline fallback
+                const isBook = this.isPressReleaseNotionBookImport && this.isPressReleaseNotionBookImport();
                 const inlineUrl = this.pressReleaseLinkedPersonRecord()?.inline_photo_url || '';
-                const match = assets.find((asset) => inlineUrl && asset.url === this.toAbsoluteMediaUrl(inlineUrl))
+                const bookFirst = isBook
+                    ? (assets.find((asset) => asset.source === 'notion-book-cover')
+                        || assets.find((asset) => asset.source === 'google-drive'))
+                    : null;
+                const match = bookFirst
+                    || assets.find((asset) => inlineUrl && asset.url === this.toAbsoluteMediaUrl(inlineUrl))
                     || assets.find((asset) => asset.source === 'notion-person-drive')
                     || assets.find((asset) => asset.source === 'notion-guest-drive')
                     || assets.find((asset) => asset.source === 'notion-person-media')

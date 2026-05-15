@@ -28,6 +28,7 @@ use hexa_package_gemini\Services\GeminiService;
 use hexa_package_sapling\Services\SaplingService;
 use hexa_package_telegram\Services\TelegramService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -97,24 +98,34 @@ class ArticleController extends Controller
     }
 
     /**
-     * Show create article form (standalone one-off).
+     * Redirect the legacy editor entry into publish2 manual mode.
      *
-     * @param Request $request
-     * @return View
+     * Editor is now a manual workflow mode of the shared pipeline,
+     * not a standalone TinyMCE tool.
      */
-    public function editor(Request $request, ?int $id = null): View
+    public function editor(Request $request, ?int $id = null): RedirectResponse
     {
-        $article = $id ? PublishArticle::find($id) : null;
-        $drafts = PublishArticle::whereIn('status', ['draft', 'drafting'])
-            ->orderByDesc('updated_at')
-            ->limit(100)
-            ->get(['id', 'title', 'status', 'updated_at']);
+        $params = ["mode" => "manual_editor"];
 
-        return view('app-publish::publishing.articles.editor', [
-            'article' => $article,
-            'drafts' => $drafts,
-        ]);
+        if ($id) {
+            $article = PublishArticle::query()->findOrFail($id);
+            $params["id"] = $article->id;
+
+            if ($article->wp_post_id || $article->wp_status || $article->wp_post_url || $article->published_at) {
+                $params["step"] = 7;
+            } elseif (trim((string) ($article->body ?? "")) !== "") {
+                $params["step"] = 6;
+            } else {
+                $params["step"] = 2;
+            }
+        } else {
+            $params["spawn"] = 1;
+            $params["step"] = 2;
+        }
+
+        return redirect()->route("publish.pipeline.v2", $params);
     }
+
 
     /**
      * @param Request $request

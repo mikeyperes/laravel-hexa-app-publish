@@ -8,7 +8,6 @@ use hexa_app_publish\Publishing\Campaigns\Models\PublishCampaign;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
-use hexa_package_wptoolkit\Services\WpToolkitService;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -17,7 +16,6 @@ class CampaignIntegrityReportService
 {
     public function __construct(
         private CampaignSettingsResolver $settingsResolver,
-        private WpToolkitService $wpToolkit,
     ) {
     }
 
@@ -250,7 +248,8 @@ class CampaignIntegrityReportService
             ];
         }
 
-        $result = $this->wpToolkit->wpCliListAdminUsers($server, (int) $site->wordpress_install_id, $forceRefresh);
+        $target = app(\hexa_app_publish\Publishing\Sites\Services\PublishSiteWordPressTargetFactory::class)->fromSite($site);
+        $result = app(\hexa_package_wordpress\Services\WordPressManagerService::class)->listAuthors($target, $forceRefresh);
 
         return [
             'success' => (bool) ($result['success'] ?? false),

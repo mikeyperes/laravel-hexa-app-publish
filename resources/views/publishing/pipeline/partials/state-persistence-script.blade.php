@@ -910,6 +910,22 @@
                 this._restoring = false;
                 // Auto-select PR source if press-release type and only one source
                 this.autoSelectPrSource();
+                // v3k-pr-web-research — press-release defaults web-research OFF; watcher keeps it in sync on type change
+                if (!this._restoring && this.persistedArticleType === 'press-release' && !state?.spinWebResearch) {
+                    this.spinWebResearch = false;
+                }
+                if (this.persistedArticleType === 'press-release' && (state === null || typeof state?.spinWebResearch === 'undefined')) {
+                    this.spinWebResearch = false;
+                }
+                this.$watch('persistedArticleType', (newType, oldType) => {
+                    if (newType === oldType) return;
+                    if (newType === 'press-release') {
+                        this.spinWebResearch = false;
+                    } else if (oldType === 'press-release') {
+                        // when leaving press-release, restore the standard default
+                        this.spinWebResearch = true;
+                    }
+                });
                 // If there's already spun content, ensure Create Article is accessible
                 if (this.spunContent || this.editorContent) {
                     if (!this.completedSteps.includes(5)) this.completedSteps.push(5);
@@ -1173,6 +1189,16 @@
             this.$watch('emailDrawerOpen', () => {
                 if (this._restoring) return;
                 this.syncPublishEmailQueryState?.();
+                if (this.emailDrawerOpen && this.emailDrawerTab === 'notification') {
+                    this.initializePublicationNotificationState?.();
+                    this.applyPublicationNotificationTemplate?.(
+                        this.publicationNotificationTemplateId
+                            || this.publicationNotificationDefaults?.template_id
+                            || this.defaultPublicationNotificationTemplate?.()?.id
+                            || '',
+                        { force: true }
+                    );
+                }
             });
             this.$watch('emailDrawerTab', () => {
                 if (this._restoring) return;

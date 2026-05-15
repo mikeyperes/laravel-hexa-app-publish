@@ -109,21 +109,21 @@
                         </div>
                         <div class="flex flex-wrap items-center gap-2 text-xs">
                             <span x-show="syndicationCategoriesCacheMeta?.age_human && syndicationCategories.length > 0" x-cloak class="inline-flex items-center gap-1 rounded-full bg-white border border-purple-200 px-2.5 py-1 text-purple-700">
-                                <span>Synced</span>
+                                <span>Cached</span>
                                 <span x-text="syndicationCategoriesCacheMeta?.age_human || 'just now'"></span>
                             </span>
                             <button x-show="syndicationCategories.length > 0 && !loadingSyndicationCats" x-cloak @click="selectAllSyndicationCats()" type="button" class="rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-purple-700 hover:bg-purple-100">Select all</button>
                             <button x-show="syndicationCategories.length > 0 && !loadingSyndicationCats" x-cloak @click="clearSyndicationCats()" type="button" class="rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-purple-700 hover:bg-purple-100">Select none</button>
                             <button @click="resyncSyndicationCategories()" :disabled="loadingSyndicationCats" type="button" class="rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-purple-700 hover:bg-purple-100 disabled:opacity-50 inline-flex items-center gap-1">
                                 <svg x-show="loadingSyndicationCats" x-cloak class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                                <span x-text="loadingSyndicationCats ? 'Syncing…' : 'Sync with source'"></span>
+                                <span x-text="loadingSyndicationCats ? 'Refreshing…' : 'Refresh from source'"></span>
                             </button>
                         </div>
                     </div>
                     <p class="text-xs text-purple-600">Select the publications this release should syndicate to. Parent labels come directly from WordPress.</p>
                     <div x-show="loadingSyndicationCats" x-cloak class="rounded-lg border border-purple-200 bg-white px-3 py-3 text-sm text-purple-700 inline-flex items-center gap-2">
                         <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        Loading publication taxonomy…
+                        Loading cached publication list…
                     </div>
                     <div x-show="syndicationCategories.length > 0 && !loadingSyndicationCats" x-cloak class="space-y-3">
                         <template x-for="parent in syndicationCategoryTree()" :key="parent.id">
@@ -153,7 +153,7 @@
                             </div>
                         </template>
                     </div>
-                    <p x-show="!syndicationCategories.length && !loadingSyndicationCats" x-cloak class="text-xs text-gray-500">Fetching the cached publication taxonomy automatically. Use sync with source only when you want a fresh pull from WordPress.</p>
+                    <p x-show="!syndicationCategories.length && !loadingSyndicationCats" x-cloak class="text-xs text-gray-500">Showing the cached publication list automatically. Refresh from source only when you need the latest WordPress changes.</p>
                 </div>
             </div>
 

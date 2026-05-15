@@ -5,8 +5,6 @@ namespace hexa_app_publish\Publishing\Delivery\Services;
 use hexa_app_publish\Publishing\Sites\Models\PublishSite;
 use hexa_package_whm\Models\HostingAccount;
 use hexa_package_whm\Models\WhmServer;
-use hexa_package_wordpress\Services\WordPressService;
-use hexa_package_wptoolkit\Services\WpToolkitService;
 
 /**
  * WordPressDeliveryService — single source of truth for publishing to WordPress.
@@ -19,14 +17,6 @@ class WordPressDeliveryService
     private const MODE_WPTOOLKIT = 'wptoolkit';
     private const MODE_REST = 'rest';
 
-    protected WpToolkitService $wptoolkit;
-    protected WordPressService $wp;
-
-    public function __construct(WpToolkitService $wptoolkit, WordPressService $wp)
-    {
-        $this->wptoolkit = $wptoolkit;
-        $this->wp = $wp;
-    }
 
     public function createPost(PublishSite $site, string $title, string $html, string $status = 'draft', array $options = []): array
     {
@@ -65,23 +55,19 @@ class WordPressDeliveryService
         if (!$resolved['server'] || !$site->wordpress_install_id) {
             return $this->failure("Site '{$site->name}' is missing WP Toolkit configuration.", self::MODE_WPTOOLKIT);
         }
-        $transportMode = $this->wptoolkit->connectionMode($resolved['server']);
+        $transportMode = $this->wordpress()->connectionMode($this->wpTarget($site));
         $publicationTaxonomy = (string) ($options['publication_taxonomy'] ?? 'publication');
+        $isRequiredPressReleaseSyndication = $site->is_press_release_source && trim((string) ($options["article_type"] ?? "")) === "press-release";
+        $expectedPublicationTerms = array_values(array_unique(array_filter(array_map("intval", (array) ($options["publication_term_ids"] ?? [])))));
+        if ($isRequiredPressReleaseSyndication && $expectedPublicationTerms === []) {
+            return $this->failure("Select at least one publication syndication source before preparing or publishing this press release.", $transportMode, [
+                "expected_publication_term_ids" => [],
+            ]);
+        }
 
         $date = ($status === 'future' && !empty($options['date'])) ? $options['date'] : null;
 
-        $result = $this->wptoolkit->wpCliCreatePost(
-            $resolved['server'],
-            $site->wordpress_install_id,
-            $title,
-            $html,
-            $status,
-            $options['category_ids'] ?? [],
-            $options['tag_ids'] ?? [],
-            $date,
-            $options['author'] ?? $site->default_author ?? null,
-            isset($options['featured_media_id']) ? (int) $options['featured_media_id'] : null
-        );
+        $result = $this->wordpress()->createPost($this->wpTarget($site), $title, $html, $status, $this->buildPostData($title, $html, $status, $options));
 
         if (!$result['success']) {
             return $this->failure($result['message'] ?? 'WP Toolkit publish failed.', $transportMode);
@@ -103,6 +89,21 @@ class WordPressDeliveryService
                 $result['message'] = trim(($result['message'] ?? 'Post created.') . ' Warning: ' . $pressReleaseSync['warning']);
             }
             $linksPayload = $pressReleaseSync['links'] ?? null;
+            if ($isRequiredPressReleaseSyndication) {
+                $assignedPublicationTerms = array_values(array_unique(array_filter(array_map("intval", (array) ($linksPayload["publication_term_ids"] ?? [])))));
+                sort($expectedPublicationTerms);
+                sort($assignedPublicationTerms);
+                if (!empty($pressReleaseSync["warning"]) || $assignedPublicationTerms !== $expectedPublicationTerms) {
+                    $this->wordpress()->updatePost($this->wpTarget($site), (int) $postId, ["status" => "draft"]);
+                    return $this->failure(!empty($pressReleaseSync["warning"]) ? (string) $pressReleaseSync["warning"] : "WordPress did not retain all selected publication syndication sources for this press release.", $transportMode, [
+                        "post_id" => (int) $postId,
+                        "post_url" => $result["data"]["post_url"] ?? null,
+                        "post_status" => "draft",
+                        "expected_publication_term_ids" => $expectedPublicationTerms,
+                        "assigned_publication_term_ids" => $assignedPublicationTerms,
+                    ]);
+                }
+            }
         }
 
         return $this->success(
@@ -125,16 +126,18 @@ class WordPressDeliveryService
         if (!$resolved['server'] || !$site->wordpress_install_id) {
             return $this->failure("Site '{$site->name}' is missing WP Toolkit configuration.", self::MODE_WPTOOLKIT);
         }
-        $transportMode = $this->wptoolkit->connectionMode($resolved['server']);
+        $transportMode = $this->wordpress()->connectionMode($this->wpTarget($site));
         $publicationTaxonomy = (string) ($options['publication_taxonomy'] ?? 'publication');
+        $isRequiredPressReleaseSyndication = $site->is_press_release_source && trim((string) ($options["article_type"] ?? "")) === "press-release";
+        $expectedPublicationTerms = array_values(array_unique(array_filter(array_map("intval", (array) ($options["publication_term_ids"] ?? [])))));
+        if ($isRequiredPressReleaseSyndication && $expectedPublicationTerms === []) {
+            return $this->failure("Select at least one publication syndication source before preparing or publishing this press release.", $transportMode, [
+                "expected_publication_term_ids" => [],
+            ]);
+        }
 
         $postData = $this->buildPostData($title, $html, $status, $options);
-        $result = $this->wptoolkit->wpCliUpdatePost(
-            $resolved['server'],
-            $site->wordpress_install_id,
-            $postId,
-            $postData
-        );
+        $result = $this->wordpress()->updatePost($this->wpTarget($site), $postId, $this->buildPostData($title, $html, $status, $options));
 
         if (!$result['success']) {
             return $this->failure($result['message'] ?? 'WP Toolkit update failed.', $transportMode);
@@ -153,6 +156,21 @@ class WordPressDeliveryService
             $result['message'] = trim(($result['message'] ?? 'Post updated.') . ' Warning: ' . $pressReleaseSync['warning']);
         }
         $linksPayload = $pressReleaseSync['links'] ?? null;
+        if ($isRequiredPressReleaseSyndication) {
+            $assignedPublicationTerms = array_values(array_unique(array_filter(array_map("intval", (array) ($linksPayload["publication_term_ids"] ?? [])))));
+            sort($expectedPublicationTerms);
+            sort($assignedPublicationTerms);
+            if (!empty($pressReleaseSync["warning"]) || $assignedPublicationTerms !== $expectedPublicationTerms) {
+                $this->wordpress()->updatePost($this->wpTarget($site), (int) $postId, ["status" => "draft"]);
+                return $this->failure(!empty($pressReleaseSync["warning"]) ? (string) $pressReleaseSync["warning"] : "WordPress did not retain all selected publication syndication sources for this press release.", $transportMode, [
+                    "post_id" => (int) $postId,
+                    "post_url" => $result["data"]["post_url"] ?? null,
+                    "post_status" => "draft",
+                    "expected_publication_term_ids" => $expectedPublicationTerms,
+                    "assigned_publication_term_ids" => $assignedPublicationTerms,
+                ]);
+            }
+        }
 
         return $this->success(
             $site,
@@ -174,8 +192,8 @@ class WordPressDeliveryService
         if (!$resolved['server'] || !$site->wordpress_install_id) {
             return $this->failure("Site '{$site->name}' is missing WP Toolkit configuration.", self::MODE_WPTOOLKIT);
         }
-        $transportMode = $this->wptoolkit->connectionMode($resolved['server']);
-        $result = $this->wptoolkit->wpCliGetPost($resolved['server'], $site->wordpress_install_id, $postId);
+        $transportMode = $this->wordpress()->connectionMode($this->wpTarget($site));
+        $result = $this->wordpress()->getPost($this->wpTarget($site), $postId);
         if (!$result['success']) {
             return $this->failure($result['message'] ?? 'WP Toolkit inspect failed.', $transportMode);
         }
@@ -198,7 +216,7 @@ class WordPressDeliveryService
         }
 
         $postData = $this->buildPostData($title, $html, $status, $options);
-        $result = $this->wp->createPost($site->url, $site->wp_username, $site->wp_application_password, $postData);
+        $result = $this->wordpress()->createPost($this->wpTarget($site), $title, $html, $status, $postData);
 
         if (!$result['success']) {
             return $this->failure($result['message'] ?? 'REST publish failed.', self::MODE_REST);
@@ -222,7 +240,7 @@ class WordPressDeliveryService
         }
 
         $postData = $this->buildPostData($title, $html, $status, $options);
-        $result = $this->wp->updatePost($site->url, $site->wp_username, $site->wp_application_password, $postId, $postData);
+        $result = $this->wordpress()->updatePost($this->wpTarget($site), $postId, $postData);
 
         if (!$result['success']) {
             return $this->failure($result['message'] ?? 'REST update failed.', self::MODE_REST);
@@ -245,7 +263,7 @@ class WordPressDeliveryService
             return $this->failure("Site '{$site->name}' has no WordPress REST credentials.", self::MODE_REST);
         }
 
-        $result = $this->wp->getPost($site->url, $site->wp_username, $site->wp_application_password, $postId);
+        $result = $this->wordpress()->getPost($this->wpTarget($site), $postId);
         if (!$result['success']) {
             return $this->failure($result['message'] ?? 'REST inspect failed.', self::MODE_REST);
         }
@@ -269,7 +287,8 @@ class WordPressDeliveryService
     private function normalizeSyndicationOptions(PublishSite $site, array $options): array
     {
         $articleType = trim((string) ($options['article_type'] ?? ''));
-        if ($articleType !== 'press-release' || !$site->is_press_release_source) {
+        $hasPublicationTerms = !empty($options['publication_term_ids']);
+        if (!$site->is_press_release_source || ($articleType !== 'press-release' && !$hasPublicationTerms)) {
             unset($options['publication_term_ids'], $options['publication_taxonomy']);
             return $options;
         }
@@ -297,11 +316,7 @@ class WordPressDeliveryService
             return $fallback;
         }
 
-        $result = $this->wptoolkit->wpCliResolvePreferredTaxonomy(
-            $resolved['server'],
-            (int) $site->wordpress_install_id,
-            ['publication', 'category']
-        );
+        $result = $this->wordpress()->resolvePreferredTaxonomy($this->wpTarget($site), ["publication", "category"]);
 
         if (!($result['success'] ?? false)) {
             return $fallback;
@@ -407,18 +422,19 @@ class WordPressDeliveryService
 
     private function syncHexaPressReleaseLinks(PublishSite $site, ?WhmServer $server, int $postId, string $publicationTaxonomy, array $options, ?string $postUrl = null): array
     {
+        $termIds = array_values(array_unique(array_filter(array_map('intval', (array) ($options['publication_term_ids'] ?? [])))));
+        $isPressRelease = trim((string) ($options['article_type'] ?? '')) === 'press-release';
+
         if (
             !$server
             || !$site->wordpress_install_id
             || !$site->is_press_release_source
-            || trim((string) ($options['article_type'] ?? '')) !== 'press-release'
+            || (!$isPressRelease && empty($termIds))
             || $publicationTaxonomy === 'category'
             || $postId <= 0
         ) {
             return ['links' => null, 'warning' => null];
         }
-
-        $termIds = array_values(array_unique(array_filter(array_map('intval', (array) ($options['publication_term_ids'] ?? [])))));
         $postUrl = $this->normalizePostUrl($postUrl);
 
         $php = '$postId=' . (int) $postId . ';'
@@ -495,7 +511,7 @@ class WordPressDeliveryService
             . '];'
             . '$emit(["success"=>true,"message"=>"Press release links synced.","links"=>$links]);';
 
-        $result = $this->wptoolkit->wpCliEval($server, (int) $site->wordpress_install_id, $php);
+        $result = $this->wordpress()->evaluatePhp($this->wpTarget($site), $php);
         if (!($result['success'] ?? false)) {
             return [
                 'links' => null,
@@ -524,5 +540,18 @@ class WordPressDeliveryService
             'links' => null,
             'warning' => 'Failed to parse synced press release links output.',
         ];
+    }
+
+    private function wordpress(): \hexa_package_wordpress\Services\WordPressManagerService
+    {
+        return app(\hexa_package_wordpress\Services\WordPressManagerService::class);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function wpTarget(PublishSite $site): array
+    {
+        return app(\hexa_app_publish\Publishing\Sites\Services\PublishSiteWordPressTargetFactory::class)->fromSite($site);
     }
 }

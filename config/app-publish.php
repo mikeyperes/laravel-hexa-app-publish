@@ -2,7 +2,7 @@
 
 return [
 
-    'version' => '18.16.45',
+    'version' => '18.16.46',
 
     /*
     |--------------------------------------------------------------------------
@@ -290,7 +290,7 @@ return [
         'default_from_email' => 'no-reply@scalemypublication.com',
         'default_reply_to' => '',
         'default_cc' => '',
-        'default_subject' => 'Your article is now live on {publication_name}',
+        'default_subject' => 'Your Article is Live on {publication_name}: {article_title}',
         'default_body' => "<p>Hi,</p><p>Your article is now live on <strong>{publication_name}</strong>.</p><p><strong>Title:</strong> {article_title}<br><strong>Permalink:</strong> <a href=\"{permalink}\">{permalink}</a><br><strong>Publication site:</strong> <a href=\"{publication_url}\">{publication_url}</a></p><hr><div>{article}</div><p>Best,<br>{username}</p>",
     ],
 
@@ -304,8 +304,8 @@ return [
         'default_from_email' => 'no-reply@scalemypublication.com',
         'default_reply_to' => 'support@scalemypublication.com',
         'default_cc' => '',
-        'default_subject' => 'Your draft is ready: {article_title}',
-        'default_body' => "<p>Hi,</p><p>Your draft is ready for review.</p><p><a href=\"{review_url}\">Open review page</a></p><hr><div>{article}</div><p>Best,<br>{username}</p>",
+        'default_subject' => 'Your Draft is Ready: {article_title}',
+        'default_body' => "<p>Hi,</p><p>Your draft is ready.</p><hr><div>{article}</div><p>Best,<br>{username}</p>",
     ],
 
     /*
@@ -330,7 +330,9 @@ return [
         '{article_links_plain}' => 'Rendered live article links block (plain text)',
         '{press_release_links}' => 'Press release links block (HTML)',
         '{press_release_links_plain}' => 'Press release links block (plain text)',
-        '{review_url}' => 'Hosted review URL for the draft approval email',
+        '{hexa_pr_link}' => 'Hexa PR Wire live permalink',
+        '{hexa_pr_links}' => 'Hexa PR Wire distribution links block (HTML)',
+        '{hexa_pr_links_plain}' => 'Hexa PR Wire distribution links block (plain text)',
         '{username}' => 'Selected publishing user name',
         '{publication_name}' => 'Publication/site display name',
         '{publication_url}' => 'Publication/site URL',

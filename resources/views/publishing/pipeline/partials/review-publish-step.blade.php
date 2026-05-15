@@ -94,17 +94,40 @@
                         <p x-show="publishTraceId" x-text="'Publish trace: ' + publishTraceId"></p>
                     </div>
 
+                    <div x-show="canUsePublicationSyndication?.() && !_publicationSyndicationReady()" x-cloak class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        <p x-show="loadingSyndicationCats" x-cloak>Waiting for the cached publication syndication list to finish loading before WordPress actions can run.</p>
+                        <p x-show="!loadingSyndicationCats && _resolvedPublicationTermIds().length === 0" x-cloak>Select at least one publication syndication source before preparing or publishing this press release.</p>
+                    </div>
+
                     <div class="flex flex-col gap-3">
-                        <button x-show="publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future'" x-cloak @click="prepareForWp()" :disabled="_prepareOperationIsActive()" class="text-white px-5 py-2.5 rounded-lg text-sm disabled:opacity-50 flex items-center justify-center gap-2" :class="prepareComplete && prepareIntegrityIssues.length === 0 && !prepareChecklist.some(c => c.status === 'failed' || c.status === 'skipped') ? 'bg-green-600 hover:bg-green-700' : (prepareComplete ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-600 hover:bg-blue-700')">
+                        <button x-show="publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future'" x-cloak @click="prepareForWp()" :disabled="_prepareOperationIsActive() || !_publicationSyndicationReady()" class="text-white px-5 py-2.5 rounded-lg text-sm disabled:opacity-50 flex items-center justify-center gap-2" :class="prepareComplete && prepareIntegrityIssues.length === 0 && !prepareChecklist.some(c => c.status === 'failed' || c.status === 'skipped') ? 'bg-green-600 hover:bg-green-700' : (prepareComplete ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-600 hover:bg-blue-700')">
                             <svg x-show="_prepareOperationIsActive()" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             <span x-text="_prepareOperationIsActive() ? (prepareOperationStatus === 'queued' ? 'Queued...' : 'Preparing...') : (prepareComplete && prepareChecklist.some(c => c.status === 'failed' || c.status === 'skipped') ? 'Retry Prepare' : (prepareComplete ? (existingWpStatus === 'publish' ? 'Re-prepare Live Post' : 'Prepared') : (existingWpStatus === 'publish' ? 'Prepare Live Update' : 'Prepare for WordPress')))"></span>
                         </button>
 
-                        <button @click="publishArticle()" :disabled="publishing || ((publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future') && !prepareComplete)" class="bg-green-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                        <button @click="publishArticle()" :disabled="publishing || ((publishAction === 'publish' || publishAction === 'draft_wp' || publishAction === 'future') && (!prepareComplete || !_publicationSyndicationReady()))" class="bg-green-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2">
                             <svg x-show="publishing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             <span x-text="publishing ? (publishOperationStatus === 'queued' ? 'Queued...' : 'Publishing...') : (publishAction === 'draft_local' ? 'Save Local Draft' : (publishAction === 'draft_wp' ? (existingWpPostId ? 'Update WP Draft' : 'Create WP Draft') : (publishAction === 'future' ? (existingWpPostId ? 'Schedule Existing Post' : 'Schedule Post') : (existingWpStatus === 'publish' ? 'Update Live Post' : (existingWpPostId ? 'Publish Existing Draft' : 'Publish')))))"></span>
                         </button>
 
+                    <div class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-3 text-left">
+                        <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Google Doc</p>
+                        <p class="mt-1 text-xs text-emerald-900" x-text="googleDocStatusLabel()"></p>
+                        <p x-show="googleDocExport?.last_exported_at" x-cloak class="mt-1 text-[11px] text-emerald-800" x-text="'Last exported ' + new Date(googleDocExport.last_exported_at).toLocaleString()"></p>
+                        <p x-show="googleDocExport?.owner_email || googleDocOwnerEmail" x-cloak class="mt-1 text-[11px] text-emerald-800" x-text="'Owner: ' + (googleDocExport?.owner_email || googleDocOwnerEmail)"></p>
+                        <p x-show="googleDocExportError" x-cloak class="mt-1 text-[11px] text-red-700" x-text="googleDocExportError"></p>
+                        <div class="mt-3 flex flex-col gap-2">
+                            <button type="button" @click="exportGoogleDoc(true)" :disabled="googleDocExporting" class="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
+                                <svg x-show="googleDocExporting" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                <svg x-show="!googleDocExporting" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h10M7 16h6M8 4h8a2 2 0 012 2v12a2 2 0 01-2 2H8a2 2 0 01-2-2V6a2 2 0 012-2z"/></svg>
+                                <span x-text="googleDocExporting ? 'Exporting...' : googleDocActionLabel()"></span>
+                            </button>
+                            <a x-show="googleDocHasDocument() && googleDocExport?.url" x-cloak :href="googleDocExport.url" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100">
+                                Open Google Doc
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                            </a>
+                        </div>
+                    </div>
                         <button @click="saveDraftNow()" :disabled="savingDraft" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-50 flex items-center justify-center gap-2">
                             <svg x-show="savingDraft" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                             <span x-text="savingDraft ? 'Saving...' : 'Save Draft'"></span>
@@ -205,10 +228,31 @@
                         @include('app-publish::publishing.pipeline.partials.checklist-item')
                     </template>
                 </div>
-                <div x-show="canUsePublicationSyndication?.() && prepareChecklist.some(c => c.type === 'publication')" x-cloak class="mb-3">
+                <div x-show="canUsePublicationSyndication && canUsePublicationSyndication() && (prepareChecklist.some(c => c.type === 'publication') || _resolvedPublicationTermIds().length > 0)" x-cloak class="mb-3">
                     <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Publication Syndication</p>
-                    <template x-for="item in prepareChecklist.filter(c => c.type === 'publication')" :key="item.label">
-                        @include('app-publish::publishing.pipeline.partials.checklist-item')
+                    <template x-if="prepareChecklist.some(c => c.type === 'publication')">
+                        <div>
+                            <template x-for="item in prepareChecklist.filter(c => c.type === 'publication')" :key="item.label">
+                                @include('app-publish::publishing.pipeline.partials.checklist-item')
+                            </template>
+                        </div>
+                    </template>
+                    <template x-if="!prepareChecklist.some(c => c.type === 'publication')">
+                        <div>
+                            <template x-for="termId in _resolvedPublicationTermIds()" :key="'pub-' + termId">
+                                <div class="py-1.5 px-2 rounded-lg mb-1 bg-green-50">
+                                    <div class="flex items-center gap-2.5">
+                                        <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                        </span>
+                                        <div class="flex-1 min-w-0">
+                                            <span class="text-sm font-medium text-gray-800" x-text="(syndicationCategories.find(cat => Number(cat.id) === Number(termId)) || {}).label || (syndicationCategories.find(cat => Number(cat.id) === Number(termId)) || {}).name || ('Publication #' + termId)"></span>
+                                        </div>
+                                    </div>
+                                    <div class="ml-7 mt-0.5 text-[10px] text-gray-500">selected for syndication</div>
+                                </div>
+                            </template>
+                        </div>
                     </template>
                 </div>
                 <div x-show="prepareChecklist.some(c => c.type === 'tag')" x-cloak>
@@ -374,7 +418,7 @@
             </div>
 
         {{-- ═══ SEO Preview ═══ --}}
-        <div x-show="articleDescription || articleTitle" class="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-4 space-y-3">
+        <div x-show="articleDescription || articleTitle" class="bg-gray-50 border border-gray-200 rounded-xl p-5 mt-4 mb-4 space-y-3">
             <h5 class="text-sm font-semibold text-gray-700">SEO Preview</h5>
             <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Meta Title</span><p class="text-sm text-blue-700 font-medium break-words" x-text="articleTitle || ''"></p></div>
             <div class="flex items-start gap-3 py-1 border-b border-gray-100"><span class="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">Meta Description</span><p class="text-sm text-gray-600 break-words" x-text="articleDescription || ''"></p></div>

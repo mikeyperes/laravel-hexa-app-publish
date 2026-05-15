@@ -234,7 +234,7 @@ class AccountController extends Controller
         $request->validate(['hosting_account_id' => 'required|integer']);
 
         $account = HostingAccount::with('whmServer')->findOrFail($request->input('hosting_account_id'));
-        $wpToolkit = app(\hexa_package_wptoolkit\Services\WpToolkitService::class);
+        $wpToolkit = app(\hexa_package_wordpress\Services\WordPressManagerService::class);
 
         if (!$account->whmServer) {
             return response()->json([
@@ -245,7 +245,7 @@ class AccountController extends Controller
         }
 
         try {
-            $result = $wpToolkit->getInstallsForAccount($account->whmServer, $account->username);
+            $result = $wpToolkit->discoverInstallsForAccount($account->whmServer, $account->username);
 
             if ($result['success'] && !empty($result['installs'])) {
                 $installs = [];
@@ -300,7 +300,7 @@ class AccountController extends Controller
         $errors = [];
         $accountResults = [];
 
-        $wpToolkit = app(\hexa_package_wptoolkit\Services\WpToolkitService::class);
+        $wpToolkit = app(\hexa_package_wordpress\Services\WordPressManagerService::class);
 
         foreach ($accounts as $account) {
             if (!$account->whmServer) {
@@ -319,7 +319,7 @@ class AccountController extends Controller
             }
 
             try {
-                $result = $wpToolkit->getInstallsForAccount($account->whmServer, $account->username);
+                $result = $wpToolkit->discoverInstallsForAccount($account->whmServer, $account->username);
 
                 if ($result['success'] && !empty($result['installs'])) {
                     $installs = [];

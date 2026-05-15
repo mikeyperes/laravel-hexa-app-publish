@@ -26,6 +26,16 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
         approvalEmailIntroHtml: '',
         approvalEmailImageMode: 'embed',
         approvalEmailAdditionalCcs: '',
+        approvalEmailSecondaryUserSearchOpen: false,
+        approvalEmailSecondaryUserSearching: false,
+        approvalEmailSecondaryUserSearchUrl: '',
+        approvalEmailSecondaryUserQuery: '',
+        approvalEmailSecondaryUserResults: [],
+        approvalEmailSecondaryUserId: '',
+        approvalEmailSecondaryUser: null,
+        approvalEmailSecondaryUserCcsImporting: false,
+        approvalEmailSecondaryUserCcEmpty: false,
+        approvalEmailSecondaryUserAbortController: null,
         approvalEmailSmtpSettingsUrl: @json(route('settings.smtp-accounts.index')),
         approvalEmailPreviewHtml: '',
         approvalEmailWarnings: [],
@@ -131,6 +141,15 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 }
                 if (panel === "approval") {
                     this.approvalEmailEnsureLoaded?.(true);
+                } else if (panel === "notification") {
+                    this.initializePublicationNotificationState?.();
+                    this.applyPublicationNotificationTemplate?.(
+                        this.publicationNotificationTemplateId
+                            || this.publicationNotificationDefaults?.template_id
+                            || this.defaultPublicationNotificationTemplate?.()?.id
+                            || "",
+                        { force: true }
+                    );
                 }
             } catch (error) {}
         },
@@ -161,6 +180,7 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
                 body_template: String(this.approvalEmailBodyTemplate || ''),
                 intro_html: String(this.approvalEmailIntroHtml || ''),
                 image_mode: String(this.approvalEmailImageMode || 'embed').trim() || 'embed',
+                secondary_user_id: String(this.approvalEmailSecondaryUserId || '').trim(),
             };
         },
 
@@ -187,6 +207,19 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             });
             this.approvalEmailAdditionalCcs = String(config.additional_ccs ?? this.approvalEmailAdditionalCcs ?? '');
             this.approvalEmailSmtpSettingsUrl = String(config.smtp_settings_url ?? this.approvalEmailSmtpSettingsUrl ?? '');
+            this.approvalEmailSecondaryUserSearchUrl = String(config.secondary_user_search_url ?? this.approvalEmailSecondaryUserSearchUrl ?? '');
+            if (config.secondary_user && typeof config.secondary_user === 'object') {
+                this.approvalEmailSecondaryUser = config.secondary_user;
+                this.approvalEmailSecondaryUserId = String(config.secondary_user.id || '');
+                if (!String(this.approvalEmailSecondaryUserQuery || '').trim()) {
+                    this.approvalEmailSecondaryUserQuery = String(config.secondary_user.name || '');
+                }
+            } else if (!preserveFilled || !String(this.approvalEmailSecondaryUserId || '').trim()) {
+                this.approvalEmailSecondaryUser = null;
+                this.approvalEmailSecondaryUserId = '';
+                this.approvalEmailSecondaryUserQuery = '';
+                this.approvalEmailSecondaryUserResults = [];
+            }
 
             if (typeof this.$nextTick === 'function') {
                 this.$nextTick(() => {
@@ -495,6 +528,108 @@ window.draftApprovalEmailMixin = window.draftApprovalEmailMixin || function draf
             this.approvalEmailCc = list.join(', ');
             this.approvalEmailCcTouched = true;
             this.approvalEmailPersistState();
+        },
+
+        approvalEmailSecondaryUserAddress(user = null) {
+            const selected = user || this.approvalEmailSecondaryUser || {};
+            return String(selected.contact_email || '').trim();
+        },
+
+        approvalEmailSecondaryUserCcList(user = null) {
+            const selected = user || this.approvalEmailSecondaryUser || {};
+            return String(selected.additional_contact_emails || '').trim();
+        },
+
+        async approvalEmailSearchSecondaryUsers() {
+            const query = String(this.approvalEmailSecondaryUserQuery || '').trim();
+            this.approvalEmailSecondaryUserCcEmpty = false;
+            if (this.approvalEmailSecondaryUserAbortController) {
+                this.approvalEmailSecondaryUserAbortController.abort();
+                this.approvalEmailSecondaryUserAbortController = null;
+            }
+            if (!query) {
+                this.approvalEmailSecondaryUserResults = [];
+                this.approvalEmailSecondaryUserSearching = false;
+                return;
+            }
+            if (!this.approvalEmailSecondaryUserSearchUrl) {
+                this.approvalEmailSetStatus('error', 'Secondary user search is not configured.');
+                return;
+            }
+            this.approvalEmailSecondaryUserSearching = true;
+            const controller = new AbortController();
+            this.approvalEmailSecondaryUserAbortController = controller;
+            try {
+                const { response, data } = await this.approvalEmailFetchJson(this.approvalEmailSecondaryUserSearchUrl + '?q=' + encodeURIComponent(query), {
+                    method: 'GET',
+                    signal: controller.signal,
+                }, { retryOn419: false });
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Secondary user search failed.');
+                }
+                this.approvalEmailSecondaryUserResults = Array.isArray(data.users) ? data.users : [];
+            } catch (error) {
+                if (error?.name !== 'AbortError') {
+                    this.approvalEmailSetStatus('error', error?.message || 'Secondary user search failed.');
+                }
+            } finally {
+                if (this.approvalEmailSecondaryUserAbortController === controller) {
+                    this.approvalEmailSecondaryUserAbortController = null;
+                }
+                this.approvalEmailSecondaryUserSearching = false;
+            }
+        },
+
+        approvalEmailChooseSecondaryUser(user) {
+            this.approvalEmailSecondaryUser = user || null;
+            this.approvalEmailSecondaryUserId = String(user?.id || '');
+            this.approvalEmailSecondaryUserQuery = String(user?.name || user?.email || '');
+            this.approvalEmailSecondaryUserResults = [];
+            this.approvalEmailSecondaryUserSearchOpen = false;
+            this.approvalEmailSecondaryUserCcEmpty = false;
+            this.approvalEmailPersistState();
+        },
+
+        approvalEmailClearSecondaryUser() {
+            if (this.approvalEmailSecondaryUserAbortController) {
+                this.approvalEmailSecondaryUserAbortController.abort();
+                this.approvalEmailSecondaryUserAbortController = null;
+            }
+            this.approvalEmailSecondaryUser = null;
+            this.approvalEmailSecondaryUserId = '';
+            this.approvalEmailSecondaryUserQuery = '';
+            this.approvalEmailSecondaryUserResults = [];
+            this.approvalEmailSecondaryUserSearchOpen = false;
+            this.approvalEmailSecondaryUserCcEmpty = false;
+            this.approvalEmailPersistState();
+        },
+
+        approvalEmailImportSecondaryUserTo() {
+            const email = this.approvalEmailSecondaryUserAddress();
+            if (!email) {
+                this.approvalEmailSetStatus('error', 'The selected secondary user does not have a public email.');
+                return;
+            }
+            this.approvalEmailTo = email;
+            this.approvalEmailToTouched = true;
+            this.approvalEmailPersistState();
+        },
+
+        async approvalEmailImportSecondaryUserCcs() {
+            if (this.approvalEmailSecondaryUserCcsImporting) return;
+            this.approvalEmailSecondaryUserCcsImporting = true;
+            this.approvalEmailSecondaryUserCcEmpty = false;
+            await new Promise((r) => setTimeout(r, 180));
+            try {
+                const list = this.approvalEmailSecondaryUserCcList();
+                if (!list) {
+                    this.approvalEmailSecondaryUserCcEmpty = true;
+                } else {
+                    this.approvalEmailAppendCcList(list);
+                }
+            } finally {
+                this.approvalEmailSecondaryUserCcsImporting = false;
+            }
         },
 
         async approvalEmailLoad(articleId = null, options = {}) {
